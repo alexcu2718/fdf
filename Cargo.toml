@@ -1,0 +1,15 @@
+[package]
+name = "fdf"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74.1"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4.5.31", features = ["derive"] }
+fnmatch-regex2 = "0.3.0"
+libc = "0.2.170"
+memchr = "2.7.4"
+mimalloc = "0.1.43"
+rayon = "1.10.0"
+regex = { version = "1.11.1", features = ["perf-dfa-full", "perf-literal", "unicode-perl"] }

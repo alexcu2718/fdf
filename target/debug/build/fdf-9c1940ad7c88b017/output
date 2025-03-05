@@ -1,0 +1,1 @@
+cargo:rustc-env=CPU_COUNT=8

@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.74.1"
 license = "MIT"
+description = "A fast, multi-threaded filesystem search tool"
+documentation = "https://docs.rs/fdf"
+repository = "https://github.com/alexcu2718/fdf"
+keywords = ["search", "filesystem", "parallel", "regex", "cli"]
+categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 [dependencies]
 clap = { version = "4.5.31", features = ["derive"] }

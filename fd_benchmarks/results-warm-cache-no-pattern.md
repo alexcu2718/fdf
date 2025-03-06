@@ -1,4 +1,4 @@
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `rlib --hidden '' '/home/alexc'` | 550.6 ± 11.2 | 541.3 | 576.0 | 1.00 |
-| `fd --hidden '' '/home/alexc'` | 1278.0 ± 8.6 | 1264.6 | 1291.3 | 2.32 ± 0.05 |
+| `fdf --hidden '' '/home/alexc'` | 383.6 ± 11.3 | 368.4 | 404.5 | 1.00 |
+| `fd --hidden '' '/home/alexc'` | 924.5 ± 21.7 | 894.5 | 959.6 | 2.41 ± 0.09 |

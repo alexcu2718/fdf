@@ -104,16 +104,27 @@ where
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
             buf_writer.write_all(extension_colour(&path.path))?;
             buf_writer.write_all(&path.path)?;
+            
+            // add a trailing slash for directories
+            if path.is_dir {
+                buf_writer.write_all(b"/")?;
+            }
+            
             buf_writer.write_all(NEWLINE)?;
             buf_writer.write_all(RESET)?;
         }
     } else {
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
             buf_writer.write_all(&path.path)?;
+            
+            // same as above
+            if path.is_dir {
+                buf_writer.write_all(b"/")?;
+            }
+            
             buf_writer.write_all(NEWLINE)?;
         }
     }
-
     buf_writer.flush()?;
     Ok(())
 }

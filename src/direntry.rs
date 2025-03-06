@@ -221,7 +221,7 @@ impl DirEntry {
     #[must_use]
     pub fn is_hidden(&self) -> bool {
         let filename = self.file_name();
-        !filename.is_empty() && filename[0] == b'.'
+        self.is_dir && filename[0] == b'.'
     }
     #[allow(clippy::inline_always)]
     #[inline(always)]
@@ -312,9 +312,9 @@ impl DirEntry {
                     buf.truncate(base_len);
                     buf.extend_from_slice(name_bytes);
 
-                    if d.d_type == DT_DIR && !buf.ends_with(&[b'/']) {
-                        buf.push(b'/');
-                    }
+                    //if d.d_type == DT_DIR && !buf.ends_with(&[b'/']) {
+                   //     buf.push(b'/');
+                 //   }
 
                     entries.push(Self {
                         path: Box::from(buf.as_slice()),

@@ -254,10 +254,11 @@ impl DirEntry {
             let mut buf = buf_cell.borrow_mut();
             buf.clear();
             buf.extend_from_slice(dir_path);
-            if needs_slash {
+            if needs_slash && !dir_path.ends_with(&[b'/']) {
                 buf.push(b'/');
             }
             let base_len = buf.len();
+            
 
             loop {
                 let nread = unsafe {
@@ -310,6 +311,10 @@ impl DirEntry {
 
                     buf.truncate(base_len);
                     buf.extend_from_slice(name_bytes);
+
+                    if d.d_type == DT_DIR && !buf.ends_with(&[b'/']) {
+                        buf.push(b'/');
+                    }
 
                     entries.push(Self {
                         path: Box::from(buf.as_slice()),

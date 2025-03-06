@@ -9,6 +9,8 @@ mod type_config;
 use type_config::build_type_filter;
 
 
+const CHARS:[char;9] = ['d', 'l', 'f', 'p', 'c', 'b', 's', 'e', 'x'];
+
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[allow(clippy::struct_excessive_bools)]
@@ -35,7 +37,7 @@ pub struct Args {
     #[arg(
         short = 'E',
         long = "extension",
-        help = "filters based on extension \n",
+        help = format!("filters based on extension, options are {CHARS:?} \n"),
     )]
     extension: Option<String>,
 

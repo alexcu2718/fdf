@@ -157,7 +157,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         finder = finder.with_filter(type_filter);
     }
 
-    let results = finder.traverse().into_iter().skip(1);
+ 
+    let  results = finder.traverse().into_iter();
+
+  
 
 
     write_paths_coloured(results, args.top_n)?;

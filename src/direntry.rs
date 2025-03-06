@@ -221,7 +221,7 @@ impl DirEntry {
     #[must_use]
     pub fn is_hidden(&self) -> bool {
         let filename = self.file_name();
-        self.is_dir && filename[0] == b'.'
+        !filename.is_empty() && filename[0] == b'.'
     }
     #[allow(clippy::inline_always)]
     #[inline(always)]

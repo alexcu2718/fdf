@@ -28,6 +28,8 @@ impl SearchConfig {
            
             let reg = RegexBuilder::new(&pattern)
                 .case_insensitive(case_insensitive)
+                .dot_matches_new_line(false)
+               // .ignore_whitespace(true)
                 .build();
 
             if reg.is_err() {

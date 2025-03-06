@@ -139,7 +139,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let keep_dirs = args.keep_dirs;
     let case_insensitive = args.case;
     let hide_hidden = !args.hidden;
-    let file_name = !args.full_path;
+    let file_name = args.full_path;
     let mut finder = Finder::new(
         path,
         &pattern,
@@ -149,6 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         file_name,
         extension_match,
     ); 
+  // eprintln!("{}",args.full_path);
 
 
     if let Some(types) = args.type_of {
@@ -156,7 +157,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         finder = finder.with_filter(type_filter);
     }
 
-    let results = finder.traverse().into_iter();
+    let results = finder.traverse().into_iter().skip(1);
 
 
     write_paths_coloured(results, args.top_n)?;

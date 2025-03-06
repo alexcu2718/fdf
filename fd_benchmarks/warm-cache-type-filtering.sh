@@ -11,3 +11,4 @@ hyperfine --warmup "$WARMUP_COUNT" \
     --export-markdown results-warm-cache-type-filtering.md
 
 check_for_differences "false" "$COMMAND_FIND" "$COMMAND_FD"
+

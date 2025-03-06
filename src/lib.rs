@@ -8,6 +8,10 @@ pub use utils::{escape_regex_string, get_depth, process_glob_regex, read_dir, re
 mod config;
 pub use config::SearchConfig;
 
+//use std::sync::OnceLock;
+
+//static START:OnceLock<Box<[u8]>>=OnceLock::new();
+
 use std::{
     ffi::OsString,
     os::unix::ffi::OsStrExt,
@@ -29,6 +33,8 @@ pub struct Finder {
     //and we can't clone a trait object.
     //so we use a function pointer instead.
     //this is a bit of a hack, but it works.
+    //short_path: bool,
+ 
 }
 
 impl Finder {
@@ -53,10 +59,15 @@ impl Finder {
             short_path,
             extension_match,
         );
+
+        
+
+        //START.get_or_init(|| root.as_bytes().to_vec().into_boxed_slice());
         Self {
             root,
             search_config,
             filter: None,
+            
         }
     }
 
@@ -108,10 +119,10 @@ impl Finder {
         filter: Option<fn(&DirEntry) -> bool>,
     ) {
         // store whether we should send the directory itself
-        let should_send = config.keep_dirs
-            && config.matches_path(&dir.path)
+        let should_send = config.keep_dirs  
+            && config.matches_path(&dir,config.file_name)
             && filter.as_ref().map_or(true, |f| f(&dir))
-            && config.extension_match.as_ref().is_none(); //map_or(true, |ext| dir.matches_extension(&ext));
+            && config.extension_match.as_ref().is_none(); 
         match DirEntry::new(&dir.path) {
             Ok(entries) => {
                 let mut dirs = Vec::with_capacity(16);
@@ -125,7 +136,7 @@ impl Finder {
                         // always include directories for traversal
                         dirs.push(entry);
                     } else if filter.as_ref().map_or(true, |f| f(&entry))
-                        && config.matches_path(&entry.path)
+                        && config.matches_path(&entry,config.file_name)
                         && config
                             .extension_match
                             .as_ref()

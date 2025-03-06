@@ -1,11 +1,14 @@
 use regex::bytes::{Regex, RegexBuilder};
 
+use crate::DirEntry;
+
 #[derive(Clone)]
 pub struct SearchConfig {
     pub regex_match: Option<Regex>,
     pub hide_hidden: bool,
     pub keep_dirs: bool,
     pub extension_match: Option<Box<[u8]>>,
+    pub file_name: bool,
 }
 
 impl SearchConfig {
@@ -19,16 +22,11 @@ impl SearchConfig {
         file_name: bool,
         extension_match: Option<Box<[u8]>>,
     ) -> Self {
-        let reg = if pattern == "." {
+        let reg = if pattern == "."  {
             None
         } else {
-            let actual_pattern = if file_name {
-                format!(r".*?(?:^|.*/)(.*{pattern}.*?)$")
-            } else {
-                pattern.to_string()
-            };
-
-            let reg = RegexBuilder::new(&actual_pattern)
+           
+            let reg = RegexBuilder::new(&pattern)
                 .case_insensitive(case_insensitive)
                 .build();
 
@@ -44,6 +42,7 @@ impl SearchConfig {
             hide_hidden,
             keep_dirs,
             extension_match,
+            file_name,
         }
     }
 
@@ -61,9 +60,13 @@ impl SearchConfig {
     #[inline(always)]
     #[must_use]
     #[allow(clippy::unnecessary_map_or)]
-    pub fn matches_path(&self, path: &[u8]) -> bool {
+    pub fn matches_path(&self, dir: &DirEntry,full_path:bool) -> bool {
+    let path=if full_path{&dir.path}else{dir.file_name()};
+       
         self.regex_match
             .as_ref()
-            .map_or(true, |reg| reg.is_match(path))
+            .map_or(true, |reg| reg.is_match(&path))
     }
+    
 }
+

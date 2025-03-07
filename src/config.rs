@@ -22,7 +22,7 @@ impl SearchConfig {
         file_name: bool,
         extension_match: Option<Box<[u8]>>,
     ) -> Self {
-        let reg = if pattern == "."  {
+        let reg = if pattern == "." || pattern.is_empty() {
             None
         } else {
            

@@ -312,10 +312,6 @@ impl DirEntry {
                     buf.truncate(base_len);
                     buf.extend_from_slice(name_bytes);
 
-                    //if d.d_type == DT_DIR && !buf.ends_with(&[b'/']) {
-                   //     buf.push(b'/');
-                 //   }
-
                     entries.push(Self {
                         path: Box::from(buf.as_slice()),
                         is_dir: d.d_type == DT_DIR, //i would explain theres but its trivial lol.

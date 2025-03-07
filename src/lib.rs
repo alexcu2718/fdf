@@ -10,7 +10,7 @@ pub use config::SearchConfig;
 
 use std::sync::OnceLock;
 
-static START:OnceLock<Box<[u8]>>=OnceLock::new();
+static START: OnceLock<Box<[u8]>> = OnceLock::new();
 
 use std::{
     ffi::OsString,
@@ -34,7 +34,6 @@ pub struct Finder {
     //so we use a function pointer instead.
     //this is a bit of a hack, but it works.
     //short_path: bool,
- 
 }
 
 impl Finder {
@@ -60,13 +59,10 @@ impl Finder {
             extension_match,
         );
 
-        
-
         Self {
             root,
             search_config,
             filter: None,
-            
         }
     }
 
@@ -99,7 +95,7 @@ impl Finder {
 
         let filter = self.filter;
 
-        START.get_or_init(||self.root.clone().as_bytes().to_vec().into_boxed_slice());
+        START.get_or_init(|| self.root.clone().as_bytes().to_vec().into_boxed_slice());
         //we have to arbitrarily construct a direntry to start the search.
 
         rayon::spawn(move || {
@@ -120,12 +116,12 @@ impl Finder {
         filter: Option<fn(&DirEntry) -> bool>,
     ) {
         // store whether we should send the directory itself
-        let should_send = config.keep_dirs  
-            && config.matches_path(&dir,config.file_name)
+        let should_send = config.keep_dirs
+            && config.matches_path(&dir, config.file_name)
             && filter.as_ref().map_or(true, |f| f(&dir))
             && config.extension_match.as_ref().is_none()
-            && unsafe {*dir.path != **START.get().unwrap_unchecked()};
-            
+            && unsafe { *dir.path != **START.get().unwrap_unchecked() };
+
         match DirEntry::new(&dir.path) {
             Ok(entries) => {
                 let mut dirs = Vec::with_capacity(16);
@@ -139,8 +135,11 @@ impl Finder {
                         // always include directories for traversal
                         dirs.push(entry);
                     } else if filter.as_ref().map_or(true, |f| f(&entry))
-                        && config.matches_path(&entry,config.file_name)
-                        && config.extension_match.as_ref().map_or(true, |ext| entry.matches_extension(ext))
+                        && config.matches_path(&entry, config.file_name)
+                        && config
+                            .extension_match
+                            .as_ref()
+                            .map_or(true, |ext| entry.matches_extension(ext))
                     {
                         // only filter non-directory entries
                         let _ = sender.send(entry);

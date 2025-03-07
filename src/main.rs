@@ -8,8 +8,7 @@ use printer::write_paths_coloured;
 mod type_config;
 use type_config::build_type_filter;
 
-
-const CHARS:[char;9] = ['d', 'l', 'f', 'p', 'c', 'b', 's', 'e', 'x'];
+const CHARS: [char; 9] = ['d', 'l', 'f', 'p', 'c', 'b', 's', 'e', 'x'];
 
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -148,20 +147,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         keep_dirs,
         file_name,
         extension_match,
-    ); 
-  // eprintln!("{}",args.full_path);
-
+    );
+    // eprintln!("{}",args.full_path);
 
     if let Some(types) = args.type_of {
         let type_filter = build_type_filter(types);
         finder = finder.with_filter(type_filter);
     }
 
- 
-    let  results = finder.traverse().into_iter();
-
-  
-
+    let results = finder.traverse().into_iter();
 
     write_paths_coloured(results, args.top_n)?;
 

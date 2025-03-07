@@ -254,11 +254,10 @@ impl DirEntry {
             let mut buf = buf_cell.borrow_mut();
             buf.clear();
             buf.extend_from_slice(dir_path);
-            if needs_slash && !dir_path.ends_with(&[b'/'])  {
+            if needs_slash && !dir_path.ends_with(b"/") {
                 buf.push(b'/');
             }
             let base_len = buf.len();
-            
 
             loop {
                 let nread = unsafe {

@@ -21,9 +21,6 @@ pub fn get_depth(filename: &[u8]) -> usize {
     }
 }
 
-
-
-
 #[allow(clippy::inline_always)]
 #[inline(always)]
 #[allow(clippy::missing_errors_doc)]

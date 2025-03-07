@@ -25,11 +25,10 @@ impl SearchConfig {
         let reg = if pattern == "." || pattern.is_empty() {
             None
         } else {
-           
-            let reg = RegexBuilder::new(&pattern)
+            let reg = RegexBuilder::new(pattern)
                 .case_insensitive(case_insensitive)
                 .dot_matches_new_line(false)
-               // .ignore_whitespace(true)
+                // .ignore_whitespace(true)
                 .build();
 
             if reg.is_err() {
@@ -62,13 +61,15 @@ impl SearchConfig {
     #[inline(always)]
     #[must_use]
     #[allow(clippy::unnecessary_map_or)]
-    pub fn matches_path(&self, dir: &DirEntry,full_path:bool) -> bool {
-    let path=if full_path{&dir.path}else{dir.file_name()};
-       
+    pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
+        let path = if full_path {
+            &dir.path
+        } else {
+            dir.file_name()
+        };
+
         self.regex_match
             .as_ref()
-            .map_or(true, |reg| reg.is_match(&path))
+            .map_or(true, |reg| reg.is_match(path))
     }
-    
 }
-

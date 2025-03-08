@@ -22,7 +22,7 @@
 //! - `foo/test?.txt` would match e.g. `foo/test1.txt` or `foo/test".txt`,
 //!   but not `foo/test/.txt`
 //! - `/etc/c[--9].conf` would match e.g. `/etc/c-.conf`, `/etc/c..conf`,
-//!    or `/etc/7.conf`, but not `/etc/c/.conf`
+//!   or `/etc/7.conf`, but not `/etc/c/.conf`
 //! - `linux-[0-9]*-{generic,aws}` would match `linux-5.2.27b1-generic`
 //!   and `linux-4.0.12-aws`, but not `linux-unsigned-5.2.27b1-generic`
 //!
@@ -107,18 +107,18 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::BareEscape => write!(f, "Bare escape at the end of the pattern"),
-            Error::UnclosedClass => write!(f, "Unclosed character class"),
-            Error::NotImplemented(s) => write!(f, "Not implemented: {}", s),
-            Error::ReversedRange(start, end) => {
-                write!(f, "Reversed range: {} > {}", start, end)
+            Self::BareEscape => write!(f, "Bare escape at the end of the pattern"),
+            Self::UnclosedClass => write!(f, "Unclosed character class"),
+            Self::NotImplemented(s) => write!(f, "Not implemented: {s}"),
+            Self::ReversedRange(start, end) => {
+                write!(f, "Reversed range: {start} > {end}")
             }
-            Error::RangeAfterRange(start, end) => {
-                write!(f, "Range after range: {}-{}", start, end)
+            Self::RangeAfterRange(start, end) => {
+                write!(f, "Range after range: {start}-{end}")
             }
-            Error::UnclosedAlternation => write!(f, "Unclosed alternation"),
-            Error::InvalidRegex(pattern, error) => {
-                write!(f, "Invalid regex pattern '{}': {}", pattern, error)
+            Self::UnclosedAlternation => write!(f, "Unclosed alternation"),
+            Self::InvalidRegex(pattern, error) => {
+                write!(f, "Invalid regex pattern '{pattern}': {error}")
             }
         }
     }
@@ -184,7 +184,7 @@ impl Default for State {
 /// This only escapes the backslash itself and the closing bracket.
 fn escape_in_class(chr: char) -> String {
     if chr == ']' || chr == '\\' {
-        format!("\\{}", chr)
+        format!("\\{chr}")
     } else {
         chr.to_string()
     }
@@ -193,7 +193,7 @@ fn escape_in_class(chr: char) -> String {
 /// Escape a character outside of a character class if necessary.
 fn escape(chr: char) -> String {
     if "[{(|^$.*?+\\".contains(chr) {
-        format!("\\{}", chr)
+        format!("\\{chr}")
     } else {
         chr.to_string()
     }
@@ -363,7 +363,7 @@ fn close_class(glob_acc: ClassAccumulator) -> String {
     
     result.push_str(final_dash);
     
-    format!("[{}]", result)
+    format!("[{result}]")
 }
 
 /// Convert a glob alternatives list to a regular expression pattern.
@@ -378,7 +378,7 @@ fn close_alternate(gathered: Vec<String>) -> String {
     items.dedup();
     
     let joined = items.join("|");
-    format!("({})", joined)
+    format!("({joined})")
 }
 
 /// Iterate over a glob pattern's characters, build up a regular expression.
@@ -416,8 +416,8 @@ where
                     '{' => (State::Alternate(String::new(), Vec::new()), None),
                     '?' => (State::Literal, Some("[^/]".to_owned())),
                     '*' => (State::Literal, Some(".*".to_owned())),
-                    ']' | '}' | '.' => (State::Literal, Some(format!("\\{}", chr))),
-                    _ => (State::Literal, Some(format!("{}", chr))),
+                    ']' | '}' | '.' => (State::Literal, Some(format!("\\{chr}"))),
+                    _ => (State::Literal, Some(format!("{chr}"))),
                 };
                 self.state = new_state;
                 res
@@ -529,8 +529,7 @@ where
         match self.pattern.next() {
             Some(chr) => match chr {
                 '\\' => Err(Error::NotImplemented(format!(
-                    "FIXME: handle class range end escape with {:?} start {:?}",
-                    acc, start
+                    "FIXME: handle class range end escape with {acc:?} start {start:?}"
                 ))),
                 ']' => {
                     acc.items.push(ClassItem::Char(start));

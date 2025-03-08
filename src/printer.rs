@@ -106,7 +106,7 @@ where
             buf_writer.write_all(&path.path)?;
 
             // add a trailing slash for directories
-            if path.is_dir {
+            if path.is_dir() {
                 buf_writer.write_all(b"/")?;
             }
 
@@ -118,7 +118,7 @@ where
             buf_writer.write_all(&path.path)?;
 
             // same as above
-            if path.is_dir {
+            if path.is_dir() {
                 buf_writer.write_all(b"/")?;
             }
 

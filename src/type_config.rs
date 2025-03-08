@@ -17,7 +17,7 @@ fn filter_by_type(entry: &DirEntry) -> bool {
     for type_char in types.iter().flat_map(|s| s.chars()) {
         match type_char {
             'd' => {
-                if entry.is_dir {
+                if entry.is_dir() {
                     return true;
                 }
             }
@@ -27,27 +27,27 @@ fn filter_by_type(entry: &DirEntry) -> bool {
                 }
             }
             'f' => {
-                if entry.is_regular_file {
+                if entry.is_regular_file() {
                     return true;
                 }
             }
             'p' => {
-                if entry.is_fifo {
+                if entry.is_fifo() {
                     return true;
                 }
             }
             'c' => {
-                if entry.is_char {
+                if entry.is_char() {
                     return true;
                 }
             }
             'b' => {
-                if entry.is_block {
+                if entry.is_block_device() {
                     return true;
                 }
             }
             's' => {
-                if entry.is_socket {
+                if entry.is_socket() {
                     return true;
                 }
             }
@@ -58,6 +58,11 @@ fn filter_by_type(entry: &DirEntry) -> bool {
             }
             'x' => {
                 if entry.is_executable() {
+                    return true;
+                }
+            }
+            'u' => {
+                if entry.is_unknown() {
                     return true;
                 }
             }

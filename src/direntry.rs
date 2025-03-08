@@ -1,14 +1,6 @@
 use libc::{
-    access, c_char, close, dirent64, open, syscall, SYS_getdents64,
-     DT_BLK, 
-     DT_CHR, 
-     DT_DIR, 
-     DT_FIFO, 
-     DT_LNK, 
-     DT_REG, 
-     DT_SOCK, 
-     DT_UNKNOWN, 
-     O_RDONLY, PATH_MAX, X_OK
+    access, c_char, close, dirent64, open, syscall, SYS_getdents64, DT_BLK, DT_CHR, DT_DIR,
+    DT_FIFO, DT_LNK, DT_REG, DT_SOCK, DT_UNKNOWN, O_RDONLY, PATH_MAX, X_OK,
 };
 
 use std::{
@@ -36,14 +28,14 @@ struct AlignedBuffer {
 //and the fields are used in the filter method
 pub struct DirEntry {
     pub path: Box<[u8]>,
-    pub(crate)  is_dir: bool,
-    pub(crate)  is_symlink: bool,
-    pub(crate)  is_regular_file: bool,
-    pub(crate)  is_fifo: bool,
-    pub(crate)  is_char: bool,
-    pub(crate)  is_block: bool,
-    pub(crate)  is_socket: bool,
-    pub(crate)  is_unknown: bool
+    pub(crate) is_dir: bool,
+    pub(crate) is_symlink: bool,
+    pub(crate) is_regular_file: bool,
+    pub(crate) is_fifo: bool,
+    pub(crate) is_char: bool,
+    pub(crate) is_block: bool,
+    pub(crate) is_socket: bool,
+    pub(crate) is_unknown: bool,
 }
 
 thread_local! {
@@ -57,7 +49,6 @@ impl fmt::Display for DirEntry {
 }
 
 impl DirEntry {
-
     #[inline(always)]
     #[allow(clippy::inline_always)]
     #[must_use]
@@ -71,52 +62,57 @@ impl DirEntry {
         let mut c_path_buf = [0u8; PATH_MAX as usize];
         c_path_buf[..file_path.len()].copy_from_slice(file_path);
         c_path_buf[file_path.len()] = 0;
-            
-            unsafe {
-                // x_ok checks for execute permission
-                access(c_path_buf.as_ptr().cast::<c_char>(), X_OK) == 0
-            }
-        
+
+        unsafe {
+            // x_ok checks for execute permission
+            access(c_path_buf.as_ptr().cast::<c_char>(), X_OK) == 0
+        }
     }
-   ///cost free check for block devices
-    pub fn is_block_device(&self) -> bool {
+    ///cost free check for block devices
+    #[must_use]
+    pub const fn is_block_device(&self) -> bool {
         self.is_block
     }
     ///Cost free check for character devices
-    pub fn is_char_device(&self) -> bool {
+    #[must_use]
+    pub const fn is_char_device(&self) -> bool {
         self.is_char
     }
     ///Cost free check for fifos
-    pub fn is_fifo(&self) -> bool {
+    #[must_use]
+    pub const fn is_fifo(&self) -> bool {
         self.is_fifo
     }
     ///Cost free check for sockets
-    pub fn is_socket(&self) -> bool {
+    #[must_use]
+    pub const fn is_socket(&self) -> bool {
         self.is_socket
     }
     ///Cost free check for regular files
-    pub fn is_regular_file(&self) -> bool {
+    #[must_use]
+    pub const fn is_regular_file(&self) -> bool {
         self.is_regular_file
     }
     ///Cost free check for directories
-    pub fn is_dir(&self) -> bool {
+    #[must_use]
+    pub const fn is_dir(&self) -> bool {
         self.is_dir
     }
     ///cost free check for block devices
-    pub fn is_char(&self) -> bool {
+    #[must_use]
+    pub const fn is_char(&self) -> bool {
         self.is_char
     }
 
     ///cost free check for unknown file types
-    pub fn is_unknown(&self) -> bool {
+    #[must_use]
+    pub const fn is_unknown(&self) -> bool {
         self.is_unknown
     }
 
-
-
-   ///cost free check for symlinks
-    pub fn is_symlink(&self) -> bool {
-       
+    ///cost free check for symlinks
+    #[must_use]
+    pub const fn is_symlink(&self) -> bool {
         self.is_symlink
     }
     #[allow(clippy::inline_always)]
@@ -164,15 +160,11 @@ impl DirEntry {
     ///returns the extension of the file if it has one
     pub fn extension(&self) -> Option<&[u8]> {
         self.file_name().rsplit(|&b| b == b'.').next()
-        
     }
-
-  
 
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
-
     ///returns the depth of the file in the directory tree (0 for root)
     pub fn depth(&self) -> usize {
         let count = memchr_iter(b'/', &self.path).count();
@@ -209,19 +201,19 @@ impl DirEntry {
         //(because unix paths are always valid utf8)
     }
 
-
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     pub fn as_os_str(&self) -> &OsStr {
         OsStr::from_bytes(&self.path)
     }
-   
+
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     pub fn matches_extension(&self, ext: &[u8]) -> bool {
-        self.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext))
+        self.extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
     }
 
     #[allow(clippy::inline_always)]
@@ -241,7 +233,6 @@ impl DirEntry {
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
     pub fn new(dir_path: &[u8]) -> io::Result<Vec<Self>> {
-
         //i have to do this here because i would lose the reference to the buffer
         //and i would have to reallocate it in the closure
         let mut c_path_buf = [0u8; PATH_MAX as usize];
@@ -257,7 +248,7 @@ impl DirEntry {
         if fd < 0 {
             return Err(Error::last_os_error());
         }
-     
+
         //heuristic to reduce the number of allocations
         //this is not a perfect heuristic but it should work for most cases
         //eg on my pc theres only 1 file per directory on average
@@ -337,7 +328,7 @@ impl DirEntry {
                         is_char: d.d_type == DT_CHR,
                         is_block: d.d_type == DT_BLK,
                         is_socket: d.d_type == DT_SOCK,
-                        is_unknown: d.d_type == DT_UNKNOWN
+                        is_unknown: d.d_type == DT_UNKNOWN,
                     });
 
                     offset += d.d_reclen as usize;

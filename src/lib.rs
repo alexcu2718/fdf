@@ -85,7 +85,7 @@ impl Finder {
         let construct_dir = DirEntry {
             path: self.root.as_bytes().into(),
             is_dir: true,
-            is_symlink: std::path::Path::new(&self.root).is_symlink(),     //cheap check only initialised once.
+            is_symlink: std::path::Path::new(&self.root).is_symlink(), //cheap check only initialised once.
             is_regular_file: true, //vague assumptions that i cant be bothered to check.
             is_fifo: false,
             is_block: false,

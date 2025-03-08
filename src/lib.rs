@@ -4,7 +4,7 @@ use rayon::prelude::*;
 mod direntry;
 pub use direntry::DirEntry;
 mod utils;
-pub use utils::{escape_regex_string, get_depth, process_glob_regex, read_dir, resolve_directory};
+pub use utils::{escape_regex_string, process_glob_regex, read_dir, resolve_directory};
 mod config;
 pub use config::SearchConfig;
 

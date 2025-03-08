@@ -1,6 +1,5 @@
 use crate::DirEntry;
 use fnmatch_regex2::glob_to_regex;
-use memchr::memchr_iter;
 use regex::escape as RegexEscape;
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
@@ -8,18 +7,7 @@ use std::env::current_dir;
 use std::ffi::OsString;
 use std::path::Path;
 
-#[allow(clippy::inline_always)]
-#[inline(always)]
-#[must_use]
-pub fn get_depth(filename: &[u8]) -> usize {
-    let count = memchr_iter(b'/', filename).count();
 
-    if filename.is_empty() && filename[0] == b'/' {
-        count.saturating_sub(1)
-    } else {
-        count
-    }
-}
 
 #[allow(clippy::inline_always)]
 #[inline(always)]
@@ -29,12 +17,12 @@ pub fn read_dir(path: &[u8]) -> Result<Vec<DirEntry>, std::io::Error> {
 }
 
 #[must_use]
-pub fn process_glob_regex(glob_pattern: &str, args_glob: bool) -> String {
+pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     if !args_glob {
-        return glob_pattern.into();
+        return pattern.into();
     }
 
-    glob_to_regex(glob_pattern).map_or_else(
+    glob_to_regex(pattern).map_or_else(
         |_| {
             eprintln!("This can't be processed as a glob pattern");
             std::process::exit(1)

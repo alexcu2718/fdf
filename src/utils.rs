@@ -1,6 +1,6 @@
-use crate::DirEntry;
-use fnmatch_regex2::glob_to_regex;
-use regex::escape as RegexEscape;
+use crate::{DirEntry,glob_to_regex};
+//use fnmatch_regex2::glob_to_regex;
+
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 use std::env::current_dir;
@@ -15,6 +15,7 @@ use std::path::Path;
 pub fn read_dir(path: &[u8]) -> Result<Vec<DirEntry>, std::io::Error> {
     DirEntry::new(path)
 }
+
 
 #[must_use]
 pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
@@ -36,7 +37,7 @@ pub fn escape_regex_string(input: &str, avoid_regex: bool, args_glob: bool) -> S
     if !avoid_regex || args_glob {
         return input.into();
     }
-    RegexEscape(input)
+    regex::escape(input)
 }
 
 #[allow(clippy::must_use_candidate)]

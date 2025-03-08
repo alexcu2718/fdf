@@ -5,6 +5,8 @@ mod direntry;
 pub use direntry::DirEntry;
 mod utils;
 pub use utils::{escape_regex_string, process_glob_regex, read_dir, resolve_directory};
+mod glob;
+pub use glob::glob_to_regex;
 mod config;
 pub use config::SearchConfig;
 

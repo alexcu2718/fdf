@@ -152,22 +152,10 @@ name = "fdf"
 version = "0.1.4"
 dependencies = [
  "clap",
- "fnmatch-regex2",
  "libc",
  "memchr",
  "mimalloc",
  "rayon",
- "regex",
-]
-
-[[package]]
-name = "fnmatch-regex2"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "465f3805562dea154870dd0be77ed43b832004ad0c7b2bf27b3cfed6185651d7"
-dependencies = [
- "itertools",
- "quick-error",
  "regex",
 ]
 
@@ -182,15 +170,6 @@ name = "is_terminal_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
-
-[[package]]
-name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
 
 [[package]]
 name = "libc"
@@ -237,12 +216,6 @@ checksum = "60946a68e5f9d28b0dc1c21bb8a97ee7d018a8b322fa57838ba31cc878e22d99"
 dependencies = [
  "unicode-ident",
 ]
-
-[[package]]
-name = "quick-error"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 
 [[package]]
 name = "quote"

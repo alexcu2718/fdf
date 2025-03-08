@@ -1,6 +1,14 @@
 use libc::{
-    access, c_char, close, dirent64, lstat, open, syscall, SYS_getdents64, DT_BLK, DT_CHR, DT_DIR,
-    DT_FIFO, DT_REG, DT_SOCK, DT_UNKNOWN, O_RDONLY, PATH_MAX, S_IFLNK, S_IFMT, X_OK,
+    access, c_char, close, dirent64, open, syscall, SYS_getdents64,
+     DT_BLK, 
+     DT_CHR, 
+     DT_DIR, 
+     DT_FIFO, 
+     DT_LNK, 
+     DT_REG, 
+     DT_SOCK, 
+     DT_UNKNOWN, 
+     O_RDONLY, PATH_MAX, X_OK
 };
 
 use std::{
@@ -28,13 +36,14 @@ struct AlignedBuffer {
 //and the fields are used in the filter method
 pub struct DirEntry {
     pub path: Box<[u8]>,
-    pub is_dir: bool,
-    pub is_unknown: bool,
-    pub is_regular_file: bool,
-    pub is_fifo: bool,
-    pub is_char: bool,
-    pub is_block: bool,
-    pub is_socket: bool,
+    pub(crate)  is_dir: bool,
+    pub(crate)  is_symlink: bool,
+    pub(crate)  is_regular_file: bool,
+    pub(crate)  is_fifo: bool,
+    pub(crate)  is_char: bool,
+    pub(crate)  is_block: bool,
+    pub(crate)  is_socket: bool,
+    pub(crate)  is_unknown: bool
 }
 
 thread_local! {
@@ -48,47 +57,58 @@ impl fmt::Display for DirEntry {
 }
 
 impl DirEntry {
+
     #[inline(always)]
     #[allow(clippy::inline_always)]
     #[must_use]
     pub fn is_executable(&self) -> bool {
-        if self.is_unknown || !self.is_regular_file {
+        if !self.is_regular_file {
             return false;
         }
-
-        // Create a null-terminated path for libc
-        let mut path_buf = [0u8; PATH_MAX as usize];
-        let path_len = std::cmp::min(self.path.len(), path_buf.len() - 1);
-        path_buf[..path_len].copy_from_slice(&self.path[..path_len]);
-        path_buf[path_len] = 0; // Null terminator
-
-        unsafe {
-            // X_OK (1) checks for execute permission
-            access(path_buf.as_ptr().cast::<c_char>(), X_OK) == 0
-        }
+        let dir_path = &self.path;
+        //i have to do this here because i would lose the reference to the buffer
+        let mut c_path_buf = [0u8; PATH_MAX as usize];
+        c_path_buf[..dir_path.len()].copy_from_slice(dir_path);
+        c_path_buf[dir_path.len()] = 0;
+            
+            unsafe {
+                // x_ok checks for execute permission
+                access(c_path_buf.as_ptr().cast::<c_char>(), X_OK) == 0
+            }
+        
+    }
+   
+    pub fn is_block_device(&self) -> bool {
+        self.is_block
+    }
+    pub fn is_char_device(&self) -> bool {
+        self.is_char
+    }
+    pub fn is_fifo(&self) -> bool {
+        self.is_fifo
+    }
+    pub fn is_socket(&self) -> bool {
+        self.is_socket
+    }
+    pub fn is_regular_file(&self) -> bool {
+        self.is_regular_file
+    }
+    pub fn is_dir(&self) -> bool {
+        self.is_dir
+    }
+    pub fn is_char(&self) -> bool {
+        self.is_char
+    }
+    pub fn is_unknown(&self) -> bool {
+        self.is_unknown
     }
 
-    #[inline(always)]
-    #[allow(clippy::inline_always)]
-    #[must_use]
-    pub fn is_symlink(&self) -> bool {
-        if self.is_regular_file {
-            return false;
-        }
-        // Create a null-terminated path for libc
-        let mut path_buf = [0u8; PATH_MAX as usize];
-        let path_len = std::cmp::min(self.path.len(), path_buf.len() - 1);
-        path_buf[..path_len].copy_from_slice(&self.path[..path_len]);
-        path_buf[path_len] = 0;
 
-        unsafe {
-            let mut stat_buf: libc::stat = std::mem::zeroed();
-            if lstat(path_buf.as_ptr().cast::<c_char>(), &mut stat_buf) == 0 {
-                (stat_buf.st_mode & S_IFMT) == S_IFLNK
-            } else {
-                false
-            }
-        }
+
+   
+    pub fn is_symlink(&self) -> bool {
+       
+        self.is_symlink
     }
     #[allow(clippy::inline_always)]
     #[inline(always)]
@@ -124,7 +144,7 @@ impl DirEntry {
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
     pub fn file_type(&self) -> io::Result<std::fs::FileType> {
-        // Since we can't directly create a std::fs::FileType,
+        //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it
         std::fs::symlink_metadata(self.as_path()).map(|m| m.file_type())
     }
@@ -133,17 +153,16 @@ impl DirEntry {
     #[inline(always)]
     #[must_use]
     pub fn extension(&self) -> Option<&[u8]> {
-        let filename = self.file_name();
-        filename
-            .iter()
-            .rposition(|&b| b == b'.')
-            .map(|pos| &filename[pos + 1..])
+        self.file_name().rsplit(|&b| b == b'.').next()
+        
     }
+
+  
 
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
-    pub fn get_depth(&self) -> usize {
+    pub fn depth(&self) -> usize {
         let count = memchr_iter(b'/', &self.path).count();
 
         if !self.path.is_empty() && self.path[0] == b'/' {
@@ -175,18 +194,9 @@ impl DirEntry {
     pub fn as_str(&self) -> &str {
         unsafe { std::str::from_utf8_unchecked(&self.path) }
         //this is safe because path is always valid utf8
-        //this assumption is because unix paths are always valid utf8
+        //(because unix paths are always valid utf8)
     }
 
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
-    #[must_use]
-    pub fn to_filename_str(&self) -> &str {
-        unsafe { std::str::from_utf8_unchecked(self.file_name()) }
-        //this is safe because file_name() returns a slice of the path which is always valid utf8
-        //and we are not modifying the slice in any way
-        //this assumption is because unix paths are always valid utf8
-    }
 
     #[allow(clippy::inline_always)]
     #[inline(always)]
@@ -194,20 +204,12 @@ impl DirEntry {
     pub fn as_os_str(&self) -> &OsStr {
         OsStr::from_bytes(&self.path)
     }
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
-    #[must_use]
-    pub fn as_os_str_filename(&self) -> &OsStr {
-        OsStr::from_bytes(self.file_name())
-        //this might be overkill, remove if warranted,
-    }
-
+   
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     pub fn matches_extension(&self, ext: &[u8]) -> bool {
-        self.extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
+        self.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext))
     }
 
     #[allow(clippy::inline_always)]
@@ -227,6 +229,9 @@ impl DirEntry {
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
     pub fn new(dir_path: &[u8]) -> io::Result<Vec<Self>> {
+
+        //i have to do this here because i would lose the reference to the buffer
+        //and i would have to reallocate it in the closure
         let mut c_path_buf = [0u8; PATH_MAX as usize];
         c_path_buf[..dir_path.len()].copy_from_slice(dir_path);
         c_path_buf[dir_path.len()] = 0;
@@ -240,7 +245,7 @@ impl DirEntry {
         if fd < 0 {
             return Err(Error::last_os_error());
         }
-
+     
         //heuristic to reduce the number of allocations
         //this is not a perfect heuristic but it should work for most cases
         //eg on my pc theres only 1 file per directory on average
@@ -314,12 +319,13 @@ impl DirEntry {
                     entries.push(Self {
                         path: Box::from(buf.as_slice()),
                         is_dir: d.d_type == DT_DIR, //i would explain theres but its trivial lol.
-                        is_unknown: d.d_type == DT_UNKNOWN,
+                        is_symlink: d.d_type == DT_LNK,
                         is_regular_file: d.d_type == DT_REG,
                         is_fifo: d.d_type == DT_FIFO,
                         is_char: d.d_type == DT_CHR,
                         is_block: d.d_type == DT_BLK,
                         is_socket: d.d_type == DT_SOCK,
+                        is_unknown: d.d_type == DT_UNKNOWN
                     });
 
                     offset += d.d_reclen as usize;

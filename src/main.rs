@@ -8,7 +8,9 @@ use printer::write_paths_coloured;
 mod type_config;
 use type_config::build_type_filter;
 
-const CHARS: [char; 9] = ['d', 'l', 'f', 'p', 'c', 'b', 's', 'e', 'x'];
+
+//mirroring option in fd but adding unknown as well.
+const CHARS: [char; 10] = ['d','u', 'l', 'f', 'p', 'c', 'b', 's', 'e', 'x'];
 
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]

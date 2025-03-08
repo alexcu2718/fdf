@@ -1,7 +1,8 @@
 use memchr::memrchr;
-
+use std::sync::OnceLock;
 use fdf::DirEntry;
 use std::io::{stdout, BufWriter, IsTerminal, Write};
+use std::collections::HashMap;
 
 const NEWLINE: &[u8] = b"\n";
 const RESET: &[u8] = b"\x1b[0m";
@@ -42,10 +43,24 @@ const COLOUR_TSV: &[u8] = b"\x1b[38;2;160;160;160m";
 const COLOUR_XLS: &[u8] = b"\x1b[38;2;64;128;64m";
 const COLOUR_XLSX: &[u8] = b"\x1b[38;2;64;128;64m";
 const COLOUR_SQL: &[u8] = b"\x1b[38;2;100;100;100m";
+// default colors if LS_COLORS is not set
+const DEFAULT_SYMLINK_COLOR: &[u8] = b"\x1b[38;2;230;150;60m";
+const DEFAULT_DIR_COLOR: &[u8] = b"\x1b[38;2;30;144;255m";
 
 #[allow(clippy::inline_always)]
 #[inline(always)]
-fn extension_colour(bytes: &[u8]) -> &[u8] {
+fn extension_colour( entry: &DirEntry) -> &[u8] {
+    // check if it's a symlink and use  LS_COLORS symlink color
+    if entry.is_symlink() {
+        return SYMLINK_COLOR.get_or_init(|| parse_ls_colors("ln", DEFAULT_SYMLINK_COLOR));
+    }
+    
+    // check if it's a directory and use  LS_COLORS directory color
+    if entry.is_dir() {
+        return DIR_COLOR.get_or_init(|| parse_ls_colors("di", DEFAULT_DIR_COLOR));
+    }
+    let bytes=&entry.path;
+    // for all other  files, color by extension
     memrchr(b'.', bytes).map_or(RESET, |pos| match &bytes[pos + 1..] {
         b"rs" => COLOUR_RS,
         b"py" => COLOUR_PY,
@@ -102,7 +117,7 @@ where
 
     if use_colors {
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
-            buf_writer.write_all(extension_colour(&path.path))?;
+            buf_writer.write_all(extension_colour( &path))?;
             buf_writer.write_all(&path.path)?;
 
             // add a trailing slash for directories
@@ -128,3 +143,68 @@ where
     buf_writer.flush()?;
     Ok(())
 }
+
+
+static SYMLINK_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
+
+static DIR_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
+
+/// parse the `LS_COLORS` environment variable and get color for a specific key
+fn parse_ls_colors(key: &str, default_color: &[u8]) -> Box<[u8]> {
+    if let Ok(ls_colors) = std::env::var("LS_COLORS") {
+        //  parse the LS_COLORS string into key-value pairs
+        let color_map: HashMap<&str, &str> = ls_colors
+            .split(':')
+            .filter_map(|entry| {
+                let parts: Vec<&str> = entry.splitn(2, '=').collect();
+                if parts.len() == 2 {
+                    Some((parts[0], parts[1]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        //  the color for the specified key
+        if let Some(color_code) = color_map.get(key) {
+            return ls_color_to_ansi_rgb(color_code).into_bytes().into_boxed_slice();
+        }
+    }
+    
+    // deault color if LS_COLORS not set or doesn't contain the key
+
+    default_color.to_vec().into_boxed_slice()
+}
+
+/// convert the `LS_COLORS` format (e.g., "01;34") to RGB ANSI escape sequence
+fn ls_color_to_ansi_rgb(ls_color: &str) -> String {
+    //  color if parsing fails
+    let mut rgb = (255, 255, 255);
+    
+    // check if format contains a color code
+    if let Some(color_code) = ls_color.split(';').nth(1).and_then(|s| s.parse::<u8>().ok()) {
+        // ANSI colors to RGB mapping
+        rgb = match color_code {
+            30 => (0, 0, 0),        
+            31 => (255, 0, 0),      
+            32 => (0, 255, 0),     
+            33 => (255, 255, 0),    
+            34 => (30, 144, 255),   
+            35 => (255, 0, 255),    
+            36 => (0, 255, 255),    
+         
+            90 => (128, 128, 128),  
+            91 => (255, 100, 100), 
+            92 => (100, 255, 100),  
+            93 => (255, 255, 100),  
+            94 => (100, 100, 255), 
+            95 => (255, 100, 255),  
+            96 => (100, 255, 255),
+      
+            _ => (255, 255, 255),   // default
+        };
+    }
+   
+    format!("\x1b[38;2;{};{};{}m", rgb.0, rgb.1, rgb.2)
+}
+

@@ -61,15 +61,16 @@ impl DirEntry {
     #[inline(always)]
     #[allow(clippy::inline_always)]
     #[must_use]
+    ///costly check for executables
     pub fn is_executable(&self) -> bool {
         if !self.is_regular_file {
             return false;
         }
-        let dir_path = &self.path;
+        let file_path = &self.path;
         //i have to do this here because i would lose the reference to the buffer
         let mut c_path_buf = [0u8; PATH_MAX as usize];
-        c_path_buf[..dir_path.len()].copy_from_slice(dir_path);
-        c_path_buf[dir_path.len()] = 0;
+        c_path_buf[..file_path.len()].copy_from_slice(file_path);
+        c_path_buf[file_path.len()] = 0;
             
             unsafe {
                 // x_ok checks for execute permission
@@ -77,35 +78,43 @@ impl DirEntry {
             }
         
     }
-   
+   ///cost free check for block devices
     pub fn is_block_device(&self) -> bool {
         self.is_block
     }
+    ///Cost free check for character devices
     pub fn is_char_device(&self) -> bool {
         self.is_char
     }
+    ///Cost free check for fifos
     pub fn is_fifo(&self) -> bool {
         self.is_fifo
     }
+    ///Cost free check for sockets
     pub fn is_socket(&self) -> bool {
         self.is_socket
     }
+    ///Cost free check for regular files
     pub fn is_regular_file(&self) -> bool {
         self.is_regular_file
     }
+    ///Cost free check for directories
     pub fn is_dir(&self) -> bool {
         self.is_dir
     }
+    ///cost free check for block devices
     pub fn is_char(&self) -> bool {
         self.is_char
     }
+
+    ///cost free check for unknown file types
     pub fn is_unknown(&self) -> bool {
         self.is_unknown
     }
 
 
 
-   
+   ///cost free check for symlinks
     pub fn is_symlink(&self) -> bool {
        
         self.is_symlink
@@ -152,6 +161,7 @@ impl DirEntry {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
+    ///returns the extension of the file if it has one
     pub fn extension(&self) -> Option<&[u8]> {
         self.file_name().rsplit(|&b| b == b'.').next()
         
@@ -162,6 +172,8 @@ impl DirEntry {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
+
+    ///returns the depth of the file in the directory tree (0 for root)
     pub fn depth(&self) -> usize {
         let count = memchr_iter(b'/', &self.path).count();
 

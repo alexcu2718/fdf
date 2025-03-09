@@ -167,13 +167,8 @@ impl DirEntry {
     #[must_use]
     ///returns the depth of the file in the directory tree (0 for root)
     pub fn depth(&self) -> usize {
-        let count = memchr_iter(b'/', &self.path).count();
+         memchr_iter(b'/', &self.path).count()
 
-        if !self.path.is_empty() && self.path[0] == b'/' {
-            count.saturating_sub(1)
-        } else {
-            count
-        }
     }
     #[allow(clippy::inline_always)]
     #[inline(always)]

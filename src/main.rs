@@ -79,12 +79,19 @@ pub struct Args {
     glob: bool,
 
     #[arg(
-        short = 'd',
-        long = "max-depth",
-        required = false,
+        short = 'n',
+        long = "n-results",
         help = "Retrieves the first eg 10 results, rlib rs$ -d 10"
     )]
     top_n: Option<usize>,
+    #[arg(
+        short = 'd',
+        long = "depth",
+        help = "Retrieves only traverse to x depth"
+    )]
+    depth: Option<usize>,
+
+
     #[arg(
         short = 't',
         long = "type",

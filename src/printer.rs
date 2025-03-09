@@ -114,7 +114,7 @@ where
 {
     let mut buf_writer = BufWriter::new(stdout().lock());
     let use_colors = stdout().is_terminal();
-
+    //TODO! fix broken pipe errors.
     if use_colors {
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
             buf_writer.write_all(extension_colour( &path))?;
@@ -124,6 +124,7 @@ where
             if path.is_dir() {
                 buf_writer.write_all(b"/")?;
             }
+            
 
             buf_writer.write_all(NEWLINE)?;
             buf_writer.write_all(RESET)?;
@@ -140,7 +141,7 @@ where
             buf_writer.write_all(NEWLINE)?;
         }
     }
-    buf_writer.flush()?;
+    let _=buf_writer.flush();
     Ok(())
 }
 

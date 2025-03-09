@@ -14,6 +14,8 @@ use std::sync::OnceLock;
 
 static START: OnceLock<Box<[u8]>> = OnceLock::new();
 
+static START_DEPTH: OnceLock<usize> = OnceLock::new();
+
 use std::{
     ffi::OsString,
     os::unix::ffi::OsStrExt,
@@ -43,6 +45,8 @@ impl Finder {
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::inline_always)]
     #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    //DUE TO INTENDED USAGE, THIS FUNCTION IS NOT TOO MANY ARGUMENTS.
     pub fn new(
         root: OsString,
         pattern: &str,
@@ -51,6 +55,7 @@ impl Finder {
         keep_dirs: bool,
         short_path: bool,
         extension_match: Option<Box<[u8]>>,
+        max_depth: Option<usize>,
     ) -> Self {
         let search_config = SearchConfig::new(
             pattern,
@@ -59,6 +64,7 @@ impl Finder {
             keep_dirs,
             short_path,
             extension_match,
+            max_depth,
         );
 
         Self {
@@ -101,6 +107,12 @@ impl Finder {
         START.get_or_init(|| self.root.clone().as_bytes().to_vec().into_boxed_slice());
         //we have to arbitrarily construct a direntry to start the search.
 
+
+        //used to calculate the depth of the starting directory
+        //i personally think this couldve been done more elegantly
+        //will probably be fixed in a refactor.
+        START_DEPTH.get_or_init(|| {construct_dir.depth()});
+
         rayon::spawn(move || {
             Self::process_directory(construct_dir, &sender, &search_config, filter);
         });
@@ -118,6 +130,15 @@ impl Finder {
         config: &SearchConfig,
         filter: Option<fn(&DirEntry) -> bool>,
     ) {
+        //check if we should stop searching
+        //SAFETY: START_DEPTH is always initialised before this function is called.
+        if config
+            .depth
+            .is_some_and(|d| dir.depth() - unsafe{START_DEPTH.get().unwrap_unchecked()} >= d)
+        {   let _ = sender.send(dir);
+            return;
+        }
+
         // store whether we should send the directory itself
         let should_send = config.keep_dirs
             && config.matches_path(&dir, config.file_name)

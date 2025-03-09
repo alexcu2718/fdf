@@ -306,11 +306,11 @@ fn handle_slash(acc: ClassAccumulator) -> ClassAccumulator {
 /// class pattern (e.g. `[A-Za-z0-9-]`), sort the characters and the classes.
 fn close_class(glob_acc: ClassAccumulator) -> String {
     let acc = handle_slash(glob_acc);
-    
+
     // Partition items into chars and ranges (replace itertools::partition_map)
     let mut chars_vec = Vec::new();
     let mut classes_vec = Vec::new();
-    
+
     for item in acc.items {
         match item {
             ClassItem::Char(chr) => chars_vec.push(chr),
@@ -321,7 +321,7 @@ fn close_class(glob_acc: ClassAccumulator) -> String {
     let (chars, final_dash) = {
         let mut has_dash = false;
         let mut chars_filtered = Vec::new();
-        
+
         for chr in chars_vec {
             if chr == '-' {
                 has_dash = true;
@@ -329,19 +329,22 @@ fn close_class(glob_acc: ClassAccumulator) -> String {
                 chars_filtered.push(chr);
             }
         }
-        
+
         // Sort and deduplicate (replace itertools::sorted_unstable and dedup)
         chars_filtered.sort_unstable();
         chars_filtered.dedup();
-        
-        let formatted_chars = chars_filtered.into_iter().map(escape_in_class).collect::<Vec<_>>();
+
+        let formatted_chars = chars_filtered
+            .into_iter()
+            .map(escape_in_class)
+            .collect::<Vec<_>>();
         (formatted_chars, if has_dash { "-" } else { "" })
     };
 
     // Sort classes (replace itertools::sorted_unstable and dedup)
     classes_vec.sort_unstable();
     classes_vec.dedup();
-    
+
     let classes = classes_vec
         .into_iter()
         .map(|cls| format!("{}-{}", escape_in_class(cls.0), escape_in_class(cls.1)))
@@ -352,17 +355,17 @@ fn close_class(glob_acc: ClassAccumulator) -> String {
     if acc.negated {
         result.push('^');
     }
-    
+
     for char_str in chars {
         result.push_str(&char_str);
     }
-    
+
     for class_str in classes {
         result.push_str(&class_str);
     }
-    
+
     result.push_str(final_dash);
-    
+
     format!("[{result}]")
 }
 
@@ -373,10 +376,10 @@ fn close_alternate(gathered: Vec<String>) -> String {
         .into_iter()
         .map(|item| item.chars().map(escape).collect::<String>())
         .collect::<Vec<_>>();
-    
+
     items.sort_unstable();
     items.dedup();
-    
+
     let joined = items.join("|");
     format!("({joined})")
 }
@@ -677,12 +680,12 @@ pub fn glob_to_regex(pattern: &str) -> Result<Regex, Error> {
         pattern: pattern.chars(),
         state: State::Start,
     };
-    
+
     let mut result = Vec::new();
     for item in flatten_ok(parser) {
         result.push(item?);
     }
-    
+
     let re_pattern = result.join("");
     Regex::new(&re_pattern).map_err(|err| Error::InvalidRegex(re_pattern, err.to_string()))
 }

@@ -1,6 +1,7 @@
 use clap::{Parser, ValueHint};
 use fdf::{process_glob_regex, resolve_directory, Finder};
 use std::ffi::OsString;
+use std::os::unix::ffi::OsStrExt;
 use std::str;
 const START_PREFIX: &str = "/";
 mod printer;
@@ -91,7 +92,6 @@ pub struct Args {
     )]
     depth: Option<usize>,
 
-
     #[arg(
         short = 't',
         long = "type",
@@ -147,6 +147,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let case_insensitive = args.case;
     let hide_hidden = !args.hidden;
     let file_name = args.full_path;
+
+
+    let depth = match (path.as_bytes(), args.depth) {
+        (b"/", Some(d)) => Some(d.saturating_sub(1)),
+        _ => args.depth,
+    };
+
     let mut finder = Finder::new(
         path,
         &pattern,
@@ -155,6 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         keep_dirs,
         file_name,
         extension_match,
+        depth
     );
     // eprintln!("{}",args.full_path);
 

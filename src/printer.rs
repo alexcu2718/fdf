@@ -1,8 +1,8 @@
-use memchr::memrchr;
-use std::sync::OnceLock;
 use fdf::DirEntry;
-use std::io::{stdout, BufWriter, IsTerminal, Write};
+use memchr::memrchr;
 use std::collections::HashMap;
+use std::io::{stdout, BufWriter, IsTerminal, Write};
+use std::sync::OnceLock;
 
 const NEWLINE: &[u8] = b"\n";
 const RESET: &[u8] = b"\x1b[0m";
@@ -49,17 +49,17 @@ const DEFAULT_DIR_COLOR: &[u8] = b"\x1b[38;2;30;144;255m";
 
 #[allow(clippy::inline_always)]
 #[inline(always)]
-fn extension_colour( entry: &DirEntry) -> &[u8] {
+fn extension_colour(entry: &DirEntry) -> &[u8] {
     // check if it's a symlink and use  LS_COLORS symlink color
     if entry.is_symlink() {
         return SYMLINK_COLOR.get_or_init(|| parse_ls_colors("ln", DEFAULT_SYMLINK_COLOR));
     }
-    
+
     // check if it's a directory and use  LS_COLORS directory color
     if entry.is_dir() {
         return DIR_COLOR.get_or_init(|| parse_ls_colors("di", DEFAULT_DIR_COLOR));
     }
-    let bytes=&entry.path;
+    let bytes = &entry.path;
     // for all other  files, color by extension
     memrchr(b'.', bytes).map_or(RESET, |pos| match &bytes[pos + 1..] {
         b"rs" => COLOUR_RS,
@@ -117,17 +117,17 @@ where
     //TODO! fix broken pipe errors.
     if use_colors {
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
-            buf_writer.write_all(extension_colour( &path))?;
+            buf_writer.write_all(extension_colour(&path))?;
             buf_writer.write_all(&path.path)?;
 
             // add a trailing slash for directories
             if path.is_dir() {
                 buf_writer.write_all(b"/")?;
             }
-            
 
             buf_writer.write_all(NEWLINE)?;
             buf_writer.write_all(RESET)?;
+            
         }
     } else {
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
@@ -139,12 +139,12 @@ where
             }
 
             buf_writer.write_all(NEWLINE)?;
+            
         }
     }
-    let _=buf_writer.flush();
+    let _ = buf_writer.flush();
     Ok(())
 }
-
 
 static SYMLINK_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
 
@@ -165,13 +165,15 @@ fn parse_ls_colors(key: &str, default_color: &[u8]) -> Box<[u8]> {
                 }
             })
             .collect();
-        
+
         //  the color for the specified key
         if let Some(color_code) = color_map.get(key) {
-            return ls_color_to_ansi_rgb(color_code).into_bytes().into_boxed_slice();
+            return ls_color_to_ansi_rgb(color_code)
+                .into_bytes()
+                .into_boxed_slice();
         }
     }
-    
+
     // deault color if LS_COLORS not set or doesn't contain the key
 
     default_color.to_vec().into_boxed_slice()
@@ -181,31 +183,34 @@ fn parse_ls_colors(key: &str, default_color: &[u8]) -> Box<[u8]> {
 fn ls_color_to_ansi_rgb(ls_color: &str) -> String {
     //  color if parsing fails
     let mut rgb = (255, 255, 255);
-    
+
     // check if format contains a color code
-    if let Some(color_code) = ls_color.split(';').nth(1).and_then(|s| s.parse::<u8>().ok()) {
+    if let Some(color_code) = ls_color
+        .split(';')
+        .nth(1)
+        .and_then(|s| s.parse::<u8>().ok())
+    {
         // ANSI colors to RGB mapping
         rgb = match color_code {
-            30 => (0, 0, 0),        
-            31 => (255, 0, 0),      
-            32 => (0, 255, 0),     
-            33 => (255, 255, 0),    
-            34 => (30, 144, 255),   
-            35 => (255, 0, 255),    
-            36 => (0, 255, 255),    
-         
-            90 => (128, 128, 128),  
-            91 => (255, 100, 100), 
-            92 => (100, 255, 100),  
-            93 => (255, 255, 100),  
-            94 => (100, 100, 255), 
-            95 => (255, 100, 255),  
+            30 => (0, 0, 0),
+            31 => (255, 0, 0),
+            32 => (0, 255, 0),
+            33 => (255, 255, 0),
+            34 => (30, 144, 255),
+            35 => (255, 0, 255),
+            36 => (0, 255, 255),
+
+            90 => (128, 128, 128),
+            91 => (255, 100, 100),
+            92 => (100, 255, 100),
+            93 => (255, 255, 100),
+            94 => (100, 100, 255),
+            95 => (255, 100, 255),
             96 => (100, 255, 255),
-      
-            _ => (255, 255, 255),   // default
+
+            _ => (255, 255, 255), // default
         };
     }
-   
+
     format!("\x1b[38;2;{};{};{}m", rgb.0, rgb.1, rgb.2)
 }
-

@@ -1,4 +1,4 @@
-use crate::{DirEntry,glob_to_regex};
+use crate::{glob_to_regex, DirEntry};
 //use fnmatch_regex2::glob_to_regex;
 
 const DOT_PATTERN: &str = ".";
@@ -7,15 +7,12 @@ use std::env::current_dir;
 use std::ffi::OsString;
 use std::path::Path;
 
-
-
 #[allow(clippy::inline_always)]
 #[inline(always)]
 #[allow(clippy::missing_errors_doc)]
 pub fn read_dir(path: &[u8]) -> Result<Vec<DirEntry>, std::io::Error> {
     DirEntry::new(path)
 }
-
 
 #[must_use]
 pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
@@ -42,11 +39,7 @@ pub fn escape_regex_string(input: &str, avoid_regex: bool, args_glob: bool) -> S
 
 #[allow(clippy::must_use_candidate)]
 pub fn resolve_directory(args_cd: bool, args_directory: Option<OsString>) -> OsString {
-    if args_cd
-        || args_directory
-            .as_ref()
-            .is_some_and(|check_dot| check_dot == DOT_PATTERN)
-    {
+    if args_cd {
         current_dir().map_or_else(
             |_| DOT_PATTERN.into(),
             |path_res| {

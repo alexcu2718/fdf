@@ -1,5 +1,5 @@
 use libc::{
-    access, c_char, close, dirent64, open, syscall, SYS_getdents64, DT_BLK, DT_CHR, DT_DIR,
+    access, c_char, close,stat, dirent64, open, syscall, SYS_getdents64, DT_BLK, DT_CHR, DT_DIR,
     DT_FIFO, DT_LNK, DT_REG, DT_SOCK, DT_UNKNOWN, O_RDONLY, PATH_MAX, X_OK,
 };
 
@@ -21,7 +21,7 @@ struct AlignedBuffer {
     data: [u8; BUFFER_SIZE],
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 #[allow(clippy::struct_excessive_bools)]
 //it is not excessive, it is a necessary evil(we get this info for free)
 //i could add more fields but the struct is 24 bytes so its aligned to memory
@@ -35,7 +35,7 @@ pub struct DirEntry {
     pub(crate) is_char: bool,
     pub(crate) is_block: bool,
     pub(crate) is_socket: bool,
-    pub(crate) is_unknown: bool,
+    pub(crate) is_unknown: bool, //this metadata is fairly useless.
 }
 
 thread_local! {
@@ -119,6 +119,8 @@ impl DirEntry {
     #[inline(always)]
     #[allow(clippy::inline_always)]
     #[must_use]
+    ///costly check for empty files
+    ///i dont see much use for this function
     pub fn is_empty(&self) -> bool {
         if self.is_regular_file {
             // for files, check if size is zero without loading all metadata
@@ -167,15 +169,48 @@ impl DirEntry {
     #[must_use]
     ///returns the depth of the file in the directory tree (0 for root)
     pub fn depth(&self) -> usize {
-         memchr_iter(b'/', &self.path).count()
-
+        //we want to omit the starting slash
+        //this helps standardise results for when start directory is .. or . for example
+       
+        memchr_iter(b'/', &self.path[1..]).count()
     }
+        
+       
+        
+    
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
+    ///returns the name of the file
+    /// failing to do so, it returns the whole path
     pub fn file_name(&self) -> &[u8] {
         memrchr(b'/', &self.path).map_or(&self.path, |pos| &self.path[pos + 1..])
     }
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    #[allow(clippy::missing_errors_doc)]
+    ///returns the inode number of the file, rather expensive
+    /// i just included it for sake of completeness.
+    pub fn ino(&self) -> io::Result<u64> {
+      
+        
+        let mut stat_buf: stat = unsafe { std::mem::zeroed() };
+      
+        let file_path = &self.path;
+     
+        let mut c_path_buf = [0u8; PATH_MAX as usize];
+        c_path_buf[..file_path.len()].copy_from_slice(file_path);
+        c_path_buf[file_path.len()] = 0;
+        
+        let res = unsafe { stat(c_path_buf.as_ptr().cast::<c_char>(), &mut stat_buf) };
+        if res < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        
+        Ok(stat_buf.st_ino)
+
+    }
+
 
     #[allow(clippy::inline_always)]
     #[inline(always)]
@@ -190,15 +225,18 @@ impl DirEntry {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
+    ///
+    ///this is safe because path is always valid utf8
+    ///(because unix paths are always valid utf8)
     pub fn as_str(&self) -> &str {
         unsafe { std::str::from_utf8_unchecked(&self.path) }
-        //this is safe because path is always valid utf8
-        //(because unix paths are always valid utf8)
+   
     }
 
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
+    ///minimal cost conversion (lowest cost)
     pub fn as_os_str(&self) -> &OsStr {
         OsStr::from_bytes(&self.path)
     }
@@ -206,20 +244,22 @@ impl DirEntry {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
+    ///checks extension case insensitively for extension
     pub fn matches_extension(&self, ext: &[u8]) -> bool {
-        self.extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
+        self.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext))
     }
 
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
+    ///converts into an owned path
     pub fn into_path(&self) -> PathBuf {
         PathBuf::from(self.as_os_str())
     }
     #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
+    ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
         let filename = self.file_name();
         !filename.is_empty() && filename[0] == b'.'

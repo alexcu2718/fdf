@@ -130,14 +130,6 @@ impl Finder {
         config: &SearchConfig,
         filter: Option<fn(&DirEntry) -> bool>,
     ) {
-        //check if we should stop searching
-        //SAFETY: START_DEPTH is always initialised before this function is called.
-        if config
-            .depth
-            .is_some_and(|d| dir.depth() - unsafe{START_DEPTH.get().unwrap_unchecked()} >= d)
-        {   let _ = sender.send(dir);
-            return;
-        }
 
         // store whether we should send the directory itself
         let should_send = config.keep_dirs
@@ -146,9 +138,19 @@ impl Finder {
             && config.extension_match.as_ref().is_none()
             && unsafe { *dir.path != **START.get().unwrap_unchecked() };
 
+        //check if we should stop searching
+        //SAFETY: START_DEPTH is always initialised before this function is called.
+        if config
+            .depth
+            .is_some_and(|d| dir.depth() - unsafe{START_DEPTH.get().unwrap_unchecked()} >= d)
+        {   if should_send{let _ = sender.send(dir);}
+            return;
+        }
+
+
         match DirEntry::new(&dir.path) {
             Ok(entries) => {
-                let mut dirs = Vec::with_capacity(16);
+                let mut dirs = Vec::with_capacity(entries.len());
 
                 for entry in entries {
                     if config.hide_hidden && entry.is_hidden() {

@@ -157,7 +157,7 @@ impl Finder {
                         continue;
                     }
 
-                    if entry.is_dir {
+                    if entry.is_dir() {
                         // always include directories for traversal
                         dirs.push(entry);
                     } else if filter.as_ref().map_or(true, |f| f(&entry))

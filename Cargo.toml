@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 rust-version = "1.74.1"
 license = "MIT"
@@ -18,9 +18,12 @@ mimalloc = "0.1.43"
 rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf-dfa-full", "perf-literal", "unicode-perl"] }
 
+
 [profile.release]
 opt-level = 3
+debug = false
+strip=true
 lto = true
 codegen-units = 1
 panic = "abort"  
-strip = true     
+   

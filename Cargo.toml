@@ -17,3 +17,10 @@ memchr = "2.7.4"
 mimalloc = "0.1.43"
 rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf-dfa-full", "perf-literal", "unicode-perl"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"  
+strip = true     

@@ -127,7 +127,7 @@ where
 
             buf_writer.write_all(NEWLINE)?;
             buf_writer.write_all(RESET)?;
-            
+            // eprintln!("{:?}", path);
         }
     } else {
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
@@ -139,7 +139,6 @@ where
             }
 
             buf_writer.write_all(NEWLINE)?;
-            
         }
     }
     let _ = buf_writer.flush();
@@ -199,7 +198,6 @@ fn ls_color_to_ansi_rgb(ls_color: &str) -> String {
             34 => (30, 144, 255),
             35 => (255, 0, 255),
             36 => (0, 255, 255),
-
             90 => (128, 128, 128),
             91 => (255, 100, 100),
             92 => (100, 255, 100),

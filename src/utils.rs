@@ -1,4 +1,4 @@
-use crate::{glob_to_regex, DirEntry};
+use crate::glob_to_regex;
 //use fnmatch_regex2::glob_to_regex;
 
 const DOT_PATTERN: &str = ".";
@@ -6,13 +6,6 @@ const START_PREFIX: &str = "/";
 use std::env::current_dir;
 use std::ffi::OsString;
 use std::path::Path;
-
-#[allow(clippy::inline_always)]
-#[inline(always)]
-#[allow(clippy::missing_errors_doc)]
-pub fn read_dir(path: &[u8]) -> Result<Vec<DirEntry>, std::io::Error> {
-    DirEntry::new(path)
-}
 
 #[must_use]
 pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {

@@ -1,16 +1,21 @@
+#![allow(clippy::inline_always)]
 use libc::{
-    access, c_char, close,stat, dirent64, open, syscall, SYS_getdents64, DT_BLK, DT_CHR, DT_DIR,
-    DT_FIFO, DT_LNK, DT_REG, DT_SOCK, DT_UNKNOWN, O_RDONLY, PATH_MAX, X_OK,
+    access, c_char, close, dirent64, open, syscall, SYS_getdents64, O_RDONLY, PATH_MAX, X_OK
 };
+
+use slimmer_box::SlimmerBox;
 
 use std::{
     cell::RefCell,
     ffi::OsStr,
     fmt,
     io::{self, Error},
-    os::unix::ffi::OsStrExt,
+    os::unix::{ffi::OsStrExt, fs::MetadataExt},
     path::{Path, PathBuf},
+    slice
 };
+
+use crate::filetype::FileType;
 
 use memchr::{memchr, memchr_iter, memrchr};
 
@@ -21,21 +26,34 @@ struct AlignedBuffer {
     data: [u8; BUFFER_SIZE],
 }
 
-#[derive(Clone)]
-#[allow(clippy::struct_excessive_bools)]
-//it is not excessive, it is a necessary evil(we get this info for free)
-//i could add more fields but the struct is 24 bytes so its aligned to memory
-//and the fields are used in the filter method
+pub trait PointerUtils {
+    fn as_cstr_ptr<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(*const c_char) -> R;
+}
+
+impl PointerUtils for [u8] {
+    #[inline(always)]
+    ///converts a byte slice into a c str(ing) pointer
+    ///utilises `PATH_MAX` (4096 BYTES) to create an upper bounded array
+    //needs to be done as a callback because we need to keep the reference to the array
+    fn as_cstr_ptr<F, R>(&self, f: F) -> R
+    where  F: FnOnce(*const c_char) -> R,
+    {
+        let mut c_path_buf = [0u8; PATH_MAX as usize];
+        c_path_buf[..self.len()].copy_from_slice(self);
+        // null terminate the string
+        c_path_buf[self.len()] = 0;
+        f(c_path_buf.as_ptr().cast())
+    }
+}
+
 pub struct DirEntry {
-    pub path: Box<[u8]>,
-    pub(crate) is_dir: bool,
-    pub(crate) is_symlink: bool,
-    pub(crate) is_regular_file: bool,
-    pub(crate) is_fifo: bool,
-    pub(crate) is_char: bool,
-    pub(crate) is_block: bool,
-    pub(crate) is_socket: bool,
-    pub(crate) is_unknown: bool, //this metadata is fairly useless.
+    pub path: SlimmerBox<[u8]>, //12 bytes
+    pub file_type: FileType, //1 byte
+    pub inode: u64, //8 bytes
+    //total 21 bytes
+    //3 bytes padding, possible uses? not sure.
 }
 
 thread_local! {
@@ -44,88 +62,113 @@ thread_local! {
 
 impl fmt::Display for DirEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        write!(f, "{}", self.as_str_lossy())
+    }
+}
+
+impl fmt::Debug for DirEntry {
+    ///debug format for `DirEntry` (showing a vector of bytes is... not very useful)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "DirEntry({},{},{})",
+            self.as_str_lossy(),
+            self.file_type,
+            self.inode
+        )
     }
 }
 
 impl DirEntry {
     #[inline(always)]
-    #[allow(clippy::inline_always)]
     #[must_use]
     ///costly check for executables
     pub fn is_executable(&self) -> bool {
-        if !self.is_regular_file {
+        if !self.is_regular_file() {
             return false;
         }
-        let file_path = &self.path;
-        //i have to do this here because i would lose the reference to the buffer
-        let mut c_path_buf = [0u8; PATH_MAX as usize];
-        c_path_buf[..file_path.len()].copy_from_slice(file_path);
-        c_path_buf[file_path.len()] = 0;
 
         unsafe {
             // x_ok checks for execute permission
-            access(c_path_buf.as_ptr().cast::<c_char>(), X_OK) == 0
+            self.path.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
         }
     }
+
     ///cost free check for block devices
+    #[inline(always)]
     #[must_use]
     pub const fn is_block_device(&self) -> bool {
-        self.is_block
+        matches!(self.file_type, FileType::BlockDevice)
     }
+
     ///Cost free check for character devices
+    #[inline(always)]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
-        self.is_char
+        matches!(self.file_type, FileType::CharDevice)
     }
+
     ///Cost free check for fifos
+    #[inline(always)]
     #[must_use]
     pub const fn is_fifo(&self) -> bool {
-        self.is_fifo
+        matches!(self.file_type, FileType::Fifo)
     }
+
     ///Cost free check for sockets
+    #[inline(always)]
     #[must_use]
     pub const fn is_socket(&self) -> bool {
-        self.is_socket
+        matches!(self.file_type, FileType::Socket)
     }
+
     ///Cost free check for regular files
+    #[inline(always)]
     #[must_use]
     pub const fn is_regular_file(&self) -> bool {
-        self.is_regular_file
+        matches!(self.file_type, FileType::RegularFile)
     }
+
     ///Cost free check for directories
+    #[inline(always)]
     #[must_use]
     pub const fn is_dir(&self) -> bool {
-        self.is_dir
+        matches!(self.file_type, FileType::Directory)
     }
-    ///cost free check for block devices
+
+    ///cost free check for character devices
+    #[inline(always)]
     #[must_use]
     pub const fn is_char(&self) -> bool {
-        self.is_char
+        matches!(self.file_type, FileType::CharDevice)
     }
 
     ///cost free check for unknown file types
+    #[inline(always)]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
-        self.is_unknown
+        matches!(self.file_type, FileType::Unknown)
     }
 
     ///cost free check for symlinks
+    #[inline(always)]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
-        self.is_symlink
+        matches!(self.file_type, FileType::Symlink)
     }
-    #[allow(clippy::inline_always)]
+
     #[inline(always)]
-    #[allow(clippy::inline_always)]
     #[must_use]
     ///costly check for empty files
     ///i dont see much use for this function
     pub fn is_empty(&self) -> bool {
-        if self.is_regular_file {
+
+       // let myitem:u16=65;
+
+        if self.is_regular_file() {
             // for files, check if size is zero without loading all metadata
             self.metadata().is_ok_and(|meta| meta.len() == 0)
-        } else if self.is_dir {
+        } else if self.is_dir() {
             //  efficient directory check - just get the first entry
             std::fs::read_dir(self.as_path()).is_ok_and(|mut entries| entries.next().is_none())
         } else {
@@ -134,20 +177,18 @@ impl DirEntry {
         }
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
     pub fn metadata(&self) -> std::io::Result<std::fs::Metadata> {
         std::fs::metadata(self.as_os_str())
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     pub fn as_path(&self) -> &Path {
         Path::new(self.as_os_str())
     }
-    #[allow(clippy::inline_always)]
+
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
     pub fn file_type(&self) -> io::Result<std::fs::FileType> {
@@ -156,29 +197,23 @@ impl DirEntry {
         std::fs::symlink_metadata(self.as_path()).map(|m| m.file_type())
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     ///returns the extension of the file if it has one
     pub fn extension(&self) -> Option<&[u8]> {
-        self.file_name().rsplit(|&b| b == b'.').next()
+        self.path.rsplit(|&b| b == b'.').next()
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     ///returns the depth of the file in the directory tree (0 for root)
     pub fn depth(&self) -> usize {
         //we want to omit the starting slash
         //this helps standardise results for when start directory is .. or . for example
-       
+
         memchr_iter(b'/', &self.path[1..]).count()
     }
-        
-       
-        
-    
-    #[allow(clippy::inline_always)]
+
     #[inline(always)]
     #[must_use]
     ///returns the name of the file
@@ -186,33 +221,16 @@ impl DirEntry {
     pub fn file_name(&self) -> &[u8] {
         memrchr(b'/', &self.path).map_or(&self.path, |pos| &self.path[pos + 1..])
     }
-    #[allow(clippy::inline_always)]
+
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
+    #[must_use]
     ///returns the inode number of the file, rather expensive
     /// i just included it for sake of completeness.
-    pub fn ino(&self) -> io::Result<u64> {
-      
-        
-        let mut stat_buf: stat = unsafe { std::mem::zeroed() };
-      
-        let file_path = &self.path;
-     
-        let mut c_path_buf = [0u8; PATH_MAX as usize];
-        c_path_buf[..file_path.len()].copy_from_slice(file_path);
-        c_path_buf[file_path.len()] = 0;
-        
-        let res = unsafe { stat(c_path_buf.as_ptr().cast::<c_char>(), &mut stat_buf) };
-        if res < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        
-        Ok(stat_buf.st_ino)
-
+    pub const fn ino(&self) -> u64 {
+        self.inode
     }
 
-
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     pub fn filter<F>(&self, f: F) -> bool
@@ -222,18 +240,22 @@ impl DirEntry {
         f(self)
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
-    #[must_use]
-    ///
+    #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING
+    ///returns the path as a &str
     ///this is safe because path is always valid utf8
     ///(because unix paths are always valid utf8)
-    pub fn as_str(&self) -> &str {
-        unsafe { std::str::from_utf8_unchecked(&self.path) }
-   
+    pub   fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.path) 
     }
 
-    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    #[must_use]
+    pub fn as_str_lossy(&self) -> std::borrow::Cow<'_, str> {
+        String::from_utf8_lossy(&self.path)
+    }
+
     #[inline(always)]
     #[must_use]
     ///minimal cost conversion (lowest cost)
@@ -241,22 +263,21 @@ impl DirEntry {
         OsStr::from_bytes(&self.path)
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     ///checks extension case insensitively for extension
     pub fn matches_extension(&self, ext: &[u8]) -> bool {
-        self.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext))
+        self.extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
-    ///converts into an owned path
+    ///converts the path string into an owned path
     pub fn into_path(&self) -> PathBuf {
         PathBuf::from(self.as_os_str())
     }
-    #[allow(clippy::inline_always)]
+
     #[inline(always)]
     #[must_use]
     ///checks if the file is hidden eg .gitignore
@@ -264,22 +285,39 @@ impl DirEntry {
         let filename = self.file_name();
         !filename.is_empty() && filename[0] == b'.'
     }
-    #[allow(clippy::inline_always)]
+
+
+
+    #[must_use]
+    #[inline(always)]
+    ///creates a new `DirEntry` from a path 
+    pub fn new<T: AsRef<OsStr>>(path: T) -> Self {
+        let path_ref = path.as_ref();
+        
+        Self {
+            path: SlimmerBox::new(path_ref.as_bytes()),  
+            file_type: FileType::from_path(path_ref),  
+            inode: std::fs::symlink_metadata(path_ref).map_or(0, |meta| meta.ino()),
+        }
+    }
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
-    pub fn new(dir_path: &[u8]) -> io::Result<Vec<Self>> {
-        //i have to do this here because i would lose the reference to the buffer
-        //and i would have to reallocate it in the closure
-        let mut c_path_buf = [0u8; PATH_MAX as usize];
-        c_path_buf[..dir_path.len()].copy_from_slice(dir_path);
-        c_path_buf[dir_path.len()] = 0;
+    ///convenience function for listing the directory entries
+    pub fn list_dir(&self) -> io::Result<Vec<Self>> {
+        Self::read_dir(&self.path)
+    }
 
-        //this is safe because we are directly converting the
-        //path to a c string and passing it to the syscall
-        //and the syscall is not modifying the path
-        //and the path is not being used after the syscall
-        //so there is no chance of use after free
-        let fd = unsafe { open(c_path_buf.as_ptr().cast(), O_RDONLY) };
+
+    
+    
+
+    #[inline(always)]
+    #[allow(clippy::missing_errors_doc)]
+    pub fn read_dir(dir_path: &[u8]) -> io::Result<Vec<Self>> {
+        //open is safe because we are passing a valid path
+        //and a valid flag
+        //need to compute the cstr pointer in a closure so we dont lose the reference
+        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) });
         if fd < 0 {
             return Err(Error::last_os_error());
         }
@@ -304,14 +342,13 @@ impl DirEntry {
 
             loop {
                 let nread = unsafe {
-                    #[allow(clippy::cast_ptr_alignment)]
                     #[allow(clippy::cast_possible_truncation)]
                     //syscall is safe because we are passing a valid fd
                     //and a valid buffer
                     syscall(
                         SYS_getdents64,
                         fd,
-                        buffer.data.as_mut_ptr().cast::<dirent64>(),
+                        buffer.data.as_mut_ptr().cast::<c_char>(), //this is an i8 pointer but more intuitive to display as a c_char
                         BUFFER_SIZE as u32,
                     )
                 };
@@ -331,12 +368,13 @@ impl DirEntry {
                 #[allow(clippy::cast_sign_loss)]
                 while offset < nread as usize {
                     #[allow(clippy::cast_ptr_alignment)]
+                    //we need to cast as dirent to access the relevant fields.
                     //this is safe because we are not modifying the buffer
                     //and the buffer is valid for the lifetime of the loop
                     let d = unsafe { &*(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
 
                     let name_end = unsafe {
-                        memchr(0, std::slice::from_raw_parts(d.d_name.as_ptr().cast(), 256))
+                        memchr(0, slice::from_raw_parts(d.d_name.as_ptr().cast(), 256))
                             .unwrap_or(256)
                     };
 
@@ -344,7 +382,7 @@ impl DirEntry {
                     //and the buffer is valid for the lifetime of the loop
 
                     let name_bytes =
-                        unsafe { std::slice::from_raw_parts(d.d_name.as_ptr().cast(), name_end) };
+                        unsafe { slice::from_raw_parts(d.d_name.as_ptr().cast(), name_end) };
 
                     if name_bytes == b"." || name_bytes == b".." {
                         offset += d.d_reclen as usize;
@@ -353,17 +391,11 @@ impl DirEntry {
 
                     buf.truncate(base_len);
                     buf.extend_from_slice(name_bytes);
-
+                    //this is safe because the path is bounded FAR below the limit (something like a few gb)
                     entries.push(Self {
-                        path: Box::from(buf.as_slice()),
-                        is_dir: d.d_type == DT_DIR, //i would explain theres but its trivial lol.
-                        is_symlink: d.d_type == DT_LNK,
-                        is_regular_file: d.d_type == DT_REG,
-                        is_fifo: d.d_type == DT_FIFO,
-                        is_char: d.d_type == DT_CHR,
-                        is_block: d.d_type == DT_BLK,
-                        is_socket: d.d_type == DT_SOCK,
-                        is_unknown: d.d_type == DT_UNKNOWN,
+                        path: unsafe { SlimmerBox::new_unchecked(buf.as_slice()) },
+                        file_type: FileType::from_dtype(d.d_type),
+                        inode: d.d_ino,
                     });
 
                     offset += d.d_reclen as usize;

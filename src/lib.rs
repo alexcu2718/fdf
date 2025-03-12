@@ -1,20 +1,7 @@
+//library imports
 use libc::{EACCES, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use rayon::prelude::*;
-
-mod direntry;
-pub use direntry::DirEntry;
-mod utils;
-pub use utils::{escape_regex_string, process_glob_regex, read_dir, resolve_directory};
-mod glob;
-pub use glob::glob_to_regex;
-mod config;
-pub use config::SearchConfig;
-
 use std::sync::OnceLock;
-
-static START: OnceLock<Box<[u8]>> = OnceLock::new();
-
-static START_DEPTH: OnceLock<usize> = OnceLock::new();
 
 use std::{
     ffi::OsString,
@@ -22,6 +9,25 @@ use std::{
     sync::mpsc::{channel as unbounded, Receiver, Sender},
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
 };
+
+//end library imports
+
+//crate imports
+
+mod direntry;
+pub use direntry::DirEntry;
+mod utils;
+pub use utils::{escape_regex_string, process_glob_regex, resolve_directory};
+mod glob;
+pub use glob::glob_to_regex;
+mod config;
+pub use config::SearchConfig;
+pub mod filetype;
+pub use filetype::FileType;
+
+static START: OnceLock<Box<[u8]>> = OnceLock::new();
+
+static START_DEPTH: OnceLock<usize> = OnceLock::new();
 
 //this allocator is more efficient than jemalloc through my testing
 #[global_allocator]
@@ -85,33 +91,22 @@ impl Finder {
     #[must_use]
     #[allow(clippy::inline_always)]
     #[inline(always)]
-    pub fn traverse(&self) -> Receiver<DirEntry> {
+    pub fn traverse(&self) -> Receiver<DirEntry> { 
         let (sender, receiver) = unbounded();
 
         let search_config = self.search_config.clone();
 
-        let construct_dir = DirEntry {
-            path: self.root.as_bytes().into(),
-            is_dir: true,
-            is_symlink: std::path::Path::new(&self.root).is_symlink(), //cheap check only initialised once.
-            is_regular_file: true, //vague assumptions that i cant be bothered to check.
-            is_fifo: false,
-            is_block: false,
-            is_char: false,
-            is_socket: false,
-            is_unknown: false,
-        };
+        let construct_dir = DirEntry::new(&self.root);
 
         let filter = self.filter;
 
         START.get_or_init(|| self.root.clone().as_bytes().to_vec().into_boxed_slice());
         //we have to arbitrarily construct a direntry to start the search.
 
-
         //used to calculate the depth of the starting directory
         //i personally think this couldve been done more elegantly
         //will probably be fixed in a refactor.
-        START_DEPTH.get_or_init(|| {construct_dir.depth()});
+        START_DEPTH.get_or_init(|| construct_dir.depth());
 
         rayon::spawn(move || {
             Self::process_directory(construct_dir, &sender, &search_config, filter);
@@ -130,7 +125,6 @@ impl Finder {
         config: &SearchConfig,
         filter: Option<fn(&DirEntry) -> bool>,
     ) {
-
         // store whether we should send the directory itself
         let should_send = config.keep_dirs
             && config.matches_path(&dir, config.file_name)
@@ -142,13 +136,15 @@ impl Finder {
         //SAFETY: START_DEPTH is always initialised before this function is called.
         if config
             .depth
-            .is_some_and(|d| dir.depth() - unsafe{START_DEPTH.get().unwrap_unchecked()} >= d)
-        {   if should_send{let _ = sender.send(dir);}
+            .is_some_and(|d| dir.depth() - unsafe { START_DEPTH.get().unwrap_unchecked() } >= d)
+        {
+            if should_send {
+                let _ = sender.send(dir);
+            }
             return;
         }
 
-
-        match DirEntry::new(&dir.path) {
+        match DirEntry::read_dir(&dir.path) {
             Ok(entries) => {
                 let mut dirs = Vec::with_capacity(entries.len());
 

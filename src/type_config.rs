@@ -3,8 +3,7 @@ use std::sync::OnceLock;
 
 static TYPE_FILTER_TYPES: OnceLock<Vec<String>> = OnceLock::new();
 
-
-//cbf to care about pass by value so im ignoring clippy. 
+//cbf to care about pass by value so im ignoring clippy.
 //negligible impact.
 #[allow(clippy::needless_pass_by_value)]
 pub fn build_type_filter(types: Vec<String>) -> fn(&DirEntry) -> bool {

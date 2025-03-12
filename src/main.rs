@@ -54,7 +54,7 @@ pub struct Args {
         default_value_t = true,
         help = "Enable case-sensitive matching\n"
     )]
-    case: bool,
+    case_sensitive: bool,
     #[arg(
         short = 'j',
         long = "threads",
@@ -143,11 +143,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    let keep_dirs = args.keep_dirs;
-    let case_insensitive = args.case;
-    let hide_hidden = !args.hidden;
-    let file_name = args.full_path;
-
 
     let depth = match (path.as_bytes(), args.depth) {
         (b"/", Some(d)) => Some(d.saturating_sub(1)),
@@ -157,14 +152,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut finder = Finder::new(
         path,
         &pattern,
-        hide_hidden,
-        case_insensitive,
-        keep_dirs,
-        file_name,
+        !args.hidden,
+        args.case_sensitive,
+        args.keep_dirs,
+        args.full_path,
         extension_match,
-        depth
+        depth,
     );
-    // eprintln!("{}",args.full_path);
 
     if let Some(types) = args.type_of {
         let type_filter = build_type_filter(types);

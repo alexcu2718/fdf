@@ -1,7 +1,5 @@
 #![allow(clippy::inline_always)]
-use libc::{
-    access, c_char, close, dirent64, open, syscall, SYS_getdents64, O_RDONLY, X_OK
-};
+use libc::{access, c_char, close, dirent64, open, syscall, SYS_getdents64, O_RDONLY, X_OK};
 
 use slimmer_box::SlimmerBox;
 
@@ -12,13 +10,11 @@ use std::{
     io::{self, Error},
     os::unix::{ffi::OsStrExt, fs::MetadataExt},
     path::{Path, PathBuf},
-    slice
+    slice,
 };
 
 use crate::filetype::FileType;
 use crate::pointer_conversion::PointerUtils;
-
-
 
 use memchr::{memchr, memchr_iter, memrchr};
 
@@ -29,16 +25,12 @@ struct AlignedBuffer {
     data: [u8; BUFFER_SIZE],
 }
 
-
-
-
-
 pub struct DirEntry {
     pub path: SlimmerBox<[u8]>, //12 bytes
-    pub file_type: FileType, //1 byte
-    pub inode: u64, //8 bytes
-    //total 21 bytes
-    //3 bytes padding, possible uses? not sure.
+    pub file_type: FileType,    //1 byte
+    pub inode: u64,             //8 bytes
+                                //total 21 bytes
+                                //3 bytes padding, possible uses? not sure.
 }
 
 thread_local! {
@@ -64,7 +56,6 @@ impl fmt::Debug for DirEntry {
     }
 }
 
-
 impl From<&str> for DirEntry {
     fn from(s: &str) -> Self {
         Self::new(s)
@@ -82,7 +73,6 @@ impl From<&Path> for DirEntry {
         Self::new(s)
     }
 }
-
 
 impl DirEntry {
     #[inline(always)]
@@ -167,8 +157,7 @@ impl DirEntry {
     ///costly check for empty files
     ///i dont see much use for this function
     pub fn is_empty(&self) -> bool {
-
-       // let myitem:u16=65;
+        // let myitem:u16=65;
 
         if self.is_regular_file() {
             // for files, check if size is zero without loading all metadata
@@ -251,8 +240,8 @@ impl DirEntry {
     ///returns the path as a &str
     ///this is safe because path is always valid utf8
     ///(because unix paths are always valid utf8)
-    pub   fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
-        std::str::from_utf8(&self.path) 
+    pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.path)
     }
 
     #[inline(always)]
@@ -291,17 +280,15 @@ impl DirEntry {
         !filename.is_empty() && filename[0] == b'.'
     }
 
-
-
     #[must_use]
     #[inline(always)]
-    ///creates a new `DirEntry` from a path 
+    ///creates a new `DirEntry` from a path
     pub fn new<T: AsRef<OsStr>>(path: T) -> Self {
         let path_ref = path.as_ref();
-        
+
         Self {
-            path: SlimmerBox::new(path_ref.as_bytes()),  
-            file_type: FileType::from_path(path_ref),  
+            path: SlimmerBox::new(path_ref.as_bytes()),
+            file_type: FileType::from_path(path_ref),
             inode: std::fs::symlink_metadata(path_ref).map_or(0, |meta| meta.ino()), //expensive, not a fan.
         }
     }
@@ -311,10 +298,6 @@ impl DirEntry {
     pub fn list_dir(&self) -> io::Result<Vec<Self>> {
         Self::read_dir(&self.path)
     }
-
-
-    
-    
 
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
@@ -398,7 +381,7 @@ impl DirEntry {
                     buf.extend_from_slice(name_bytes);
                     //this is safe because the path is bounded FAR below the limit (something like a few gb)
                     entries.push(Self {
-                        path: unsafe { SlimmerBox::new_unchecked(buf.as_slice()) },
+                        path: unsafe { SlimmerBox::new_unchecked(&buf) },
                         file_type: FileType::from_dtype(d.d_type),
                         inode: d.d_ino,
                     });

@@ -1,8 +1,8 @@
 #![allow(clippy::inline_always)]
-use regex::bytes::{Regex, RegexBuilder};
 use crate::DirEntry;
+use regex::bytes::{Regex, RegexBuilder};
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct SearchConfig {
     pub regex_match: Option<Regex>,
     pub hide_hidden: bool,
@@ -11,7 +11,6 @@ pub struct SearchConfig {
     pub file_name: bool,
     pub depth: Option<usize>,
 }
-
 
 impl SearchConfig {
     #[allow(clippy::fn_params_excessive_bools)]

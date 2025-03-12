@@ -1,3 +1,4 @@
+#![allow(clippy::inline_always)]
 use libc::{DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK};
 use std::{ffi::OsStr, os::unix::fs::FileTypeExt, path::Path};
 /// Represents the type of a file in the filesystem
@@ -13,18 +14,18 @@ pub enum FileType {
     Unknown, //this shouldnt ever happen
 }
 
-
 impl FileType {
     #[must_use]
+    #[inline(always)]
     /// Converts a `libc` file type to a `FileType`
     pub const fn from_dtype(d_type: u8) -> Self {
         match d_type {
+            DT_REG => Self::RegularFile,
+            DT_DIR => Self::Directory,
             DT_BLK => Self::BlockDevice,
             DT_CHR => Self::CharDevice,
-            DT_DIR => Self::Directory,
             DT_FIFO => Self::Fifo,
             DT_LNK => Self::Symlink,
-            DT_REG => Self::RegularFile,
             DT_SOCK => Self::Socket,
             _ => Self::Unknown,
         }
@@ -32,20 +33,17 @@ impl FileType {
     /// Converts a `FileType` from a path
     #[must_use]
     pub fn from_path(path_start: &OsStr) -> Self {
-        let path = Path::new(path_start);
-        path.symlink_metadata()
-            .map(|metadata| metadata.file_type())
-            .map_or(Self::Unknown, |file_type| {
-                match file_type {
-                    ft if ft.is_dir() => Self::Directory,
-                    ft if ft.is_file() => Self::RegularFile,
-                    ft if ft.is_symlink() => Self::Symlink,
-                    ft if ft.is_block_device() => Self::BlockDevice,
-                    ft if ft.is_char_device() => Self::CharDevice,
-                    ft if ft.is_fifo() => Self::Fifo,
-                    ft if ft.is_socket() => Self::Socket,
-                    _ => Self::Unknown,
-                }
+        Path::new(path_start)
+            .symlink_metadata()
+            .map_or(Self::Unknown, |metadata| match metadata.file_type() {
+                ft if ft.is_dir() => Self::Directory,
+                ft if ft.is_file() => Self::RegularFile,
+                ft if ft.is_symlink() => Self::Symlink,
+                ft if ft.is_block_device() => Self::BlockDevice,
+                ft if ft.is_char_device() => Self::CharDevice,
+                ft if ft.is_fifo() => Self::Fifo,
+                ft if ft.is_socket() => Self::Socket,
+                _ => Self::Unknown,
             })
     }
 }

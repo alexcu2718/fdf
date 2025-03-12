@@ -47,7 +47,6 @@ pub struct Finder {
     //so we use a function pointer instead.
 }
 
-
 impl Finder {
     #[must_use]
     #[allow(clippy::fn_params_excessive_bools)]
@@ -89,7 +88,7 @@ impl Finder {
 
     #[must_use]
     #[inline(always)]
-    pub fn traverse(&self) -> Receiver<DirEntry> { 
+    pub fn traverse(&self) -> Receiver<DirEntry> {
         let (sender, receiver) = unbounded();
 
         let search_config = self.search_config.clone();

@@ -1,9 +1,9 @@
-use clap::{Parser, ValueHint,ArgAction,value_parser,CommandFactory};
+use clap::{value_parser, ArgAction, CommandFactory, Parser, ValueHint};
+use clap_complete::aot::{generate, Shell};
 use fdf::{process_glob_regex, resolve_directory, Finder};
 use std::ffi::OsString;
 use std::io::stdout;
 use std::os::unix::ffi::OsStrExt;
-use clap_complete::aot::{generate, Shell};
 use std::str;
 const START_PREFIX: &str = "/";
 mod printer;
@@ -131,10 +131,6 @@ pub struct Args {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
-
-
-
     let args = Args::parse();
     let path = resolve_directory(args.current_directory, args.directory);
 
@@ -167,7 +163,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-
 
     let depth = match (path.as_bytes(), args.depth) {
         (b"/", Some(d)) => Some(d.saturating_sub(1)),

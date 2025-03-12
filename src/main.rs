@@ -1,7 +1,9 @@
-use clap::{Parser, ValueHint};
+use clap::{Parser, ValueHint,ArgAction,value_parser,CommandFactory};
 use fdf::{process_glob_regex, resolve_directory, Finder};
 use std::ffi::OsString;
+use std::io::stdout;
 use std::os::unix::ffi::OsStrExt;
+use clap_complete::aot::{generate, Shell};
 use std::str;
 const START_PREFIX: &str = "/";
 mod printer;
@@ -91,6 +93,13 @@ pub struct Args {
         help = "Retrieves only traverse to x depth"
     )]
     depth: Option<usize>,
+    #[arg(
+        long = "generate",
+        action = ArgAction::Set,
+        value_parser = value_parser!(Shell),
+        help = "Generate shell completions"
+    )]
+    generate: Option<Shell>,
 
     #[arg(
         short = 't',
@@ -122,8 +131,24 @@ pub struct Args {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+
+
+
     let args = Args::parse();
     let path = resolve_directory(args.current_directory, args.directory);
+
+    if let Some(generator) = args.generate {
+        let mut cmd = Args::command();
+        let cmd_clone = cmd.clone();
+        generate(
+            generator,
+            &mut cmd,
+            cmd_clone.get_name().to_string(),
+            &mut stdout(),
+        );
+        return Ok(());
+    }
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(args.thread_num)

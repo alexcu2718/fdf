@@ -1,3 +1,4 @@
+#![allow(clippy::inline_always)]
 //library imports
 use libc::{EACCES, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use rayon::prelude::*;
@@ -16,6 +17,8 @@ use std::{
 
 mod direntry;
 pub use direntry::DirEntry;
+mod pointer_conversion;
+pub use pointer_conversion::PointerUtils;
 mod utils;
 pub use utils::{escape_regex_string, process_glob_regex, resolve_directory};
 mod glob;
@@ -33,7 +36,7 @@ static START_DEPTH: OnceLock<usize> = OnceLock::new();
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[derive(Clone)]
+#[derive(Debug)]
 pub struct Finder {
     root: OsString,
     search_config: SearchConfig,
@@ -42,15 +45,12 @@ pub struct Finder {
     //this is because we can't use a trait object here, as we need to be able to clone the Finder struct.
     //and we can't clone a trait object.
     //so we use a function pointer instead.
-    //this is a bit of a hack, but it works.
-    //short_path: bool,
 }
+
 
 impl Finder {
     #[must_use]
     #[allow(clippy::fn_params_excessive_bools)]
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
     #[allow(clippy::too_many_arguments)]
     //DUE TO INTENDED USAGE, THIS FUNCTION IS NOT TOO MANY ARGUMENTS.
     pub fn new(
@@ -81,7 +81,6 @@ impl Finder {
     }
 
     #[must_use]
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub fn with_filter(mut self, filter: fn(&DirEntry) -> bool) -> Self {
         self.filter = Some(filter);
@@ -89,7 +88,6 @@ impl Finder {
     }
 
     #[must_use]
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub fn traverse(&self) -> Receiver<DirEntry> { 
         let (sender, receiver) = unbounded();
@@ -118,7 +116,6 @@ impl Finder {
     #[inline(always)]
     #[allow(clippy::unnecessary_map_or)]
     //i use map_or because compatibility with 1.74 as is_none_or is unstable until 1.82(ish)
-    #[allow(clippy::inline_always)]
     fn process_directory(
         dir: DirEntry,
         sender: &Sender<DirEntry>,

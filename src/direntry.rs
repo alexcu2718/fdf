@@ -1,6 +1,6 @@
 #![allow(clippy::inline_always)]
 use libc::{
-    access, c_char, close, dirent64, open, syscall, SYS_getdents64, O_RDONLY, PATH_MAX, X_OK
+    access, c_char, close, dirent64, open, syscall, SYS_getdents64, O_RDONLY, X_OK
 };
 
 use slimmer_box::SlimmerBox;
@@ -16,6 +16,9 @@ use std::{
 };
 
 use crate::filetype::FileType;
+use crate::pointer_conversion::PointerUtils;
+
+
 
 use memchr::{memchr, memchr_iter, memrchr};
 
@@ -26,27 +29,9 @@ struct AlignedBuffer {
     data: [u8; BUFFER_SIZE],
 }
 
-pub trait PointerUtils {
-    fn as_cstr_ptr<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(*const c_char) -> R;
-}
 
-impl PointerUtils for [u8] {
-    #[inline(always)]
-    ///converts a byte slice into a c str(ing) pointer
-    ///utilises `PATH_MAX` (4096 BYTES) to create an upper bounded array
-    //needs to be done as a callback because we need to keep the reference to the array
-    fn as_cstr_ptr<F, R>(&self, f: F) -> R
-    where  F: FnOnce(*const c_char) -> R,
-    {
-        let mut c_path_buf = [0u8; PATH_MAX as usize];
-        c_path_buf[..self.len()].copy_from_slice(self);
-        // null terminate the string
-        c_path_buf[self.len()] = 0;
-        f(c_path_buf.as_ptr().cast())
-    }
-}
+
+
 
 pub struct DirEntry {
     pub path: SlimmerBox<[u8]>, //12 bytes
@@ -78,6 +63,26 @@ impl fmt::Debug for DirEntry {
         )
     }
 }
+
+
+impl From<&str> for DirEntry {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<&OsStr> for DirEntry {
+    fn from(s: &OsStr) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<&Path> for DirEntry {
+    fn from(s: &Path) -> Self {
+        Self::new(s)
+    }
+}
+
 
 impl DirEntry {
     #[inline(always)]
@@ -297,7 +302,7 @@ impl DirEntry {
         Self {
             path: SlimmerBox::new(path_ref.as_bytes()),  
             file_type: FileType::from_path(path_ref),  
-            inode: std::fs::symlink_metadata(path_ref).map_or(0, |meta| meta.ino()),
+            inode: std::fs::symlink_metadata(path_ref).map_or(0, |meta| meta.ino()), //expensive, not a fan.
         }
     }
     #[inline(always)]

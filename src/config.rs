@@ -1,8 +1,8 @@
+#![allow(clippy::inline_always)]
 use regex::bytes::{Regex, RegexBuilder};
-
 use crate::DirEntry;
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct SearchConfig {
     pub regex_match: Option<Regex>,
     pub hide_hidden: bool,
@@ -11,6 +11,7 @@ pub struct SearchConfig {
     pub file_name: bool,
     pub depth: Option<usize>,
 }
+
 
 impl SearchConfig {
     #[allow(clippy::fn_params_excessive_bools)]
@@ -30,7 +31,6 @@ impl SearchConfig {
             let reg = RegexBuilder::new(pattern)
                 .case_insensitive(case_insensitive)
                 .dot_matches_new_line(false)
-                // .ignore_whitespace(true)
                 .build();
 
             if reg.is_err() {
@@ -50,7 +50,6 @@ impl SearchConfig {
         }
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     pub fn matches_with<F>(&self, path: &[u8], predicate: F) -> bool
@@ -60,7 +59,6 @@ impl SearchConfig {
         predicate(path)
     }
 
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     #[must_use]
     #[allow(clippy::unnecessary_map_or)]

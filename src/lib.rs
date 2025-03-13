@@ -2,11 +2,8 @@
 //library imports
 use libc::{EACCES, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use rayon::prelude::*;
-use std::sync::OnceLock;
-
 use std::{
     ffi::OsString,
-    os::unix::ffi::OsStrExt,
     sync::mpsc::{channel as unbounded, Receiver, Sender},
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
 };
@@ -27,8 +24,6 @@ mod config;
 pub use config::SearchConfig;
 pub mod filetype;
 pub use filetype::FileType;
-
-static START: OnceLock<Box<[u8]>> = OnceLock::new();
 
 
 
@@ -101,11 +96,10 @@ impl Finder {
 
         let filter = self.filter;
 
-        START.get_or_init(|| self.root.clone().as_bytes().to_vec().into_boxed_slice());
         //we have to arbitrarily construct a direntry to start the search.
 
         rayon::spawn(move || {
-            Self::process_directory(construct_dir, &sender, &search_config, filter);
+            Self::process_directory(construct_dir, &sender, &search_config, filter, true);
         });
 
         receiver
@@ -120,13 +114,14 @@ impl Finder {
         sender: &Sender<DirEntry>,
         config: &SearchConfig,
         filter: Option<fn(&DirEntry) -> bool>,
+        is_start_dir: bool,
     ) {
         // store whether we should send the directory itself
         let should_send = config.keep_dirs
             && config.matches_path(&dir, config.file_name)
             && filter.as_ref().map_or(true, |f| f(&dir))
             && config.extension_match.as_ref().is_none()
-            && unsafe { *dir.path != **START.get().unwrap_unchecked() };
+            && !is_start_dir;
 
         //check if we should stop searching
         if config.depth
@@ -165,7 +160,7 @@ impl Finder {
                 }
 
                 dirs.into_par_iter().for_each(|dir| {
-                    Self::process_directory(dir, sender, config, filter);
+                    Self::process_directory(dir, sender, config, filter, false);
                 });
             }
 

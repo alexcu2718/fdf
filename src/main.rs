@@ -3,7 +3,6 @@ use clap_complete::aot::{generate, Shell};
 use fdf::{process_glob_regex, resolve_directory, Finder};
 use std::ffi::OsString;
 use std::io::stdout;
-use std::os::unix::ffi::OsStrExt;
 use std::str;
 const START_PREFIX: &str = "/";
 mod printer;
@@ -83,7 +82,7 @@ pub struct Args {
 
     #[arg(
         short = 'n',
-        long = "n-results",
+        long = "max-results",
         help = "Retrieves the first eg 10 results, rlib rs$ -d 10"
     )]
     top_n: Option<usize>,
@@ -164,10 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    let depth = match (path.as_bytes(), args.depth) {
-        (b"/", Some(d)) => Some(d.saturating_sub(1)),
-        _ => args.depth,
-    };
+
 
     let mut finder = Finder::new(
         path,
@@ -177,7 +173,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.keep_dirs,
         args.full_path,
         extension_match,
-        depth,
+        args.depth
     );
 
     if let Some(types) = args.type_of {

@@ -1,4 +1,4 @@
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 212.1 ± 2.4 | 207.9 | 215.4 | 1.00 |
-| `fd -HI --extension 'jpg' '' '/home/alexc'` | 358.9 ± 4.5 | 351.6 | 367.3 | 1.69 ± 0.03 |
+| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 229.9 ± 1.7 | 227.8 | 233.3 | 1.00 |
+| `fd -HI --extension 'jpg' '' '/home/alexc'` | 366.9 ± 5.2 | 359.4 | 374.9 | 1.60 ± 0.03 |

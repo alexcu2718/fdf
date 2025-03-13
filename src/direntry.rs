@@ -30,7 +30,7 @@ pub struct DirEntry {
     pub path: SlimmerBox<[u8]>, //12 bytes
     pub file_type: FileType,    //1 byte
     pub(crate) inode: u64,             //8 bytes
-    pub(crate) depth:u16,            //2 bytes    
+    pub(crate) depth:u16,            //2 bytes    , this is a max of 65535 directories deep, it's also 2 bytes so keeps struct below 24bytes.
                                 //total 23 bytes
                                 //1 bytes padding, possible uses? not sure.
 }
@@ -44,6 +44,16 @@ impl fmt::Display for DirEntry {
         write!(f, "{}", self.as_str_lossy())
     }
 }
+
+impl std::ops::Deref for DirEntry {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
+
 
 impl fmt::Debug for DirEntry {
     ///debug format for `DirEntry` (showing a vector of bytes is... not very useful)
@@ -174,16 +184,32 @@ impl DirEntry {
     pub fn metadata(&self) -> std::io::Result<std::fs::Metadata> {
         std::fs::metadata(self.as_os_str())
     }
+    #[inline(always)]
+    #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING AGAIN
+    #[must_use]
+    ///Cost free conversion to bytes (because it is already is bytes)
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.path
+    }
 
     #[inline(always)]
     #[must_use]
+    ///Low cost free conversion to a `Path`
     pub fn as_path(&self) -> &Path {
         Path::new(self.as_os_str())
     }
 
     #[inline(always)]
+    #[must_use]
+    ///returns the file type of the file (eg directory, regular file, etc)
+    pub const fn file_type(&self) -> FileType {
+        self.file_type
+    }
+
+    #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
-    pub fn file_type(&self) -> io::Result<std::fs::FileType> {
+    ///Costly conversion to a `std::fs::FileType`
+    pub fn to_std_file_type(&self) -> io::Result<std::fs::FileType> {
         //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it
         std::fs::symlink_metadata(self.as_path()).map(|m| m.file_type())
@@ -191,24 +217,25 @@ impl DirEntry {
 
     #[inline(always)]
     #[must_use]
-    ///returns the extension of the file if it has one
+    ///Returns the extension of the file if it has one
     pub fn extension(&self) -> Option<&[u8]> {
         self.file_name().rsplit(|&b| b == b'.').next()
     }
 
     #[inline(always)]
     #[must_use]
-    ///returns the depth relative to the start directory, this is cost free
+    ///Returns the depth relative to the start directory, this is cost free
     pub const  fn depth(&self) -> u16 {
         self.depth
     }
 
     #[inline(always)]
     #[must_use]
-    ///returns the name of the file
+    ///Returns the name of the file (as bytes)
     /// failing to do so, it returns the whole path
     pub fn file_name(&self) -> &[u8] {
-        memrchr(b'/', &self.path).map_or(&self.path, |pos| &self.path[pos + 1..])
+        let path=self.path.as_ref();
+        memrchr(b'/', path).map_or(path, |pos| &path[pos + 1..])
     }
 
     #[inline(always)]
@@ -241,13 +268,24 @@ impl DirEntry {
 
     #[inline(always)]
     #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    /// Returns the path as a &str without checking if it is valid UTF-8.
+    /// 
+    /// # Safety
+    /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
+    pub unsafe fn as_str_unchecked(&self) -> &str {
+        std::str::from_utf8_unchecked(&self.path)
+    }
+    #[inline(always)]
+    #[must_use]
+    ///Returns the path as a    `Cow<str>`
     pub fn as_str_lossy(&self) -> std::borrow::Cow<'_, str> {
         String::from_utf8_lossy(&self.path)
     }
 
     #[inline(always)]
     #[must_use]
-    ///minimal cost conversion (lowest cost)
+    ///Minimal cost conversion  to `OsStr`
     pub fn as_os_str(&self) -> &OsStr {
         OsStr::from_bytes(&self.path)
     }
@@ -262,7 +300,7 @@ impl DirEntry {
 
     #[inline(always)]
     #[must_use]
-    ///converts the path string into an owned path
+    ///converts the path (bytes) into an owned path
     pub fn into_path(&self) -> PathBuf {
         PathBuf::from(self.as_os_str())
     }
@@ -284,7 +322,7 @@ impl DirEntry {
         Self {
             path: SlimmerBox::new(path_ref.as_bytes()),
             file_type: FileType::from_path(path_ref),
-            inode: std::fs::symlink_metadata(path_ref).map_or(0, |meta| meta.ino()), //expensive, not a fan.
+            inode: std::fs::symlink_metadata(path_ref).map_or(0, |meta| meta.ino()), //expensive, not a fan. but im not ricing this.
             depth:0,
         }
     }
@@ -315,7 +353,9 @@ impl DirEntry {
             let mut buf = buf_cell.borrow_mut();
             buf.clear();
             buf.extend_from_slice(dir_path);
-            if needs_slash && !dir_path.ends_with(b"/") {
+            //the commented out bit is not necessary because the paths dont end with a slash except for the root directory
+            //but this is covered by needs slash.
+            if needs_slash /*&& !dir_path.ends_with(b"/")*/ {
                 buf.push(b'/');
             }
             let base_len = buf.len();
@@ -353,22 +393,26 @@ impl DirEntry {
                     //and the buffer is valid for the lifetime of the loop
                     let d = unsafe { &*(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
 
+                    
+                    let name_ptr = d.d_name.as_ptr().cast::<u8>();
+
                     let name_end = unsafe {
-                        memchr(0, slice::from_raw_parts(d.d_name.as_ptr().cast(), 256))
-                            .unwrap_or(256)
+                        memchr(0, slice::from_raw_parts(name_ptr, 256)).unwrap_or(256)
                     };
 
-                    //this is safe because we are not modifying the buffer
-                    //and the buffer is valid for the lifetime of the loop
-
-                    let name_bytes =
-                        unsafe { slice::from_raw_parts(d.d_name.as_ptr().cast(), name_end) };
-
-                    if name_bytes == b"." || name_bytes == b".." {
-                        offset += d.d_reclen as usize;
-                        continue;
+                    // Fast check for "." and ".." to skip unnecessary work
+                    if name_end <= 2 {
+                        let first = unsafe { *name_ptr };
+                        if first == b'.' && (name_end == 1 || unsafe { *name_ptr.add(1) } == b'.') {
+                            offset += d.d_reclen as usize;
+                            continue;
+                        }
                     }
 
+                    // Slice only once, after filtering out "." and ".."
+                    let name_bytes = unsafe { slice::from_raw_parts(name_ptr, name_end) };
+
+                
                     buf.truncate(base_len);
                     buf.extend_from_slice(name_bytes);
                     //this is safe because the path is bounded FAR below the limit (something like a few gb)
@@ -390,3 +434,4 @@ impl DirEntry {
         Ok(entries)
     }
 }
+

@@ -50,10 +50,11 @@ impl fmt::Debug for DirEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "DirEntry({},{},{})",
+            "DirEntry(Filename:{},FileType:{},Inode:{},Depth:{})",
             self.as_str_lossy(),
             self.file_type,
-            self.inode
+            self.inode,
+            self.depth
         )
     }
 }
@@ -197,7 +198,7 @@ impl DirEntry {
     #[must_use]
     ///returns the extension of the file if it has one
     pub fn extension(&self) -> Option<&[u8]> {
-        self.path.rsplit(|&b| b == b'.').next()
+        self.file_name().rsplit(|&b| b == b'.').next()
     }
 
     #[inline(always)]

@@ -9,7 +9,7 @@ pub struct SearchConfig {
     pub keep_dirs: bool,
     pub extension_match: Option<Box<[u8]>>,
     pub file_name: bool,
-    pub depth: Option<usize>,
+    pub depth: Option<u16>,
 }
 
 impl SearchConfig {
@@ -22,7 +22,7 @@ impl SearchConfig {
         keep_dirs: bool,
         file_name: bool,
         extension_match: Option<Box<[u8]>>,
-        depth: Option<usize>,
+        depth: Option<u16>,
     ) -> Self {
         let reg = if pattern == "." || pattern.is_empty() {
             None

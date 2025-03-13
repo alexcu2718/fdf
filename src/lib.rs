@@ -30,13 +30,14 @@ pub use filetype::FileType;
 
 static START: OnceLock<Box<[u8]>> = OnceLock::new();
 
-static START_DEPTH: OnceLock<usize> = OnceLock::new();
+
 
 //this allocator is more efficient than jemalloc through my testing
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Debug)]
+/// A struct to find files in a directory.
 pub struct Finder {
     root: OsString,
     search_config: SearchConfig,
@@ -52,6 +53,7 @@ impl Finder {
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::too_many_arguments)]
     //DUE TO INTENDED USAGE, THIS FUNCTION IS NOT TOO MANY ARGUMENTS.
+    /// Create a new Finder instance.
     pub fn new(
         root: OsString,
         pattern: &str,
@@ -60,7 +62,7 @@ impl Finder {
         keep_dirs: bool,
         short_path: bool,
         extension_match: Option<Box<[u8]>>,
-        max_depth: Option<usize>,
+        max_depth: Option<u16>,
     ) -> Self {
         let search_config = SearchConfig::new(
             pattern,
@@ -81,6 +83,7 @@ impl Finder {
 
     #[must_use]
     #[inline(always)]
+    /// Set a filter function to filter out entries.
     pub fn with_filter(mut self, filter: fn(&DirEntry) -> bool) -> Self {
         self.filter = Some(filter);
         self
@@ -88,6 +91,7 @@ impl Finder {
 
     #[must_use]
     #[inline(always)]
+    /// Traverse the directory and return a receiver for the entries.
     pub fn traverse(&self) -> Receiver<DirEntry> {
         let (sender, receiver) = unbounded();
 
@@ -100,11 +104,6 @@ impl Finder {
         START.get_or_init(|| self.root.clone().as_bytes().to_vec().into_boxed_slice());
         //we have to arbitrarily construct a direntry to start the search.
 
-        //used to calculate the depth of the starting directory
-        //i personally think this couldve been done more elegantly
-        //will probably be fixed in a refactor.
-        START_DEPTH.get_or_init(|| construct_dir.depth());
-
         rayon::spawn(move || {
             Self::process_directory(construct_dir, &sender, &search_config, filter);
         });
@@ -115,6 +114,7 @@ impl Finder {
     #[inline(always)]
     #[allow(clippy::unnecessary_map_or)]
     //i use map_or because compatibility with 1.74 as is_none_or is unstable until 1.82(ish)
+    /// Traverse the directory and send the `DirEntry` to the Receiver.
     fn process_directory(
         dir: DirEntry,
         sender: &Sender<DirEntry>,
@@ -129,10 +129,8 @@ impl Finder {
             && unsafe { *dir.path != **START.get().unwrap_unchecked() };
 
         //check if we should stop searching
-        //SAFETY: START_DEPTH is always initialised before this function is called.
-        if config
-            .depth
-            .is_some_and(|d| dir.depth() - unsafe { START_DEPTH.get().unwrap_unchecked() } >= d)
+        if config.depth
+            .is_some_and(|d| dir.depth()  >= d)
         {
             if should_send {
                 let _ = sender.send(dir);
@@ -140,7 +138,7 @@ impl Finder {
             return;
         }
 
-        match DirEntry::read_dir(&dir.path) {
+        match DirEntry::read_dir(&dir) {
             Ok(entries) => {
                 let mut dirs = Vec::with_capacity(entries.len());
 

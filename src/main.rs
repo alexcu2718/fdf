@@ -92,7 +92,7 @@ pub struct Args {
         long = "depth",
         help = "Retrieves only traverse to x depth"
     )]
-    depth: Option<usize>,
+    depth: Option<u16>,
     #[arg(
         long = "generate",
         action = ArgAction::Set,
@@ -185,9 +185,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         finder = finder.with_filter(type_filter);
     }
 
-    let results = finder.traverse().into_iter();
+   // let results = finder.traverse().into_iter();
 
-    write_paths_coloured(results, args.top_n)?;
+    write_paths_coloured(finder.traverse().iter(), args.top_n)?;
 
     Ok(())
 }

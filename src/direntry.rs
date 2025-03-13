@@ -16,7 +16,7 @@ use std::{
 use crate::filetype::FileType;
 use crate::pointer_conversion::PointerUtils;
 
-use memchr::{memchr, memchr_iter, memrchr};
+use memchr::{memchr, memrchr};
 
 const BUFFER_SIZE: usize = 512 * 4;
 
@@ -25,12 +25,14 @@ struct AlignedBuffer {
     data: [u8; BUFFER_SIZE],
 }
 
+#[derive(Clone)]
 pub struct DirEntry {
     pub path: SlimmerBox<[u8]>, //12 bytes
     pub file_type: FileType,    //1 byte
-    pub inode: u64,             //8 bytes
-                                //total 21 bytes
-                                //3 bytes padding, possible uses? not sure.
+    pub(crate) inode: u64,             //8 bytes
+    pub(crate) depth:u16,            //2 bytes    
+                                //total 23 bytes
+                                //1 bytes padding, possible uses? not sure.
 }
 
 thread_local! {
@@ -200,12 +202,9 @@ impl DirEntry {
 
     #[inline(always)]
     #[must_use]
-    ///returns the depth of the file in the directory tree (0 for root)
-    pub fn depth(&self) -> usize {
-        //we want to omit the starting slash
-        //this helps standardise results for when start directory is .. or . for example
-
-        memchr_iter(b'/', &self.path[1..]).count()
+    ///returns the depth relative to the start directory, this is cost free
+    pub const  fn depth(&self) -> u16 {
+        self.depth
     }
 
     #[inline(always)]
@@ -290,21 +289,18 @@ impl DirEntry {
             path: SlimmerBox::new(path_ref.as_bytes()),
             file_type: FileType::from_path(path_ref),
             inode: std::fs::symlink_metadata(path_ref).map_or(0, |meta| meta.ino()), //expensive, not a fan.
+            depth:0,
         }
     }
-    #[inline(always)]
-    #[allow(clippy::missing_errors_doc)]
-    ///convenience function for listing the directory entries
-    pub fn list_dir(&self) -> io::Result<Vec<Self>> {
-        Self::read_dir(&self.path)
-    }
+
 
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
-    pub fn read_dir(dir_path: &[u8]) -> io::Result<Vec<Self>> {
+    pub fn read_dir(&self) -> io::Result<Vec<Self>> {
         //open is safe because we are passing a valid path
         //and a valid flag
         //need to compute the cstr pointer in a closure so we dont lose the reference
+        let dir_path=&self.path;
         let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) });
         if fd < 0 {
             return Err(Error::last_os_error());
@@ -314,7 +310,7 @@ impl DirEntry {
         //this is not a perfect heuristic but it should work for most cases
         //eg on my pc theres only 1 file per directory on average
         let mut entries: Vec<Self> = Vec::with_capacity(4);
-        let needs_slash = dir_path != b"/";
+        let needs_slash = **dir_path != *b"/";
 
         PATH_BUFFER.with(|buf_cell| -> io::Result<()> {
             let mut buffer = AlignedBuffer {
@@ -384,6 +380,7 @@ impl DirEntry {
                         path: unsafe { SlimmerBox::new_unchecked(&buf) },
                         file_type: FileType::from_dtype(d.d_type),
                         inode: d.d_ino,
+                        depth:self.depth+1,
                     });
 
                     offset += d.d_reclen as usize;

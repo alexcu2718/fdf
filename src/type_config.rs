@@ -39,7 +39,7 @@ fn filter_by_type(entry: &DirEntry) -> bool {
                 }
             }
             'c' => {
-                if entry.is_char() {
+                if entry.is_char_device() {
                     return true;
                 }
             }

@@ -134,12 +134,7 @@ impl DirEntry {
         matches!(self.file_type, FileType::Directory)
     }
 
-    ///cost free check for character devices
-    #[inline(always)]
-    #[must_use]
-    pub const fn is_char(&self) -> bool {
-        matches!(self.file_type, FileType::CharDevice)
-    }
+  
 
     ///cost free check for unknown file types
     #[inline(always)]

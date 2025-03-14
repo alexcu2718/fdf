@@ -1,10 +1,8 @@
 #![allow(clippy::inline_always)]
 
-//use std::sync::Arc;
-//use std::intrinsics::likely;
+
 
 //library imports
-use libc::{EACCES, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use rayon::prelude::*;
 use std::{
     ffi::OsString,
@@ -99,7 +97,7 @@ impl Finder {
 
         let construct_dir = DirEntry::new(&self.root);
 
-        if !construct_dir.as_ref().is_ok_and(|d| d.is_dir()) {
+        if !construct_dir.as_ref().is_ok_and(direntry::DirEntry::is_dir) {
             eprintln!("Error: The provided path is not a directory.");
             std::process::exit(1);
         }
@@ -180,18 +178,15 @@ impl Finder {
                 });
             }
 
-            Err(e)
-                if matches!(
-                    e.raw_os_error(),
-                    Some(EINVAL | ENOENT | EACCES | ENOTDIR | ELOOP) //einval=invalid argument
-                                                                     //enoent= no such file or directory
-                                                                     //eacces=permission denied
-                                                                     //enotdir=not a directory
-                                                                     //eloop=too many symbolic links
-                ) => {}
-            Err(check) => {
-                eprintln!("this is a new error i havent seen LOL {check}");
-                //this is for debugging purposes, because i still dont know what other errors exist.
+            Err(DirEntryError::AccessDenied(_) | DirEntryError::InvalidPath) => {
+                // ignore permission denied and invalid path errors
+            }
+            //enoent= no such file or directory
+            //eacces=permission denied
+            //enotdir=not a directory
+            //eloop=too many symbolic links
+            Err(e) => {
+                eprintln!("Unexpected error: {e}");
             }
         }
         //finally send it

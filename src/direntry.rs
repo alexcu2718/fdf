@@ -283,7 +283,7 @@ impl DirEntry {
     ///this is safe because path is always valid utf8
     ///(because unix paths are always valid utf8)
     pub fn as_str(&self) -> Result<&str, DirEntryError> {
-        std::str::from_utf8(&self.path).map_err(|e| DirEntryError::Utf8Error(e))
+        std::str::from_utf8(&self.path).map_err(DirEntryError::Utf8Error)
     }
 
     #[inline(always)]
@@ -348,8 +348,8 @@ impl DirEntry {
         //theres probably a more elegant way.
     }
 
-    #[must_use]
     #[inline(always)]
+    #[allow(clippy::missing_errors_doc)]
     ///Creates a new `DirEntry` from a path
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self, DirEntryError> {
         let path_os_str = path.as_ref();
@@ -378,11 +378,11 @@ impl DirEntry {
 
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
-    pub fn read_dir(&self) -> io::Result<Vec<Self>> {
+    pub fn read_dir(&self) -> Result<Vec<Self>, DirEntryError> {
         let dir_path = &self.path;
         let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) });
         if fd < 0 {
-            return Err(Error::last_os_error());
+            return Err(Error::last_os_error().into());
         }
 
         let mut entries: Vec<Self> = Vec::with_capacity(4);
@@ -412,9 +412,8 @@ impl DirEntry {
 
                 if nread <= 0 {
                     if nread < 0 {
-                        let err = Error::last_os_error();
                         unsafe { close(fd) };
-                        return Err(err);
+                        return Err(Error::last_os_error());
                     }
                     break;
                 }
@@ -488,6 +487,7 @@ impl DirEntry {
     }
 
     /// Get last modification time
+    #[allow(clippy::missing_errors_doc)] //fixing errors later
     pub fn modified_time(&self) -> Result<SystemTime, DirEntryError> {
         self.get_stat().and_then(|s| {
             let sec = s.st_mtime;
@@ -499,7 +499,7 @@ impl DirEntry {
 
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 #[allow(clippy::missing_errors_doc)] //fixing errors later
-fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime,DirEntryError> {
+fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime, DirEntryError> {
     let (base, offset) = if sec >= 0 {
         (UNIX_EPOCH, Duration::new(sec as u64, nsec as u32))
     } else {
@@ -511,6 +511,6 @@ fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime,DirEntryEr
     };
 
     base.checked_sub(offset)
-        .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0))).ok_or(DirEntryError::TimeError)
-        
+        .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
+        .ok_or(DirEntryError::TimeError)
 }

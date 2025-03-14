@@ -47,10 +47,10 @@ impl fmt::Display for DirEntryError {
             Self::InvalidStat => write!(f, "Invalid file stat"),
             Self::TimeError => write!(f, "Invalid time conversion"),
             Self::MetadataError => write!(f, "Metadata error"),
-            Self::Utf8Error(e) => write!(f, "UTF-8 conversion error: {}", e),
-            Self::BrokenPipe(e) => write!(f, "Broken pipe: {}", e),
-            Self::OSerror(e) => write!(f, "OS error: {}", e),
-            Self::AccessDenied(e) => write!(f, "Access denied: {}", e),
+            Self::Utf8Error(e) => write!(f, "UTF-8 conversion error: {e}"),
+            Self::BrokenPipe(e) => write!(f, "Broken pipe: {e}"),
+            Self::OSerror(e) => write!(f, "OS error: {e}"),
+            Self::AccessDenied(e) => write!(f, "Access denied: {e}"),
         }
     }
 }

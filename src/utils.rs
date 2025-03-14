@@ -1,5 +1,4 @@
 use crate::glob_to_regex;
-//use fnmatch_regex2::glob_to_regex;
 
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";

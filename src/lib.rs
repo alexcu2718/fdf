@@ -44,7 +44,7 @@ pub struct Finder {
     //and we can't clone a trait object.
     //so we use a function pointer instead.
 }
-
+///The Finder struct is used to find files in a directory.
 impl Finder {
     #[must_use]
     #[allow(clippy::fn_params_excessive_bools)]

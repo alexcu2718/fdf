@@ -27,6 +27,13 @@ use crate::pointer_conversion::PointerUtils;
 
 const BUFFER_SIZE: usize = 512 * 4;
 
+#[derive(Debug,Clone)]
+pub enum DirEntryError {
+    InvalidPath,
+    InvalidStat,
+
+}
+
 #[repr(C, align(8))]
 struct AlignedBuffer {
     data: [u8; BUFFER_SIZE],
@@ -38,7 +45,8 @@ pub struct DirEntry {
     pub(crate) file_type: FileType, //1 byte
     pub(crate) inode: u64,          //8 bytes
     pub(crate) depth: u8, //1 bytes    , this is a max of 65535 directories deep, it's also 1 bytes so keeps struct below 24bytes.
-                           //total 20 bytes
+    pub(crate) base_len: u8, //1 bytes     , this info is free and helps to get the filename.               
+                           //total 21 bytes
                            //4 bytes padding, possible uses? not sure.
 }
 
@@ -82,23 +90,6 @@ impl fmt::Debug for DirEntry {
     }
 }
 
-impl From<&str> for DirEntry {
-    fn from(s: &str) -> Self {
-        Self::new(s)
-    }
-}
-
-impl From<&OsStr> for DirEntry {
-    fn from(s: &OsStr) -> Self {
-        Self::new(s)
-    }
-}
-
-impl From<&Path> for DirEntry {
-    fn from(s: &Path) -> Self {
-        Self::new(s)
-    }
-}
 
 /// `DirEntry` is safe to pass from one thread to another, as it's not reference-counted.
 unsafe impl Send for DirEntry {}
@@ -270,11 +261,11 @@ impl DirEntry {
     #[inline(always)]
     #[must_use]
     ///Returns the name of the file (as bytes)
-    /// failing to do so, it returns the whole path
     pub fn file_name(&self) -> &[u8] {
-        let path = self.path.as_ref();
-        memrchr(b'/', path).map_or(path, |pos| &path[pos + 1..])
+        &self.path.as_ref()[self.base_len as usize..]
+        
     }
+    
 
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
@@ -365,41 +356,34 @@ impl DirEntry {
         Some(&path[..=parent_end])
     }
 
-    #[inline(always)]
-    #[must_use]
-    fn invalid_entry(bytes: &[u8]) -> Self {
-        Self {
-            path: SlimmerBox::new(bytes),
-            file_type: FileType::Unknown,
-            inode: 0,
-            depth: 0,
-        }
-    }
+
 
    
 
     #[must_use]
     #[inline(always)]
     ///Creates a new `DirEntry` from a path
-    pub fn new<T: AsRef<OsStr>>(path: T) -> Self {
-        let path_ref = path.as_ref().as_bytes();
+    pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self, DirEntryError> {
+        let path_os_str = path.as_ref();
+        let path_ref=path_os_str.as_bytes();
         // get file metadata using lstat (doesn't follow symlinks)
         let mut stat_buf = MaybeUninit::<stat>::uninit();
         let res =
             unsafe { path_ref.as_cstr_ptr(|filename| lstat(filename, stat_buf.as_mut_ptr())) };
 
         if res != 0 {
-            return Self::invalid_entry(path_ref); //this needs to just return an error but TODO!
+            return Err(DirEntryError::InvalidPath) //this needs to just return an error but TODO!
         }
 
         // extract information from successful stat
         let stat = unsafe { stat_buf.assume_init() };
-        Self {
+        Ok(Self {
             path: SlimmerBox::new(path_ref),
             file_type: FileType::from_mode(stat.st_mode),
             inode: stat.st_ino,
             depth: 0,
-        }
+            base_len:Path::new(path_os_str).parent().map_or(0,|x|x.as_os_str().as_bytes().len() as u8)
+        })
     }
 
     #[inline(always)]
@@ -475,6 +459,7 @@ impl DirEntry {
                         file_type: FileType::from_dtype(d.d_type),
                         inode: d.d_ino,
                         depth: self.depth + 1,
+                        base_len:base_len as u8
                     });
 
                     offset += d.d_reclen as usize;

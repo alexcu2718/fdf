@@ -127,6 +127,7 @@ where
 
             buf_writer.write_all(NEWLINE)?;
             buf_writer.write_all(RESET)?;
+           
             // eprintln!("{:?}", path);
         }
     } else {

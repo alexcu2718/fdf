@@ -18,7 +18,7 @@ use std::{
 //crate imports
 
 mod direntry;
-pub use direntry::DirEntry;
+pub use direntry::{DirEntry,DirEntryError};
 
 mod pointer_conversion;
 pub use pointer_conversion::PointerUtils;
@@ -98,7 +98,7 @@ impl Finder {
 
         let construct_dir = DirEntry::new(&self.root);
 
-        if !construct_dir.is_dir() {
+        if !construct_dir.as_ref().is_ok_and(|d| d.is_dir()) {
             eprintln!("Error: The provided path is not a directory.");
             std::process::exit(1);
         }
@@ -110,8 +110,11 @@ impl Finder {
 
         //we have to arbitrarily construct a direntry to start the search.
 
+
+        //spawn the search in a new thread.
+        //this is safe because we've already checked that the directory exists.
         rayon::spawn(move || {
-            Self::process_directory(construct_dir, &sender, &search_config, filter, true);
+            Self::process_directory(unsafe {construct_dir.unwrap_unchecked()}, &sender, &search_config, filter, true);
         });
 
         receiver

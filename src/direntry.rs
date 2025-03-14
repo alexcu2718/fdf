@@ -7,7 +7,7 @@ use libc::{
     R_OK, W_OK, X_OK,
 };
 
-use memchr::memrchr;
+
 use slimmer_box::SlimmerBox;
 
 use std::{
@@ -347,10 +347,11 @@ impl DirEntry {
 
     #[inline(always)]
     #[must_use]
-    pub fn parent(&self) -> Option<&[u8]> {
-        let path = self.path.as_ref();
-        let parent_end = memrchr(b'/', path)?;
-        Some(&path[..=parent_end])
+    ///returns the parent directory of the file (as bytes)
+    pub fn parent(&self) -> &[u8] {
+        &self.path.as_ref()[..std::cmp::max(self.base_len as usize -1,1)] 
+        //we need to be careful if it's root,im not a fan of this method but eh.
+        //theres probably a more elegant way.
     }
 
 

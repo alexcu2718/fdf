@@ -163,7 +163,6 @@ dependencies = [
  "clap",
  "clap_complete",
  "libc",
- "memchr",
  "mimalloc",
  "rayon",
  "regex",

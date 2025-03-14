@@ -499,7 +499,7 @@ impl DirEntry {
 
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 #[allow(clippy::missing_errors_doc)] //fixing errors later
-fn unix_time_to_system_time(sec: i64, nsec: i32) -> io::Result<SystemTime> {
+fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime,DirEntryError> {
     let (base, offset) = if sec >= 0 {
         (UNIX_EPOCH, Duration::new(sec as u64, nsec as u32))
     } else {
@@ -511,6 +511,6 @@ fn unix_time_to_system_time(sec: i64, nsec: i32) -> io::Result<SystemTime> {
     };
 
     base.checked_sub(offset)
-        .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid timestamp value"))
+        .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0))).ok_or(DirEntryError::TimeError)
+        
 }

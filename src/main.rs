@@ -1,3 +1,5 @@
+#![feature(core_intrinsics)]
+#![allow(internal_features)]
 use clap::{value_parser, ArgAction, CommandFactory, Parser, ValueHint};
 use clap_complete::aot::{generate, Shell};
 use fdf::{process_glob_regex, resolve_directory, Finder};
@@ -138,9 +140,7 @@ pub struct Args {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let path= resolve_directory(args.current_directory, args.directory,args.absolute_path);
-  
-    
+    let path = resolve_directory(args.current_directory, args.directory, args.absolute_path);
 
     if let Some(generator) = args.generate {
         let mut cmd = Args::command();
@@ -172,8 +172,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-
-
     let mut finder = Finder::new(
         path,
         &pattern,
@@ -182,7 +180,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.keep_dirs,
         args.full_path,
         extension_match,
-        args.depth
+        args.depth,
     );
 
     if let Some(types) = args.type_of {
@@ -190,7 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         finder = finder.with_filter(type_filter);
     }
 
-   // let results = finder.traverse().into_iter();
+    // let results = finder.traverse().into_iter();
 
     write_paths_coloured(finder.traverse().iter(), args.top_n)?;
 

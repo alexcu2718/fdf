@@ -45,14 +45,13 @@ pub fn resolve_directory(
                 } else {
                     path_res
                 };
-                path.to_str()
-                    .map_or_else(|| DOT_PATTERN.into(), Into::into)
+                path.to_str().map_or_else(|| DOT_PATTERN.into(), Into::into)
             },
         )
     } else {
         let dir_to_use = args_directory.unwrap_or_else(|| START_PREFIX.into());
         let path_check = Path::new(&dir_to_use);
-        
+
         if !path_check.is_dir() {
             eprintln!("{dir_to_use:?} is not a directory");
             std::process::exit(1);

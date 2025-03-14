@@ -1,4 +1,9 @@
 #![allow(clippy::inline_always)]
+#![allow(internal_features)]
+#![feature(core_intrinsics)]
+//use std::sync::Arc;
+//use std::intrinsics::likely;
+
 //library imports
 use libc::{EACCES, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use rayon::prelude::*;
@@ -24,8 +29,6 @@ mod config;
 pub use config::SearchConfig;
 pub mod filetype;
 pub use filetype::FileType;
-
-
 
 //this allocator is more efficient than jemalloc through my testing
 #[global_allocator]
@@ -84,7 +87,6 @@ impl Finder {
         self
     }
 
-  
     #[must_use]
     #[inline(always)]
     /// Traverse the directory and return a receiver for the entries.
@@ -125,9 +127,7 @@ impl Finder {
             && !is_start_dir;
 
         //check if we should stop searching
-        if config.depth
-            .is_some_and(|d| dir.depth()  >= d)
-        {
+        if config.depth.is_some_and(|d| dir.depth() >= d) {
             if should_send {
                 let _ = sender.send(dir);
             }
@@ -160,8 +160,6 @@ impl Finder {
                     }
                 }
 
-        
-
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(dir, sender, config, filter, false);
                 });
@@ -188,3 +186,7 @@ impl Finder {
         }
     }
 }
+
+
+
+

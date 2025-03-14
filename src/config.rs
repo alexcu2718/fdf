@@ -73,3 +73,6 @@ impl SearchConfig {
             .map_or(true, |reg| reg.is_match(path))
     }
 }
+
+
+

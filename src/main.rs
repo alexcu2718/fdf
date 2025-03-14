@@ -133,7 +133,9 @@ pub struct Args {
         long = "fixed-strings",
         required = false,
         default_value_t = false,
-        help = "Use a fixed string not a regex"
+        help = "Use a fixed string not a regex",
+        conflicts_with = "glob"
+        
     )]
     fixed_string: bool,
 }
@@ -158,13 +160,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .num_threads(args.thread_num)
         .build_global()?;
 
-    let pattern = process_glob_regex(&args.pattern.unwrap_or_else(|| ".".into()), args.glob);
+        let start_pattern = args.pattern.as_ref().map_or_else(|| {
+                         eprintln!("Error: No pattern provided. Exiting.");
+                             std::process::exit(1);
+                        }, std::clone::Clone::clone);
 
-    let pattern = if args.fixed_string {
-        regex::escape(&pattern)
-    } else {
-        pattern
-    };
+
+        
+    let pattern =if args.fixed_string {regex::escape(&start_pattern)} else{ process_glob_regex(&start_pattern, args.glob)};
+
+    
 
    
 

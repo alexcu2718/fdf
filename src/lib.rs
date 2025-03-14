@@ -23,7 +23,7 @@ pub use direntry::DirEntry;
 mod pointer_conversion;
 pub use pointer_conversion::PointerUtils;
 mod utils;
-pub use utils::{escape_regex_string, process_glob_regex, resolve_directory};
+pub use utils::{ process_glob_regex, resolve_directory};
 mod glob;
 pub use glob::glob_to_regex;
 mod config;

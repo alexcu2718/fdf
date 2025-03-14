@@ -22,13 +22,7 @@ pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     )
 }
 
-#[must_use]
-pub fn escape_regex_string(input: &str, avoid_regex: bool, args_glob: bool) -> String {
-    if !avoid_regex || args_glob {
-        return input.into();
-    }
-    regex::escape(input)
-}
+
 
 #[allow(clippy::must_use_candidate)]
 pub fn resolve_directory(

@@ -23,16 +23,12 @@ use std::{
 };
 
 use crate::filetype::FileType;
+use crate::error::DirEntryError;
 use crate::pointer_conversion::PointerUtils;
 
 const BUFFER_SIZE: usize = 512 * 4;
 
-#[derive(Debug,Clone)]
-pub enum DirEntryError {
-    InvalidPath,
-    InvalidStat,
 
-}
 
 #[repr(C, align(8))]
 struct AlignedBuffer {
@@ -198,8 +194,8 @@ impl DirEntry {
 
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
-    pub fn metadata(&self) -> std::io::Result<std::fs::Metadata> {
-        std::fs::metadata(self.as_os_str())
+    pub fn metadata(&self) -> Result<std::fs::Metadata, DirEntryError> {
+        std::fs::metadata(self.as_os_str()).map_err(|_| DirEntryError::MetadataError)
     }
     #[inline(always)]
     #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING AGAIN
@@ -238,10 +234,10 @@ impl DirEntry {
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
     ///Costly conversion to a `std::fs::FileType`
-    pub fn to_std_file_type(&self) -> io::Result<std::fs::FileType> {
+    pub fn to_std_file_type(&self) -> Result<std::fs::FileType, DirEntryError> {
         //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it
-        std::fs::symlink_metadata(self.as_path()).map(|m| m.file_type())
+        std::fs::symlink_metadata(self.as_path()).map(|m| m.file_type()).map_err(|_| DirEntryError::MetadataError)
     }
 
     #[inline(always)]
@@ -268,7 +264,6 @@ impl DirEntry {
     
 
     #[inline(always)]
-    #[allow(clippy::missing_errors_doc)]
     #[must_use]
     ///returns the inode number of the file, rather expensive
     /// i just included it for sake of completeness.
@@ -291,9 +286,11 @@ impl DirEntry {
     ///returns the path as a &str
     ///this is safe because path is always valid utf8
     ///(because unix paths are always valid utf8)
-    pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
-        std::str::from_utf8(&self.path)
+    pub fn as_str(&self) -> Result<&str, DirEntryError> {
+        std::str::from_utf8(&self.path).map_err(|e| DirEntryError::Utf8Error(e))
     }
+
+
 
     #[inline(always)]
     #[must_use]
@@ -454,7 +451,7 @@ impl DirEntry {
 
                     entries.push(Self {
                         // SAFETY:
-                        //The caller must ensure that slice’s length can fit in a u32.
+                        //The caller must ensure that slice’s length can fit in a u32 (trivially true here)
                         path: unsafe { SlimmerBox::new_unchecked(&buf) },
                         file_type: FileType::from_dtype(d.d_type),
                         inode: d.d_ino,
@@ -476,7 +473,7 @@ impl DirEntry {
 impl DirEntry {
     /// Helper to safely perform stat syscall
     #[inline(always)]
-    fn get_stat(&self) -> io::Result<stat> {
+    fn get_stat(&self) -> Result<stat,DirEntryError> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
 
         let res = self
@@ -486,28 +483,29 @@ impl DirEntry {
         if res == 0 {
             Ok(unsafe { stat_buf.assume_init() })
         } else {
-            Err(io::Error::last_os_error())
+            Err(DirEntryError::InvalidStat)
         }
     }
 
     /// Get file size in bytes
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    pub fn size(&self) -> io::Result<u64> {
+    pub fn size(&self) -> Result<u64,DirEntryError> {
         self.get_stat().map(|s| s.st_size as u64)
     }
 
     /// Get last modification time
-    #[inline(always)]
-    #[allow(clippy::missing_errors_doc)] //fixing errors later
-    pub fn modified_time(&self) -> io::Result<SystemTime> {
+    pub fn modified_time(&self) -> Result<SystemTime, DirEntryError> {
         self.get_stat().and_then(|s| {
             let sec = s.st_mtime;
             let nsec = s.st_mtime_nsec as i32;
             unix_time_to_system_time(sec, nsec)
+                .map_err(|_| DirEntryError::TimeError) 
         })
     }
 }
+
+
 
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 #[allow(clippy::missing_errors_doc)] //fixing errors later

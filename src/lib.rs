@@ -18,8 +18,9 @@ use std::{
 //crate imports
 
 mod direntry;
-pub use direntry::{DirEntry,DirEntryError};
-
+pub use direntry::DirEntry;
+mod error;
+pub use error::DirEntryError;
 mod pointer_conversion;
 pub use pointer_conversion::PointerUtils;
 mod utils;

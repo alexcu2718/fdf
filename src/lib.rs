@@ -24,7 +24,7 @@ pub use error::DirEntryError;
 mod pointer_conversion;
 pub use pointer_conversion::PointerUtils;
 mod utils;
-pub use utils::{ process_glob_regex, resolve_directory};
+pub use utils::{process_glob_regex, resolve_directory};
 mod glob;
 pub use glob::glob_to_regex;
 mod config;
@@ -104,18 +104,20 @@ impl Finder {
             std::process::exit(1);
         }
 
-
-
-
         let filter = self.filter;
 
         //we have to arbitrarily construct a direntry to start the search.
 
-
         //spawn the search in a new thread.
         //this is safe because we've already checked that the directory exists.
         rayon::spawn(move || {
-            Self::process_directory(unsafe {construct_dir.unwrap_unchecked()}, &sender, &search_config, filter, true);
+            Self::process_directory(
+                unsafe { construct_dir.unwrap_unchecked() },
+                &sender,
+                &search_config,
+                filter,
+                true,
+            );
         });
 
         receiver

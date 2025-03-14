@@ -7,7 +7,6 @@ use libc::{
     R_OK, W_OK, X_OK,
 };
 
-
 use slimmer_box::SlimmerBox;
 
 use std::{
@@ -22,13 +21,11 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use crate::filetype::FileType;
 use crate::error::DirEntryError;
+use crate::filetype::FileType;
 use crate::pointer_conversion::PointerUtils;
 
 const BUFFER_SIZE: usize = 512 * 4;
-
-
 
 #[repr(C, align(8))]
 struct AlignedBuffer {
@@ -37,13 +34,13 @@ struct AlignedBuffer {
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DirEntry {
-    pub path: SlimmerBox<[u8],u16>,     //10 bytes
-    pub(crate) file_type: FileType, //1 byte
-    pub(crate) inode: u64,          //8 bytes
+    pub path: SlimmerBox<[u8], u16>, //10 bytes
+    pub(crate) file_type: FileType,  //1 byte
+    pub(crate) inode: u64,           //8 bytes
     pub(crate) depth: u8, //1 bytes    , this is a max of 65535 directories deep, it's also 1 bytes so keeps struct below 24bytes.
-    pub(crate) base_len: u8, //1 bytes     , this info is free and helps to get the filename.               
-                           //total 21 bytes
-                           //4 bytes padding, possible uses? not sure.
+    pub(crate) base_len: u8, //1 bytes     , this info is free and helps to get the filename.
+                          //total 21 bytes
+                          //4 bytes padding, possible uses? not sure.
 }
 
 thread_local! {
@@ -85,7 +82,6 @@ impl fmt::Debug for DirEntry {
         )
     }
 }
-
 
 /// `DirEntry` is safe to pass from one thread to another, as it's not reference-counted.
 unsafe impl Send for DirEntry {}
@@ -237,7 +233,9 @@ impl DirEntry {
     pub fn to_std_file_type(&self) -> Result<std::fs::FileType, DirEntryError> {
         //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it
-        std::fs::symlink_metadata(self.as_path()).map(|m| m.file_type()).map_err(|_| DirEntryError::MetadataError)
+        std::fs::symlink_metadata(self.as_path())
+            .map(|m| m.file_type())
+            .map_err(|_| DirEntryError::MetadataError)
     }
 
     #[inline(always)]
@@ -259,9 +257,7 @@ impl DirEntry {
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
         &self.path.as_ref()[self.base_len as usize..]
-        
     }
-    
 
     #[inline(always)]
     #[must_use]
@@ -289,8 +285,6 @@ impl DirEntry {
     pub fn as_str(&self) -> Result<&str, DirEntryError> {
         std::str::from_utf8(&self.path).map_err(|e| DirEntryError::Utf8Error(e))
     }
-
-
 
     #[inline(always)]
     #[must_use]
@@ -349,28 +343,24 @@ impl DirEntry {
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
-        &self.path.as_ref()[..std::cmp::max(self.base_len as usize -1,1)] 
+        &self.path.as_ref()[..std::cmp::max(self.base_len as usize - 1, 1)]
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
     }
-
-
-
-   
 
     #[must_use]
     #[inline(always)]
     ///Creates a new `DirEntry` from a path
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self, DirEntryError> {
         let path_os_str = path.as_ref();
-        let path_ref=path_os_str.as_bytes();
+        let path_ref = path_os_str.as_bytes();
         // get file metadata using lstat (doesn't follow symlinks)
         let mut stat_buf = MaybeUninit::<stat>::uninit();
         let res =
             unsafe { path_ref.as_cstr_ptr(|filename| lstat(filename, stat_buf.as_mut_ptr())) };
 
         if res != 0 {
-            return Err(DirEntryError::InvalidPath) //this needs to just return an error but TODO!
+            return Err(DirEntryError::InvalidPath); //this needs to just return an error but TODO!
         }
 
         // extract information from successful stat
@@ -380,7 +370,9 @@ impl DirEntry {
             file_type: FileType::from_mode(stat.st_mode),
             inode: stat.st_ino,
             depth: 0,
-            base_len:Path::new(path_os_str).parent().map_or(0,|x|x.as_os_str().as_bytes().len() as u8)
+            base_len: Path::new(path_os_str)
+                .parent()
+                .map_or(0, |x| x.as_os_str().as_bytes().len() as u8),
         })
     }
 
@@ -457,7 +449,7 @@ impl DirEntry {
                         file_type: FileType::from_dtype(d.d_type),
                         inode: d.d_ino,
                         depth: self.depth + 1,
-                        base_len:base_len as u8
+                        base_len: base_len as u8,
                     });
 
                     offset += d.d_reclen as usize;
@@ -474,7 +466,7 @@ impl DirEntry {
 impl DirEntry {
     /// Helper to safely perform stat syscall
     #[inline(always)]
-    fn get_stat(&self) -> Result<stat,DirEntryError> {
+    fn get_stat(&self) -> Result<stat, DirEntryError> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
 
         let res = self
@@ -491,7 +483,7 @@ impl DirEntry {
     /// Get file size in bytes
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    pub fn size(&self) -> Result<u64,DirEntryError> {
+    pub fn size(&self) -> Result<u64, DirEntryError> {
         self.get_stat().map(|s| s.st_size as u64)
     }
 
@@ -500,13 +492,10 @@ impl DirEntry {
         self.get_stat().and_then(|s| {
             let sec = s.st_mtime;
             let nsec = s.st_mtime_nsec as i32;
-            unix_time_to_system_time(sec, nsec)
-                .map_err(|_| DirEntryError::TimeError) 
+            unix_time_to_system_time(sec, nsec).map_err(|_| DirEntryError::TimeError)
         })
     }
 }
-
-
 
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 #[allow(clippy::missing_errors_doc)] //fixing errors later
@@ -525,4 +514,3 @@ fn unix_time_to_system_time(sec: i64, nsec: i32) -> io::Result<SystemTime> {
         .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid timestamp value"))
 }
-

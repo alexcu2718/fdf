@@ -22,8 +22,6 @@ pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     )
 }
 
-
-
 #[allow(clippy::must_use_candidate)]
 pub fn resolve_directory(
     args_cd: bool,

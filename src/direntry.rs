@@ -3,7 +3,7 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 use libc::{
-    access, c_char, close, dirent64, lstat, open, stat, syscall, SYS_getdents64, F_OK, O_RDONLY,
+    access, c_char, close,strlen, dirent64, lstat, open, stat, syscall, SYS_getdents64, F_OK, O_RDONLY,
     R_OK, W_OK, X_OK,
 };
 
@@ -11,7 +11,7 @@ use slimmer_box::SlimmerBox;
 
 use std::{
     cell::RefCell,
-    ffi::CStr,
+    slice,
     ffi::OsStr,
     fmt,
     io::{self, Error},
@@ -424,11 +424,12 @@ impl DirEntry {
                     let d = unsafe { &*(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
 
                     // SAFETY: kernel guarantees null-terminated d_name
-                    let name_cstr = unsafe { CStr::from_ptr(d.d_name.as_ptr()) };
-                    let name_bytes = name_cstr.to_bytes();
+                    let name_ptr = d.d_name.as_ptr();
+                    let len_str=unsafe{strlen(name_ptr)};
+                    let name_bytes = unsafe { slice::from_raw_parts(name_ptr.cast::<u8>(), len_str) };
 
-                    // fast path check using byte length first
-                    if name_bytes.len() <= 2 {
+                    // fast path check using length test first
+                    if len_str <= 2 {
                         match name_bytes {
                             b"." | b".." => {
                                 offset += d.d_reclen as usize;
@@ -444,6 +445,7 @@ impl DirEntry {
                     entries.push(Self {
                         // SAFETY:
                         //The caller must ensure that slice’s length can fit in a u32 (trivially true here)
+                        //copypasted from docs.
                         path: unsafe { SlimmerBox::new_unchecked(&buf) },
                         file_type: FileType::from_dtype(d.d_type),
                         inode: d.d_ino,

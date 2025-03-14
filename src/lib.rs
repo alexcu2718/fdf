@@ -1,6 +1,5 @@
 #![allow(clippy::inline_always)]
-#![allow(internal_features)]
-#![feature(core_intrinsics)]
+
 //use std::sync::Arc;
 //use std::intrinsics::likely;
 
@@ -186,7 +185,3 @@ impl Finder {
         }
     }
 }
-
-
-
-

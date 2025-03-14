@@ -34,9 +34,9 @@ struct AlignedBuffer {
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DirEntry {
-    pub path: SlimmerBox<[u8]>, //12 bytes
-    pub (crate) file_type: FileType,    //1 byte
-    pub(crate) inode: u64,      //8 bytes
+    pub path: SlimmerBox<[u8]>,     //12 bytes
+    pub(crate) file_type: FileType, //1 byte
+    pub(crate) inode: u64,          //8 bytes
     pub(crate) depth: u16, //2 bytes    , this is a max of 65535 directories deep, it's also 2 bytes so keeps struct below 24bytes.
                            //total 23 bytes
                            //1 bytes padding, possible uses? not sure.
@@ -46,7 +46,8 @@ thread_local! {
     static PATH_BUFFER: RefCell<Vec<u8>> = RefCell::new(Vec::with_capacity(4096));
 }
 
-impl fmt::Display for DirEntry { //i might need to change this to show other metadata.
+impl fmt::Display for DirEntry {
+    //i might need to change this to show other metadata.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str_lossy())
     }
@@ -400,99 +401,89 @@ impl DirEntry {
     }
 
     #[inline(always)]
-#[allow(clippy::missing_errors_doc)]
-pub fn read_dir(&self) -> io::Result<Vec<Self>> {
-    let dir_path = &self.path;
-    let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) });
-    if fd < 0 {
-        return Err(Error::last_os_error());
-    }
-
-    let mut entries: Vec<Self> = Vec::with_capacity(4);
-    let needs_slash = **dir_path != *b"/";
-
-    PATH_BUFFER.with(|buf_cell| -> io::Result<()> {
-        let mut buffer = AlignedBuffer {
-            data: [0; BUFFER_SIZE],
-        };
-        let mut buf = buf_cell.borrow_mut();
-        buf.clear();
-        buf.extend_from_slice(dir_path);
-        if needs_slash {
-            buf.push(b'/');
+    #[allow(clippy::missing_errors_doc)]
+    pub fn read_dir(&self) -> io::Result<Vec<Self>> {
+        let dir_path = &self.path;
+        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) });
+        if fd < 0 {
+            return Err(Error::last_os_error());
         }
-        let base_len = buf.len();
 
-        loop {
-            let nread = unsafe {
-                syscall(
-                    SYS_getdents64,
-                    fd,
-                    buffer.data.as_mut_ptr().cast::<c_char>(),
-                    BUFFER_SIZE as u32,
-                )
+        let mut entries: Vec<Self> = Vec::with_capacity(4);
+        let needs_slash = **dir_path != *b"/";
+
+        PATH_BUFFER.with(|buf_cell| -> io::Result<()> {
+            let mut buffer = AlignedBuffer {
+                data: [0; BUFFER_SIZE],
             };
-
-            if nread <= 0 {
-                if nread < 0 {
-                    let err = Error::last_os_error();
-                    unsafe { close(fd) };
-                    return Err(err);
-                }
-                break;
+            let mut buf = buf_cell.borrow_mut();
+            buf.clear();
+            buf.extend_from_slice(dir_path);
+            if needs_slash {
+                buf.push(b'/');
             }
+            let base_len = buf.len();
 
-            let mut offset = 0;
+            loop {
+                let nread = unsafe {
+                    syscall(
+                        SYS_getdents64,
+                        fd,
+                        buffer.data.as_mut_ptr().cast::<c_char>(),
+                        BUFFER_SIZE as u32,
+                    )
+                };
 
-            while offset < nread as usize {
-                let d = unsafe { &*(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
+                if nread <= 0 {
+                    if nread < 0 {
+                        let err = Error::last_os_error();
+                        unsafe { close(fd) };
+                        return Err(err);
+                    }
+                    break;
+                }
 
-                // SAFETY: kernel guarantees null-terminated d_name
-                let name_cstr = unsafe { CStr::from_ptr(d.d_name.as_ptr()) };
-                let name_bytes = name_cstr.to_bytes();
+                let mut offset = 0;
 
-                // fast path check using byte length first
-                if name_bytes.len() <= 2 {
-                    match name_bytes {
-                        b"." | b".." => {
-                            offset += d.d_reclen as usize;
-                            continue;
+                while offset < nread as usize {
+                    let d = unsafe { &*(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
+
+                    // SAFETY: kernel guarantees null-terminated d_name
+                    let name_cstr = unsafe { CStr::from_ptr(d.d_name.as_ptr()) };
+                    let name_bytes = name_cstr.to_bytes();
+
+                    // fast path check using byte length first
+                    if name_bytes.len() <= 2 {
+                        match name_bytes {
+                            b"." | b".." => {
+                                offset += d.d_reclen as usize;
+                                continue;
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
+
+                    buf.truncate(base_len);
+                    buf.extend_from_slice(name_bytes);
+
+                    entries.push(Self {
+                        // SAFETY:
+                        //The caller must ensure that slice’s length can fit in a u32.
+                        path: unsafe { SlimmerBox::new_unchecked(&buf) },
+                        file_type: FileType::from_dtype(d.d_type),
+                        inode: d.d_ino,
+                        depth: self.depth + 1,
+                    });
+
+                    offset += d.d_reclen as usize;
                 }
-
-                buf.truncate(base_len);
-                buf.extend_from_slice(name_bytes);
-
-                entries.push(Self {
-                    // SAFETY: 
-                    //The caller must ensure that slice’s length can fit in a u32.
-                    path: unsafe { SlimmerBox::new_unchecked(&buf) },
-                    file_type: FileType::from_dtype(d.d_type),
-                    inode: d.d_ino,
-                    depth: self.depth + 1,
-                });
-
-                // prefetch next entry while processing current one
-                let next_offset = offset + d.d_reclen as usize;
-                if next_offset < nread as usize {
-                    unsafe {
-                        std::intrinsics::prefetch_read_data(
-                            buffer.data.as_ptr().add(next_offset),
-                            3, // prefetch next 3 cache lines
-                        );
-                    }
-                }
-                offset = next_offset;
             }
-        }
-        Ok(())
-    })?;
+            Ok(())
+        })?;
 
-    unsafe { close(fd) };
-    Ok(entries)
-}
+        unsafe { close(fd) };
+        Ok(entries)
+    }
 }
 
 impl DirEntry {
@@ -548,8 +539,6 @@ fn unix_time_to_system_time(sec: i64, nsec: i32) -> io::Result<SystemTime> {
         .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid timestamp value"))
 }
-
-
 
 /*
 #![allow(clippy::inline_always)]
@@ -1020,7 +1009,7 @@ pub fn read_dir(&self) -> io::Result<Vec<Self>> {
                 buf.extend_from_slice(name_bytes);
 
                 entries.push(Self {
-                    // SAFETY: 
+                    // SAFETY:
                     //The caller must ensure that slice’s length can fit in a u32.
                     path: unsafe { SlimmerBox::new_unchecked(&buf) },
                     file_type: FileType::from_dtype(d.d_type),

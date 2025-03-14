@@ -166,11 +166,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pattern
     };
 
-    let extension_match = if args.extension.is_some() {
-        Some(args.extension.unwrap().into_bytes().into_boxed_slice())
-    } else {
-        None
-    };
+   
+
+  
 
     let mut finder = Finder::new(
         path,
@@ -179,7 +177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.case_sensitive,
         args.keep_dirs,
         args.full_path,
-        extension_match,
+        args.extension.map(|x| x.into_bytes().into()),
         args.depth,
     );
 

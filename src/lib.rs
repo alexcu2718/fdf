@@ -9,6 +9,7 @@ use rayon::prelude::*;
 use std::{
     ffi::OsString,
     sync::mpsc::{channel as unbounded, Receiver, Sender},
+    sync::Arc,
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
 };
 
@@ -18,6 +19,7 @@ use std::{
 
 mod direntry;
 pub use direntry::DirEntry;
+
 mod pointer_conversion;
 pub use pointer_conversion::PointerUtils;
 mod utils;
@@ -58,7 +60,7 @@ impl Finder {
         case_insensitive: bool,
         keep_dirs: bool,
         short_path: bool,
-        extension_match: Option<Box<[u8]>>,
+        extension_match: Option<Arc<[u8]>>,
         max_depth: Option<u16>,
     ) -> Self {
         let search_config = SearchConfig::new(

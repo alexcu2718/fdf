@@ -1,13 +1,14 @@
 #![allow(clippy::inline_always)]
 use crate::DirEntry;
 use regex::bytes::{Regex, RegexBuilder};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct SearchConfig {
     pub regex_match: Option<Regex>,
     pub hide_hidden: bool,
     pub keep_dirs: bool,
-    pub extension_match: Option<Box<[u8]>>,
+    pub extension_match: Option<Arc<[u8]>>,
     pub file_name: bool,
     pub depth: Option<u16>,
 }
@@ -21,7 +22,7 @@ impl SearchConfig {
         case_insensitive: bool,
         keep_dirs: bool,
         file_name: bool,
-        extension_match: Option<Box<[u8]>>,
+        extension_match: Option<Arc<[u8]>>,
         depth: Option<u16>,
     ) -> Self {
         let reg = if pattern == "." || pattern.is_empty() {

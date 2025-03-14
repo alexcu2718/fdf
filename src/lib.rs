@@ -61,7 +61,7 @@ impl Finder {
         keep_dirs: bool,
         short_path: bool,
         extension_match: Option<Arc<[u8]>>,
-        max_depth: Option<u16>,
+        max_depth: Option<u8>,
     ) -> Self {
         let search_config = SearchConfig::new(
             pattern,
@@ -97,6 +97,14 @@ impl Finder {
         let search_config = self.search_config.clone();
 
         let construct_dir = DirEntry::new(&self.root);
+
+        if !construct_dir.is_dir() {
+            eprintln!("Error: The provided path is not a directory.");
+            std::process::exit(1);
+        }
+
+
+
 
         let filter = self.filter;
 

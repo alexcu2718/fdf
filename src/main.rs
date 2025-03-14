@@ -63,6 +63,13 @@ pub struct Args {
         help = "Number of threads to use, defaults to available threads",
     )]
     thread_num: usize,
+    #[arg(
+        short = 'a',
+        long = "absolute-path",
+       // default_value_t = env!("CPU_COUNT").parse::<usize>().unwrap_or(1),
+        help = "Show absolute path",
+    )]
+    absolute_path: bool,
 
     #[arg(
         short = 'I',
@@ -131,7 +138,9 @@ pub struct Args {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let path = resolve_directory(args.current_directory, args.directory);
+    let path= resolve_directory(args.current_directory, args.directory,args.absolute_path);
+  
+    
 
     if let Some(generator) = args.generate {
         let mut cmd = Args::command();

@@ -1,8 +1,11 @@
 #![allow(clippy::inline_always)]
-use libc::{DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK};
+use libc::{DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK,
+    mode_t,
+     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK};
+    
 use std::{ffi::OsStr, os::unix::fs::FileTypeExt, path::Path};
 /// Represents the type of a file in the filesystem
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq,PartialOrd, Ord, Hash)]
 pub enum FileType {
     BlockDevice,
     CharDevice,
@@ -30,8 +33,23 @@ impl FileType {
             _ => Self::Unknown,
         }
     }
+    #[must_use]
+    #[inline(always)]
+    pub const fn from_mode(mode: mode_t) -> Self {
+        match mode & S_IFMT {
+            S_IFREG => Self::RegularFile,
+            S_IFDIR => Self::Directory,
+            S_IFBLK => Self::BlockDevice,
+            S_IFCHR => Self::CharDevice,
+            S_IFIFO => Self::Fifo,
+            S_IFLNK => Self::Symlink,
+            S_IFSOCK => Self::Socket,
+            _ => Self::Unknown,
+        }
+    }
     /// Converts a `FileType` from a path
     #[must_use]
+    #[inline(always)]
     pub fn from_path(path_start: &OsStr) -> Self {
         Path::new(path_start)
             .symlink_metadata()

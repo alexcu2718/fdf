@@ -1,6 +1,12 @@
 #![allow(clippy::inline_always)]
-use libc::{access, c_char, close, dirent64, open, syscall, SYS_getdents64, O_RDONLY, X_OK};
+#![allow(clippy::cast_ptr_alignment)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+use libc::{access,lstat, c_char, close, dirent64, open,stat, syscall, SYS_getdents64, O_RDONLY,
+     X_OK,R_OK,W_OK,F_OK};
 
+
+use memchr::{memchr, memrchr};
 use slimmer_box::SlimmerBox;
 
 use std::{
@@ -8,15 +14,15 @@ use std::{
     ffi::OsStr,
     fmt,
     io::{self, Error},
-    os::unix::{ffi::OsStrExt, fs::MetadataExt},
+    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     slice,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+    mem::MaybeUninit
 };
 
 use crate::filetype::FileType;
 use crate::pointer_conversion::PointerUtils;
-
-use memchr::{memchr, memrchr};
 
 const BUFFER_SIZE: usize = 512 * 4;
 
@@ -25,7 +31,7 @@ struct AlignedBuffer {
     data: [u8; BUFFER_SIZE],
 }
 
-#[derive(Clone)]
+#[derive( Clone,PartialEq,  Eq,PartialOrd, Ord, Hash)]
 pub struct DirEntry {
     pub path: SlimmerBox<[u8]>, //12 bytes
     pub file_type: FileType,    //1 byte
@@ -52,6 +58,16 @@ impl std::ops::Deref for DirEntry {
         &self.path
     }
 }
+
+impl AsRef<Path> for DirEntry {
+    #[inline(always)]
+    fn as_ref(&self) -> &Path {
+        self.as_path()
+    }
+}
+
+
+
 
 
 
@@ -165,7 +181,6 @@ impl DirEntry {
     ///costly check for empty files
     ///i dont see much use for this function
     pub fn is_empty(&self) -> bool {
-        // let myitem:u16=65;
 
         if self.is_regular_file() {
             // for files, check if size is zero without loading all metadata
@@ -179,6 +194,25 @@ impl DirEntry {
         }
     }
 
+
+    #[inline(always)]
+    #[must_use]
+    ///somewhatcostly check for readable files
+    pub fn is_readable(&self) -> bool {
+        unsafe { self.path.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
+    }
+
+
+
+
+
+    #[inline(always)]
+    #[must_use]
+    ///somewhat costly check for writable files
+    pub fn is_writable(&self) -> bool {
+        unsafe { self.path.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
+    }
+
     #[inline(always)]
     #[allow(clippy::missing_errors_doc)]
     pub fn metadata(&self) -> std::io::Result<std::fs::Metadata> {
@@ -190,6 +224,19 @@ impl DirEntry {
     ///Cost free conversion to bytes (because it is already is bytes)
     pub fn as_bytes(&self) -> &[u8] {
         &self.path
+    }
+
+    #[inline(always)]
+    #[must_use]
+    ///checks if the path is absolute
+    pub fn is_absolute(&self) -> bool {
+        self.path.first() == Some(&b'/')
+    }
+
+
+    #[inline(always)]
+    pub fn components(&self) -> impl Iterator<Item = &[u8]> {
+        self.path.split(|&b| b == b'/').filter(|s| !s.is_empty())
     }
 
     #[inline(always)]
@@ -307,23 +354,67 @@ impl DirEntry {
 
     #[inline(always)]
     #[must_use]
+    pub fn exists(&self) -> bool {
+        unsafe { self.path.as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
+    }
+
+    #[inline(always)]
+    #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
         let filename = self.file_name();
         !filename.is_empty() && filename[0] == b'.'
     }
 
+    #[inline(always)]
+    #[must_use]
+    pub fn parent(&self) -> Option<&[u8]> {
+        let path = self.path.as_ref();
+        let parent_end = memrchr(b'/', path)?;
+        Some(&path[..=parent_end])}
+     
+        
+
+
+
+
+    #[inline(always)]
+    #[must_use]
+    fn invalid_entry(bytes: &[u8]) -> Self {
+        Self {
+            path: SlimmerBox::new(bytes),
+            file_type: FileType::Unknown,
+            inode: 0,
+            depth: 0,
+        }
+    }
+    
+
+
+
     #[must_use]
     #[inline(always)]
-    ///creates a new `DirEntry` from a path
+    ///Creates a new `DirEntry` from a path
     pub fn new<T: AsRef<OsStr>>(path: T) -> Self {
-        let path_ref = path.as_ref();
+        let path_ref = path.as_ref().as_bytes();
+       
 
+
+        // get file metadata using lstat (doesn't follow symlinks)
+        let mut stat_buf = MaybeUninit::<stat>::uninit();
+        let res = unsafe {path_ref.as_cstr_ptr(|filename|lstat(filename, stat_buf.as_mut_ptr())) };
+
+        if res != 0 {
+            return Self::invalid_entry(path_ref); //this needs to just return an error but TODO!
+        }
+
+        // extract information from successful stat
+        let stat = unsafe { stat_buf.assume_init() };
         Self {
-            path: SlimmerBox::new(path_ref.as_bytes()),
-            file_type: FileType::from_path(path_ref),
-            inode: std::fs::symlink_metadata(path_ref).map_or(0, |meta| meta.ino()), //expensive, not a fan. but im not ricing this.
-            depth:0,
+            path: SlimmerBox::new(path_ref),
+            file_type: FileType::from_mode(stat.st_mode),
+            inode: stat.st_ino,
+            depth: 0,
         }
     }
 
@@ -362,7 +453,6 @@ impl DirEntry {
 
             loop {
                 let nread = unsafe {
-                    #[allow(clippy::cast_possible_truncation)]
                     //syscall is safe because we are passing a valid fd
                     //and a valid buffer
                     syscall(
@@ -384,8 +474,7 @@ impl DirEntry {
                 }
 
                 let mut offset = 0;
-                #[allow(clippy::cast_possible_truncation)]
-                #[allow(clippy::cast_sign_loss)]
+              
                 while offset < nread as usize {
                     #[allow(clippy::cast_ptr_alignment)]
                     //we need to cast as dirent to access the relevant fields.
@@ -409,7 +498,7 @@ impl DirEntry {
                         }
                     }
 
-                    // Slice only once, after filtering out "." and ".."
+                    // create name only  after filtering out "." and ".."
                     let name_bytes = unsafe { slice::from_raw_parts(name_ptr, name_end) };
 
                 
@@ -434,4 +523,68 @@ impl DirEntry {
         Ok(entries)
     }
 }
+
+
+
+
+impl DirEntry {
+    /// Helper to safely perform stat syscall
+    #[inline(always)]
+    fn get_stat(&self) -> io::Result<stat> {
+        let mut stat_buf = MaybeUninit::<stat>::uninit();
+        
+        let res = self.path.as_cstr_ptr(|ptr| unsafe {
+            stat(ptr, stat_buf.as_mut_ptr())
+        });
+
+        if res == 0 {
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+
+    /// Get file size in bytes
+    #[inline(always)]
+    #[allow(clippy::missing_errors_doc)]//fixing errors later
+    pub fn size(&self) -> io::Result<u64> {
+        self.get_stat().map(|s| s.st_size as u64)
+    }
+
+    /// Get last modification time
+    #[inline(always)]
+    #[allow(clippy::missing_errors_doc)]//fixing errors later
+    pub fn modified_time(&self) -> io::Result<SystemTime> {
+        self.get_stat().and_then(|s| {
+            let sec = s.st_mtime;
+            let nsec = s.st_mtime_nsec as i32;
+            unix_time_to_system_time(sec, nsec)
+        })
+    }
+
+}
+
+
+
+
+
+/// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
+#[allow(clippy::missing_errors_doc)]//fixing errors later
+fn unix_time_to_system_time(sec: i64, nsec: i32) -> io::Result<SystemTime> {
+    let (base, offset) = if sec >= 0 {
+        (UNIX_EPOCH, Duration::new(sec as u64, nsec as u32))
+    } else {
+        let sec_abs = sec.unsigned_abs();
+        (UNIX_EPOCH + Duration::new(sec_abs, 0), 
+        Duration::from_nanos(nsec as u64))
+    };
+
+    base.checked_sub(offset)
+        .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
+        .ok_or_else(|| io::Error::new(
+            io::ErrorKind::InvalidData, 
+            "Invalid timestamp value"
+        ))
+}
+
 

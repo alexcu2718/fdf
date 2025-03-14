@@ -31,23 +31,43 @@ pub fn escape_regex_string(input: &str, avoid_regex: bool, args_glob: bool) -> S
 }
 
 #[allow(clippy::must_use_candidate)]
-pub fn resolve_directory(args_cd: bool, args_directory: Option<OsString>) -> OsString {
+pub fn resolve_directory(
+    args_cd: bool,
+    args_directory: Option<OsString>,
+    canonicalise: bool,
+) -> OsString {
     if args_cd {
         current_dir().map_or_else(
             |_| DOT_PATTERN.into(),
             |path_res| {
-                path_res
-                    .to_str()
+                let path = if canonicalise {
+                    path_res.canonicalize().unwrap_or(path_res)
+                } else {
+                    path_res
+                };
+                path.to_str()
                     .map_or_else(|| DOT_PATTERN.into(), Into::into)
             },
         )
     } else {
         let dir_to_use = args_directory.unwrap_or_else(|| START_PREFIX.into());
         let path_check = Path::new(&dir_to_use);
+        
         if !path_check.is_dir() {
             eprintln!("{dir_to_use:?} is not a directory");
-            std::process::exit(1)
+            std::process::exit(1);
         }
-        dir_to_use
+
+        if canonicalise {
+            match path_check.canonicalize() {
+                Ok(canonical_path) => canonical_path.into_os_string(),
+                Err(e) => {
+                    eprintln!("Failed to canonicalize path {path_check:?}: {e}");
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            dir_to_use
+        }
     }
 }

@@ -84,6 +84,7 @@ impl Finder {
         self
     }
 
+  
     #[must_use]
     #[inline(always)]
     /// Traverse the directory and return a receiver for the entries.
@@ -158,6 +159,8 @@ impl Finder {
                         //this only happens when we cut the receiver due to limiting entries,
                     }
                 }
+
+        
 
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(dir, sender, config, filter, false);

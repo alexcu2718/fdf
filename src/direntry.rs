@@ -1,46 +1,69 @@
-#![allow(clippy::inline_always)]
 #![allow(clippy::cast_ptr_alignment)]
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 use libc::{
-    access, c_char, close,strlen, dirent64, lstat, open, stat, syscall, SYS_getdents64, F_OK, O_RDONLY,
+    access, c_char, close, dirent64, open, stat, strlen, syscall, SYS_getdents64, F_OK, O_RDONLY,
     R_OK, W_OK, X_OK,
+    free,realpath
 };
 
-use slimmer_box::SlimmerBox;
+/* reference for dirent64
+pub struct dirent64 {
+    pub d_ino: u64,
+    pub d_off: i64,
+    pub d_reclen: u16,
+    pub d_type: u8,
+    pub d_name: [i8; 256],
+}
+
+*/
+use scopeguard::defer;
 
 use std::{
+    //intrinsics::likely,
     cell::RefCell,
-    slice,
     ffi::OsStr,
     fmt,
     io::{self, Error},
-    mem::MaybeUninit,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    slice,
+    time::SystemTime,
 };
 
-use crate::error::DirEntryError;
-use crate::filetype::FileType;
-use crate::pointer_conversion::PointerUtils;
+pub use crate::{OsBytes,error::DirEntryError,Result,filetype::FileType,traits_and_conversions::BytesToCstrPointer};
+use crate::utils::{get_baselen, get_stat_bytes, unix_time_to_system_time};
 
-const BUFFER_SIZE: usize = 512 * 4;
+const BUFFER_SIZE: usize = 512 * 8;
+//A generic `Result` type for the crate
+
+//this is a 4k buffer, which is the maximum size of a directory entry on most filesystems
+
+
 
 #[repr(C, align(8))]
-struct AlignedBuffer {
-    data: [u8; BUFFER_SIZE],
+pub struct AlignedBuffer {
+    pub data: [u8; BUFFER_SIZE],
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, )]
 pub struct DirEntry {
-    pub path: SlimmerBox<[u8], u16>, //10 bytes
+    pub path: OsBytes, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
     pub(crate) file_type: FileType,  //1 byte
-    pub(crate) inode: u64,           //8 bytes
+    pub(crate) inode: u64,           //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 65535 directories deep, it's also 1 bytes so keeps struct below 24bytes.
-    pub(crate) base_len: u8, //1 bytes     , this info is free and helps to get the filename.
-                          //total 21 bytes
-                          //4 bytes padding, possible uses? not sure.
+    pub(crate) base_len: u8, //1 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
+                             //total 21 bytes
+                             //3 bytes padding, possible uses? not sure.
+
+    //maybe i can add is is_hidden attribute, this is 'free' and can be used to check if the file is hidden.
+    //this is a 1 byte attribute, so it keeps the struct below 24 bytes (22 bytes with that)
+    //other ideas are yet to be made
+
+
+    //possible ideas is storing the dirents value, as a direct struct, with handy functions to get the details
+    //except for the name, the filename is easy to grab from the pointer but it's then resolving to form
+    //a full path, the preceeding path is not stored, maybe i can store it in a buffer  
 }
 
 thread_local! {
@@ -58,12 +81,33 @@ impl std::ops::Deref for DirEntry {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.path
+        self.as_bytes()
+    }
+}
+
+impl From<DirEntry> for PathBuf {
+    fn from(entry: DirEntry) -> Self {
+        entry.into_path()
+    }
+}
+impl TryFrom<&[u8]> for DirEntry {
+    type Error = DirEntryError;
+
+    fn try_from(path: &[u8]) -> Result<Self> {
+        Self::new(OsStr::from_bytes(path))
+    }
+}
+
+impl TryFrom<&OsStr> for DirEntry {
+    type Error = DirEntryError;
+
+    fn try_from(path: &OsStr) -> Result<Self> {
+        Self::new(path)
     }
 }
 
 impl AsRef<Path> for DirEntry {
-    #[inline(always)]
+    #[inline]
     fn as_ref(&self) -> &Path {
         self.as_path()
     }
@@ -87,7 +131,7 @@ impl fmt::Debug for DirEntry {
 unsafe impl Send for DirEntry {}
 
 impl DirEntry {
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///costly check for executables
     pub fn is_executable(&self) -> bool {
@@ -97,67 +141,67 @@ impl DirEntry {
 
         unsafe {
             // x_ok checks for execute permission
-            self.path.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
+            self.as_bytes().as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
         }
     }
 
     ///cost free check for block devices
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn is_block_device(&self) -> bool {
         matches!(self.file_type, FileType::BlockDevice)
     }
 
     ///Cost free check for character devices
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
         matches!(self.file_type, FileType::CharDevice)
     }
 
     ///Cost free check for fifos
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn is_fifo(&self) -> bool {
         matches!(self.file_type, FileType::Fifo)
     }
 
     ///Cost free check for sockets
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn is_socket(&self) -> bool {
         matches!(self.file_type, FileType::Socket)
     }
 
     ///Cost free check for regular files
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn is_regular_file(&self) -> bool {
         matches!(self.file_type, FileType::RegularFile)
     }
 
     ///Cost free check for directories
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn is_dir(&self) -> bool {
         matches!(self.file_type, FileType::Directory)
     }
 
     ///cost free check for unknown file types
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
         matches!(self.file_type, FileType::Unknown)
     }
 
     ///cost free check for symlinks
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
         matches!(self.file_type, FileType::Symlink)
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///costly check for empty files
     ///i dont see much use for this function
@@ -173,64 +217,99 @@ impl DirEntry {
             false
         }
     }
+    #[inline]
+    #[allow(clippy::missing_errors_doc)]
+    ///Converts a path to a proper path, if it is not already
+    /// Errors if i've fucked up my pointer shit here lol,not properly tested.
+    pub fn as_full_path(self) -> Result<Self> {
+        if self.is_absolute() {
+            return Ok(self);
+        }
+       
 
-    #[inline(always)]
+        let ptr = unsafe { self.as_bytes().as_cstr_ptr(|cstrpointer| realpath(cstrpointer, std::ptr::null_mut())) };
+        if ptr.is_null() {
+            return Err(Error::last_os_error().into());
+        }
+
+        let bytes = unsafe { slice::from_raw_parts(ptr.cast::<u8>(), strlen(ptr)) };
+        //safe because easily fits in capacity (which is absurdly for our purposes)
+
+        let boxed = Self{
+            path:OsBytes::new(bytes),
+            file_type: self.file_type,
+            inode: self.inode,
+            depth: self.depth,
+            base_len: (bytes.len() -self.file_name().len()) as u8 ,}; //we need the length up to the filename INCLUDING
+            //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
+            //so we subtract the filename length from the total length, probably could've been done more elegantly.
+            //TBD? not imperative. 
+        unsafe { free(ptr.cast()) }; //we need to free the pointer AFTER copying the data
+        // Return the new DirEntry
+
+
+        Ok(boxed)
+    }
+
+    #[inline]
     #[must_use]
     ///somewhatcostly check for readable files
     pub fn is_readable(&self) -> bool {
-        unsafe { self.path.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
+        unsafe { self.as_bytes().as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    ///somewhat costly check for writable files
+    ///somewhat costly check for writable files(by current user)
     pub fn is_writable(&self) -> bool {
-        unsafe { self.path.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
+        //maybe i can automatically exclude certain files from this check to
+        //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
+        unsafe { self.as_bytes().as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
     }
 
-    #[inline(always)]
+    #[inline]
     #[allow(clippy::missing_errors_doc)]
-    pub fn metadata(&self) -> Result<std::fs::Metadata, DirEntryError> {
+    pub fn metadata(&self) -> Result<std::fs::Metadata> {
         std::fs::metadata(self.as_os_str()).map_err(|_| DirEntryError::MetadataError)
     }
-    #[inline(always)]
+    #[inline]
     #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING AGAIN
     #[must_use]
     ///Cost free conversion to bytes (because it is already is bytes)
     pub fn as_bytes(&self) -> &[u8] {
-        &self.path
+        self.path.as_bytes()
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///checks if the path is absolute
     pub fn is_absolute(&self) -> bool {
-        self.path.first() == Some(&b'/')
+        self.as_bytes().first() == Some(&b'/')
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn components(&self) -> impl Iterator<Item = &[u8]> {
-        self.path.split(|&b| b == b'/').filter(|s| !s.is_empty())
+        self.as_bytes().split(|&b| b == b'/').filter(|s| !s.is_empty())
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    ///Low cost free conversion to a `Path`
+    ///Low cost  conversion to a `Path`
     pub fn as_path(&self) -> &Path {
         Path::new(self.as_os_str())
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///returns the file type of the file (eg directory, regular file, etc)
     pub const fn file_type(&self) -> FileType {
         self.file_type
     }
 
-    #[inline(always)]
+    #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Costly conversion to a `std::fs::FileType`
-    pub fn to_std_file_type(&self) -> Result<std::fs::FileType, DirEntryError> {
+    pub fn to_std_file_type(&self) -> Result<std::fs::FileType> {
         //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it
         std::fs::symlink_metadata(self.as_path())
@@ -238,28 +317,35 @@ impl DirEntry {
             .map_err(|_| DirEntryError::MetadataError)
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///Returns the extension of the file if it has one
     pub fn extension(&self) -> Option<&[u8]> {
         self.file_name().rsplit(|&b| b == b'.').next()
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///Returns the depth relative to the start directory, this is cost free
     pub const fn depth(&self) -> u8 {
         self.depth
     }
 
-    #[inline(always)]
+    #[inline]
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING
+    pub fn len(&self) -> usize {
+        self.as_bytes().len()
+    }
+
+    #[inline]
     #[must_use]
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
-        &self.path.as_ref()[self.base_len as usize..]
+        &self.as_bytes()[self.base_len as usize..]
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///returns the inode number of the file, rather expensive
     /// i just included it for sake of completeness.
@@ -267,26 +353,30 @@ impl DirEntry {
         self.inode
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    pub fn filter<F>(&self, f: F) -> bool
-    where
-        F: Fn(&Self) -> bool,
-    {
-        f(self)
+    pub fn filter(&self, func: impl Fn(&Self) -> bool) -> bool {
+        func(self)
     }
 
-    #[inline(always)]
+    #[inline]
+    #[must_use]
+    ///returns the length of the base path (eg /home/user/ is 6)
+    pub const fn base_len(&self) -> u8 {
+        self.base_len
+    }
+
+    #[inline]
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING
     ///returns the path as a &str
     ///this is safe because path is always valid utf8
     ///(because unix paths are always valid utf8)
-    pub fn as_str(&self) -> Result<&str, DirEntryError> {
-        std::str::from_utf8(&self.path).map_err(DirEntryError::Utf8Error)
+    pub fn as_str(&self) -> Result<&str> {
+        std::str::from_utf8(self.as_bytes()).map_err(DirEntryError::Utf8Error)
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
     /// Returns the path as a &str without checking if it is valid UTF-8.
@@ -294,23 +384,23 @@ impl DirEntry {
     /// # Safety
     /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
     pub unsafe fn as_str_unchecked(&self) -> &str {
-        std::str::from_utf8_unchecked(&self.path)
+        std::str::from_utf8_unchecked(self.as_bytes())
     }
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///Returns the path as a    `Cow<str>`
     pub fn as_str_lossy(&self) -> std::borrow::Cow<'_, str> {
-        String::from_utf8_lossy(&self.path)
+        String::from_utf8_lossy(self.as_bytes())
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///Minimal cost conversion  to `OsStr`
     pub fn as_os_str(&self) -> &OsStr {
-        OsStr::from_bytes(&self.path)
+        OsStr::from_bytes(self.as_bytes())
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///checks extension case insensitively for extension
     pub fn matches_extension(&self, ext: &[u8]) -> bool {
@@ -318,88 +408,79 @@ impl DirEntry {
             .is_some_and(|e| e.eq_ignore_ascii_case(ext))
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///converts the path (bytes) into an owned path
     pub fn into_path(&self) -> PathBuf {
         PathBuf::from(self.as_os_str())
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub fn exists(&self) -> bool {
-        unsafe { self.path.as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
+        unsafe { self.as_bytes().as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
-        let filename = self.file_name();
-        !filename.is_empty() && filename[0] == b'.'
+        //self.file_name().first() == Some(&b'.')
+        self.as_bytes()[self.base_len as usize] == b'.'
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
-        &self.path.as_ref()[..std::cmp::max(self.base_len as usize - 1, 1)]
+        &self.as_bytes()[..std::cmp::max(self.base_len as usize - 1, 1)]
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
     }
 
-    #[inline(always)]
+    #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Creates a new `DirEntry` from a path
-    pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self, DirEntryError> {
-        let path_os_str = path.as_ref();
-        let path_ref = path_os_str.as_bytes();
-        // get file metadata using lstat (doesn't follow symlinks)
-        let mut stat_buf = MaybeUninit::<stat>::uninit();
-        let res =
-            unsafe { path_ref.as_cstr_ptr(|filename| lstat(filename, stat_buf.as_mut_ptr())) };
-
-        if res != 0 {
-            return Err(DirEntryError::InvalidPath); //this needs to just return an error but TODO!
-        }
+    pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
+        let path_ref = path.as_ref().as_bytes();
 
         // extract information from successful stat
-        let stat = unsafe { stat_buf.assume_init() };
+        let get_stat = get_stat_bytes(path_ref)?;
+
         Ok(Self {
-            path: SlimmerBox::new(path_ref),
-            file_type: FileType::from_mode(stat.st_mode),
-            inode: stat.st_ino,
+            path: path_ref.into(),
+            file_type: FileType::from_mode(get_stat.st_mode),
+            inode: get_stat.st_ino,
             depth: 0,
-            base_len: Path::new(path_os_str)
-                .parent()
-                .map_or(0, |x| x.as_os_str().as_bytes().len() as u8),
+            base_len: get_baselen(path_ref),
         })
     }
 
-    #[inline(always)]
+    #[inline]
     #[allow(clippy::missing_errors_doc)]
-    pub fn read_dir(&self) -> Result<Vec<Self>, DirEntryError> {
-        let dir_path = &self.path;
-        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) });
+    pub fn read_dir(&self) -> Result<Vec<Self>> {
+        let dir_path = self.as_bytes();
+        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) }); //file descriptor pointer
         if fd < 0 {
             return Err(Error::last_os_error().into());
         }
+        defer! { unsafe { close(fd); } } // ensure FD closure even on early returns
 
-        let mut entries: Vec<Self> = Vec::with_capacity(4);
-        let needs_slash = **dir_path != *b"/";
-
-        PATH_BUFFER.with(|buf_cell| -> io::Result<()> {
+        let needs_slash = dir_path != b"/";
+        let mut entries = PATH_BUFFER.with(|buf_cell| -> io::Result<Vec<Self>> {
             let mut buffer = AlignedBuffer {
                 data: [0; BUFFER_SIZE],
             };
             let mut buf = buf_cell.borrow_mut();
             buf.clear();
             buf.extend_from_slice(dir_path);
+
             if needs_slash {
                 buf.push(b'/');
             }
             let base_len = buf.len();
 
+            let mut entries = Vec::with_capacity(8);
             loop {
                 let nread = unsafe {
                     syscall(
@@ -410,109 +491,92 @@ impl DirEntry {
                     )
                 };
 
-                if nread <= 0 {
-                    if nread < 0 {
-                        unsafe { close(fd) };
-                        return Err(Error::last_os_error());
-                    }
-                    break;
-                }
+                match nread {
+                    0 => break, // end of directory
+                    n if n < 0 => return Err(Error::last_os_error()),
+                    n => {
+                        let mut offset = 0;
+                        while offset < n as usize {
+                            let d = unsafe { *(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
+                            let reclen = d.d_reclen as usize;
 
-                let mut offset = 0;
+                    
+                        
 
-                while offset < nread as usize {
-                    let d = unsafe { &*(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
+                            let name_ptr = d.d_name.as_ptr();
+                            let len_ptr=unsafe{strlen(name_ptr)}; //find the position of the null terminator
+                            let name_bytes:&[u8] = unsafe { //cast the name pointer to a byte slice
+                                slice::from_raw_parts(name_ptr.cast::<u8>(), len_ptr)
+                            };
 
-                    // SAFETY: kernel guarantees null-terminated d_name
-                    let name_ptr = d.d_name.as_ptr();
-                    let len_str=unsafe{strlen(name_ptr)};
-                    let name_bytes = unsafe { slice::from_raw_parts(name_ptr.cast::<u8>(), len_str) };
+                           
+                             
 
-                    // fast path check using length test first
-                    if len_str <= 2 {
-                        match name_bytes {
-                            b"." | b".." => {
-                                offset += d.d_reclen as usize;
+                            // skip . and .. using direct byte comparisons
+                            if  len_ptr<=2 && (name_bytes == b"." || name_bytes == b"..") {
+                                offset += reclen;
                                 continue;
                             }
-                            _ => {}
+
+                            // reuse buffer buffer efficiently
+                            buf.truncate(base_len);
+                            buf.extend_from_slice(name_bytes); //add the name to the buffer (the filename)
+
+
+                            //this gets the file type of the file, the fallback description is for when dirent64 doesn't do filetype properly,
+                            //if this occurs, itll return unknown, which means it needs to be queried with stat/fstat ( a lot more costly)
+                            let file_type = FileType::from_dtype_fallback(d.d_type, &buf);
+
+                            entries.push(Self {
+                                //safe because the info in the buffer is far less than the maximum
+                                path: buf[..].into(),
+                                file_type,
+                                inode: d.d_ino,
+                                depth: self.depth + 1,
+                                base_len: base_len as u8,
+                            });
+
+                            offset += reclen;
                         }
                     }
-
-                    buf.truncate(base_len);
-                    buf.extend_from_slice(name_bytes);
-
-                    entries.push(Self {
-                        // SAFETY:
-                        //The caller must ensure that slice’s length can fit in a u32 (trivially true here)
-                        //copypasted from docs.
-                        path: unsafe { SlimmerBox::new_unchecked(&buf) },
-                        file_type: FileType::from_dtype(d.d_type),
-                        inode: d.d_ino,
-                        depth: self.depth + 1,
-                        base_len: base_len as u8,
-                    });
-
-                    offset += d.d_reclen as usize;
                 }
             }
-            Ok(())
+            Ok(entries)
         })?;
 
-        unsafe { close(fd) };
+        entries.shrink_to_fit(); // reduce memory usage
         Ok(entries)
     }
+
+    pub fn into_iter(&self) -> impl Iterator<Item = Vec<Self>> {
+        
+        self.read_dir().into_iter()
+    }
+    
+
 }
 
 impl DirEntry {
     /// Helper to safely perform stat syscall
-    #[inline(always)]
-    fn get_stat(&self) -> Result<stat, DirEntryError> {
-        let mut stat_buf = MaybeUninit::<stat>::uninit();
-
-        let res = self
-            .path
-            .as_cstr_ptr(|ptr| unsafe { stat(ptr, stat_buf.as_mut_ptr()) });
-
-        if res == 0 {
-            Ok(unsafe { stat_buf.assume_init() })
-        } else {
-            Err(DirEntryError::InvalidStat)
-        }
+    #[inline]
+    fn get_stat(&self) -> Result<stat> {
+        get_stat_bytes(self.as_bytes())
     }
 
     /// Get file size in bytes
-    #[inline(always)]
+    #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    pub fn size(&self) -> Result<u64, DirEntryError> {
+    pub fn size(&self) -> Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
     }
 
     /// Get last modification time
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    pub fn modified_time(&self) -> Result<SystemTime, DirEntryError> {
+    pub fn modified_time(&self) -> Result<SystemTime> {
         self.get_stat().and_then(|s| {
             let sec = s.st_mtime;
             let nsec = s.st_mtime_nsec as i32;
             unix_time_to_system_time(sec, nsec).map_err(|_| DirEntryError::TimeError)
         })
     }
-}
-
-/// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
-#[allow(clippy::missing_errors_doc)] //fixing errors later
-fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime, DirEntryError> {
-    let (base, offset) = if sec >= 0 {
-        (UNIX_EPOCH, Duration::new(sec as u64, nsec as u32))
-    } else {
-        let sec_abs = sec.unsigned_abs();
-        (
-            UNIX_EPOCH + Duration::new(sec_abs, 0),
-            Duration::from_nanos(nsec as u64),
-        )
-    };
-
-    base.checked_sub(offset)
-        .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
-        .ok_or(DirEntryError::TimeError)
 }

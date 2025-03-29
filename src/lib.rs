@@ -1,11 +1,9 @@
 #![allow(clippy::inline_always)]
 
-
-
 //library imports
 use rayon::prelude::*;
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     sync::mpsc::{channel as unbounded, Receiver, Sender},
     sync::Arc,
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
@@ -17,18 +15,31 @@ use std::{
 
 mod direntry;
 pub use direntry::DirEntry;
+
 mod error;
 pub use error::DirEntryError;
-mod pointer_conversion;
-pub use pointer_conversion::PointerUtils;
+
+mod custom_types_result;
+pub use custom_types_result::{Result,OsBytes};
+
+mod traits_and_conversions;
+pub use traits_and_conversions::{BytesToCstrPointer, ToOsStr, PathToBytes,ByteArray};
+
+
 mod utils;
-pub use utils::{process_glob_regex, resolve_directory};
+pub use utils::{
+    get_baselen, get_stat_bytes, process_glob_regex, resolve_directory, unix_time_to_system_time,
+};
+
+
 mod glob;
 pub use glob::glob_to_regex;
 mod config;
 pub use config::SearchConfig;
 pub mod filetype;
 pub use filetype::FileType;
+
+
 
 //this allocator is more efficient than jemalloc through my testing
 #[global_allocator]
@@ -53,7 +64,7 @@ impl Finder {
     //DUE TO INTENDED USAGE, THIS FUNCTION IS NOT TOO MANY ARGUMENTS.
     /// Create a new Finder instance.
     pub fn new(
-        root: OsString,
+        root: impl AsRef<OsStr>,
         pattern: &str,
         hide_hidden: bool,
         case_insensitive: bool,
@@ -62,7 +73,7 @@ impl Finder {
         extension_match: Option<Arc<[u8]>>,
         max_depth: Option<u8>,
     ) -> Self {
-        let search_config = SearchConfig::new(
+        let config = SearchConfig::new(
             pattern,
             hide_hidden,
             case_insensitive,
@@ -71,35 +82,42 @@ impl Finder {
             extension_match,
             max_depth,
         );
-
+    
+        let search_config = match config {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("Error creating search config: {e}");
+                std::process::exit(1);
+            }
+        };
+    
         Self {
-            root,
+            root: root.as_ref().to_owned(),
             search_config,
             filter: None,
         }
     }
 
     #[must_use]
-    #[inline(always)]
+    #[inline]
     /// Set a filter function to filter out entries.
     pub fn with_filter(mut self, filter: fn(&DirEntry) -> bool) -> Self {
         self.filter = Some(filter);
         self
     }
 
-    #[must_use]
-    #[inline(always)]
+    #[inline]
+    #[allow(clippy::missing_errors_doc)]
     /// Traverse the directory and return a receiver for the entries.
-    pub fn traverse(&self) -> Receiver<DirEntry> {
+    pub fn traverse(&self) -> Result<Receiver<DirEntry>> {
         let (sender, receiver) = unbounded();
 
         let search_config = self.search_config.clone();
 
         let construct_dir = DirEntry::new(&self.root);
 
-        if !construct_dir.as_ref().is_ok_and(direntry::DirEntry::is_dir) {
-            eprintln!("Error: The provided path is not a directory.");
-            std::process::exit(1);
+        if !construct_dir.as_ref().is_ok_and(DirEntry::is_dir) {
+            return Err(DirEntryError::InvalidPath);
         }
 
         let filter = self.filter;
@@ -118,10 +136,10 @@ impl Finder {
             );
         });
 
-        receiver
+        Ok(receiver)
     }
 
-    #[inline(always)]
+    #[inline]
     #[allow(clippy::unnecessary_map_or)]
     //i use map_or because compatibility with 1.74 as is_none_or is unstable until 1.82(ish)
     /// Traverse the directory and send the `DirEntry` to the Receiver.
@@ -135,8 +153,8 @@ impl Finder {
         // store whether we should send the directory itself
         let should_send = config.keep_dirs
             && config.matches_path(&dir, config.file_name)
-            && filter.as_ref().map_or(true, |f| f(&dir))
-            && config.extension_match.as_ref().is_none()
+            && filter.map_or(true, |f| f(&dir))
+            && config.extension_match.as_ref().is_none() //no directories should match extensions (mostly? not sure.)
             && !is_start_dir;
 
         //check if we should stop searching
@@ -149,9 +167,10 @@ impl Finder {
 
         match DirEntry::read_dir(&dir) {
             Ok(entries) => {
-                let mut dirs = Vec::with_capacity(entries.len());
+                let mut dirs = Vec::with_capacity(entries.len()/2);
 
                 for entry in entries {
+                   
                     if config.hide_hidden && entry.is_hidden() {
                         continue;
                     }
@@ -159,7 +178,7 @@ impl Finder {
                     if entry.is_dir() {
                         // always include directories for traversal
                         dirs.push(entry);
-                    } else if filter.as_ref().map_or(true, |f| f(&entry))
+                    } else if filter.map_or(true, |f| f(&entry))
                         && config.matches_path(&entry, config.file_name)
                         && config
                             .extension_match
@@ -186,7 +205,7 @@ impl Finder {
             //enotdir=not a directory
             //eloop=too many symbolic links
             Err(e) => {
-                eprintln!("Unexpected error: {e}");
+                eprintln!("Unexpected error: {e}"); //i need to polish this up a bit fuck off.
             }
         }
         //finally send it

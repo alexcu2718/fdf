@@ -1,4 +1,5 @@
-use fdf::DirEntry;
+use fdf::{DirEntry,Result};
+
 use std::collections::HashMap;
 use std::io::{stdout, BufWriter, IsTerminal, Write};
 use std::sync::OnceLock;
@@ -104,10 +105,7 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 
 #[allow(clippy::inline_always)]
 #[inline(always)]
-pub fn write_paths_coloured<I>(
-    paths: I,
-    limit: Option<usize>,
-) -> Result<(), Box<dyn std::error::Error>>
+pub fn write_paths_coloured<I>(paths: I, limit: Option<usize>) -> Result<()>
 where
     I: Iterator<Item = DirEntry>,
 {
@@ -117,7 +115,7 @@ where
     if use_colors {
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
             buf_writer.write_all(extension_colour(&path))?;
-            buf_writer.write_all(&path.path)?;
+            buf_writer.write_all(path.as_bytes())?;
 
             // add a trailing slash for directories
             if path.is_dir() {
@@ -129,9 +127,8 @@ where
         }
     } else {
         for path in paths.take(limit.unwrap_or(usize::MAX)) {
-            buf_writer.write_all(&path.path)?;
-
-            // same as above
+            buf_writer.write_all(path.as_bytes())?;
+            // add a trailing slash for directories
             if path.is_dir() {
                 buf_writer.write_all(b"/")?;
             }
@@ -139,7 +136,7 @@ where
             buf_writer.write_all(NEWLINE)?;
         }
     }
-    let _ = buf_writer.flush();
+    buf_writer.flush()?;
     Ok(())
 }
 

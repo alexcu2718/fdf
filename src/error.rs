@@ -11,6 +11,9 @@ pub enum DirEntryError {
     BrokenPipe(io::Error),
     OSerror(io::Error),
     AccessDenied(io::Error),
+    WriteError(io::Error),
+    RayonError(rayon::ThreadPoolBuildError),
+    RegexError(regex::Error),
 }
 
 impl From<io::Error> for DirEntryError {
@@ -50,7 +53,10 @@ impl fmt::Display for DirEntryError {
             Self::Utf8Error(e) => write!(f, "UTF-8 conversion error: {e}"),
             Self::BrokenPipe(e) => write!(f, "Broken pipe: {e}"),
             Self::OSerror(e) => write!(f, "OS error: {e}"),
+            Self::RayonError(e) => write!(f, "Rayon error: {e}"),
+            Self::WriteError(e) => write!(f, "Write error: {e}"),
             Self::AccessDenied(e) => write!(f, "Access denied: {e}"),
+            Self::RegexError(e) => write!(f, "Regex error: {e}"),
         }
     }
 }

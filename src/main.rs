@@ -1,6 +1,6 @@
 use clap::{value_parser, ArgAction, CommandFactory, Parser, ValueHint};
 use clap_complete::aot::{generate, Shell};
-use fdf::{process_glob_regex, resolve_directory, Finder};
+use fdf::{process_glob_regex, resolve_directory, DirEntryError, Finder};
 use std::ffi::OsString;
 use std::io::stdout;
 use std::str;
@@ -137,7 +137,7 @@ pub struct Args {
     fixed_string: bool,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), DirEntryError> {
     let args = Args::parse();
     let path = resolve_directory(args.current_directory, args.directory, args.absolute_path);
 
@@ -155,7 +155,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(args.thread_num)
-        .build_global()?;
+        .build_global()
+        .map_err(DirEntryError::RayonError)?;
 
     let start_pattern = args.pattern.as_ref().map_or_else(
         || {
@@ -187,9 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         finder = finder.with_filter(type_filter);
     }
 
-    // let results = finder.traverse().into_iter();
-
-    write_paths_coloured(finder.traverse().iter(), args.top_n)?;
+    let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n); //.map_err(|e| DirEntryError::from(e))?;
 
     Ok(())
 }

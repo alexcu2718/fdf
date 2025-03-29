@@ -12,6 +12,7 @@ use std::{
 //end library imports
 
 //crate imports
+mod direntry_tests;
 
 mod direntry;
 pub use direntry::DirEntry;

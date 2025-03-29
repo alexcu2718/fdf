@@ -21,6 +21,10 @@ scopeguard = "1.2.0"
 slimmer_box = "0.6.5"
 
 
+[dev-dependencies]
+tempfile = "3.10.1"
+
+
 [profile.release]
 opt-level = 3
 debug = false

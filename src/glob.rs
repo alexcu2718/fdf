@@ -35,7 +35,7 @@
 //! # use std::error::Error;
 //!
 //! # fn main() -> Result<(), Box<dyn Error>> {
-//! let re_name = fdf::glob::glob_to_regex("linux-[0-9]*-{generic,aws}")?;
+//! let re_name = fdf::glob_to_regex("linux-[0-9]*-{generic,aws}")?;
 //! for name in &[
 //!     "linux-5.2.27b1-generic",
 //!     "linux-4.0.12-aws",

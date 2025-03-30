@@ -497,7 +497,7 @@ impl DirEntry {
                     n => {
                         let mut offset = 0;
                         while offset < n as usize {
-                            let d = unsafe { *(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
+                            let d = unsafe { &*(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
                             let reclen = d.d_reclen as usize;
 
                     
@@ -513,6 +513,7 @@ impl DirEntry {
                              
 
                             // skip . and .. using direct byte comparisons
+                            //i need to resolve this efficiency in assembly i think
                             if  len_ptr<=2 && (name_bytes == b"." || name_bytes == b"..") {
                                 offset += reclen;
                                 continue;

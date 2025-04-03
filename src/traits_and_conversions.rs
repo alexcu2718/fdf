@@ -1,10 +1,3 @@
-use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
-
-use crate::DirEntry;
-
-//this is essentially for a cheat i wish to try to save on heap allocations, ignore this
 
 
 pub trait BytesToCstrPointer {
@@ -14,12 +7,12 @@ pub trait BytesToCstrPointer {
 }
 
 pub trait ToOsStr {
-    fn to_os_str(&self) -> &OsStr;
+    fn to_os_str(&self) -> &std::ffi::OsStr;
 }
 
 impl ToOsStr for [u8] {
-    fn to_os_str(&self) -> &OsStr {
-        OsStr::from_bytes(self)
+    fn to_os_str(&self) -> &std::ffi::OsStr {
+        std::os::unix::ffi::OsStrExt::from_bytes(self)
     }
 }
 
@@ -46,23 +39,23 @@ pub trait PathToBytes {
     fn to_bytes(&self) -> &[u8];
 }
 
-impl PathToBytes for Path {
+impl PathToBytes for std::path::Path {
     #[inline(always)]
     #[allow(clippy::inline_always)]
     fn to_bytes(&self) -> &[u8] {
-        self.as_os_str().as_bytes()
+        std::os::unix::ffi::OsStrExt::as_bytes(self.as_os_str())
     }
 }
 
 
 
 
-pub(crate) trait ToStat{
+pub trait ToStat{
     fn get_stat(&self) -> crate::Result<libc::stat>;
 }
 
-impl ToStat for DirEntry{
-
+impl ToStat for crate::DirEntry{
+    ///Converts into `libc::stat` , mostly for internal use..probably...
     fn get_stat(&self) -> crate::Result<libc::stat> {
         let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
 
@@ -80,7 +73,7 @@ impl ToStat for DirEntry{
 impl ToStat for &[u8] {
     #[inline(always)]
     #[allow(clippy::inline_always)]
-    ///Converts a byte slice into a pointer to libc::stat pointer
+    ///Converts a byte slice into  `libc::stat`, interal probably.
     fn get_stat(&self) -> crate::Result<libc::stat> {
         let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
 

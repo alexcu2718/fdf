@@ -28,6 +28,7 @@ const BUFFER_SIZE: usize = 512 * 8;
 
 
 //this is a 4k buffer, which is the maximum size of a directory entry on most filesystems
+//might change this, who knows?
 
 #[repr(C, align(8))]
 pub struct AlignedBuffer {
@@ -324,7 +325,7 @@ impl DirEntry {
     #[must_use]
     #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING
     pub fn len(&self) -> usize {
-        debug_assert!(self.as_bytes().len()>0);
+        debug_assert!(!self.as_bytes().is_empty());
         self.as_bytes().len()
     }
 
@@ -373,11 +374,13 @@ impl DirEntry {
     ///
     /// # Safety
     /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
+    #[allow(clippy::missing_panics_doc)]
     pub unsafe fn as_str_unchecked(&self) -> &str {
         debug_assert!(self.as_bytes().is_ascii());
         //mouthful!
+        
         debug_assert_eq!(
-            DirEntry::new(std::path::PathBuf::from(".").canonicalize().unwrap()).unwrap().as_full_path().unwrap().as_bytes(),
+            Self::new(std::path::PathBuf::from(".").canonicalize().unwrap()).unwrap().as_full_path().unwrap().as_bytes(),
             self.as_bytes()
         );
         std::str::from_utf8_unchecked(self.as_bytes())

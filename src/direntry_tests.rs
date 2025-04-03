@@ -1,8 +1,6 @@
-//use crate::direntry::DirEntry;
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
     use crate::direntry::DirEntry;
     use std::os::unix::ffi::OsStrExt;
 

@@ -1,3 +1,4 @@
+//this probably needs to be reworked to reduce struct size, im not knowledgeable enough yet to do so.
 use libc::{EACCES, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use std::{fmt, io};
 

@@ -1,7 +1,6 @@
 #![allow(clippy::cast_possible_wrap)]
 use crate::{offset_ptr, BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, Result};
 use libc::{closedir, opendir, readdir64, strlen, DIR, PATH_MAX};
-use std::marker::PhantomData;
 use crate::debug_print;
 pub struct DirIter {
     dir: *mut DIR,
@@ -9,7 +8,6 @@ pub struct DirIter {
     base_len: usize,
     depth: u8,
     error: Option<Error>,
-    _phantom: PhantomData<*mut DIR>,
 }
 
 impl DirIter {
@@ -44,7 +42,6 @@ impl DirIter {
             base_len,
             depth: dir_path.depth(),
             error: None,
-            _phantom: PhantomData,
         })
     }
 }

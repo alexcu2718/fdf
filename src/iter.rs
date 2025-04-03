@@ -47,7 +47,7 @@ impl DirIter {
 }
 
 impl Iterator for DirIter {
-    type Item = Result<DirEntry>;
+    type Item = DirEntry;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
@@ -91,13 +91,13 @@ impl Iterator for DirIter {
 
             #[allow(clippy::cast_possible_truncation)] // this numbers involved never exceed u8
             // return the directory entry
-            return Some(Ok(DirEntry {
+            return Some(DirEntry {
                 path: full_path.into(),
                 file_type,
                 inode:unsafe { *offset_ptr!(entry, d_ino) },
                 depth: self.depth + 1,
                 base_len: self.base_len as u8,
-            }));
+            });
         }
     }
 }

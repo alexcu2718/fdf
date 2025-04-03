@@ -568,7 +568,7 @@ impl DirEntry {
     /// im not sure about this...its a complex type.
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    pub fn as_iter(&self) -> Result<impl Iterator<Item = Result<Self>> + '_> {
+    pub fn as_iter(&self) -> Result<impl Iterator<Item = Self> + '_> {
         DirIter::new(self)
     }
 

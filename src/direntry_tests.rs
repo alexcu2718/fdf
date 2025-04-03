@@ -135,8 +135,9 @@ mod tests {
         // collect entries
         let mut entries = Vec::new();
         while let Some(entry) = iter.next() {
-            entries.push(entry?);
+            entries.push(entry);
         }
+        
 
         // verify results
         let entry_iter = entries.iter().collect::<Vec<_>>();

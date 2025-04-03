@@ -12,8 +12,11 @@ use std::{
 //end library imports
 
 //crate imports
+mod iter;
+pub(crate) use iter::DirIter;
 mod direntry_tests;
 
+mod dirent_macro;
 mod direntry;
 pub use direntry::DirEntry;
 
@@ -21,17 +24,16 @@ mod error;
 pub use error::DirEntryError;
 
 mod custom_types_result;
-pub use custom_types_result::{Result,OsBytes};
+pub use custom_types_result::{OsBytes, Result};
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{BytesToCstrPointer, ToOsStr, PathToBytes,ByteArray};
-
+pub use traits_and_conversions::{ BytesToCstrPointer, PathToBytes, ToOsStr};
+pub(crate) use traits_and_conversions::ToStat;
 
 mod utils;
 pub use utils::{
-    get_baselen, get_stat_bytes, process_glob_regex, resolve_directory, unix_time_to_system_time,
+    get_baselen, process_glob_regex, resolve_directory, unix_time_to_system_time,
 };
-
 
 mod glob;
 pub use glob::glob_to_regex;
@@ -39,8 +41,6 @@ mod config;
 pub use config::SearchConfig;
 pub mod filetype;
 pub use filetype::FileType;
-
-
 
 //this allocator is more efficient than jemalloc through my testing
 #[global_allocator]
@@ -83,7 +83,7 @@ impl Finder {
             extension_match,
             max_depth,
         );
-    
+
         let search_config = match config {
             Ok(cfg) => cfg,
             Err(e) => {
@@ -91,7 +91,7 @@ impl Finder {
                 std::process::exit(1);
             }
         };
-    
+
         Self {
             root: root.as_ref().to_owned(),
             search_config,
@@ -168,10 +168,9 @@ impl Finder {
 
         match DirEntry::read_dir(&dir) {
             Ok(entries) => {
-                let mut dirs = Vec::with_capacity(entries.len()/2);
+                let mut dirs = Vec::with_capacity(entries.len() / 2);
 
                 for entry in entries {
-                   
                     if config.hide_hidden && entry.is_hidden() {
                         continue;
                     }

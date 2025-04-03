@@ -1,4 +1,4 @@
-use fdf::{DirEntry,Result};
+use fdf::{DirEntry, Result};
 
 use std::collections::HashMap;
 use std::io::{stdout, BufWriter, IsTerminal, Write};

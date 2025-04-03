@@ -1,4 +1,4 @@
-use crate::{DirEntry,DirEntryError,Result};
+use crate::{DirEntry, DirEntryError, Result};
 use regex::bytes::{Regex, RegexBuilder};
 use std::sync::Arc;
 
@@ -33,10 +33,8 @@ impl SearchConfig {
                 .dot_matches_new_line(false)
                 .build();
 
-            if let Err(regerror)=reg {
-                return Err(DirEntryError::RegexError(
-                    regerror
-                ));
+            if let Err(regerror) = reg {
+                return Err(DirEntryError::RegexError(regerror));
             }
             reg.ok()
         };
@@ -53,8 +51,7 @@ impl SearchConfig {
 
     #[inline(always)]
     #[must_use]
-    pub fn matches_with<F:FnOnce(&[u8])->bool>(&self, path: &[u8], predicate: F) -> bool
-    {
+    pub fn matches_with<F: FnOnce(&[u8]) -> bool>(&self, path: &[u8], predicate: F) -> bool {
         predicate(path)
     }
 

@@ -1,11 +1,9 @@
 #![allow(dead_code)]
-use crate::{glob_to_regex, DirEntryError,Result,BytesToCstrPointer};
-use std::time::{Duration,SystemTime,UNIX_EPOCH};
+use crate::{glob_to_regex, DirEntryError, Result};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
-
-
 
 #[must_use]
 pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
@@ -50,7 +48,8 @@ pub fn resolve_directory(
         }
 
         if canonicalise {
-            match path_check.canonicalize() { //stupid yank spelling.
+            match path_check.canonicalize() {
+                //stupid yank spelling.
                 Ok(canonical_path) => canonical_path.into_os_string(),
                 Err(e) => {
                     eprintln!("Failed to canonicalise path {path_check:?}: {e}");
@@ -73,7 +72,6 @@ pub fn get_baselen(path: &[u8]) -> u8 {
         .map_or(1, |parent| parent.len() + 1) as u8 // +1 to include trailing slash etc
 }
 
-
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 #[allow(clippy::missing_errors_doc)] //fixing errors later
 #[allow(clippy::cast_possible_truncation)]
@@ -94,16 +92,3 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
-#[inline(always)]
-#[allow(clippy::missing_errors_doc)]
-pub fn get_stat_bytes(path: &[u8]) -> Result<libc::stat> {
-    let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
-
-    let res = path.as_cstr_ptr(|ptr| unsafe { libc::stat(ptr, stat_buf.as_mut_ptr()) });
-
-    if res == 0 {
-        Ok(unsafe { stat_buf.assume_init() })
-    } else {
-        Err(DirEntryError::InvalidStat)
-    }
-}

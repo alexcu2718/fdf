@@ -1,3 +1,6 @@
+//!THIS IS SHAMELESSLY COPY PASTED, I ADMIT THE FULL LICENCE HERE, I EDITED IT TO REMOVE THE CRATES I DIDNT WANT(NO DEPENDENCY EXCEPT REGEX).
+//! THIS IS COPY PASTED+EDITED ~10%
+//! IM BEING EXPLICITLY CLEAR ABOUT THIS.
 //! Shell glob-like filename matching.
 //!
 //! The glob-style pattern features currently supported are:

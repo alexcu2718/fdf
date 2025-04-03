@@ -1,4 +1,19 @@
+##THIS CODE IS PRETTY INACCURATE TILL I FIX IT, DONT RELY ON IT, USE --help
+
+
+
 # fdf - Fast Directory Finder
+
+
+
+
+
+
+
+
+
+
+
 
 ## LINUX ONLY!!!!!!!!!!!!! (should work on openbsd?)
 

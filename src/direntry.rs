@@ -2,72 +2,55 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 use libc::{
-    access, c_char, close, dirent64, open, stat, strlen, syscall, SYS_getdents64, F_OK, O_RDONLY,
-    R_OK, W_OK, X_OK,
-    free,realpath
+    access, c_char, dirent64, free, realpath, strlen, SYS_getdents64, F_OK, O_RDONLY, R_OK,
+    W_OK, X_OK,syscall,close,open,PATH_MAX
 };
-
-/* reference for dirent64
-pub struct dirent64 {
-    pub d_ino: u64,
-    pub d_off: i64,
-    pub d_reclen: u16,
-    pub d_type: u8,
-    pub d_name: [i8; 256],
-}
-
-*/
-use scopeguard::defer;
 
 use std::{
     //intrinsics::likely,
-    cell::RefCell,
     ffi::OsStr,
     fmt,
-    io::{self, Error},
+    io::Error,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     slice,
     time::SystemTime,
 };
 
-pub use crate::{OsBytes,error::DirEntryError,Result,filetype::FileType,traits_and_conversions::BytesToCstrPointer};
-use crate::utils::{get_baselen, get_stat_bytes, unix_time_to_system_time};
+pub use crate::utils::{get_baselen,  unix_time_to_system_time};
+use crate::{ DirIter, ToStat};
+pub use crate::{
+    error::DirEntryError, filetype::FileType, traits_and_conversions::BytesToCstrPointer, OsBytes,
+    Result,
+};
 
 const BUFFER_SIZE: usize = 512 * 8;
-//A generic `Result` type for the crate
+
 
 //this is a 4k buffer, which is the maximum size of a directory entry on most filesystems
-
-
 
 #[repr(C, align(8))]
 pub struct AlignedBuffer {
     pub data: [u8; BUFFER_SIZE],
 }
 
-#[derive(Clone, )]
+#[derive(Clone)]
 pub struct DirEntry {
     pub path: OsBytes, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
-    pub(crate) file_type: FileType,  //1 byte
-    pub(crate) inode: u64,           //8 bytes, i may drop this in the future, it's not very useful.
+    pub(crate) file_type: FileType, //1 byte
+    pub(crate) inode: u64, //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 65535 directories deep, it's also 1 bytes so keeps struct below 24bytes.
     pub(crate) base_len: u8, //1 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                              //total 21 bytes
                              //3 bytes padding, possible uses? not sure.
 
-    //maybe i can add is is_hidden attribute, this is 'free' and can be used to check if the file is hidden.
-    //this is a 1 byte attribute, so it keeps the struct below 24 bytes (22 bytes with that)
-    //other ideas are yet to be made
+                             //maybe i can add is is_hidden attribute, this is 'free' and can be used to check if the file is hidden.
+                             //this is a 1 byte attribute, so it keeps the struct below 24 bytes (22 bytes with that)
+                             //other ideas are yet to be made
 
-
-    //possible ideas is storing the dirents value, as a direct struct, with handy functions to get the details
-    //except for the name, the filename is easy to grab from the pointer but it's then resolving to form
-    //a full path, the preceeding path is not stored, maybe i can store it in a buffer  
-}
-
-thread_local! {
-    static PATH_BUFFER: RefCell<Vec<u8>> = RefCell::new(Vec::with_capacity(4096));
+                             //possible ideas is storing the dirents value, as a direct struct, with handy functions to get the details
+                             //except for the name, the filename is easy to grab from the pointer but it's then resolving to form
+                             //a full path, the preceeding path is not stored, maybe i can store it in a buffer
 }
 
 impl fmt::Display for DirEntry {
@@ -223,11 +206,14 @@ impl DirEntry {
     /// Errors if i've fucked up my pointer shit here lol,not properly tested.
     pub fn as_full_path(self) -> Result<Self> {
         if self.is_absolute() {
+            //doesnt convert
             return Ok(self);
         }
-       
 
-        let ptr = unsafe { self.as_bytes().as_cstr_ptr(|cstrpointer| realpath(cstrpointer, std::ptr::null_mut())) };
+        let ptr = unsafe {
+            self.as_bytes()
+                .as_cstr_ptr(|cstrpointer| realpath(cstrpointer, std::ptr::null_mut()))
+        };
         if ptr.is_null() {
             return Err(Error::last_os_error().into());
         }
@@ -235,18 +221,18 @@ impl DirEntry {
         let bytes = unsafe { slice::from_raw_parts(ptr.cast::<u8>(), strlen(ptr)) };
         //safe because easily fits in capacity (which is absurdly for our purposes)
 
-        let boxed = Self{
-            path:OsBytes::new(bytes),
+        let boxed = Self {
+            path: OsBytes::new(bytes),
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
-            base_len: (bytes.len() -self.file_name().len()) as u8 ,}; //we need the length up to the filename INCLUDING
-            //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
-            //so we subtract the filename length from the total length, probably could've been done more elegantly.
-            //TBD? not imperative. 
+            base_len: (bytes.len() - self.file_name().len()) as u8,
+        }; //we need the length up to the filename INCLUDING
+           //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
+           //so we subtract the filename length from the total length, probably could've been done more elegantly.
+           //TBD? not imperative.
         unsafe { free(ptr.cast()) }; //we need to free the pointer AFTER copying the data
-        // Return the new DirEntry
-
+                                     // Return the new DirEntry
 
         Ok(boxed)
     }
@@ -289,7 +275,9 @@ impl DirEntry {
 
     #[inline]
     pub fn components(&self) -> impl Iterator<Item = &[u8]> {
-        self.as_bytes().split(|&b| b == b'/').filter(|s| !s.is_empty())
+        self.as_bytes()
+            .split(|&b| b == b'/')
+            .filter(|s| !s.is_empty())
     }
 
     #[inline]
@@ -328,6 +316,7 @@ impl DirEntry {
     #[must_use]
     ///Returns the depth relative to the start directory, this is cost free
     pub const fn depth(&self) -> u8 {
+        
         self.depth
     }
 
@@ -335,6 +324,7 @@ impl DirEntry {
     #[must_use]
     #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING
     pub fn len(&self) -> usize {
+        debug_assert!(self.as_bytes().len()>0);
         self.as_bytes().len()
     }
 
@@ -384,12 +374,20 @@ impl DirEntry {
     /// # Safety
     /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
     pub unsafe fn as_str_unchecked(&self) -> &str {
+        debug_assert!(self.as_bytes().is_ascii());
+        //mouthful!
+        debug_assert_eq!(
+            DirEntry::new(std::path::PathBuf::from(".").canonicalize().unwrap()).unwrap().as_full_path().unwrap().as_bytes(),
+            self.as_bytes()
+        );
         std::str::from_utf8_unchecked(self.as_bytes())
     }
     #[inline]
     #[must_use]
     ///Returns the path as a    `Cow<str>`
     pub fn as_str_lossy(&self) -> std::borrow::Cow<'_, str> {
+        debug_assert!(self.as_bytes().is_ascii());
+        
         String::from_utf8_lossy(self.as_bytes())
     }
 
@@ -428,16 +426,33 @@ impl DirEntry {
         //self.file_name().first() == Some(&b'.')
         self.as_bytes()[self.base_len as usize] == b'.'
     }
+    #[inline]
+    #[must_use]
+    pub fn dirname(&self) -> &[u8] {
+
+
+        self.as_bytes()[..self.base_len as usize - 1]
+            .rsplit(|&b| b == b'/')
+            .next()
+            .unwrap_or(self.as_bytes())
+        //we need to be careful if it's root,im not a fan of this method but eh.
+        //theres probably a more elegant way.
+    }
 
     #[inline]
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
+
+        
         &self.as_bytes()[..std::cmp::max(self.base_len as usize - 1, 1)]
+        
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
     }
 
+
+  
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Creates a new `DirEntry` from a path
@@ -445,7 +460,7 @@ impl DirEntry {
         let path_ref = path.as_ref().as_bytes();
 
         // extract information from successful stat
-        let get_stat = get_stat_bytes(path_ref)?;
+        let get_stat = path_ref.get_stat()?;
 
         Ok(Self {
             path: path_ref.into(),
@@ -455,113 +470,107 @@ impl DirEntry {
             base_len: get_baselen(path_ref),
         })
     }
-
     #[inline]
     #[allow(clippy::missing_errors_doc)]
+    ///Creates a new `DirEntry` from a path
     pub fn read_dir(&self) -> Result<Vec<Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) }); //file descriptor pointer
+        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY) });
         if fd < 0 {
             return Err(Error::last_os_error().into());
         }
-        defer! { unsafe { close(fd); } } // ensure FD closure even on early returns
 
         let needs_slash = dir_path != b"/";
-        let mut entries = PATH_BUFFER.with(|buf_cell| -> io::Result<Vec<Self>> {
-            let mut buffer = AlignedBuffer {
-                data: [0; BUFFER_SIZE],
-            };
-            let mut buf = buf_cell.borrow_mut();
-            buf.clear();
-            buf.extend_from_slice(dir_path);
+        let mut entries = Vec::with_capacity(8);
 
-            if needs_slash {
-                buf.push(b'/');
-            }
-            let base_len = buf.len();
+        // use a stack-allocated buffer with `PATH_MAX` size
+        let mut path_buffer = [0u8; PATH_MAX as usize];
+        let dir_path_len = dir_path.len();
 
-            let mut entries = Vec::with_capacity(8);
-            loop {
-                let nread = unsafe {
-                    syscall(
-                        SYS_getdents64,
-                        fd,
-                        buffer.data.as_mut_ptr().cast::<c_char>(),
-                        BUFFER_SIZE as u32,
-                    )
-                };
+        path_buffer[..dir_path_len].copy_from_slice(dir_path);
+        let mut path_len = dir_path_len;
 
-                match nread {
-                    0 => break, // end of directory
-                    n if n < 0 => return Err(Error::last_os_error()),
-                    n => {
-                        let mut offset = 0;
-                        while offset < n as usize {
-                            let d = unsafe { &*(buffer.data.as_ptr().add(offset).cast::<dirent64>()) };
-                            let reclen = d.d_reclen as usize;
+        // add trailing slash if needed
+        if needs_slash {
+            path_buffer[path_len] = b'/';
+            path_len += 1;
+        }
+   
 
-                    
-                        
+        let mut buffer = AlignedBuffer {
+            data: [0; BUFFER_SIZE],
+        };
+        #[allow(clippy::cast_possible_wrap)]
+        loop {
+            let nread = unsafe {
+                syscall(
+                    SYS_getdents64,
+                    fd,
+                    buffer.data.as_mut_ptr().cast::<c_char>(),
+                    BUFFER_SIZE,
+                )
+            } as isize;
 
-                            let name_ptr = d.d_name.as_ptr();
-                            let len_ptr=unsafe{strlen(name_ptr)}; //find the position of the null terminator
-                            let name_bytes:&[u8] = unsafe { //cast the name pointer to a byte slice
-                                slice::from_raw_parts(name_ptr.cast::<u8>(), len_ptr)
-                            };
+            match nread {
+                0 => break, // End of directory
+                n if n < 0 => {
+                  
+                    return Err(Error::last_os_error().into());
+                }
+                n => {
+                    let mut offset = 0;
+                    while offset < n as usize {
+                        let d = unsafe { &*buffer.data.as_ptr().add(offset).cast::<dirent64>() };
+                        let reclen = d.d_reclen as usize;
 
-                           
-                             
+                        let name_ptr = d.d_name.as_ptr();
+                        let name_len = unsafe { strlen(name_ptr) };
+                        let name_bytes = unsafe { std::slice::from_raw_parts(name_ptr.cast::<u8>(), name_len) };
+                       
 
-                            // skip . and .. using direct byte comparisons
-                            //i need to resolve this efficiency in assembly i think
-                            if  len_ptr<=2 && (name_bytes == b"." || name_bytes == b"..") {
-                                offset += reclen;
-                                continue;
-                            }
-
-                            // reuse buffer buffer efficiently
-                            buf.truncate(base_len);
-                            buf.extend_from_slice(name_bytes); //add the name to the buffer (the filename)
-
-
-                            //this gets the file type of the file, the fallback description is for when dirent64 doesn't do filetype properly,
-                            //if this occurs, itll return unknown, which means it needs to be queried with stat/fstat ( a lot more costly)
-                            let file_type = FileType::from_dtype_fallback(d.d_type, &buf);
-
-                            entries.push(Self {
-                                //safe because the info in the buffer is far less than the maximum
-                                path: buf[..].into(),
-                                file_type,
-                                inode: d.d_ino,
-                                depth: self.depth + 1,
-                                base_len: base_len as u8,
-                            });
-
+                        // Skip . and ..
+                        if name_bytes == b"." || name_bytes == b".." {
                             offset += reclen;
+                            continue;
                         }
+
+                       
+
+                        let total_len = path_len + name_len as usize;
+                        // build full path in buffer
+                        path_buffer[path_len..total_len].copy_from_slice(name_bytes);
+                        let full_path = &path_buffer[..total_len];
+
+                        // Create path and push entry
+                        entries.push(Self {
+                            path: full_path.into(), // convert to our type
+                            file_type: FileType::from_dtype_fallback(d.d_type, full_path),
+                            inode: d.d_ino,
+                            depth: self.depth + 1,
+                            base_len: path_len as u8,
+                        });
+
+                        offset += reclen;
                     }
                 }
             }
-            Ok(entries)
-        })?;
+        }
 
-        entries.shrink_to_fit(); // reduce memory usage
+        unsafe { close(fd) };
+        entries.shrink_to_fit();
         Ok(entries)
+    }
+    /// Returns an iterator over the directory entries.
+    /// very unique API compared to my other one, was an experiment.
+    /// im not sure about this...its a complex type.
+    #[inline]
+    #[allow(clippy::missing_errors_doc)]
+    pub fn as_iter(&self) -> Result<impl Iterator<Item = Result<Self>> + '_> {
+        DirIter::new(self)
     }
 
     pub fn into_iter(&self) -> impl Iterator<Item = Vec<Self>> {
-        
         self.read_dir().into_iter()
-    }
-    
-
-}
-
-impl DirEntry {
-    /// Helper to safely perform stat syscall
-    #[inline]
-    fn get_stat(&self) -> Result<stat> {
-        get_stat_bytes(self.as_bytes())
     }
 
     /// Get file size in bytes
@@ -581,3 +590,4 @@ impl DirEntry {
         })
     }
 }
+

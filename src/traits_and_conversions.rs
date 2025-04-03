@@ -2,33 +2,10 @@ use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
+use crate::DirEntry;
 
 //this is essentially for a cheat i wish to try to save on heap allocations, ignore this
-pub struct ByteArray{ 
-    path:[u8; libc::PATH_MAX as usize] ,
-    path_len:usize,
-}
-impl ByteArray{
 
-        #[inline]
-        #[must_use]
-        pub fn new(full_path:&[u8]) -> Self {
-            let full_path_len = full_path.len();
-            let mut c_path_buf = [0u8; libc::PATH_MAX as usize];
-            c_path_buf[..full_path_len].copy_from_slice(full_path);
-            // null terminate the string
-            c_path_buf[full_path_len] = 0;
-            Self{path:c_path_buf, path_len:full_path_len}
-        }
-
-        #[inline]
-        #[must_use]
-        pub fn as_path(&self) -> &[u8] {
-            &self.path[..self.path_len]
-        }
-
-
-}
 
 pub trait BytesToCstrPointer {
     fn as_cstr_ptr<F, R>(&self, f: F) -> R
@@ -65,16 +42,54 @@ impl BytesToCstrPointer for [u8] {
     }
 }
 
-
-pub trait PathToBytes{
-    fn to_bytes(&self)->&[u8];
+pub trait PathToBytes {
+    fn to_bytes(&self) -> &[u8];
 }
 
-impl PathToBytes for Path{
+impl PathToBytes for Path {
     #[inline(always)]
     #[allow(clippy::inline_always)]
-    fn to_bytes(&self)->&[u8] {
+    fn to_bytes(&self) -> &[u8] {
         self.as_os_str().as_bytes()
     }
 }
 
+
+
+
+pub(crate) trait ToStat{
+    fn get_stat(&self) -> crate::Result<libc::stat>;
+}
+
+impl ToStat for DirEntry{
+
+    fn get_stat(&self) -> crate::Result<libc::stat> {
+        let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
+
+        let res = self.as_cstr_ptr(|ptr| unsafe { libc::stat(ptr, stat_buf.as_mut_ptr()) });
+    
+        if res == 0 {
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(crate::DirEntryError::InvalidStat)
+        }
+    }
+
+}
+
+impl ToStat for &[u8] {
+    #[inline(always)]
+    #[allow(clippy::inline_always)]
+    ///Converts a byte slice into a pointer to libc::stat pointer
+    fn get_stat(&self) -> crate::Result<libc::stat> {
+        let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
+
+        let res = self.as_cstr_ptr(|ptr| unsafe { libc::stat(ptr, stat_buf.as_mut_ptr()) });
+    
+        if res == 0 {
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(crate::DirEntryError::InvalidStat)
+        }
+    }
+}

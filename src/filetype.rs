@@ -3,8 +3,7 @@ use libc::{
     mode_t, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR,
     S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
-
-use crate::get_stat_bytes;
+use crate::ToStat;
 use std::os::unix::ffi::OsStrExt;
 use std::{ffi::OsStr, os::unix::fs::FileTypeExt, path::Path};
 /// Represents the type of a file in the filesystem
@@ -24,7 +23,7 @@ impl FileType {
     #[must_use]
     #[inline(always)]
     /// Converts a `libc` file type to a `FileType`
-    /// I would *prefer* to use this function instead of the below one. 
+    /// I would *prefer* to use this function instead of the below one.
     /// However on some ESOTERIC/EDGY AHH linux filesystems, this can fuck up
     pub const fn from_dtype(d_type: u8) -> Self {
         match d_type {
@@ -40,8 +39,8 @@ impl FileType {
     }
     #[must_use]
     #[inline(always)]
-    //this is a fallback for when we can't get the file type from the libc
-    //this can happen on funky filesystems like NTFS
+    ///this is a fallback for when we can't get the file type from the libc
+    ///this can happen on funky filesystems like NTFS
     //im probably going to handle this
     pub fn from_dtype_fallback(d_type: u8, file_path: &[u8]) -> Self {
         match d_type {
@@ -59,10 +58,9 @@ impl FileType {
     #[must_use]
     #[inline(always)]
     pub fn from_bytes(file_path: &[u8]) -> Self {
-        get_stat_bytes(file_path)
-            .map_or(Self::Unknown, |metadata| Self::from_mode(metadata.st_mode))
+        file_path.get_stat().map_or(Self::Unknown, |metadata| Self::from_mode(metadata.st_mode))
     }
- 
+
     #[must_use]
     #[inline(always)]
     pub const fn from_mode(mode: mode_t) -> Self {
@@ -77,7 +75,7 @@ impl FileType {
             _ => Self::Unknown,
         }
     }
-    /// Converts a `FileType` from a path
+    /// converts a `FileType` from a path
     #[must_use]
     #[inline(always)]
     pub fn from_path<'a>(path_start: impl AsRef<&'a Path>) -> Self {
@@ -110,12 +108,12 @@ impl std::fmt::Display for FileType {
         }
     }
 }
-
+//so lazy but it works lol.
 impl<T> From<T> for FileType
 where
     T: AsRef<OsStr>,
 {
     fn from(os_str: T) -> Self {
-        Self::from_bytes(os_str.as_ref().as_bytes()) 
+        Self::from_bytes(os_str.as_ref().as_bytes())
     }
 }

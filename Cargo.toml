@@ -2,7 +2,7 @@
 name = "fdf"
 version = "0.1.5"
 edition = "2021"
-rust-version = "1.74.1"
+rust-version = "1.75.0"
 license = "MIT"
 description = "A fast, multi-threaded filesystem search tool"
 documentation = "https://docs.rs/fdf"
@@ -17,7 +17,6 @@ libc = "0.2.170"
 mimalloc = "0.1.43"
 rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf"] }
-scopeguard = "1.2.0"
 slimmer_box = "0.6.5"
 
 

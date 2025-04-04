@@ -227,10 +227,10 @@ impl DirEntry {
     #[allow(clippy::missing_errors_doc)]
     ///Converts a path to a proper path, if it is not already
     /// Errors if i've fucked up my pointer shit here lol,not properly tested.
-    pub fn as_full_path(&self) -> Result<Self> {
+    pub fn as_full_path(self) -> Result<Self> {
         if self.is_absolute() {
             //doesnt convert
-            return Ok(self.clone());
+            return Ok(self);
         }
 
         //safe because easily fits in capacity (which is absurdly for our purposes)

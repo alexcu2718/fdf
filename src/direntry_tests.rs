@@ -1,8 +1,9 @@
-
 #[cfg(test)]
 mod tests {
+    use crate::debug_print;
     use crate::direntry::DirEntry;
     use std::os::unix::ffi::OsStrExt;
+  
 
     #[test]
     fn test_path_methods() {
@@ -94,17 +95,21 @@ mod tests {
         assert_eq!(entry, std_entry);
     }
     #[test]
-    fn test_full_path() {
-        let temp_dir = std::env::temp_dir();
+    fn test_full_path()->Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join("test_full_path");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
         std::env::set_current_dir(&temp_dir).unwrap();
-        let file_path = DirEntry::new(".").unwrap().as_full_path().unwrap();
+        let file_path = DirEntry::new(".")?.as_full_path()?;
+        debug_print!(&file_path);
         let my_path: Box<[u8]> = file_path.as_bytes().into();
 
-        let my_path_std: std::path::PathBuf = std::path::Path::new(".").canonicalize().unwrap();
+        let my_path_std: std::path::PathBuf = std::path::Path::new(".").canonicalize()?;
         let bytes_std: &[u8] = my_path_std.as_os_str().as_bytes();
         assert_eq!(&*my_path, bytes_std);
 
         assert_eq!(file_path.is_dir(), my_path_std.is_dir());
+        Ok(())
     }
 
     use std::env::temp_dir;
@@ -137,7 +142,6 @@ mod tests {
         while let Some(entry) = iter.next() {
             entries.push(entry);
         }
-        
 
         // verify results
         let entry_iter = entries.iter().collect::<Vec<_>>();

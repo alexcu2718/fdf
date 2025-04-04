@@ -1,5 +1,3 @@
-
-
 pub trait BytesToCstrPointer {
     fn as_cstr_ptr<F, R>(&self, f: F) -> R
     where
@@ -47,27 +45,23 @@ impl PathToBytes for std::path::Path {
     }
 }
 
-
-
-
-pub trait ToStat{
+pub trait ToStat {
     fn get_stat(&self) -> crate::Result<libc::stat>;
 }
 
-impl ToStat for crate::DirEntry{
+impl ToStat for crate::DirEntry {
     ///Converts into `libc::stat` , mostly for internal use..probably...
     fn get_stat(&self) -> crate::Result<libc::stat> {
         let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
 
         let res = self.as_cstr_ptr(|ptr| unsafe { libc::stat(ptr, stat_buf.as_mut_ptr()) });
-    
+
         if res == 0 {
             Ok(unsafe { stat_buf.assume_init() })
         } else {
             Err(crate::DirEntryError::InvalidStat)
         }
     }
-
 }
 
 impl ToStat for &[u8] {
@@ -78,7 +72,7 @@ impl ToStat for &[u8] {
         let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
 
         let res = self.as_cstr_ptr(|ptr| unsafe { libc::stat(ptr, stat_buf.as_mut_ptr()) });
-    
+
         if res == 0 {
             Ok(unsafe { stat_buf.assume_init() })
         } else {

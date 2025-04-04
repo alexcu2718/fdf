@@ -2,29 +2,30 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 use libc::{
-    access, c_char, dirent64, free, realpath, strlen, SYS_getdents64, F_OK, O_RDONLY, R_OK,
-    W_OK, X_OK,syscall,close,open,PATH_MAX
+    access, c_char, close, dirent64, open, realpath, strlen, syscall, SYS_getdents64, F_OK,
+    O_RDONLY, PATH_MAX, R_OK, W_OK, X_OK,
 };
 
 use std::{
-    //intrinsics::likely,
-    ffi::OsStr,
-    fmt,
-    io::Error,
-    os::unix::ffi::OsStrExt,
-    path::{Path, PathBuf},
-    slice,
-    time::SystemTime,
+    ffi::OsStr, fmt, hint::assert_unchecked, io::Error, os::unix::ffi::OsStrExt, path::{Path, PathBuf}, slice, time::SystemTime
 };
 
-pub use crate::utils::{get_baselen,  unix_time_to_system_time};
-use crate::{ DirIter, ToStat};
+
+//this is from a wizardy C forum.
+//c code is offsetof(struct dirent, d_name) + PATH_MAX is enough to one shot.
+const BUFFER_SIZE:usize=std::mem::offset_of!(dirent64, d_name) + PATH_MAX as usize;
+
+
+
+
+
+pub use crate::utils::{get_baselen, unix_time_to_system_time};
 pub use crate::{
     error::DirEntryError, filetype::FileType, traits_and_conversions::BytesToCstrPointer, OsBytes,
     Result,
 };
-
-const BUFFER_SIZE: usize = 512 * 8;
+#[allow(unused_imports)]
+use crate::{debug_print, DirIter, ToStat};
 
 
 //this is a 4k buffer, which is the maximum size of a directory entry on most filesystems
@@ -201,15 +202,15 @@ impl DirEntry {
             false
         }
     }
+    
     #[inline]
-    #[allow(clippy::missing_errors_doc)]
-    ///Converts a path to a proper path, if it is not already
-    /// Errors if i've fucked up my pointer shit here lol,not properly tested.
-    pub fn as_full_path(self) -> Result<Self> {
+    #[allow(clippy::missing_errors_doc)]//  #[clippy::allow(missing_errors_doc)]
+    pub fn full_name_bytes(&self) -> Result<&[u8]> {
+
         if self.is_absolute() {
-            //doesnt convert
-            return Ok(self);
+            return Ok(self.as_bytes());
         }
+
 
         let ptr = unsafe {
             self.as_bytes()
@@ -220,8 +221,27 @@ impl DirEntry {
         }
 
         let bytes = unsafe { slice::from_raw_parts(ptr.cast::<u8>(), strlen(ptr)) };
-        //safe because easily fits in capacity (which is absurdly for our purposes)
+        Ok(bytes)
+    }
 
+ 
+
+
+
+
+    #[inline]
+    #[allow(clippy::missing_errors_doc)]
+    ///Converts a path to a proper path, if it is not already
+    /// Errors if i've fucked up my pointer shit here lol,not properly tested.
+    pub fn as_full_path(&self) -> Result<Self> {
+        if self.is_absolute() {
+            //doesnt convert
+            return Ok(self.clone());
+        }
+
+        
+        //safe because easily fits in capacity (which is absurdly for our purposes)
+        let bytes=self.full_name_bytes()?;
         let boxed = Self {
             path: OsBytes::new(bytes),
             file_type: self.file_type,
@@ -232,11 +252,12 @@ impl DirEntry {
            //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
            //so we subtract the filename length from the total length, probably could've been done more elegantly.
            //TBD? not imperative.
-        unsafe { free(ptr.cast()) }; //we need to free the pointer AFTER copying the data
-                                     // Return the new DirEntry
 
-        Ok(boxed)
+           Ok(boxed)      
     }
+
+        
+    
 
     #[inline]
     #[must_use]
@@ -317,7 +338,6 @@ impl DirEntry {
     #[must_use]
     ///Returns the depth relative to the start directory, this is cost free
     pub const fn depth(&self) -> u8 {
-        
         self.depth
     }
 
@@ -378,9 +398,13 @@ impl DirEntry {
     pub unsafe fn as_str_unchecked(&self) -> &str {
         debug_assert!(self.as_bytes().is_ascii());
         //mouthful!
-        
+
         debug_assert_eq!(
-            Self::new(std::path::PathBuf::from(".").canonicalize().unwrap()).unwrap().as_full_path().unwrap().as_bytes(),
+            Self::new(std::path::PathBuf::from(".").canonicalize().unwrap())
+                .unwrap()
+                .as_full_path()
+                .unwrap()
+                .as_bytes(),
             self.as_bytes()
         );
         std::str::from_utf8_unchecked(self.as_bytes())
@@ -390,7 +414,7 @@ impl DirEntry {
     ///Returns the path as a    `Cow<str>`
     pub fn as_str_lossy(&self) -> std::borrow::Cow<'_, str> {
         debug_assert!(self.as_bytes().is_ascii());
-        
+
         String::from_utf8_lossy(self.as_bytes())
     }
 
@@ -432,8 +456,6 @@ impl DirEntry {
     #[inline]
     #[must_use]
     pub fn dirname(&self) -> &[u8] {
-
-
         self.as_bytes()[..self.base_len as usize - 1]
             .rsplit(|&b| b == b'/')
             .next()
@@ -446,16 +468,12 @@ impl DirEntry {
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
-
-        
         &self.as_bytes()[..std::cmp::max(self.base_len as usize - 1, 1)]
-        
+
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
     }
 
-
-  
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Creates a new `DirEntry` from a path
@@ -486,8 +504,9 @@ impl DirEntry {
         let needs_slash = dir_path != b"/";
         let mut entries = Vec::with_capacity(8);
 
-        // use a stack-allocated buffer with `PATH_MAX` size
-        let mut path_buffer = [0u8; PATH_MAX as usize];
+        // use a static buffer, basically it should be below 256 but weird shit i cant be arsed to research
+        //see other comments on this, sparse as tho they may b.
+        let mut path_buffer = [0u8; PATH_MAX as usize /8 ];
         let dir_path_len = dir_path.len();
 
         path_buffer[..dir_path_len].copy_from_slice(dir_path);
@@ -498,10 +517,9 @@ impl DirEntry {
             path_buffer[path_len] = b'/';
             path_len += 1;
         }
-   
 
         let mut buffer = AlignedBuffer {
-            data: [0; BUFFER_SIZE],
+            data: [0; BUFFER_SIZE], //it should one shot almost all directories. 10% dont, HMMMMMM
         };
         #[allow(clippy::cast_possible_wrap)]
         loop {
@@ -517,7 +535,6 @@ impl DirEntry {
             match nread {
                 0 => break, // End of directory
                 n if n < 0 => {
-                  
                     return Err(Error::last_os_error().into());
                 }
                 n => {
@@ -527,9 +544,12 @@ impl DirEntry {
                         let reclen = d.d_reclen as usize;
 
                         let name_ptr = d.d_name.as_ptr();
+                        unsafe {
+                            assert_unchecked(strlen(name_ptr) < PATH_MAX as usize/8);
+                        };
                         let name_len = unsafe { strlen(name_ptr) };
-                        let name_bytes = unsafe { std::slice::from_raw_parts(name_ptr.cast::<u8>(), name_len) };
-                       
+                        let name_bytes =unsafe { std::slice::from_raw_parts(name_ptr.cast::<u8>(), name_len) };
+                        unsafe {assert_unchecked(name_len <= BUFFER_SIZE)};
 
                         // Skip . and ..
                         if name_bytes == b"." || name_bytes == b".." {
@@ -537,13 +557,12 @@ impl DirEntry {
                             continue;
                         }
 
-                       
-
                         let total_len = path_len + name_len as usize;
                         // build full path in buffer
                         path_buffer[path_len..total_len].copy_from_slice(name_bytes);
                         let full_path = &path_buffer[..total_len];
-
+                        //debug_assert!(PATH_MLL < 4096, "PATH_MAX is too large");
+                        //debug_print!(BUFFER_SIZE);
                         // Create path and push entry
                         entries.push(Self {
                             path: full_path.into(), // convert to our type
@@ -593,4 +612,3 @@ impl DirEntry {
         })
     }
 }
-

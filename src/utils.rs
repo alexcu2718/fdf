@@ -91,4 +91,3 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
         .ok_or(DirEntryError::TimeError)
 }
-

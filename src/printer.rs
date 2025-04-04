@@ -1,10 +1,18 @@
-use fdf::{DirEntry, Result};
 
+use fdf::{DirEntry, Result};
 use std::collections::HashMap;
 use std::io::{stdout, BufWriter, IsTerminal, Write};
 use std::sync::OnceLock;
 
+
+
+
+
+
 const NEWLINE: &[u8] = b"\n";
+const NEWLINE_CRLF: &[u8] = b"/\n";
+const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
+const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
 const RESET: &[u8] = b"\x1b[0m";
 const COLOUR_RS: &[u8] = b"\x1b[38;2;200;60;0m";
 const COLOUR_PY: &[u8] = b"\x1b[38;2;0;200;200m";
@@ -108,43 +116,90 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 pub fn write_paths_coloured<I>(paths: I, limit: Option<usize>) -> Result<()>
 where
     I: Iterator<Item = DirEntry>,
-{
-    let mut buf_writer = BufWriter::new(stdout().lock());
-    let use_colors = stdout().is_terminal();
+{   
+    let std_out= stdout();
+    let use_colors = std_out.is_terminal();
+
+    let mut writer=BufWriter::new(std_out.lock());
+
+    
+    
+    
+
+    let limit_opt:usize= limit.unwrap_or(usize::MAX);
     //TODO! fix broken pipe errors.
     if use_colors {
-        for path in paths.take(limit.unwrap_or(usize::MAX)) {
-            buf_writer.write_all(extension_colour(&path))?;
-            buf_writer.write_all(path.as_bytes())?;
+        for path in paths.take(limit_opt) {
+            writer.write_all(extension_colour(&path))?;
+            writer.write_all(path.as_bytes())?;
 
-            // add a trailing slash for directories
+            // add a trailing slash+newline for directories
             if path.is_dir() {
-                buf_writer.write_all(b"/")?;
+                writer.write_all(NEWLINE_CRLF_RESET)?;
+            }
+            // add a trailing newline for files
+            else {
+                writer.write_all(NEWLINE_RESET)?;
             }
 
-            buf_writer.write_all(NEWLINE)?;
-            buf_writer.write_all(RESET)?;
+           
+            
         }
-    } else {
-        for path in paths.take(limit.unwrap_or(usize::MAX)) {
-            buf_writer.write_all(path.as_bytes())?;
-            // add a trailing slash for directories
+    } 
+    else   // let pipe_writer = PipeWriter::new(std_out.lock());
+     {
+        for path in paths.take(limit_opt) {
+            writer.write_all(path.as_bytes())?;
+            // add a trailing slash+newline for directories
             if path.is_dir() {
-                buf_writer.write_all(b"/")?;
+                writer.write_all(NEWLINE_CRLF)?;
+            }
+            // add a trailing newline for files
+            else {
+                writer.write_all(NEWLINE)?;
             }
 
-            buf_writer.write_all(NEWLINE)?;
+            
+            
+
+            
         }
     }
-    buf_writer.flush()?;
+    writer.flush()?;
+
+   
     Ok(())
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// COLOUR PARSING PART
 
 static SYMLINK_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
 
 static DIR_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
 
-/// parse the `LS_COLORS` environment variable and get color for a specific key
+/// parse the `LS_COLORS` environment variable and get color for a specific 
+#[cold]
 fn parse_ls_colors(key: &str, default_color: &[u8]) -> Box<[u8]> {
     if let Ok(ls_colors) = std::env::var("LS_COLORS") {
         //  parse the LS_COLORS string into key-value pairs

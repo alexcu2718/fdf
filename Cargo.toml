@@ -1,8 +1,7 @@
 [package]
 name = "fdf"
-version = "0.1.5"
+version = "1.81.0"
 edition = "2021"
-rust-version = "1.75.0"
 license = "MIT"
 description = "A fast, multi-threaded filesystem search tool"
 documentation = "https://docs.rs/fdf"

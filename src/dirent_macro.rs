@@ -18,7 +18,6 @@ macro_rules! offset_ptr {
     }};
 }
 
-
 //a cheap debug print macro, only prints if debug_assertions is enabled
 #[macro_export]
 macro_rules! debug_print {
@@ -29,5 +28,3 @@ macro_rules! debug_print {
         }
     };
 }
-
-

@@ -1,10 +1,10 @@
 #![allow(clippy::cast_possible_wrap)]
+use crate::debug_print;
 use crate::{offset_ptr, BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, Result};
 use libc::{closedir, opendir, readdir64, strlen, DIR, PATH_MAX};
-use crate::debug_print;
 pub struct DirIter {
     dir: *mut DIR,
-    buffer: [u8; PATH_MAX as usize],
+    buffer: [u8; PATH_MAX as usize /8],
     base_len: usize,
     depth: u8,
     error: Option<Error>,
@@ -26,8 +26,10 @@ impl DirIter {
         let needs_slash = dirp != b"/";
         let base_len = dirp_len + needs_slash as usize;
 
-        // initialise buffer with 0s; size is PATH_MAX + 1 to accommodate slash
-        let mut buffer = [0u8; PATH_MAX as usize];
+        // initialise buffer with 0s; size is PATH_MAX/8, should be below 256 but on my own system theres some
+        //thats 270ish, even though i cant make one, ill research another day, too lazy.
+        //my terminal actually crashes when working with these files names, PUNISH THEM
+        let mut buffer = [0u8; PATH_MAX as usize/8];
         // copy directory path into buffer
         buffer[..dirp_len].copy_from_slice(dirp);
 
@@ -53,7 +55,6 @@ impl Iterator for DirIter {
         if self.error.is_some() {
             debug_print!(&self.error);
             return None;
-            
         }
 
         loop {
@@ -85,16 +86,16 @@ impl Iterator for DirIter {
 
             // get file type
             let dir_info = unsafe { *offset_ptr!(entry, d_type) };
-          
+
             let file_type = FileType::from_dtype_fallback(dir_info, full_path);
-             debug_assert!(file_type== FileType::from_dtype(dir_info));
+            debug_assert!(file_type == FileType::from_dtype(dir_info));
 
             #[allow(clippy::cast_possible_truncation)] // this numbers involved never exceed u8
             // return the directory entry
             return Some(DirEntry {
                 path: full_path.into(),
                 file_type,
-                inode:unsafe { *offset_ptr!(entry, d_ino) },
+                inode: unsafe { *offset_ptr!(entry, d_ino) },
                 depth: self.depth + 1,
                 base_len: self.base_len as u8,
             });
@@ -110,7 +111,7 @@ impl Drop for DirIter {
     }
 }
 
-/* 
+/*
 #[cfg(test)]
 fn are_types_equal<T: 'static, U: 'static>() -> bool {
     use std::any::TypeId;

@@ -1,9 +1,9 @@
 #![allow(clippy::inline_always)]
+use crate::ToStat;
 use libc::{
     mode_t, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR,
     S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
-use crate::ToStat;
 use std::os::unix::ffi::OsStrExt;
 use std::{ffi::OsStr, os::unix::fs::FileTypeExt, path::Path};
 /// Represents the type of a file in the filesystem
@@ -58,7 +58,9 @@ impl FileType {
     #[must_use]
     #[inline(always)]
     pub fn from_bytes(file_path: &[u8]) -> Self {
-        file_path.get_stat().map_or(Self::Unknown, |metadata| Self::from_mode(metadata.st_mode))
+        file_path
+            .get_stat()
+            .map_or(Self::Unknown, |metadata| Self::from_mode(metadata.st_mode))
     }
 
     #[must_use]

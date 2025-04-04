@@ -1,5 +1,6 @@
 #![allow(clippy::inline_always)]
 
+#![feature(anonymous_pipe)]
 //library imports
 use rayon::prelude::*;
 use std::{
@@ -16,6 +17,8 @@ mod iter;
 pub(crate) use iter::DirIter;
 mod direntry_tests;
 
+mod metadata;
+
 mod dirent_macro;
 mod direntry;
 pub use direntry::DirEntry;
@@ -27,13 +30,11 @@ mod custom_types_result;
 pub use custom_types_result::{OsBytes, Result};
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{ BytesToCstrPointer, PathToBytes, ToOsStr};
 pub(crate) use traits_and_conversions::ToStat;
+pub use traits_and_conversions::{BytesToCstrPointer, PathToBytes, ToOsStr};
 
 mod utils;
-pub use utils::{
-    get_baselen, process_glob_regex, resolve_directory, unix_time_to_system_time,
-};
+pub use utils::{get_baselen, process_glob_regex, resolve_directory, unix_time_to_system_time};
 
 mod glob;
 pub use glob::glob_to_regex;
@@ -107,6 +108,7 @@ impl Finder {
         self
     }
 
+    
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     /// Traverse the directory and return a receiver for the entries.
@@ -165,10 +167,10 @@ impl Finder {
             }
             return;
         }
-
+        //match dir.as_iter()  example of how to use the iterator
         match DirEntry::read_dir(&dir) {
             Ok(entries) => {
-                let mut dirs = Vec::with_capacity(entries.len() / 2);
+                let mut dirs = Vec::with_capacity(entries.len()/2);
 
                 for entry in entries {
                     if config.hide_hidden && entry.is_hidden() {

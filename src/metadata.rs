@@ -1,4 +1,4 @@
-/* 
+/*
 //ketch of how to include extra metadata in the DirEntry struct
 //but im unsure if this is the best way to do it
 #![allow(dead_code)]
@@ -14,7 +14,7 @@ impl DirEntryMetadata {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn new(dirent:DirEntry) -> Result<Self> {
-        
+
         let stat= dirent.as_bytes().get_stat()?;
 
         debug_assert!(!dirent.is_unknown());
@@ -24,12 +24,12 @@ impl DirEntryMetadata {
             meta: stat,})
 
 
-        
-            
-        
+
+
+
     }
 
-    
+
 
 
     #[must_use]
@@ -42,7 +42,7 @@ impl DirEntryMetadata {
     }
     #[must_use]
     pub const  fn size(&self) -> i64 {
-        self.meta.st_size 
+        self.meta.st_size
     }
     #[must_use]
     pub const  fn accessed(&self) -> i64 {
@@ -60,7 +60,7 @@ impl DirEntryMetadata {
     pub const fn permissions(&self) -> u32 {
         self.meta.st_mode
     }
-   
+
     #[must_use]
     pub const  fn file_type(&self) -> FileType {
         self.dirent.file_type()
@@ -102,7 +102,7 @@ impl DirEntryMetadata {
     pub const fn is_char_device(&self) -> bool {
         matches!(self.file_type(),FileType::CharDevice)
     }
-  
+
     //#[must_use]
 }
 
@@ -118,7 +118,7 @@ mod tests {
         let test_dir = std::env::temp_dir();
         let path = std::path::PathBuf::from(test_dir).join("test_file.txt");
         std::fs::File::create(&path).unwrap();
-    
+
         let dirent = DirEntry::new(path.clone()).unwrap();
         let metadata = DirEntryMetadata::new(dirent).unwrap();
 
@@ -128,7 +128,7 @@ mod tests {
         assert_eq!(metadata.is_dir(), false);
         assert_eq!(metadata.is_symlink(), false);
         assert_eq!(metadata.dirent.as_bytes(), path.to_bytes());
-        
+
         assert_eq!(metadata.inode(), path.metadata().unwrap().ino());
 
     }

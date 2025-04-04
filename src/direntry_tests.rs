@@ -3,7 +3,6 @@ mod tests {
     use crate::debug_print;
     use crate::direntry::DirEntry;
     use std::os::unix::ffi::OsStrExt;
-  
 
     #[test]
     fn test_path_methods() {
@@ -95,7 +94,7 @@ mod tests {
         assert_eq!(entry, std_entry);
     }
     #[test]
-    fn test_full_path()->Result<(), Box<dyn std::error::Error>> {
+    fn test_full_path() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join("test_full_path");
         std::fs::create_dir_all(&temp_dir).unwrap();
 

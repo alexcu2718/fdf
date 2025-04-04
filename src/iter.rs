@@ -4,7 +4,7 @@ use crate::{offset_ptr, BytesToCstrPointer, DirEntry, DirEntryError as Error, Fi
 use libc::{closedir, opendir, readdir64, strlen, DIR, PATH_MAX};
 pub struct DirIter {
     dir: *mut DIR,
-    buffer: [u8; PATH_MAX as usize /8],
+    buffer: [u8; PATH_MAX as usize / 8],
     base_len: usize,
     depth: u8,
     error: Option<Error>,
@@ -29,7 +29,7 @@ impl DirIter {
         // initialise buffer with 0s; size is PATH_MAX/8, should be below 256 but on my own system theres some
         //thats 270ish, even though i cant make one, ill research another day, too lazy.
         //my terminal actually crashes when working with these files names, PUNISH THEM
-        let mut buffer = [0u8; PATH_MAX as usize/8];
+        let mut buffer = [0u8; PATH_MAX as usize / 8];
         // copy directory path into buffer
         buffer[..dirp_len].copy_from_slice(dirp);
 

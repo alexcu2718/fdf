@@ -7,26 +7,27 @@ use libc::{
 };
 
 use std::{
-    ffi::OsStr, fmt, hint::assert_unchecked, io::Error, os::unix::ffi::OsStrExt, path::{Path, PathBuf}, slice, time::SystemTime
+    ffi::OsStr,
+    fmt,
+    hint::assert_unchecked,
+    io::Error,
+    os::unix::ffi::OsStrExt,
+    path::{Path, PathBuf},
+    slice,
+    time::SystemTime,
 };
-
 
 //this is from a wizardy C forum.
 //c code is offsetof(struct dirent, d_name) + PATH_MAX is enough to one shot.
-const BUFFER_SIZE:usize=std::mem::offset_of!(dirent64, d_name) + PATH_MAX as usize;
-
-
-
-
+const BUFFER_SIZE: usize = std::mem::offset_of!(dirent64, d_name) + PATH_MAX as usize;
 
 pub use crate::utils::{get_baselen, unix_time_to_system_time};
+#[allow(unused_imports)]
+use crate::{debug_print, DirIter, ToStat};
 pub use crate::{
     error::DirEntryError, filetype::FileType, traits_and_conversions::BytesToCstrPointer, OsBytes,
     Result,
 };
-#[allow(unused_imports)]
-use crate::{debug_print, DirIter, ToStat};
-
 
 //this is a 4k buffer, which is the maximum size of a directory entry on most filesystems
 //might change this, who knows?
@@ -202,15 +203,13 @@ impl DirEntry {
             false
         }
     }
-    
-    #[inline]
-    #[allow(clippy::missing_errors_doc)]//  #[clippy::allow(missing_errors_doc)]
-    pub fn full_name_bytes(&self) -> Result<&[u8]> {
 
+    #[inline]
+    #[allow(clippy::missing_errors_doc)] //  #[clippy::allow(missing_errors_doc)]
+    pub fn full_name_bytes(&self) -> Result<&[u8]> {
         if self.is_absolute() {
             return Ok(self.as_bytes());
         }
-
 
         let ptr = unsafe {
             self.as_bytes()
@@ -224,11 +223,6 @@ impl DirEntry {
         Ok(bytes)
     }
 
- 
-
-
-
-
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Converts a path to a proper path, if it is not already
@@ -239,9 +233,8 @@ impl DirEntry {
             return Ok(self.clone());
         }
 
-        
         //safe because easily fits in capacity (which is absurdly for our purposes)
-        let bytes=self.full_name_bytes()?;
+        let bytes = self.full_name_bytes()?;
         let boxed = Self {
             path: OsBytes::new(bytes),
             file_type: self.file_type,
@@ -253,11 +246,8 @@ impl DirEntry {
            //so we subtract the filename length from the total length, probably could've been done more elegantly.
            //TBD? not imperative.
 
-           Ok(boxed)      
+        Ok(boxed)
     }
-
-        
-    
 
     #[inline]
     #[must_use]
@@ -506,7 +496,7 @@ impl DirEntry {
 
         // use a static buffer, basically it should be below 256 but weird shit i cant be arsed to research
         //see other comments on this, sparse as tho they may b.
-        let mut path_buffer = [0u8; PATH_MAX as usize /8 ];
+        let mut path_buffer = [0u8; PATH_MAX as usize / 8];
         let dir_path_len = dir_path.len();
 
         path_buffer[..dir_path_len].copy_from_slice(dir_path);
@@ -545,11 +535,12 @@ impl DirEntry {
 
                         let name_ptr = d.d_name.as_ptr();
                         unsafe {
-                            assert_unchecked(strlen(name_ptr) < PATH_MAX as usize/8);
+                            assert_unchecked(strlen(name_ptr) < PATH_MAX as usize / 8);
                         };
                         let name_len = unsafe { strlen(name_ptr) };
-                        let name_bytes =unsafe { std::slice::from_raw_parts(name_ptr.cast::<u8>(), name_len) };
-                        unsafe {assert_unchecked(name_len <= BUFFER_SIZE)};
+                        let name_bytes =
+                            unsafe { std::slice::from_raw_parts(name_ptr.cast::<u8>(), name_len) };
+                        unsafe { assert_unchecked(name_len <= BUFFER_SIZE) };
 
                         // Skip . and ..
                         if name_bytes == b"." || name_bytes == b".." {

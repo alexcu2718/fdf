@@ -1,13 +1,7 @@
-
 use fdf::{DirEntry, Result};
 use std::collections::HashMap;
 use std::io::{stdout, BufWriter, IsTerminal, Write};
 use std::sync::OnceLock;
-
-
-
-
-
 
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
@@ -116,17 +110,13 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 pub fn write_paths_coloured<I>(paths: I, limit: Option<usize>) -> Result<()>
 where
     I: Iterator<Item = DirEntry>,
-{   
-    let std_out= stdout();
+{
+    let std_out = stdout();
     let use_colors = std_out.is_terminal();
 
-    let mut writer=BufWriter::new(std_out.lock());
+    let mut writer = BufWriter::new(std_out.lock());
 
-    
-    
-    
-
-    let limit_opt:usize= limit.unwrap_or(usize::MAX);
+    let limit_opt: usize = limit.unwrap_or(usize::MAX);
     //TODO! fix broken pipe errors.
     if use_colors {
         for path in paths.take(limit_opt) {
@@ -141,13 +131,10 @@ where
             else {
                 writer.write_all(NEWLINE_RESET)?;
             }
-
-           
-            
         }
-    } 
-    else   // let pipe_writer = PipeWriter::new(std_out.lock());
-     {
+    } else
+    // let pipe_writer = PipeWriter::new(std_out.lock());
+    {
         for path in paths.take(limit_opt) {
             writer.write_all(path.as_bytes())?;
             // add a trailing slash+newline for directories
@@ -158,39 +145,12 @@ where
             else {
                 writer.write_all(NEWLINE)?;
             }
-
-            
-            
-
-            
         }
     }
     writer.flush()?;
 
-   
     Ok(())
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // COLOUR PARSING PART
 
@@ -198,7 +158,7 @@ static SYMLINK_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
 
 static DIR_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
 
-/// parse the `LS_COLORS` environment variable and get color for a specific 
+/// parse the `LS_COLORS` environment variable and get color for a specific
 #[cold]
 fn parse_ls_colors(key: &str, default_color: &[u8]) -> Box<[u8]> {
     if let Ok(ls_colors) = std::env::var("LS_COLORS") {

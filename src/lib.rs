@@ -1,5 +1,4 @@
 #![allow(clippy::inline_always)]
-
 #![feature(anonymous_pipe)]
 //library imports
 use rayon::prelude::*;
@@ -108,7 +107,6 @@ impl Finder {
         self
     }
 
-    
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     /// Traverse the directory and return a receiver for the entries.
@@ -170,7 +168,7 @@ impl Finder {
         //match dir.as_iter()  example of how to use the iterator
         match DirEntry::read_dir(&dir) {
             Ok(entries) => {
-                let mut dirs = Vec::with_capacity(entries.len()/2);
+                let mut dirs = Vec::with_capacity(entries.len() / 2);
 
                 for entry in entries {
                     if config.hide_hidden && entry.is_hidden() {

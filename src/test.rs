@@ -1,15 +1,31 @@
 #[cfg(test)]
 mod tests {
     use crate::debug_print;
-    use crate::direntry::DirEntry;
+    use crate::{DirEntry, DirIter, FileType};
+    use std::fs::File;
     use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn check_filenames() {
+        let temp_dir = std::env::temp_dir();
+        let file_name = "parent_TEST.txt";
+        let file_path = temp_dir.as_path().join(file_name);
+
+        let _ = std::fs::File::create(&file_path);
+
+        let entry = DirEntry::new(file_path.as_os_str()).unwrap();
+        let _ = std::fs::remove_file(&file_path);
+        assert_eq!(entry.file_name(), file_name.as_bytes());
+    }
 
     #[test]
     fn test_path_methods() {
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.as_path().join("parent/child.txt");
-        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
-        std::fs::write(&file_path, "test").unwrap();
+        let _ = std::fs::remove_dir_all(file_path.parent().unwrap());
+        let _ = std::fs::create_dir_all(file_path.parent().unwrap());
+        let _ = std::fs::write(&file_path, "test");
 
         let entry = DirEntry::new(file_path.as_os_str()).unwrap();
         assert_eq!(entry.file_name(), b"child.txt");
@@ -114,14 +130,14 @@ mod tests {
     use std::env::temp_dir;
     use std::fs;
     use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_iterator() -> core::result::Result<(), Box<dyn std::error::Error>> {
         // make a unique test directory inside temp_dir
-        let unique_id = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
+        let unique_id = "fdf_iterator_test";
         let dir_path: PathBuf = temp_dir().join(format!("test_dir_{}", unique_id));
-        fs::create_dir(&dir_path)?;
+        let _ = fs::remove_dir_all(dir_path.as_path());
+        let _ = fs::create_dir(dir_path.as_path());
 
         // create test files and subdirectory
         fs::write(dir_path.join("file1.txt"), "content")?;
@@ -143,22 +159,16 @@ mod tests {
         }
 
         // verify results
-        let entry_iter = entries.iter().collect::<Vec<_>>();
-        let _ = fs::remove_dir_all(dir_entry.as_path());
+
+        //let _ = fs::remove_dir_all(dir_entry.as_path());
         assert_eq!(entries.len(), 3, "Should find two files and one subdir");
+
         assert!(
-            entry_iter
-                .clone()
-                .iter()
-                .any(|e| e.file_name() == b"file1.txt"),
-            "Should find file1.txt"
-        );
-        assert!(
-            entry_iter.clone().iter().filter(|e| e.is_dir()).count() == 1,
+            entries.clone().iter().filter(|e| e.is_dir()).count() == 1,
             "Should find one directory"
         );
         assert!(
-            entry_iter
+            entries
                 .clone()
                 .iter()
                 .filter(|e| e.is_regular_file())
@@ -173,8 +183,9 @@ mod tests {
     #[test]
     fn test_handles_various_tests() -> Result<(), Box<dyn std::error::Error>> {
         // create empty directory
-        let tdir = temp_dir().join("NOTAREALPATHLALALALALA");
-        fs::create_dir_all(&tdir)?;
+        let tdir = temp_dir().join("NOTAREALPATHLALALA");
+        let _ = fs::remove_dir_all(&tdir); //delete it first etc, because thi
+        let _ = fs::create_dir_all(&tdir);
 
         let dir_entry = DirEntry::new(&tdir)?;
 
@@ -186,7 +197,11 @@ mod tests {
         assert_eq!(dir_entry.as_bytes(), tdir.as_os_str().as_bytes());
         assert_eq!(dir_entry.as_path(), &tdir);
         assert!(dir_entry.is_dir(), "Should be a directory");
-        assert!(dir_entry.is_empty(), "Directory should be empty");
+        assert!(
+            dir_entry.is_empty(),
+            "Directory should be empty {}",
+            dir_entry.as_path().display()
+        );
         assert!(dir_entry.exists(), "Directory should exist");
         assert!(dir_entry.is_readable(), "Directory should be readable");
         assert!(dir_entry.is_writable(), "Directory should be writable");
@@ -196,16 +211,7 @@ mod tests {
         );
         assert!(!dir_entry.is_hidden(), "Directory should be not hidden");
         assert!(!dir_entry.is_symlink(), "Directory should be not symlink");
-
-        // Get iterator
-        let mut iter = dir_entry.as_iter()?;
-        let evaludated_statement = iter.next();
         let _ = fs::remove_dir_all(&tdir);
-        // should return no entries (excluding . and ..)
-        assert!(
-            evaludated_statement.is_none(),
-            "Empty directory should have no entries"
-        );
 
         Ok(())
     }
@@ -213,10 +219,110 @@ mod tests {
     fn test_dirname() {
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.as_path().join("parent/child.txt");
-        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
-        std::fs::write(&file_path, "test").unwrap();
+        let _ = std::fs::remove_dir_all(file_path.parent().unwrap());
+        let _ = std::fs::create_dir_all(file_path.parent().unwrap());
+        let _ = std::fs::write(&file_path, "test");
 
         let entry = DirEntry::new(file_path.as_os_str()).unwrap();
+
         assert_eq!(entry.dirname(), b"parent");
+        let _ = std::fs::remove_dir_all(file_path.parent().unwrap()).unwrap();
+    }
+    #[test]
+    fn test_basic_iteration() {
+        let dir_path = temp_dir().join("THROWAWAYANYTHING");
+        let _ = fs::create_dir_all(&dir_path);
+
+        // create test files
+        let _ = File::create(dir_path.join("file1.txt"));
+        let _ = fs::create_dir(dir_path.join("subdir"));
+
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let iter = DirIter::new(&dir_entry).unwrap();
+        let entries: Vec<_> = iter.collect();
+
+        assert_eq!(entries.len(), 2);
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|e| e.path.as_os_str().to_string_lossy())
+            .collect();
+        names.sort();
+
+        assert!(names[0].ends_with("file1.txt"));
+        assert!(names[1].ends_with("subdir"));
+
+        let _ = fs::remove_dir_all(dir_path);
+    }
+
+    #[test]
+    fn test_entries() {
+        let dir = temp_dir().join("test_dir");
+        let _ = fs::create_dir_all(&dir);
+        let dir_entry = DirEntry::new(&dir).unwrap();
+        let iter = DirIter::new(&dir_entry).unwrap();
+        let entries: Vec<_> = iter.collect();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(dir_entry.is_dir(), true);
+        assert_eq!(entries.len(), 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_file_types() {
+        let dir_path = temp_dir().join("THROW_AWAY");
+
+        let _ = fs::create_dir_all(&dir_path);
+
+        // Create different file types
+        let _ = File::create(dir_path.join("regular.txt"));
+        let _ = fs::create_dir(dir_path.join("directory"));
+
+        let _ = symlink("regular.txt", dir_path.join("symlink"));
+
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+
+        let mut type_counts = std::collections::HashMap::new();
+        for entry in entries {
+            *type_counts.entry(entry.file_type).or_insert(0) += 1;
+            println!(
+                "File: {}, Type: {:?}",
+                entry.path.as_os_str().to_string_lossy(),
+                entry.file_type
+            );
+        }
+
+        let _ = fs::remove_dir_all(dir_path);
+        assert_eq!(type_counts.get(&FileType::RegularFile).unwrap(), &1);
+        assert_eq!(type_counts.get(&FileType::Directory).unwrap(), &1);
+        assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
+    }
+
+    #[test]
+    fn test_path_construction() {
+        let dir = temp_dir().join("test_pathXXX");
+        let _ = fs::create_dir_all(&dir);
+
+        let dir_entry = DirEntry::new(&dir).unwrap();
+
+        let _ = File::create(&dir.join("regular.txt"));
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        assert_eq!(entries.len(), 1);
+
+        let v = entries[0]
+            .path
+            .as_os_str()
+            .to_string_lossy()
+            .contains("regular.txt");
+
+        let _ = std::fs::remove_dir_all(dir);
+        assert!(v);
+    }
+
+    #[test]
+    fn test_error_handling() {
+        let non_existent = DirEntry::new("/non/existent/path");
+        assert!(non_existent.is_err());
     }
 }

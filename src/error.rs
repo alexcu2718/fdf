@@ -15,6 +15,9 @@ pub enum DirEntryError {
     WriteError(io::Error),
     RayonError(rayon::ThreadPoolBuildError),
     RegexError(regex::Error),
+    NotADirectory,
+
+    TooManySymbolicLinks, //this shouldnt happen because im ignoring symlinks but this makes it easier to debug
 }
 
 impl From<io::Error> for DirEntryError {
@@ -27,8 +30,10 @@ impl From<io::Error> for DirEntryError {
         // map OS error codes to variants
         if let Some(code) = error.raw_os_error() {
             match code {
-                ENOENT | ENOTDIR | ELOOP | EINVAL => Self::InvalidPath,
-                EACCES => Self::AccessDenied(error), //  handling EACCES specifically
+                EINVAL | ENOENT => Self::InvalidPath,
+                ENOTDIR => Self::NotADirectory,
+                ELOOP => Self::TooManySymbolicLinks,
+                EACCES => Self::AccessDenied(error),
                 _ => Self::OSerror(error),
             }
         } else {
@@ -47,7 +52,7 @@ impl From<std::str::Utf8Error> for DirEntryError {
 impl fmt::Display for DirEntryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidPath => write!(f, "Invalid path"),
+            Self::InvalidPath => write!(f, "Invalid path, neither a file nor a directory"),
             Self::InvalidStat => write!(f, "Invalid file stat"),
             Self::TimeError => write!(f, "Invalid time conversion"),
             Self::MetadataError => write!(f, "Metadata error"),
@@ -58,6 +63,8 @@ impl fmt::Display for DirEntryError {
             Self::WriteError(e) => write!(f, "Write error: {e}"),
             Self::AccessDenied(e) => write!(f, "Access denied: {e}"),
             Self::RegexError(e) => write!(f, "Regex error: {e}"),
+            Self::NotADirectory => write!(f, "Not a directory"),
+            Self::TooManySymbolicLinks => write!(f, "Too many symbolic links"),
         }
     }
 }

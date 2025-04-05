@@ -49,15 +49,14 @@ impl SearchConfig {
         })
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
     pub fn matches_with<F: FnOnce(&[u8]) -> bool>(&self, path: &[u8], predicate: F) -> bool {
         predicate(path)
     }
 
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    #[allow(clippy::unnecessary_map_or)]
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
         let path = if full_path {
             dir.as_bytes()
@@ -67,6 +66,6 @@ impl SearchConfig {
 
         self.regex_match
             .as_ref()
-            .map_or(true, |reg| reg.is_match(path))
+            .is_none_or(|reg| reg.is_match(path))
     }
 }

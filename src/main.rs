@@ -175,7 +175,7 @@ fn main() -> Result<(), DirEntryError> {
     };
 
     let mut finder = Finder::new(
-        path,
+        &path,
         &pattern,
         !args.hidden,
         args.case_sensitive,
@@ -191,6 +191,17 @@ fn main() -> Result<(), DirEntryError> {
     }
 
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n); //.map_err(|e| DirEntryError::from(e))?;
+
+    /*
+        let vecents = DirEntry::new(&path)?;
+
+
+        let mut iter = vecents.as_iter()?;
+
+    //
+        while let Some(entry_result) = iter.next() {
+            eprintln!("{:?}", entry_result);
+        }*/
 
     Ok(())
 }

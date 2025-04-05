@@ -4,8 +4,8 @@ use libc::{
     mode_t, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR,
     S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
-use std::os::unix::ffi::OsStrExt;
-use std::{ffi::OsStr, os::unix::fs::FileTypeExt, path::Path};
+
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt, os::unix::fs::FileTypeExt, path::Path};
 /// Represents the type of a file in the filesystem
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FileType {
@@ -37,6 +37,7 @@ impl FileType {
             _ => Self::Unknown,
         }
     }
+
     #[must_use]
     #[inline(always)]
     ///this is a fallback for when we can't get the file type from the libc
@@ -57,6 +58,8 @@ impl FileType {
 
     #[must_use]
     #[inline(always)]
+    ///uses a stat call to get the file type, more costly but more accurate
+    /// this is used when we can't get the file type from dirent64 due to funky filesystems
     pub fn from_bytes(file_path: &[u8]) -> Self {
         file_path
             .get_stat()

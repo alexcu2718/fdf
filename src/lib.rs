@@ -1,5 +1,3 @@
-#![allow(clippy::inline_always)]
-#![feature(anonymous_pipe)]
 //library imports
 use rayon::prelude::*;
 use std::{
@@ -14,8 +12,8 @@ use std::{
 //crate imports
 mod iter;
 pub(crate) use iter::DirIter;
-mod direntry_tests;
-
+mod test;
+pub use direntry::LOCAL_PATH_MAX;
 mod metadata;
 
 mod dirent_macro;
@@ -29,8 +27,7 @@ mod custom_types_result;
 pub use custom_types_result::{OsBytes, Result};
 
 mod traits_and_conversions;
-pub(crate) use traits_and_conversions::ToStat;
-pub use traits_and_conversions::{BytesToCstrPointer, PathToBytes, ToOsStr};
+pub use traits_and_conversions::{BytesToCstrPointer, PathToBytes, ToOsStr, ToStat};
 
 mod utils;
 pub use utils::{get_baselen, process_glob_regex, resolve_directory, unix_time_to_system_time};
@@ -52,10 +49,6 @@ pub struct Finder {
     root: OsString,
     search_config: SearchConfig,
     filter: Option<fn(&DirEntry) -> bool>,
-    //luckily avoid making it dyn, as we can just use a function pointer.
-    //this is because we can't use a trait object here, as we need to be able to clone the Finder struct.
-    //and we can't clone a trait object.
-    //so we use a function pointer instead.
 }
 ///The Finder struct is used to find files in a directory.
 impl Finder {
@@ -66,7 +59,7 @@ impl Finder {
     /// Create a new Finder instance.
     pub fn new(
         root: impl AsRef<OsStr>,
-        pattern: &str,
+        pattern: impl AsRef<str>,
         hide_hidden: bool,
         case_insensitive: bool,
         keep_dirs: bool,
@@ -133,7 +126,6 @@ impl Finder {
                 &sender,
                 &search_config,
                 filter,
-                true,
             );
         });
 
@@ -141,22 +133,19 @@ impl Finder {
     }
 
     #[inline]
-    #[allow(clippy::unnecessary_map_or)]
-    //i use map_or because compatibility with 1.74 as is_none_or is unstable until 1.82(ish)
     /// Traverse the directory and send the `DirEntry` to the Receiver.
     fn process_directory(
         dir: DirEntry,
         sender: &Sender<DirEntry>,
         config: &SearchConfig,
         filter: Option<fn(&DirEntry) -> bool>,
-        is_start_dir: bool,
     ) {
         // store whether we should send the directory itself
         let should_send = config.keep_dirs
             && config.matches_path(&dir, config.file_name)
-            && filter.map_or(true, |f| f(&dir))
+            && filter.is_none_or(|f| f(&dir))
             && config.extension_match.as_ref().is_none() //no directories should match extensions (mostly? not sure.)
-            && !is_start_dir;
+            && dir.depth() !=0; //dont send the root directory
 
         //check if we should stop searching
         if config.depth.is_some_and(|d| dir.depth() >= d) {
@@ -168,7 +157,7 @@ impl Finder {
         //match dir.as_iter()  example of how to use the iterator
         match DirEntry::read_dir(&dir) {
             Ok(entries) => {
-                let mut dirs = Vec::with_capacity(entries.len() / 2);
+                let mut dirs = Vec::with_capacity(entries.len() / 2); //maybe smallvec here.
 
                 for entry in entries {
                     if config.hide_hidden && entry.is_hidden() {
@@ -178,12 +167,12 @@ impl Finder {
                     if entry.is_dir() {
                         // always include directories for traversal
                         dirs.push(entry);
-                    } else if filter.map_or(true, |f| f(&entry))
+                    } else if filter.is_none_or(|f| f(&entry))
                         && config.matches_path(&entry, config.file_name)
                         && config
                             .extension_match
                             .as_ref()
-                            .map_or(true, |ext| entry.matches_extension(ext))
+                            .is_none_or(|ext| entry.matches_extension(ext))
                     {
                         // only filter non-directory entries
                         let _ = sender.send(entry);
@@ -193,12 +182,15 @@ impl Finder {
                 }
 
                 dirs.into_par_iter().for_each(|dir| {
-                    Self::process_directory(dir, sender, config, filter, false);
+                    Self::process_directory(dir, sender, config, filter);
                 });
             }
 
             Err(DirEntryError::AccessDenied(_) | DirEntryError::InvalidPath) => {
                 // ignore permission denied and invalid path errors
+                //these will happen if the directory is not accessible(eg /etc/)
+                //or the path changes midway throughout processing, like /proc/
+                //this is a common error, so we can ignore it.
             }
             //enoent= no such file or directory
             //eacces=permission denied

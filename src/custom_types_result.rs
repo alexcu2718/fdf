@@ -1,3 +1,5 @@
+use std::os::unix::ffi::OsStrExt;
+
 pub type Result<T> = std::result::Result<T, crate::DirEntryError>;
 
 #[derive(Clone, Debug)]
@@ -20,6 +22,12 @@ impl OsBytes {
     #[allow(clippy::missing_const_for_fn)]
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn as_os_str(&self) -> &std::ffi::OsStr {
+        std::ffi::OsStr::from_bytes(self.as_bytes())
     }
 }
 

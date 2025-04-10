@@ -26,10 +26,8 @@ impl BytesToCstrPointer for [u8] {
     {
         let mut c_path_buf = [0u8; crate::LOCAL_PATH_MAX];
         c_path_buf[..self.len()].copy_from_slice(self);
-        // null terminate the string
-        c_path_buf[self.len()] = 0;
-        f(std::ptr::addr_of!(c_path_buf).cast::<i8>())
-        //if you thought nested macros were  a pain then hello
+        
+        f(c_path_buf.as_ptr().cast::<i8>())
     }
 }
 

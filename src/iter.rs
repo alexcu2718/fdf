@@ -105,8 +105,13 @@ impl Iterator for DirIter {
             let dir_info = unsafe { *offset_ptr!(entry, d_type).cast() };
 
             let file_type = FileType::from_dtype_fallback(dir_info, full_path);
+            //let c_str_ptr=full_path.as_cstr_ptr(|x| x);
+            //unsafe{eprintln!("{:#?}",std::ffi::CStr::from_ptr(c_str_ptr).to_string_lossy())};
 
             debug_assert!(file_type == FileType::from_dtype(dir_info));
+
+
+            
 
             #[allow(clippy::cast_possible_truncation)] // this numbers involved never exceed u8
             // return the directory entry

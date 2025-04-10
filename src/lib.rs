@@ -155,9 +155,9 @@ impl Finder {
             return;
         }
         //match dir.as_iter()  example of how to use the iterator
-        match DirEntry::read_dir(&dir) {
+        match dir.read_dir() {
             Ok(entries) => {
-                let mut dirs = Vec::with_capacity(entries.len() / 2); //maybe smallvec here.
+                let mut dirs = Vec::with_capacity(entries.len()/2); //maybe smallvec here.
 
                 for entry in entries {
                     if config.hide_hidden && entry.is_hidden() {

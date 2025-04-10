@@ -211,14 +211,6 @@ impl DirEntry {
         }
     }
 
-    #[inline]
-    #[must_use]
-    ///costly check for empty files without using `std::fs`.
-    pub fn is_empty_raw(&self) -> bool {
-        self.as_bytes()
-            .get_stat()
-            .is_ok_and(|stat| stat.st_size == 0)
-    }
 
     #[inline]
     #[allow(clippy::missing_errors_doc)] //  #[clippy::allow(missing_errors_doc)]

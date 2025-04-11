@@ -1,4 +1,3 @@
-#![allow(clippy::cast_ptr_alignment)]
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 
@@ -18,6 +17,9 @@ use std::{
     slice,
     time::SystemTime,
 };
+
+
+
 
 //this is from a wizardy C forum. basically, the final directory name length (256 bytes aka 4096 bits aka path max +final filename length)
 //is 256 bytes(CAN DIFFER DEPENDING ON LIBC), so we can use that to calculate the size of the buffer. there should NEVER be anything bigger than the buffer
@@ -482,6 +484,21 @@ impl DirEntry {
             base_len: get_baselen(path_ref),
         })
     }
+
+
+/* 
+#[inline(always)]
+
+    pub fn getdents64(fd: i32, dirp: *mut void, count: u8) -> Result<i32> {
+
+        let fd=unsafe{syscall(SYS_getdents64, fd, dirp as *mut void, count)};
+        if fd < 0 {
+            return Err(Error::last_os_error().into());
+        }
+        Ok(fd as i32)
+
+}
+*/
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Creates a new `DirEntry` from a path
@@ -510,7 +527,7 @@ impl DirEntry {
         }
 
         let mut buffer = AlignedBuffer {
-            data: [0; BUFFER_SIZE], //it should one shot almost all directories. 10% dont, HMMMMMM
+            data: [0; BUFFER_SIZE], //it should one shot almost all directories. 
         };
         #[allow(clippy::cast_possible_wrap)]
         loop {
@@ -525,6 +542,8 @@ impl DirEntry {
                 n => {
                     let mut offset = 0;
                     while offset < n as usize {
+                        #[allow(clippy::cast_ptr_alignment)]
+                        //we cant const cast here because dirent is not actually guaranteed
                         let d = unsafe { &*buffer.data.as_ptr().add(offset).cast::<dirent64>() };
 
                         //skip . and .., these will cause recursion ofc but also theyre expressed as i8 arrays

@@ -1,4 +1,3 @@
-#![feature(anonymous_pipe)]
 
 use clap::{value_parser, ArgAction, CommandFactory, Parser, ValueHint};
 use clap_complete::aot::{generate, Shell};

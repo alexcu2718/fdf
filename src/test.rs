@@ -1,10 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::debug_print;
+    use crate::{debug_print, ToOsStr};
     use crate::{DirEntry, DirIter, FileType};
     use std::fs::File;
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::symlink;
+    use std::env::temp_dir;
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn check_filenames() {
@@ -126,10 +129,70 @@ mod tests {
         assert_eq!(file_path.is_dir(), my_path_std.is_dir());
         Ok(())
     }
+    #[test]
+    fn test_from_bytes() -> Result<(), Box<dyn std::error::Error>> {
+        //this is a mess of code but works lol to demonstrate infallibility(or idealllllllyyyyyyyyy...(ik its not))
+        let temp_dir = std::env::temp_dir().join("test_full_path");
+        let _= std::fs::remove_dir_all(&temp_dir);
+        let _= std::fs::create_dir_all(&temp_dir);
+    
+        //  test file structure
+        let test_file = temp_dir.join("test_file.txt");
+        let _=std::fs::write(&test_file, "test content");
 
-    use std::env::temp_dir;
-    use std::fs;
-    use std::path::PathBuf;
+        let test_file_canon=PathBuf::from(test_file).canonicalize().unwrap();
+        let test_file_canon=test_file_canon.as_os_str().as_bytes();
+    
+        // directory entry for temp dir
+        let dir_entry = DirEntry::new(&temp_dir)?;
+        let canonical_path = temp_dir.canonicalize()?;
+        
+        // convert to bytes for most accurate comparison
+        let dir_bytes = dir_entry.as_os_str();
+        let canonical_bytes = canonical_path.as_os_str();
+        dbg!(&dir_bytes);
+        dbg!(&canonical_bytes);
+    
+        // verify path conversions in bytes(i want to make sure every byte is right.)
+        assert_eq!(
+            dir_bytes.as_bytes(), canonical_bytes.as_bytes(),
+            "Path bytes should matchh"
+        );
+    
+        // iteration
+        let mut entries = dir_entry.read_dir()?
+            .into_iter()
+            .collect::<Vec<_>>();
+
+
+    
+        assert!(!entries.is_empty(), "Should find at least the directory itself");
+        
+        let first_entry = entries.pop().unwrap();
+        assert_eq!(
+            first_entry.as_bytes(), test_file_canon,
+            "Directory entry should match canonical path"
+        );
+    
+        //  file type detection
+        assert!(first_entry.is_regular_file(), "should be regular file");
+        assert_eq!(
+            FileType::from_bytes(first_entry.as_bytes()),
+            FileType::RegularFile,
+            "File type should be regular"
+        );
+
+        let pathcheck=
+            std::path::Path::new(first_entry.to_os_str()).canonicalize().unwrap();
+
+            assert!(pathcheck.is_file(), "should be a file");
+        
+    
+        // Clean up
+        let _=std::fs::remove_dir_all(temp_dir);
+        Ok(())
+    }
+
 
     #[test]
     fn test_iterator() -> core::result::Result<(), Box<dyn std::error::Error>> {

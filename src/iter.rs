@@ -110,7 +110,7 @@ impl Iterator for DirIter {
 
             debug_assert!(file_type == FileType::from_dtype(dir_info));
 
-
+         
             
 
             #[allow(clippy::cast_possible_truncation)] // this numbers involved never exceed u8

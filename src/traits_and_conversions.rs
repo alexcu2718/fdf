@@ -20,7 +20,7 @@ impl BytesToCstrPointer for [u8] {
     ///utilises `LOCAL_PATH_MAX` converts a file of up to 512 birts to create an upper bounded array
     //needs to be done as a callback because we need to keep the reference to the array
     //apparently this can fuck up on some weird filesystems, like NTFS(`PATH_MAX` ) being incorrect.
-        //needs to be done as a callback because we need to keep the reference to the array
+    //needs to be done as a callback because we need to keep the reference to the array
     //apparently this can fuck up on some weird filesystems, like NTFS(`PATH_MAX` ) being incorrect.
     fn as_cstr_ptr<F, R>(&self, f: F) -> R
     where

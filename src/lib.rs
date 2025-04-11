@@ -140,6 +140,8 @@ impl Finder {
         config: &SearchConfig,
         filter: Option<fn(&DirEntry) -> bool>,
     ) {
+        //probably need to make a FSA to handle filter conditions
+
         // store whether we should send the directory itself
         let should_send = config.keep_dirs
             && config.matches_path(&dir, config.file_name)
@@ -155,7 +157,7 @@ impl Finder {
             return;
         }
         //match dir.as_iter()  example of how to use the iterator
-        match dir.as_iter() {
+        match dir.read_dir() {
             Ok(entries) => {
                 let mut dirs = Vec::new(); //maybe smallvec here.
 

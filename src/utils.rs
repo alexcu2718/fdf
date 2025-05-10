@@ -108,15 +108,15 @@ pub(crate) unsafe  fn strlen_asm(s: *const i8) -> usize {
         ptr = in(reg) s,
         len = out(reg) len,
         out("rdi") _,  // mark rdi as clobbered
-        out("rcx") _,  // mark rcx as clobbered
-        out("al") _,   // mark al as clobbered
+        out("rcx") _,  // mark ^ as clobbered
+        out("al") _,   // mark ^ as clobbered
     );
     len
 }
 
 #[cfg(not(target_arch = "x86_64"))]
 pub(crate) unsafe fn strlen_asm(s: *const i8) -> usize {
-    // Fallback implementation for non-x86_64 architectures
+    // fallback implementation for non-x86_64 architectures
     let mut len = 0;
     while *s.add(len) != 0 {
         len += 1;

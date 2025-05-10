@@ -2,9 +2,9 @@
 
 use crate::{
     offset_ptr, BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, Result,
-    LOCAL_PATH_MAX,
+    LOCAL_PATH_MAX,strlen_asm
 };
-use libc::{closedir, opendir, readdir64, strlen, DIR};
+use libc::{closedir, opendir, readdir64, DIR};
 
 #[derive(Debug)]
 pub struct DirIter {
@@ -14,6 +14,7 @@ pub struct DirIter {
     depth: u8,
     error: Option<Error>,
 }
+
 
 impl DirIter {
     #[inline]
@@ -86,7 +87,7 @@ impl Iterator for DirIter {
                 }
             }
 
-            let name_len = unsafe { strlen(name_file) };
+            let name_len = unsafe { strlen_asm(name_file) };
 
             let name_bytes: &[u8] =
                 unsafe { std::slice::from_raw_parts(name_file.cast(), name_len) };

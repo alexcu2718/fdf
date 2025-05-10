@@ -91,3 +91,35 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
         .ok_or(DirEntryError::TimeError)
 }
+
+
+#[cfg(target_arch = "x86_64")]
+pub(crate) unsafe  fn strlen_asm(s: *const i8) -> usize {
+    let len: usize;
+    core::arch::asm!(
+        "mov rdi, {ptr}",
+        "xor rcx, rcx",
+        "not rcx",
+        "xor al, al",
+        "repne scasb",
+        "not rcx",
+        "dec rcx",
+        "mov {len}, rcx",
+        ptr = in(reg) s,
+        len = out(reg) len,
+        out("rdi") _,  // mark rdi as clobbered
+        out("rcx") _,  // mark rcx as clobbered
+        out("al") _,   // mark al as clobbered
+    );
+    len
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+pub(crate) unsafe fn strlen_asm(s: *const i8) -> usize {
+    // Fallback implementation for non-x86_64 architectures
+    let mut len = 0;
+    while *s.add(len) != 0 {
+        len += 1;
+    }
+    len
+}

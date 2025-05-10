@@ -35,6 +35,8 @@ pub use crate::{
 };
 use crate::{DirIter, ToStat};
 
+use crate::strlen_asm;
+
 //this is a 4k buffer, which is the maximum size of a directory entry on most filesystems
 //might change this, who knows?
 
@@ -563,12 +565,19 @@ impl DirEntry {
                             }
                         }
 
-                        let name_len = unsafe { strlen(name_ptr.cast()) };
+                        let name_len = unsafe { strlen_asm(name_ptr.cast()) };
 
                         debug_assert!(unsafe {
-                            libc::strlen(name_ptr.cast())
+                            strlen_asm(name_ptr.cast())
                                 == libc::strnlen(name_ptr.cast(), LOCAL_PATH_MAX)
                         });
+
+
+                             debug_assert!(unsafe {
+                            libc::strlen(name_ptr.cast()) 
+                                == libc::strnlen(name_ptr.cast(), LOCAL_PATH_MAX)
+                        });
+
 
                         let name_bytes = unsafe { std::slice::from_raw_parts(name_ptr, name_len) };
 

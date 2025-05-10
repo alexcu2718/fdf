@@ -32,6 +32,8 @@ pub use traits_and_conversions::{BytesToCstrPointer, PathToBytes, ToOsStr, ToSta
 mod utils;
 pub use utils::{get_baselen, process_glob_regex, resolve_directory, unix_time_to_system_time};
 
+pub(crate) use utils::strlen_asm;
+
 mod glob;
 pub use glob::glob_to_regex;
 mod config;

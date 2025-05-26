@@ -117,8 +117,12 @@ where
     let mut writer = BufWriter::new(std_out.lock());
 
     let limit_opt: usize = limit.unwrap_or(usize::MAX);
+
+
+    let check_std_colours=std::env::var("FDF_NO_COLOR").is_ok_and(|x|x.eq_ignore_ascii_case("TRUE"));
+
     //TODO! fix broken pipe errors.
-    if use_colors {
+    if use_colors && !check_std_colours {
         for path in paths.take(limit_opt) {
             writer.write_all(extension_colour(&path))?;
             writer.write_all(path.as_bytes())?;

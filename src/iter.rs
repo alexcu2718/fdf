@@ -1,8 +1,8 @@
 #![allow(clippy::cast_possible_wrap)]
 
 use crate::{
-    offset_ptr, BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, Result,
-    LOCAL_PATH_MAX,strlen_asm
+    offset_ptr, strlen_asm, BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, Result,
+    LOCAL_PATH_MAX,
 };
 use libc::{closedir, opendir, readdir64, DIR};
 
@@ -10,11 +10,10 @@ use libc::{closedir, opendir, readdir64, DIR};
 pub struct DirIter {
     dir: *mut DIR,
     buffer: [u8; LOCAL_PATH_MAX],
-    base_len: usize,
+    base_len: u16,
     depth: u8,
     error: Option<Error>,
 }
-
 
 impl DirIter {
     #[inline]
@@ -47,7 +46,7 @@ impl DirIter {
         Ok(Self {
             dir,
             buffer,
-            base_len,
+            base_len: base_len as _,
             depth: dir_path.depth(),
             error: None,
         })
@@ -94,10 +93,10 @@ impl Iterator for DirIter {
             //THIS CANNOT BE A CONST POINTER CAST, IT WILL BREAK DUE TO SOME SHIT THAT TOOK A WHILE TO UNDERSTAND.
 
             // calculate totak buffer capacity
-            let total_path_len = self.base_len + name_len;
+            let total_path_len = self.base_len as usize + name_len;
 
             // copy filename into buffer
-            self.buffer[self.base_len..total_path_len].copy_from_slice(name_bytes);
+            self.buffer[(self.base_len as usize)..total_path_len].copy_from_slice(name_bytes);
 
             // get valid path slice
             let full_path = &self.buffer[..total_path_len];
@@ -118,7 +117,7 @@ impl Iterator for DirIter {
                 file_type,
                 inode: unsafe { *offset_ptr!(entry, d_ino) },
                 depth: self.depth + 1,
-                base_len: self.base_len as u8,
+                base_len: self.base_len as _,
             });
         }
     }

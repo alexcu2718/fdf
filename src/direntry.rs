@@ -51,17 +51,17 @@ pub struct DirEntry {
     pub(crate) file_type: FileType, //1 byte
     pub(crate) inode: u64, //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 65535 directories deep, it's also 1 bytes so keeps struct below 24bytes.
-    pub(crate) base_len: u8, //1 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
-                             //total 21 bytes
-                             //3 bytes padding, possible uses? not sure.
+    pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
+                              //total 22 bytes
+                              //2 bytes padding, possible uses? not sure.
 
-                             //maybe i can add is is_hidden attribute, this is 'free' and can be used to check if the file is hidden.
-                             //this is a 1 byte attribute, so it keeps the struct below 24 bytes (22 bytes with that)
-                             //other ideas are yet to be made
+                              //maybe i can add is is_hidden attribute, this is 'free' and can be used to check if the file is hidden.
+                              //this is a 1 byte attribute, so it keeps the struct below 24 bytes (22 bytes with that)
+                              //other ideas are yet to be made
 
-                             //possible ideas is storing the dirents value, as a direct struct, with handy functions to get the details
-                             //except for the name, the filename is easy to grab from the pointer but it's then resolving to form
-                             //a full path, the preceeding path is not stored, maybe i can store it in a buffer
+                              //possible ideas is storing the dirents value, as a direct struct, with handy functions to get the details
+                              //except for the name, the filename is easy to grab from the pointer but it's then resolving to form
+                              //a full path, the preceeding path is not stored, maybe i can store it in a buffer
 }
 
 impl fmt::Display for DirEntry {
@@ -248,7 +248,7 @@ impl DirEntry {
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
-            base_len: (bytes.len() - self.file_name().len()) as u8,
+            base_len: (bytes.len() - self.file_name().len()) as _,
         }; //we need the length up to the filename INCLUDING
            //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
            //so we subtract the filename length from the total length, probably could've been done more elegantly.
@@ -378,7 +378,7 @@ impl DirEntry {
     #[inline]
     #[must_use]
     ///returns the length of the base path (eg /home/user/ is 6 '/home/')
-    pub const fn base_len(&self) -> u8 {
+    pub const fn base_len(&self) -> u16 {
         self.base_len
     }
 
@@ -572,12 +572,10 @@ impl DirEntry {
                                 == libc::strnlen(name_ptr.cast(), LOCAL_PATH_MAX)
                         });
 
-
-                             debug_assert!(unsafe {
-                            libc::strlen(name_ptr.cast()) 
+                        debug_assert!(unsafe {
+                            libc::strlen(name_ptr.cast())
                                 == libc::strnlen(name_ptr.cast(), LOCAL_PATH_MAX)
                         });
-
 
                         let name_bytes = unsafe { std::slice::from_raw_parts(name_ptr, name_len) };
 
@@ -587,16 +585,17 @@ impl DirEntry {
 
                         let total_len = path_len + name_len as usize;
                         // build full path in buffer
+                        //  eprintln!("{}",name_bytes.to_os_str().to_string_lossy());
                         path_buffer[path_len..total_len].copy_from_slice(name_bytes);
                         let full_path = &path_buffer[..total_len];
-
+                        //      eprintln!("{}",full_path.to_os_str().to_string_lossy());
                         // Create path and push entry
                         entries.push(Self {
                             path: full_path.into(), // convert to our type
                             file_type: FileType::from_dtype_fallback(d.d_type, full_path),
                             inode: d.d_ino,
                             depth: self.depth + 1,
-                            base_len: path_len as u8,
+                            base_len: path_len as _,
                         });
 
                         debug_assert_eq!(std::mem::size_of::<dirent64>(), std::mem::size_of_val(d));

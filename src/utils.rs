@@ -66,10 +66,10 @@ pub fn resolve_directory(
 #[inline]
 #[must_use]
 #[allow(clippy::cast_possible_truncation)]
-pub fn get_baselen(path: &[u8]) -> u8 {
+pub fn get_baselen(path: &[u8]) -> u16 {
     path.rsplitn(2, |&c| c == b'/')
         .nth(1)
-        .map_or(1, |parent| parent.len() + 1) as u8 // +1 to include trailing slash etc
+        .map_or(1, |parent| parent.len() + 1) as _ // +1 to include trailing slash etc
 }
 
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`

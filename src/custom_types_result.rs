@@ -33,7 +33,6 @@ impl OsBytes {
 
 impl<T: AsRef<[u8]>> From<T> for OsBytes {
     #[inline]
-    #[must_use]
     fn from(data: T) -> Self {
         Self::new(data.as_ref())
     }

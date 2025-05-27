@@ -29,32 +29,8 @@
 //! - `linux-[0-9]*-{generic,aws}` would match `linux-5.2.27b1-generic`
 //!   and `linux-4.0.12-aws`, but not `linux-unsigned-5.2.27b1-generic`
 //!
-//! Note that the [`glob_to_regex`] function returns a regular expression
-//! that will only verify whether a specified text string matches
-//! the pattern; it does not in any way attempt to look up any paths on
-//! the filesystem.
-//!
-//! ```rust
-//! # use std::error::Error;
-//!
-//! # fn main() -> Result<(), Box<dyn Error>> {
-//! let re_name = fdf::glob_to_regex("linux-[0-9]*-{generic,aws}")?;
-//! for name in &[
-//!     "linux-5.2.27b1-generic",
-//!     "linux-4.0.12-aws",
-//!     "linux-unsigned-5.2.27b1-generic"
-//! ] {
-//!     let okay = re_name.is_match(name);
-//!     println!(
-//!         "{}: {}",
-//!         name,
-//!         match okay { true => "yes", false => "no" },
-//!     );
-//!     assert!(okay == !name.contains("unsigned"));
-//! }
-//! # Ok(())
-//! # }
-//! ```
+
+
 
 /*
  * Copyright (c) 2021, 2022  Peter Pentchev <roam@ringlet.net>
@@ -86,7 +62,6 @@ use std::fmt;
 use std::mem;
 use std::vec::IntoIter as VecIntoIter;
 
-use regex::Regex;
 
 /// Error type for glob pattern operations
 #[derive(Debug)]
@@ -678,7 +653,7 @@ where
 /// Most of the [`Error`] values, mostly syntax errors in
 /// the specified glob pattern.
 #[allow(clippy::missing_inline_in_public_items)]
-pub fn glob_to_regex(pattern: &str) -> Result<Regex, Error> {
+pub fn glob_to_regex(pattern: &str) -> Result<String, Error> {
     let parser = GlobIterator {
         pattern: pattern.chars(),
         state: State::Start,
@@ -689,6 +664,6 @@ pub fn glob_to_regex(pattern: &str) -> Result<Regex, Error> {
         result.push(item?);
     }
 
-    let re_pattern = result.join("");
-    Regex::new(&re_pattern).map_err(|err| Error::InvalidRegex(re_pattern, err.to_string()))
+    Ok(result.join(""))
+ 
 }

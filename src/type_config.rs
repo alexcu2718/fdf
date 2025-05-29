@@ -5,8 +5,9 @@ static TYPE_FILTER_TYPES: OnceLock<Vec<String>> = OnceLock::new();
 
 //cbf to care about pass by value so im ignoring clippy.
 //negligible impact.
-#[allow(clippy::needless_pass_by_value)]
-pub fn build_type_filter(types: Vec<String>) -> fn(&DirEntry) -> bool {
+//#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::expect_used)]
+pub fn build_type_filter(types: &[String]) -> fn(&DirEntry) -> bool {
     TYPE_FILTER_TYPES.get_or_init(|| types.iter().map(|t| t.to_lowercase()).collect());
 
     // return a function pointer
@@ -14,7 +15,7 @@ pub fn build_type_filter(types: Vec<String>) -> fn(&DirEntry) -> bool {
 }
 
 fn filter_by_type(entry: &DirEntry) -> bool {
-    let types = TYPE_FILTER_TYPES.get().expect("Types not initialised");
+    let types = unsafe{TYPE_FILTER_TYPES.get().unwrap_unchecked()};
 
     for type_char in types.iter().flat_map(|s| s.chars()) {
         match type_char {

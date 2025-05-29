@@ -1,129 +1,89 @@
 #![allow(clippy::cast_possible_wrap)]
-
+#[allow(unused_imports)]
 use crate::{
-    offset_ptr, BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, Result,
-    LOCAL_PATH_MAX,strlen_asm
+    BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType,PathBuffer,copy_name_to_buffer,
+    Result, offset_ptr, strlen_asm,cstr,skip_dot_entries,init_path_buffer_readdir
 };
-use libc::{closedir, opendir, readdir64, DIR};
+use libc::{DIR, closedir, opendir, readdir64};
 
 #[derive(Debug)]
 pub struct DirIter {
     dir: *mut DIR,
-    buffer: [u8; LOCAL_PATH_MAX],
-    base_len: usize,
+    buffer: PathBuffer,
+    base_len: u16,
     depth: u8,
     error: Option<Error>,
 }
 
 
+
 impl DirIter {
     #[inline]
+    pub const fn as_mut_ptr(&mut self) -> *mut u8 {
+        // This function is used to get a mutable pointer to the internal buffer.
+        // It is useful for operations that require direct access to the buffer.
+        self.buffer.as_mut_ptr()
+    }
+
+    #[inline]
     #[allow(clippy::cast_lossless)]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn new(dir_path: &DirEntry) -> Result<Self> {
-        let dirp = dir_path.as_bytes(); //DirEntry::new(".")
+        let dirp = dir_path.as_bytes();
         let dir = dirp.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
+        //let dir=unsafe{opendir(cstr!(dirp))};
+        //alternatively this also works if you dont like closures :)
 
         if dir.is_null() {
             return Err(std::io::Error::last_os_error().into());
-        }
+        }      
+        let mut buffer = PathBuffer::new();
+        let (needs_slash, base_len);
+        init_path_buffer_readdir!(dir_path, buffer, base_len, needs_slash); //0 cost macro to construct the buffer in the way we want.
 
-        let dirp_len = dirp.len();
-
-        let needs_slash: bool = dirp != b"/";
-        let base_len = dirp_len + needs_slash as usize; //casting bool to usize is trivial
-
-        // initialise buffer with 0s; size is PATH_MAX/8, should be below 256 but on my own system theres some
-        //thats 270ish, even though i cant make one, ill research another day, too lazy.
-        //my terminal actually crashes when working with these files names, PUNISH THEM
-        let mut buffer = [0u8; LOCAL_PATH_MAX];
-        // copy directory path into buffer
-        buffer[..dirp_len].copy_from_slice(dirp);
-
-        // add trailing slash if needed
-        if needs_slash {
-            buffer[dirp_len] = b'/';
-        }
 
         Ok(Self {
             dir,
             buffer,
-            base_len,
+            base_len:base_len as _,
             depth: dir_path.depth(),
             error: None,
         })
     }
+ 
 }
 
+
+
+
 impl Iterator for DirIter {
-    type Item = DirEntry;
+    type Item = DirEntry;    
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
-            //dbg!(&self.error);
             return None;
         }
 
         loop {
             let entry = unsafe { readdir64(self.dir) };
             if entry.is_null() {
-                // end of directory stream or error occurred
-
                 return None;
             }
-
-            let name_file: *const i8 = unsafe { offset_ptr!(entry, d_name).cast() };
-
-            //skip . and .., these will cause recursion ofc but also theyre expressed as i8 arrays
-            //that are either [46, 46, 0] or [46, 0, 0] therefore we can just check the first 3 bytes
-            //thus avoiding strlen on all these.
-            unsafe {
-                if *name_file.add(0) == 46 {
-                    //test the easiest condition first
-                    //short circuit with this one as its easier
-                    if *name_file.add(1) == 0 || (*name_file.add(1) == 46 && *name_file.add(2) == 0)
-                    {
-                        continue;
-                    }
-                }
-            }
-
-            let name_len = unsafe { strlen_asm(name_file) };
-
-            let name_bytes: &[u8] =
-                unsafe { std::slice::from_raw_parts(name_file.cast(), name_len) };
-            //THIS CANNOT BE A CONST POINTER CAST, IT WILL BREAK DUE TO SOME SHIT THAT TOOK A WHILE TO UNDERSTAND.
-
-            // calculate totak buffer capacity
-            let total_path_len = self.base_len + name_len;
-
-            // copy filename into buffer
-            self.buffer[self.base_len..total_path_len].copy_from_slice(name_bytes);
-
-            // get valid path slice
-            let full_path = &self.buffer[..total_path_len];
-
-            // get file type
-            let dir_info = unsafe { *offset_ptr!(entry, d_type).cast() };
-
-            let file_type = FileType::from_dtype_fallback(dir_info, full_path);
-            //let c_str_ptr=full_path.as_cstr_ptr(|x| x);
-            //unsafe{eprintln!("{:#?}",std::ffi::CStr::from_ptr(c_str_ptr).to_string_lossy())};
-
-            debug_assert!(file_type == FileType::from_dtype(dir_info));
-
-            #[allow(clippy::cast_possible_truncation)] // this numbers involved never exceed u8
-            // return the directory entry
+            let name_file: *const u8 = unsafe { offset_ptr!(entry, d_name).cast() };
+            let dir_info: u8 = unsafe { *offset_ptr!(entry, d_type).cast() };
+            skip_dot_entries!(dir_info, name_file);
+            let total_path_len = copy_name_to_buffer!(self, name_file,  self.base_len as usize);
+            let full_path = unsafe { self.buffer.get_unchecked_mut(..total_path_len) };
             return Some(DirEntry {
                 path: full_path.into(),
-                file_type,
+                file_type:FileType::from_dtype_fallback(dir_info, full_path),
                 inode: unsafe { *offset_ptr!(entry, d_ino) },
                 depth: self.depth + 1,
-                base_len: self.base_len as u8,
+                base_len: self.base_len,
             });
         }
     }
 }
-
 impl Drop for DirIter {
     fn drop(&mut self) {
         if !self.dir.is_null() {
@@ -131,3 +91,5 @@ impl Drop for DirIter {
         }
     }
 }
+
+

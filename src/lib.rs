@@ -1,10 +1,62 @@
 //library imports
+#![allow(clippy::single_call_fn)]
+#![allow(clippy::let_underscore_must_use)]
+#![allow(clippy::let_underscore_untyped)]
+#![allow(clippy::macro_metavars_in_unsafe)]
+#![allow(clippy::shadow_unrelated)]
+#![allow(clippy::print_stderr)]
+#![allow(clippy::implicit_return)]
+#![allow(clippy::as_underscore)]
+#![allow(clippy::print_stderr)]
+#![allow(clippy::min_ident_chars)]
+#![allow(clippy::implicit_return)]
+#![allow(clippy::missing_docs_in_private_items)]
+#![allow(clippy::undocumented_unsafe_blocks)]
+#![allow(clippy::blanket_clippy_restriction_lints)]
+#![allow(clippy::absolute_paths)]
+#![allow(clippy::impl_trait_in_params)]
+#![allow(clippy::arbitrary_source_item_ordering)]
+#![allow(clippy::std_instead_of_core)]
+#![allow(clippy::filetype_is_file)]
+#![allow(clippy::missing_assert_message)]
+#![allow(clippy::unused_trait_names)]
+#![allow(clippy::exhaustive_enums)]
+#![allow(clippy::exhaustive_structs)]
+#![allow(clippy::missing_inline_in_public_items)]
+#![allow(clippy::std_instead_of_alloc)]
+#![allow(clippy::unseparated_literal_suffix)]
+#![allow(clippy::pub_use)]
+#![allow(clippy::field_scoped_visibility_modifiers)]
+#![allow(clippy::pub_with_shorthand)]
+#![allow(clippy::redundant_pub_crate)]
+#![allow(clippy::allow_attributes)]
+#![allow(clippy::allow_attributes_without_reason)]
+#![allow(clippy::use_debug)]
+#![allow(clippy::map_err_ignore)]
+#![allow(clippy::exit)]
+#![allow(clippy::cast_ptr_alignment)]
+#![allow(clippy::multiple_unsafe_ops_per_block)]
+#![allow(clippy::pattern_type_mismatch)]
+#![allow(clippy::arithmetic_side_effects)]
+#![allow(clippy::as_conversions)]
+#![allow(clippy::question_mark_used)]
+#![allow(clippy::semicolon_if_nothing_returned)]
+#![allow(clippy::indexing_slicing)]
+#![allow(clippy::missing_trait_methods)]
+#![allow(clippy::default_numeric_fallback)]
+#![allow(clippy::wildcard_enum_match_arm)]
+#![allow(clippy::semicolon_inside_block)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::semicolon_outside_block)]
+#![allow(clippy::return_and_then)]
+#![allow(clippy::cast_possible_wrap)]
+//#![allow(clippy::non_ex)]
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
-    sync::mpsc::{channel as unbounded, Receiver, Sender},
     sync::Arc,
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
+    sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 
 //end library imports
@@ -13,8 +65,11 @@ use std::{
 mod iter;
 pub(crate) use iter::DirIter;
 mod test;
-pub use direntry::LOCAL_PATH_MAX;
+
 mod metadata;
+
+mod buffer;
+pub(crate) use buffer::AlignedBuffer;
 
 mod dirent_macro;
 mod direntry;
@@ -24,16 +79,15 @@ mod error;
 pub use error::DirEntryError;
 
 mod custom_types_result;
-pub use custom_types_result::{OsBytes, Result};
+pub use custom_types_result::{OsBytes, Result,LOCAL_PATH_MAX,BUFFER_SIZE,PathBuffer, SyscallBuffer,AsU8};
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{BytesToCstrPointer, PathToBytes, ToOsStr, ToStat};
+pub use traits_and_conversions::{AsOsStr, BytesToCstrPointer, PathAsBytes, ToStat};
 
 mod utils;
-pub use utils::{get_baselen, process_glob_regex, resolve_directory, unix_time_to_system_time};
 
 pub(crate) use utils::strlen_asm;
-
+pub use utils::{ unix_time_to_system_time};
 mod glob;
 pub use glob::glob_to_regex;
 mod config;
@@ -57,6 +111,7 @@ impl Finder {
     #[must_use]
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::too_many_arguments)]
+    #[inline]
     //DUE TO INTENDED USAGE, THIS FUNCTION IS NOT TOO MANY ARGUMENTS.
     /// Create a new Finder instance.
     pub fn new(
@@ -112,6 +167,7 @@ impl Finder {
 
         let construct_dir = DirEntry::new(&self.root);
 
+
         if !construct_dir.as_ref().is_ok_and(DirEntry::is_dir) {
             return Err(DirEntryError::InvalidPath);
         }
@@ -134,78 +190,61 @@ impl Finder {
         Ok(receiver)
     }
 
+
     #[inline]
-    /// Traverse the directory and send the `DirEntry` to the Receiver.
     fn process_directory(
         dir: DirEntry,
         sender: &Sender<DirEntry>,
         config: &SearchConfig,
         filter: Option<fn(&DirEntry) -> bool>,
     ) {
-        //probably need to make a FSA to handle filter conditions
-
-        // store whether we should send the directory itself
         let should_send = config.keep_dirs
             && config.matches_path(&dir, config.file_name)
             && filter.is_none_or(|f| f(&dir))
-            && config.extension_match.as_ref().is_none() //no directories should match extensions (mostly? not sure.)
-            && dir.depth() !=0; //dont send the root directory
+            && config.extension_match.as_ref().is_none()
+            && dir.depth() != 0;
 
-        //check if we should stop searching
-        if config.depth.is_some_and(|d| dir.depth() >= d) {
-            if should_send {
-                let _ = sender.send(dir);
-            }
-            return;
+        if should_send && config.depth.is_some_and(|d| dir.depth() >= d) {
+            let _ = sender.send(dir);
+
+            return; // stop processing this directory if depth limit is reached
         }
-        //match dir.as_iter()  example of how to use the iterator
-        match dir.read_dir() {
+
+        //let test_all_conditions=filter.is_none() && config.extension_match.is_none() ;
+
+        match dir.as_iter() {
             Ok(entries) => {
-                let mut dirs = Vec::new(); //maybe smallvec here.
+                // Store only directories for parallel recursive call
+                let mut dirs = Vec::new();
 
-                for entry in entries {
-                    if config.hide_hidden && entry.is_hidden() {
-                        continue;
-                    }
-
+                for entry in entries .filter(|e| !config.hide_hidden || !e.is_hidden())
+                {
+                    // NOTA || NOTB ===  NOT
                     if entry.is_dir() {
-                        // always include directories for traversal
-                        dirs.push(entry);
-                    } else if filter.is_none_or(|f| f(&entry))
-                        && config.matches_path(&entry, config.file_name)
-                        && config
-                            .extension_match
-                            .as_ref()
-                            .is_none_or(|ext| entry.matches_extension(ext))
-                    {
-                        // only filter non-directory entries
-                        let _ = sender.send(entry);
-                        //the only error that should happen here is if the receiver is dropped, which is fine.
-                        //this only happens when we cut the receiver due to limiting entries,
+                        dirs.push(entry); // save dir for parallel traversal
+                    } else {
+                        // apply filters and send files immediately
+                        if filter.is_none_or(|f| f(&entry))
+                            && config.matches_path(&entry, config.file_name)
+                            && config
+                                .extension_match
+                                .as_ref()
+                                .is_none_or(|ext| entry.matches_extension(ext))
+                        {
+                            let _ = sender.send(entry);
+                        }
                     }
                 }
 
+                // Process directories in parallel
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(dir, sender, config, filter);
                 });
             }
-
-            Err(DirEntryError::AccessDenied(_) | DirEntryError::InvalidPath) => {
-                // ignore permission denied and invalid path errors
-                //these will happen if the directory is not accessible(eg /etc/)
-                //or the path changes midway throughout processing, like /proc/
-                //this is a common error, so we can ignore it.
-            }
-            //enoent= no such file or directory
-            //eacces=permission denied
-            //enotdir=not a directory
-            //eloop=too many symbolic links
-            Err(e) => {
-                eprintln!("Unexpected error: {e}"); //i need to polish this up a bit fuck off.
-            }
+            Err(DirEntryError::AccessDenied(_) | DirEntryError::InvalidPath) => {}
+            Err(e) => eprintln!("Unexpected error: {e}"),
         }
-        //finally send it
-        //this needs to be done at the end because it consumes the dir.
+
         if should_send {
             let _ = sender.send(dir);
         }

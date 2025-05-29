@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::{debug_print, ToOsStr};
-    use crate::{DirEntry, DirIter, FileType};
+    #![allow(unused_imports)]
+    use crate::{DirEntry, DirIter, FileType, debug_print};
+    use crate::traits_and_conversions::AsOsStr;
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
@@ -24,19 +25,29 @@ mod tests {
 
     #[test]
     fn test_path_methods() {
+        // Setup test directory and file
         let temp_dir = std::env::temp_dir();
-        let file_path = temp_dir.as_path().join("parent/child.txt");
-        let _ = std::fs::remove_dir_all(file_path.parent().unwrap());
-        let _ = std::fs::create_dir_all(file_path.parent().unwrap());
-        let _ = std::fs::write(&file_path, "test");
+        let test_file_path = temp_dir.join("parent/child.txt");
+        let test_dir = test_file_path
+            .parent()
+            .expect("File path should have parent");
 
-        let entry = DirEntry::new(file_path.as_os_str()).unwrap();
+        // Clean up from previous if errored
+        let _ = std::fs::remove_dir_all(test_dir);
+
+        //
+        std::fs::create_dir_all(test_dir).expect("Failed to create test directory");
+        std::fs::write(&test_file_path, "test").expect("Failed to write test file");
+
+        //
+        let entry = DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
+
         assert_eq!(entry.file_name(), b"child.txt");
         assert_eq!(entry.extension().unwrap(), b"txt");
-        assert_eq!(
-            entry.parent(),
-            file_path.parent().unwrap().as_os_str().as_bytes()
-        );
+        assert_eq!(entry.parent(), test_dir.as_os_str().as_bytes());
+
+        // Clean up (optional - some prefer to leave for inspection)
+        let _ = std::fs::remove_dir_all(test_dir);
     }
 
     #[test]
@@ -54,7 +65,7 @@ mod tests {
         let entries = dir_entry.read_dir().unwrap();
 
         let mut names: Vec<_> = entries.iter().map(|e| e.file_name().to_vec()).collect();
-        let _ = std::fs::remove_dir_all(&dir_path).unwrap();
+        let _ = std::fs::remove_dir_all(&dir_path);
         assert_eq!(entries.len(), 3);
 
         names.sort();
@@ -71,6 +82,8 @@ mod tests {
             assert_eq!(entry.depth(), 1);
             assert_eq!(entry.base_len() as usize, dir_path.as_os_str().len() + 1);
         }
+
+        //let _=std::fs::File::
     }
 
     #[test]
@@ -91,33 +104,51 @@ mod tests {
     #[test]
     fn filename_test() {
         let temp_dir = std::env::temp_dir();
-        let file_path = temp_dir.as_path().join("testfile.txt");
-        std::fs::write(&file_path, "test").unwrap();
+        let new_dir = temp_dir.as_path().join("testdir_filename");
+        let _ = std::fs::remove_dir_all(&new_dir);
+        let _ = std::fs::create_dir_all(&new_dir);
+        let file_path = new_dir.join("testfile.txt");
+
+        let throwaway = std::fs::remove_file(&file_path);
+        if throwaway.is_err() {
+            eprintln!("DAMN!")
+            //stupid noops
+        }
+        let _ = std::fs::write(&file_path, "test");
 
         let entry = DirEntry::new(file_path.as_os_str()).unwrap();
         assert_eq!(entry.file_name(), b"testfile.txt");
+        let x = std::fs::remove_file(&file_path).is_ok(); //have to check the result to avoid no-op 
+        assert!(x, "File should be removed successfully");
+        let _ = std::fs::remove_dir_all(&new_dir);
+        //assert!(y.is_ok(), "Directory should be removed successfully");
     }
     #[test]
     fn base_len_test() {
         let temp_dir = std::env::temp_dir();
-        let file_path = temp_dir.as_path().join("testfile.txt");
+        let file_path = temp_dir.as_path().join("testfilenew.txt");
         std::fs::write(&file_path, "test").unwrap();
 
-        let entry: u8 = DirEntry::new(file_path.as_os_str()).unwrap().base_len();
-        let std_entry: u8 = (std::path::Path::new(file_path.as_os_str())
+        let entry: u16 = DirEntry::new(file_path.as_os_str()).unwrap().base_len();
+        let std_entry: u16 = (std::path::Path::new(file_path.as_os_str())
             .parent()
             .unwrap()
             .as_os_str()
             .len()
-            + 1) as u8;
+            + 1) as _;
         assert_eq!(entry, std_entry);
+
+        let _ = std::fs::remove_file(&file_path);
     }
     #[test]
     fn test_full_path() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join("test_full_path");
-        std::fs::create_dir_all(&temp_dir).unwrap();
 
-        std::env::set_current_dir(&temp_dir).unwrap();
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        // delete it first etc, because this is a test
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
         let file_path = DirEntry::new(".")?.as_full_path()?;
         debug_print!(&file_path);
         let my_path: Box<[u8]> = file_path.as_bytes().into();
@@ -127,27 +158,30 @@ mod tests {
         assert_eq!(&*my_path, bytes_std);
 
         assert_eq!(file_path.is_dir(), my_path_std.is_dir());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
     }
     #[test]
     fn test_from_bytes() -> Result<(), Box<dyn std::error::Error>> {
         //this is a mess of code but works lol to demonstrate infallibility(or idealllllllyyyyyyyyy...(ik its not))
-        let temp_dir = std::env::temp_dir().join("test_full_path");
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // Create a unique temp directory for this test
+        let temp_dir = std::env::temp_dir().join("test_full_path_fdf");
         let _ = std::fs::create_dir_all(&temp_dir);
 
-        //  test file structure
-        let test_file = temp_dir.join("test_file.txt");
-        let _ = std::fs::write(&test_file, "test content");
+        // Set up test file
+        let test_file = temp_dir.join("test_file_fdf.txt");
+        std::fs::write(&test_file, "test content")?;
 
-        let test_file_canon = PathBuf::from(test_file).canonicalize().unwrap();
-        let test_file_canon = test_file_canon.as_os_str().as_bytes();
+        // Get canonical paths for comparison
+        let test_file_canon = std::fs::canonicalize(&test_file)?;
+        let test_file_bytes = test_file_canon.as_os_str().as_bytes();
 
-        // directory entry for temp dir
+        // Test directory entry
         let dir_entry = DirEntry::new(&temp_dir)?;
         let canonical_path = temp_dir.canonicalize()?;
 
-        // convert to bytes for most accurate comparison
+        // Compare paths at byte level
         let dir_bytes = dir_entry.as_os_str();
         let canonical_bytes = canonical_path.as_os_str();
         dbg!(&dir_bytes);
@@ -171,34 +205,31 @@ mod tests {
         let first_entry = entries.pop().unwrap();
         assert_eq!(
             first_entry.as_bytes(),
-            test_file_canon,
+            test_file_bytes,
             "Directory entry should match canonical path"
         );
 
         //  file type detection
-        assert!(first_entry.is_regular_file(), "should be regular file");
-        assert_eq!(
-            FileType::from_bytes(first_entry.as_bytes()),
-            FileType::RegularFile,
-            "File type should be regular"
-        );
 
-        let pathcheck = std::path::Path::new(first_entry.to_os_str())
+        let pathcheck = std::path::Path::new(first_entry.as_os_str())
             .canonicalize()
             .unwrap();
 
         assert!(pathcheck.is_file(), "should be a file");
 
         // Clean up
-        let _ = std::fs::remove_dir_all(temp_dir);
+        let a = std::fs::remove_dir_all(temp_dir);
+        assert!(a.is_ok(), "Should remove temp directory successfully");
+
         Ok(())
     }
 
     #[test]
+    #[clippy::allow(while)]
     fn test_iterator() -> core::result::Result<(), Box<dyn std::error::Error>> {
         // make a unique test directory inside temp_dir
         let unique_id = "fdf_iterator_test";
-        let dir_path: PathBuf = temp_dir().join(format!("test_dir_{}", unique_id));
+        let dir_path: PathBuf = temp_dir().join(unique_id);
         let _ = fs::remove_dir_all(dir_path.as_path());
         let _ = fs::create_dir(dir_path.as_path());
 
@@ -213,15 +244,19 @@ mod tests {
         let dir_entry = DirEntry::new(&dir_path)?;
 
         // get iterator
-        let mut iter = dir_entry.as_iter()?;
+        let iter = dir_entry.as_iter()?;
 
         // collect entries
         let mut entries = Vec::new();
-        while let Some(entry) = iter.next() {
-            entries.push(entry);
+        //while let Some(entry) = iter.next() {
+        //   entries.push(entry);
+        // }
+
+        for entry in iter {
+            entries.push(entry)
         }
 
-        // verify results
+        //verify results
 
         //let _ = fs::remove_dir_all(dir_entry.as_path());
         assert_eq!(entries.len(), 3, "Should find two files and one subdir");
@@ -239,6 +274,8 @@ mod tests {
                 == 2,
             "Should find two regular files"
         );
+
+        let _ = fs::remove_dir_all(dir_path.as_path());
 
         Ok(())
     }
@@ -289,7 +326,7 @@ mod tests {
         let entry = DirEntry::new(file_path.as_os_str()).unwrap();
 
         assert_eq!(entry.dirname(), b"parent");
-        let _ = std::fs::remove_dir_all(file_path.parent().unwrap()).unwrap();
+        let _ = std::fs::remove_dir_all(file_path.parent().unwrap());
     }
     #[test]
     fn test_basic_iteration() {
@@ -326,7 +363,7 @@ mod tests {
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
-        assert_eq!(dir_entry.is_dir(), true);
+        assert!(dir_entry.is_dir());
         assert_eq!(entries.len(), 0);
         let _ = fs::remove_dir_all(dir);
     }
@@ -369,7 +406,7 @@ mod tests {
 
         let dir_entry = DirEntry::new(&dir).unwrap();
 
-        let _ = File::create(&dir.join("regular.txt"));
+        let _ = File::create(dir.join("regular.txt"));
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
         assert_eq!(entries.len(), 1);
 

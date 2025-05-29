@@ -1,3 +1,67 @@
+#![allow(clippy::all)]
+#![allow(clippy::expect_used)]
+
+#![allow(clippy::all)]
+#![allow(clippy::absolute_paths)]
+#![allow(clippy::print_stderr)]
+#![allow(clippy::implicit_return)]
+//#![allow(clippy::print_stdin)]
+#![allow(clippy::single_call_fn)]
+#![allow(clippy::let_underscore_must_use)]
+#![allow(clippy::let_underscore_untyped)]
+#![allow(clippy::macro_metavars_in_unsafe)]
+#![allow(clippy::shadow_unrelated)]
+#![allow(clippy::print_stderr)]
+#![allow(clippy::implicit_return)]
+#![allow(clippy::as_underscore)]
+#![allow(clippy::print_stderr)]
+#![allow(clippy::min_ident_chars)]
+#![allow(clippy::implicit_return)]
+#![allow(clippy::missing_docs_in_private_items)]
+#![allow(clippy::undocumented_unsafe_blocks)]
+#![allow(clippy::blanket_clippy_restriction_lints)]
+#![allow(clippy::absolute_paths)]
+#![allow(clippy::impl_trait_in_params)]
+#![allow(clippy::arbitrary_source_item_ordering)]
+#![allow(clippy::std_instead_of_core)]
+#![allow(clippy::filetype_is_file)]
+#![allow(clippy::missing_assert_message)]
+#![allow(clippy::unused_trait_names)]
+#![allow(clippy::exhaustive_enums)]
+#![allow(clippy::exhaustive_structs)]
+#![allow(clippy::missing_inline_in_public_items)]
+#![allow(clippy::std_instead_of_alloc)]
+#![allow(clippy::unseparated_literal_suffix)]
+#![allow(clippy::pub_use)]
+#![allow(clippy::field_scoped_visibility_modifiers)]
+#![allow(clippy::pub_with_shorthand)]
+#![allow(clippy::redundant_pub_crate)]
+#![allow(clippy::allow_attributes)]
+#![allow(clippy::allow_attributes_without_reason)]
+#![allow(clippy::use_debug)]
+#![allow(clippy::map_err_ignore)]
+#![allow(clippy::exit)]
+#![allow(clippy::cast_ptr_alignment)]
+#![allow(clippy::multiple_unsafe_ops_per_block)]
+#![allow(clippy::pattern_type_mismatch)]
+#![allow(clippy::arithmetic_side_effects)]
+#![allow(clippy::as_conversions)]
+#![allow(clippy::question_mark_used)]
+#![allow(clippy::semicolon_if_nothing_returned)]
+#![allow(clippy::indexing_slicing)]
+#![allow(clippy::missing_trait_methods)]
+#![allow(clippy::default_numeric_fallback)]
+#![allow(clippy::wildcard_enum_match_arm)]
+#![allow(clippy::semicolon_inside_block)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::semicolon_outside_block)]
+#![allow(clippy::return_and_then)]
+#![allow(clippy::cast_possible_wrap)]
+
+
+
+#![allow(clippy::error_impl_error)]
+//#![allow(warnings)]
 //!THIS IS SHAMELESSLY COPY PASTED, I ADMIT THE FULL LICENCE HERE, I EDITED IT TO REMOVE THE CRATES I DIDNT WANT(NO DEPENDENCY EXCEPT REGEX).
 //! THIS IS COPY PASTED+EDITED ~10%
 //! IM BEING EXPLICITLY CLEAR ABOUT THIS.
@@ -20,41 +84,6 @@
 //! Note that the `*` and `?` wildcard patterns, as well as the character
 //! classes, will never match a slash.
 //!
-//! Examples:
-//! - `abc.txt` would only match `abc.txt`
-//! - `foo/test?.txt` would match e.g. `foo/test1.txt` or `foo/test".txt`,
-//!   but not `foo/test/.txt`
-//! - `/etc/c[--9].conf` would match e.g. `/etc/c-.conf`, `/etc/c..conf`,
-//!   or `/etc/7.conf`, but not `/etc/c/.conf`
-//! - `linux-[0-9]*-{generic,aws}` would match `linux-5.2.27b1-generic`
-//!   and `linux-4.0.12-aws`, but not `linux-unsigned-5.2.27b1-generic`
-//!
-//! Note that the [`glob_to_regex`] function returns a regular expression
-//! that will only verify whether a specified text string matches
-//! the pattern; it does not in any way attempt to look up any paths on
-//! the filesystem.
-//!
-//! ```rust
-//! # use std::error::Error;
-//!
-//! # fn main() -> Result<(), Box<dyn Error>> {
-//! let re_name = fdf::glob_to_regex("linux-[0-9]*-{generic,aws}")?;
-//! for name in &[
-//!     "linux-5.2.27b1-generic",
-//!     "linux-4.0.12-aws",
-//!     "linux-unsigned-5.2.27b1-generic"
-//! ] {
-//!     let okay = re_name.is_match(name);
-//!     println!(
-//!         "{}: {}",
-//!         name,
-//!         match okay { true => "yes", false => "no" },
-//!     );
-//!     assert!(okay == !name.contains("unsigned"));
-//! }
-//! # Ok(())
-//! # }
-//! ```
 
 /*
  * Copyright (c) 2021, 2022  Peter Pentchev <roam@ringlet.net>
@@ -86,7 +115,7 @@ use std::fmt;
 use std::mem;
 use std::vec::IntoIter as VecIntoIter;
 
-use regex::Regex;
+//use regex::Regex;
 
 /// Error type for glob pattern operations
 #[derive(Debug)]
@@ -678,7 +707,7 @@ where
 /// Most of the [`Error`] values, mostly syntax errors in
 /// the specified glob pattern.
 #[allow(clippy::missing_inline_in_public_items)]
-pub fn glob_to_regex(pattern: &str) -> Result<Regex, Error> {
+pub fn glob_to_regex(pattern: &str) -> Result<String, Error> {
     let parser = GlobIterator {
         pattern: pattern.chars(),
         state: State::Start,
@@ -689,6 +718,67 @@ pub fn glob_to_regex(pattern: &str) -> Result<Regex, Error> {
         result.push(item?);
     }
 
-    let re_pattern = result.join("");
-    Regex::new(&re_pattern).map_err(|err| Error::InvalidRegex(re_pattern, err.to_string()))
+    Ok(result.join(""))
+}
+
+////////////////EXTRA   for FFI
+
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
+use std::ptr;
+
+#[repr(C)]
+pub struct FFIError {
+    code: i32,
+    message: *mut c_char,
+}
+
+/// FFI-safe version of `glob_to_regex` in C via stdlib yay
+//#[no_mangle]
+#[unsafe(no_mangle)]
+#[allow(clippy::unwrap_used)]
+pub unsafe extern "C" fn glob_to_regex_ffi(
+    pattern: *const c_char,
+    out_regex: *mut *mut c_char,
+    out_error: *mut FFIError,
+) -> i32 {
+    // null check
+    if pattern.is_null() || out_regex.is_null() || out_error.is_null() {
+        return 1;
+    }
+
+    // convert C string to  &str
+    let c_str = unsafe { CStr::from_ptr(pattern) };
+    let pattern_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = CString::new(format!("Invalid UTF-8 in input: {e}")).unwrap();
+            unsafe {
+                (*out_error).code = 2;
+                (*out_error).message = msg.into_raw();
+            }
+            return 2;
+        }
+    };
+
+    // call rust logic
+    match glob_to_regex(pattern_str) {
+        Ok(regex) => {
+            let c_string = CString::new(regex).unwrap();
+            unsafe {
+                *out_regex = c_string.into_raw();
+                (*out_error).code = 0;
+                (*out_error).message = ptr::null_mut();
+            }
+            0 // success
+        }
+        Err(e) => {
+            let msg = CString::new(format!("{e}")).unwrap();
+            unsafe {
+                (*out_error).code = 3;
+                (*out_error).message = msg.into_raw();
+            }
+            3 // error
+        }
+    }
 }

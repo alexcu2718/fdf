@@ -1,40 +1,152 @@
-use std::os::unix::ffi::OsStrExt;
+use slimmer_box::SlimmerBox;
+use crate::DirEntryError;
+use std::sync::Arc;
+use crate::AlignedBuffer;
+use libc::{PATH_MAX,dirent64};
+use std::mem::offset_of;
 
-pub type Result<T> = std::result::Result<T, crate::DirEntryError>;
+use std::ops::Deref;
 
+pub type Result<T> = std::result::Result<T, DirEntryError>;
+
+
+
+
+pub const LOCAL_PATH_MAX: usize = 512; 
+
+
+
+
+pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize;
+//local path max, this is a bit of a guess but should be fine, as long as its >~300
+
+pub type PathBuffer=AlignedBuffer<u8,LOCAL_PATH_MAX>;
+pub type SyscallBuffer = AlignedBuffer<u8,BUFFER_SIZE>;
+
+
+
+
+
+// Define a trait that all storage types must implement
+pub trait BytesStorage: Deref<Target = [u8]>  {
+    fn from_slice(bytes: &[u8]) -> Self;
+}
+
+pub trait AsU8  {
+    fn as_bytes(&self) -> &[u8];
+}
+
+
+impl AsU8 for SlimmerBox<[u8], u16> {
+    fn as_bytes(&self) -> &[u8] {
+        self.as_ref()
+    }
+}
+
+
+impl AsU8 for Arc<[u8]>{
+    fn as_bytes(&self) -> &[u8] {
+        self.as_ref()
+    }
+}
+
+
+impl AsU8 for Vec<u8>{
+    fn as_bytes(&self) -> &[u8] {
+        self.as_ref()
+    }
+}
+
+
+
+
+impl AsU8 for Box<[u8]>{
+    fn as_bytes(&self) -> &[u8] {
+        self.as_ref()
+    }
+}
+
+
+
+// Implement BytesStorage for SlimmerBox
+impl BytesStorage for SlimmerBox<[u8], u16> {
+    fn from_slice(bytes: &[u8]) -> Self {
+        unsafe {Self::new_unchecked(bytes) }
+    }
+}
+
+
+
+
+
+
+// Implement BytesStorage for Arc<[u8]>
+impl BytesStorage for Arc<[u8]> {
+    fn from_slice(bytes: &[u8]) -> Self {
+        Self::from(bytes)
+    }
+}
+
+ // Implement BytesStorage for Vec<[u8]>
+impl BytesStorage for Vec<u8> {
+    fn from_slice(bytes: &[u8]) -> Self {
+        bytes.to_vec()
+    }
+}
+
+
+ // Implement BytesStorage for Box<[u8]>
+impl BytesStorage for Box<[u8]> {
+    fn from_slice(bytes: &[u8]) -> Self {
+        Self::from(bytes)
+    }
+}
+
+// OsBytes generic over the storage type, this allows easy switch to arc for multithreading to avoid race conditions:)
 #[derive(Clone, Debug)]
-pub struct OsBytes {
-    pub(crate) bytes: slimmer_box::SlimmerBox<[u8], u16>,
-} //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
+pub struct OsBytes<S: BytesStorage> {
+    pub(crate) bytes: S,
+}
 
-impl OsBytes {
+impl<S: BytesStorage> OsBytes<S> {
     #[inline]
     #[must_use]
     pub fn new(bytes: &[u8]) -> Self {
-        unsafe {
-            Self {
-                bytes: slimmer_box::SlimmerBox::new_unchecked(bytes),
-            }
+        Self {
+            bytes: S::from_slice(bytes),
         }
     }
+
     #[inline]
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
+        self.bytes.as_ref()
     }
 
     #[inline]
     #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn as_path(&self) -> &std::path::Path {
+        self.as_os_str().as_ref()
+    }
+
+    #[inline]
+    #[must_use]
+    #[allow(clippy::transmute_ptr_to_ptr)]
     pub fn as_os_str(&self) -> &std::ffi::OsStr {
-        std::ffi::OsStr::from_bytes(self.as_bytes())
+        unsafe { std::mem::transmute(self.as_bytes()) }
     }
 }
 
-impl<T: AsRef<[u8]>> From<T> for OsBytes {
+impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
     #[inline]
-    #[must_use]
     fn from(data: T) -> Self {
         Self::new(data.as_ref())
     }
 }
+
+#[allow(dead_code)]
+pub type SlimOsBytes = OsBytes<SlimmerBox<[u8], u16>>;
+#[allow(dead_code)]
+pub type ArcOsBytes = OsBytes<std::sync::Arc<[u8]>>;

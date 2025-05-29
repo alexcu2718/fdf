@@ -1,75 +1,20 @@
 #![allow(dead_code)]
-use crate::{glob_to_regex, DirEntryError, Result};
+use crate::{DirEntryError, Result};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 
-#[must_use]
-pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
-    if !args_glob {
-        return pattern.into();
-    }
 
-    glob_to_regex(pattern).map_or_else(
-        |_| {
-            eprintln!("This can't be processed as a glob pattern");
-            std::process::exit(1)
-        },
-        |good_pattern| good_pattern.as_str().into(),
-    )
-}
-
-#[allow(clippy::must_use_candidate)]
-pub fn resolve_directory(
-    args_cd: bool,
-    args_directory: Option<std::ffi::OsString>,
-    canonicalise: bool,
-) -> std::ffi::OsString {
-    if args_cd {
-        std::env::current_dir().map_or_else(
-            |_| DOT_PATTERN.into(),
-            |path_res| {
-                let path = if canonicalise {
-                    path_res.canonicalize().unwrap_or(path_res)
-                } else {
-                    path_res
-                };
-                path.to_str().map_or_else(|| DOT_PATTERN.into(), Into::into)
-            },
-        )
-    } else {
-        let dir_to_use = args_directory.unwrap_or_else(|| START_PREFIX.into());
-        let path_check = std::path::Path::new(&dir_to_use);
-
-        if !path_check.is_dir() {
-            eprintln!("{dir_to_use:?} is not a directory");
-            std::process::exit(1);
-        }
-
-        if canonicalise {
-            match path_check.canonicalize() {
-                //stupid yank spelling.
-                Ok(canonical_path) => canonical_path.into_os_string(),
-                Err(e) => {
-                    eprintln!("Failed to canonicalise path {path_check:?}: {e}");
-                    std::process::exit(1);
-                }
-            }
-        } else {
-            dir_to_use
-        }
-    }
-}
 
 /// Get the length of the basename of a path (up to and including the last '/')
 #[inline]
 #[must_use]
 #[allow(clippy::cast_possible_truncation)]
-pub fn get_baselen(path: &[u8]) -> u8 {
+pub(crate) fn get_baselen(path: &[u8]) -> u16 {
     path.rsplitn(2, |&c| c == b'/')
         .nth(1)
-        .map_or(1, |parent| parent.len() + 1) as u8 // +1 to include trailing slash etc
+        .map_or(1, |parent| parent.len() + 1) as _ // +1 to include trailing slash etc
 }
 
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
@@ -92,34 +37,36 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
-
 #[cfg(target_arch = "x86_64")]
-pub(crate) unsafe  fn strlen_asm(s: *const i8) -> usize {
-    let len: usize;
-    core::arch::asm!(
+#[allow(clippy::inline_asm_x86_intel_syntax)]
+#[inline]
+pub(crate) unsafe fn strlen_asm<T>(s: *const T) -> usize {
+    unsafe {
+        let len: usize;
+        core::arch::asm!(
         "mov rdi, {ptr}",
-        "xor rcx, rcx",
-        "not rcx",
-        "xor al, al",
+        "xor eax, eax",  // xor is smaller than xor al,al
+        "mov rcx, -1",   // directly set to max instead of xor/not
         "repne scasb",
         "not rcx",
         "dec rcx",
         "mov {len}, rcx",
-        ptr = in(reg) s,
-        len = out(reg) len,
-        out("rdi") _,  // mark rdi as clobbered
-        out("rcx") _,  // mark ^ as clobbered
-        out("al") _,   // mark ^ as clobbered
-    );
-    len
+            ptr = in(reg) s,
+            len = out(reg) len,
+            out("rdi") _,  // mark rdi as clobbered
+            out("rcx") _,  // mark ^ as clobbered
+            out("al") _,   // mark ^ as clobbered
+        );
+
+        len
+    }
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub(crate) unsafe fn strlen_asm(s: *const i8) -> usize {
-    // fallback implementation for non-x86_64 architectures
-    let mut len = 0;
-    while *s.add(len) != 0 {
-        len += 1;
-    }
-    len
+#[inline]
+pub(crate) unsafe fn strlen_asm<T>(s: *const T) -> usize
+where
+    *const T: Into<*const u8>,
+{
+    libc::strlen(s.cast::<i8>())
 }

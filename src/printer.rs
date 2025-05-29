@@ -117,8 +117,12 @@ where
     let mut writer = BufWriter::new(std_out.lock());
 
     let limit_opt: usize = limit.unwrap_or(usize::MAX);
+
+
+    let check_std_colours=std::env::var("FDF_NO_COLOR").is_ok_and(|x|x.eq_ignore_ascii_case("TRUE"));
+
     //TODO! fix broken pipe errors.
-    if use_colors {
+    if use_colors && !check_std_colours {
         for path in paths.take(limit_opt) {
             writer.write_all(extension_colour(&path))?;
             writer.write_all(path.as_bytes())?;
@@ -159,7 +163,6 @@ static SYMLINK_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
 static DIR_COLOR: OnceLock<Box<[u8]>> = OnceLock::new();
 
 /// parse the `LS_COLORS` environment variable and get color for a specific
-#[cold]
 fn parse_ls_colors(key: &str, default_color: &[u8]) -> Box<[u8]> {
     if let Ok(ls_colors) = std::env::var("LS_COLORS") {
         //  parse the LS_COLORS string into key-value pairs
@@ -167,11 +170,8 @@ fn parse_ls_colors(key: &str, default_color: &[u8]) -> Box<[u8]> {
             .split(':')
             .filter_map(|entry| {
                 let parts: Vec<&str> = entry.splitn(2, '=').collect();
-                if parts.len() == 2 {
-                    Some((parts[0], parts[1]))
-                } else {
-                    None
-                }
+                (parts.len() == 2).then(|| (parts[0], parts[1]))
+                
             })
             .collect();
 

@@ -1,6 +1,9 @@
+#![allow(clippy::all)]
+#![allow(warnings)]
 use std::thread;
-const MIN_THREADS: usize = 1;
+
 fn main() {
+    const MIN_THREADS: usize = 1;
     let num_threads =
         thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
 

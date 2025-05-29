@@ -1,64 +1,107 @@
+
+
+
+
+
+
+
+use std::path::Path;
+use libc::{stat,lstat};
+use std::mem::transmute;
+use std::mem::MaybeUninit;
+use std::ffi::OsStr;
+
+
 pub trait BytesToCstrPointer {
     fn as_cstr_ptr<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(*const libc::c_char) -> R;
+        F: FnOnce(*const i8) -> R;
 }
 //convenience thing for me suck it
-pub trait ToOsStr {
-    fn to_os_str(&self) -> &std::ffi::OsStr;
+pub trait AsOsStr {
+    fn as_os_str(&self) -> &OsStr;
 }
 
-impl ToOsStr for [u8] {
-    fn to_os_str(&self) -> &std::ffi::OsStr {
-        std::os::unix::ffi::OsStrExt::from_bytes(self)
+impl AsOsStr for [u8] {
+    #[inline]
+    #[allow(clippy::transmute_ptr_to_ptr)]
+    fn as_os_str(&self) -> &OsStr {
+        //same represensation fuck clippy  yapping
+        unsafe { transmute::<&[u8], &OsStr>(self) }
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 impl BytesToCstrPointer for [u8] {
     #[inline]
-    ///converts a byte slice into a c str(ing) pointer
-    ///utilises `LOCAL_PATH_MAX` converts a file of up to 512 birts to create an upper bounded array
-    //needs to be done as a callback because we need to keep the reference to the array
-    //apparently this can fuck up on some weird filesystems, like NTFS(`PATH_MAX` ) being incorrect.
-    //needs to be done as a callback because we need to keep the reference to the array
-    //apparently this can fuck up on some weird filesystems, like NTFS(`PATH_MAX` ) being incorrect.
+    /// Converts a byte slice into a C string pointer
+    /// Utilizes `LOCAL_PATH_MAX` to create an upper bounded array
     fn as_cstr_ptr<F, R>(&self, f: F) -> R
     where
         F: FnOnce(*const i8) -> R,
     {
-        let mut c_path_buf = [0u8; crate::LOCAL_PATH_MAX];
-        c_path_buf[..self.len()].copy_from_slice(self);
-        // null terminate the string
-        c_path_buf[self.len()] = 0;
-        f(std::ptr::addr_of!(c_path_buf).cast::<i8>())
-        //if you thought nested macros were  a pain then hello
+        debug_assert!(
+            self.len() < crate::LOCAL_PATH_MAX,
+            "Input too large for buffer"
+        );
+
+        let c_path_buf = crate::PathBuffer::new().as_mut_ptr();
+
+        // Copy bytes using copy_nonoverlapping
+        unsafe {
+            std::ptr::copy_nonoverlapping(self.as_ptr(),c_path_buf, self.len());
+            c_path_buf.add(self.len()).write(0); // Null terminate the string
+
+        }
+
+      
+   
+
+        f(c_path_buf.cast::<_>())
     }
 }
 
-pub trait PathToBytes {
-    fn to_bytes(&self) -> &[u8];
+
+
+
+pub trait PathAsBytes {
+    fn as_bytes(&self) -> &[u8];
 }
 
-impl PathToBytes for std::path::Path {
+#[allow(clippy::transmute_ptr_to_ptr)]
+impl PathAsBytes for Path {
     #[inline]
-    fn to_bytes(&self) -> &[u8] {
-        std::os::unix::ffi::OsStrExt::as_bytes(self.as_os_str())
+    fn as_bytes(&self) -> &[u8] {
+        unsafe{transmute::<&Self,_>(self)}
     }
 }
 
 pub trait ToStat {
     #[allow(clippy::missing_errors_doc)] //SKIPPING ERRORS UNTIL DONE.
-    fn get_stat(&self) -> crate::Result<libc::stat>;
+    fn get_stat(&self) -> crate::Result<stat>;
 }
 
 impl ToStat for crate::DirEntry {
     ///Converts into `libc::stat` , mostly for internal use..probably...
     #[inline]
-    fn get_stat(&self) -> crate::Result<libc::stat> {
-        let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
+    fn get_stat(&self) -> crate::Result<stat> {
+        let mut stat_buf = MaybeUninit::<stat>::uninit();
 
-        let res = self
-            .as_cstr_ptr(|ptr| unsafe { libc::stat(ptr, std::ptr::addr_of_mut!(stat_buf).cast()) });
+        let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
 
         if res == 0 {
             Ok(unsafe { stat_buf.assume_init() })
@@ -71,10 +114,9 @@ impl ToStat for crate::DirEntry {
 impl ToStat for &[u8] {
     #[inline]
     ///Converts a byte slice into  `libc::stat`, internal probably.
-    fn get_stat(&self) -> crate::Result<libc::stat> {
-        let mut stat_buf = std::mem::MaybeUninit::<libc::stat>::uninit();
-        let res = self
-            .as_cstr_ptr(|ptr| unsafe { libc::stat(ptr, std::ptr::addr_of_mut!(stat_buf).cast()) });
+    fn get_stat(&self) -> crate::Result<stat> {
+        let mut stat_buf = MaybeUninit::<stat>::uninit();
+        let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
 
         if res == 0 {
             Ok(unsafe { stat_buf.assume_init() })

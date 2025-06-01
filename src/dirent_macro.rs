@@ -148,23 +148,23 @@ macro_rules! init_path_buffer_syscall {
 
 #[macro_export(local_inner_macros)]
 macro_rules! init_path_buffer_readdir {
-    ($dir_path:expr, $buffer:expr, $base_len:ident, $needs_slash:ident) => {{
+    ($dir_path:expr, $buffer:expr) => {{
         let dirp = $dir_path.as_bytes();
         let dirp_len = dirp.len();
-        $needs_slash = $dir_path.depth != 0 || dirp != b"/";
-        $base_len = dirp_len + $needs_slash as usize;
+        let needs_slash = $dir_path.depth != 0 || dirp != b"/";
+        let base_len = dirp_len + needs_slash as usize;
 
         let buffer_ptr = $buffer.as_mut_ptr();
 
         unsafe {
             std::ptr::copy_nonoverlapping(dirp.as_ptr(), buffer_ptr, dirp_len);
 
-            if $needs_slash {
+            if needs_slash {
                 buffer_ptr.add(dirp_len).write(b'/');
             }
         }
 
-        dirp_len
+        base_len
     }};
 }
 

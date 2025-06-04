@@ -236,7 +236,8 @@ impl Finder {
                     }
                 }
 
-                // send into  directories in parallel, threadsafe wrapper.
+                // send into  directories in parallel (via vec) which is threadsafe, we could ideally switch storage type to arc and then
+                // use rayon::iter::IntoParallelIterator for more efficient parallel processing , ill try that in an experimental build.
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(dir, sender, config, filter);
                 });

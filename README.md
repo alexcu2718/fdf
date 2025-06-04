@@ -6,7 +6,22 @@ its low-level capabilities and performance optimisations.
 By building a filesystem traversal tool from scratch, I aimed to explore syscalls, memory safety,
 and parallelism—while challenging myself to match or exceed the speed of established tools like fd.
 
-I only picked up linux about half a year ago so I wanted to do something involving C/Rust/Linux/Assembly(if required) because
+And to my pleasure, I did succeed! Although, my featureset is dramatically lessened, somethings are a pain to implement
+Please check the fd_benchmarks for more.
+
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+|:---|---:|---:|---:|---:|
+| `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 |
+| `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
+
+
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+|:---|---:|---:|---:|---:|
+| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 |
+| `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
+
+
+I only picked up linux about midway 2024 so I wanted to do something involving C/Rust/Linux/Assembly(if required) because
 there's no point in making some cookie cutter TODO project. Go hard or go home.
 
 Philosophical aspect:
@@ -14,16 +29,22 @@ One could argue that despite this crate having some merits, was it WORTH it?
 Yes, because almost everything here will be reused in some concept/form/etc, you learn a tool properly, you don't need to create quantity,
 just quality.
 
-*nix Compatibility::::::::(I'm not sure, openbsd may be easier to write, i'm pretty sure the same syscall works but i think)
+*nix Compatibility::::::::(I'm not sure, openbsd** may be easier to write, i'm pretty sure the same syscall works but i think)
 Tested on EXT4/BTRFS on Debian/Ubuntu/Arch, no issues.
 NO CLUE on BSD-MAY WORK (might just do some experiments on a VM)
 MacOS
 
 
+[openbsd/freebsd comment* (TBF I don't know if they're significantly distinct, someone shoot me) this may actually be more efficient on bsd because the dirent struct has d_namelen (i believe), which allows us to avoid strlen a lot which a nice win, need to boot up a VM]
 
-TODO LIST MAYBE:
-BUMP ALLOCATOR potentially, potentially written from scratch (see microsoft's edit for a nice bump)
 
+#TODO LIST MAYBE:
+--Arena allocator potentially,  written from scratch (see microsoft's edit for a nice one) //github.com/microsoft/edit/tree/main/src/arena
+--IOUring for batched called like open/etc, this will be a extremely difficult adaptation.
+--Maybe some kind of string interning, it's easy if everyone were ascii but honestly probably extremely difficult to implement 'efficiently'
+--I would like to rewrite my threading to not rely on rayon, i've had attempts get close but no cigar
+--Some sort of iterator adaptor+filter, which would allow one to not allocate heap memory to store the Dirent
+--I think there's ultimately a hard limit in syscalls, I've played around with an experimental zig iouring getdents implementation but it's out of my comfort zone, A LOT, I'll probably do it still(if possible)
 
 ****THIS IS NOT FINISHED, THIS WILL BE ABOUT 2025/06-07 for semi-comparable featureset with fd.
 

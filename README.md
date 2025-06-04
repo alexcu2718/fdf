@@ -6,8 +6,15 @@ its low-level capabilities and performance optimisations.
 By building a filesystem traversal tool from scratch, I aimed to explore syscalls, memory safety,
 and parallelism—while challenging myself to match or exceed the speed of established tools like fd.
 
-And to my pleasure, I did succeed! Although, my featureset is dramatically lessened, somethings are a pain to implement
-Please check the fd_benchmarks for more.
+For reference fd: https://github.com/sharkdp/fd (it has 19000* more stars than this repo!)
+
+And to my pleasure, I did succeed! Although, my featureset is dramatically lessened, somethings are a pain to implement,
+It's also a hobby project I do when I'm bored, so I do things when I feel like them, why yes, how did you know I worked on half-l....
+
+Feature set match: regex/glob/type filtering/extension matching, i've got to implement some gitignore stuff together, that's going to be very enjoyable lol.
+but actually I have some ideas on how to do to this. I've got internal features for lots of things, but this doesn't extend to the CLI.
+
+Please check the fd_benchmarks for more(run them yourself, please!)
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
@@ -17,9 +24,11 @@ Please check the fd_benchmarks for more.
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 |
+| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 |  
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
 
+
+[*SMALL PEDANTIC NOTE ON THE ABOVE, FD AND FDF determine extensions different, I look for a .jpg (case-insensititively) meanwhile fd is just a case insensitive regex search on jpg$, so I will actually defend mine as better!]
 
 I only picked up linux about midway 2024 so I wanted to do something involving C/Rust/Linux/Assembly(if required) because
 there's no point in making some cookie cutter TODO project. Go hard or go home.

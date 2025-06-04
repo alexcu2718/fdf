@@ -1,5 +1,5 @@
 
-# fdf - Fast Directory Finder(LINUX ONLY!!!!!!!!!!!!! )
+# fdf - Fast Directory Finder(LINUX ONLY)
 
 This project began as a way to deepen my understanding of Rust, particularly
 its low-level capabilities and performance optimisations.
@@ -40,11 +40,17 @@ MacOS
 
 #TODO LIST MAYBE:
 --Arena allocator potentially,  written from scratch (see microsoft's edit for a nice one) //github.com/microsoft/edit/tree/main/src/arena
+
 --IOUring for batched called like open/etc, this will be a extremely difficult adaptation.
+
 --Maybe some kind of string interning, it's easy if everyone were ascii but honestly probably extremely difficult to implement 'efficiently'
+
 --I would like to rewrite my threading to not rely on rayon, i've had attempts get close but no cigar
+
 --Some sort of iterator adaptor+filter, which would allow one to not allocate heap memory to store the Dirent
+
 --I think there's ultimately a hard limit in syscalls, I've played around with an experimental zig iouring getdents implementation but it's out of my comfort zone, A LOT, I'll probably do it still(if possible)
+
 
 ****THIS IS NOT FINISHED, THIS WILL BE ABOUT 2025/06-07 for semi-comparable featureset with fd.
 

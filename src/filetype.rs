@@ -25,7 +25,7 @@ impl FileType {
     #[inline]
     /// Converts a `libc` file type to a `FileType`
     /// I would *prefer* to use this function instead of the below one.
-    /// However on some ESOTERIC/EDGY AHH linux filesystems, this can fuck up
+    /// on EXT4/BTRFS this is fine however its not guaranteed so this is not really useful.
     pub const fn from_dtype(d_type: u8) -> Self {
         match d_type {
             DT_REG => Self::RegularFile,
@@ -45,6 +45,7 @@ impl FileType {
     ///this can happen on funky filesystems like NTFS/XFS, BTRFS/ext4 work fine.
     //fortunately we can just check the dtype, if it's unknowm, it means we have to do another syscall, yay!
     pub fn from_dtype_fallback(d_type: u8, file_path: &[u8]) -> Self {
+        //i wouldve just chained the function calls but it's clearer this way
         match d_type {
             DT_REG => Self::RegularFile,
             DT_DIR => Self::Directory,

@@ -6,13 +6,13 @@ use std::mem::offset_of;
 use std::sync::Arc;
 
 use std::ops::Deref;
-
+///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 
 pub const LOCAL_PATH_MAX: usize = 512;
+//basically this is the should allow getdents to grab a lot of entries in one go
+pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 
-pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize + 200; //my experiments tend to prefer this. maybe entirely anecdata.
-//local path max, this is a bit of a guess but should be fine, as long as its >~300
 
 pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
@@ -22,7 +22,8 @@ pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 pub trait BytesStorage: Deref<Target = [u8]> {
     fn from_slice(bytes: &[u8]) -> Self;
 }
-
+// Define a trait for types that can be converted to a byte slice
+// This allows us to use different storage types like Arc, Box, Vec, and SlimmerBox
 pub trait AsU8 {
     fn as_bytes(&self) -> &[u8];
 }
@@ -111,6 +112,7 @@ impl<S: BytesStorage> OsBytes<S> {
 
     #[inline]
     #[must_use]
+     /// Returns a reference to the underlying bytes as  `&Path` 
     #[allow(clippy::missing_const_for_fn)]
     pub fn as_path(&self) -> &std::path::Path {
         self.as_os_str().as_ref()
@@ -119,7 +121,9 @@ impl<S: BytesStorage> OsBytes<S> {
     #[inline]
     #[must_use]
     #[allow(clippy::transmute_ptr_to_ptr)]
-    pub fn as_os_str(&self) -> &std::ffi::OsStr {
+    /// Returns a reference to the underlying bytes as an `OsStr`.
+    /// This is unsafe because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
+    pub fn as_os_str(&self) -> &std::ffi::OsStr { //transmute is safe because osstr <=> bytes on linux (NOT windows)
         unsafe { std::mem::transmute(self.as_bytes()) }
     }
 }
@@ -130,7 +134,7 @@ impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
         Self::new(data.as_ref())
     }
 }
-
+//generic examples of types :)
 #[allow(dead_code)]
 pub type SlimOsBytes = OsBytes<SlimmerBox<[u8], u16>>;
 #[allow(dead_code)]

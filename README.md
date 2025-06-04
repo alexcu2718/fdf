@@ -19,6 +19,12 @@ Tested on EXT4/BTRFS on Debian/Ubuntu/Arch, no issues.
 NO CLUE on BSD-MAY WORK (might just do some experiments on a VM)
 MacOS
 
+
+
+TODO LIST MAYBE:
+BUMP ALLOCATOR potentially, potentially written from scratch (see microsoft's edit for a nice bump)
+
+
 ****THIS IS NOT FINISHED, THIS WILL BE ABOUT 2025/06-07 for semi-comparable featureset with fd.
 
 **A high-performance file search utility for Linux systems**, designed to quickly traverse and filter your filesystem.

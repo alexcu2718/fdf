@@ -28,8 +28,7 @@ use crate::{
     utils::unix_time_to_system_time,
 };
 
-//this is a 4k buffer, which is the maximum size of a directory entry on most filesystems
-//might change this, who knows?
+
 
 #[derive(Clone)]
 pub struct DirEntry {
@@ -638,8 +637,6 @@ impl Iterator for DirEntryIterator {
                 // If no more entries, return None,
                 return None;
             }
-
-            //eprintln!("Remaining bytes after read: {}", self.remaining_bytes);
         }
     }
 }

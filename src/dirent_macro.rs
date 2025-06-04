@@ -1,11 +1,10 @@
-//copied this macro from the standard library
-//using it to access offsets in a more strict way, doing this in dirent64 is possible but im considering
-//the performance impact of that, this is a bit more readable and less error prone
 
-#![allow(clippy::macro_metavars_in_unsafe)]
 
 #[allow(clippy::ptr_as_ptr)]
 #[macro_export]
+///copied this macro from the standard library
+///using it to access offsets in a more strict way, doing this in dirent64 is possible but im considering
+///the performance impact of that, this is a bit more readable and less error prone
 macro_rules! offset_ptr {
     ($entry_ptr:expr, $field:ident) => {{
         const OFFSET: isize = std::mem::offset_of!(libc::dirent64, $field) as isize;
@@ -88,7 +87,7 @@ macro_rules! skip_dot_entries {
        #[allow(clippy::macro_metavars_in_unsafe)]//stupid error let me use my hack macros.
         unsafe {
             let ddd = $d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN;
-            if ddd && *$name_ptr.add(0) == 46 {  // 46 == '.' in ASCII
+            if ddd && *$name_ptr.add(0) == 46 {  // 46 == '.' in ASCII //access first element of pointer and dereference for value and check if its ascii . aka 46
                 // Check for "." or ".."
                 if *$name_ptr.add(1) == 0 ||     // Single dot case
                    *$name_ptr.add(1) == 46 &&   // Double dot case
@@ -178,7 +177,7 @@ macro_rules! prefetch_next_entry {
             unsafe {
                 use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
                 let next_entry = $self.buffer.as_ptr().add($self.offset + 64).cast();
-                _mm_prefetch(next_entry, _MM_HINT_T0);// bvvvvvvvv333333333333 CAT DID THIS IM LK\\\Z
+                _mm_prefetch(next_entry, _MM_HINT_T0);// bvvvvvvvv333333333333 CAT DID THIS IM LK\\\Z//im leaving this art
             }
         }
     };

@@ -57,11 +57,6 @@
 #![allow(clippy::return_and_then)]
 #![allow(clippy::cast_possible_wrap)]
 
-
-
-
-
-
 use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::{DirEntryError, Finder, glob_to_regex};
@@ -254,13 +249,8 @@ fn main() -> Result<(), DirEntryError> {
 
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n); //.map_err(|e| DirEntryError::from(e))?;
 
-   
-
     Ok(())
 }
-
-
-
 
 #[allow(clippy::must_use_candidate)]
 pub fn resolve_directory(
@@ -268,7 +258,7 @@ pub fn resolve_directory(
     args_directory: Option<std::ffi::OsString>,
     canonicalise: bool,
 ) -> std::ffi::OsString {
-    let  dot_pattern= ".";
+    let dot_pattern = ".";
     if args_cd {
         std::env::current_dir().map_or_else(
             |_| dot_pattern.into(),
@@ -315,11 +305,8 @@ pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
         return pattern.into();
     }
 
-    glob_to_regex(pattern).unwrap_or_else(
-        |_| {
-            eprintln!("This can't be processed as a glob pattern");
-            std::process::exit(1)
-        },
-        
-    )
+    glob_to_regex(pattern).unwrap_or_else(|_| {
+        eprintln!("This can't be processed as a glob pattern");
+        std::process::exit(1)
+    })
 }

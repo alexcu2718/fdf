@@ -1,12 +1,14 @@
 #![allow(clippy::cast_possible_wrap)]
 #[allow(unused_imports)]
 use crate::{
-    BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType,PathBuffer,copy_name_to_buffer,
-    Result, offset_ptr, strlen_asm,cstr,skip_dot_entries,init_path_buffer_readdir
+    BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
+    SyscallBuffer, copy_name_to_buffer, cstr, init_path_buffer_readdir, offset_ptr,
+    skip_dot_entries, strlen_asm,
 };
 use libc::{DIR, closedir, opendir, readdir64};
 
 #[derive(Debug)]
+/// An iterator over directory entries from readdir64 via libc
 pub struct DirIter {
     dir: *mut DIR,
     buffer: PathBuffer,
@@ -14,8 +16,6 @@ pub struct DirIter {
     depth: u8,
     error: Option<Error>,
 }
-
-
 
 impl DirIter {
     #[inline]
@@ -36,27 +36,22 @@ impl DirIter {
 
         if dir.is_null() {
             return Err(std::io::Error::last_os_error().into());
-        }      
+        }
         let mut buffer = PathBuffer::new();
-        let base_len= init_path_buffer_readdir!(dir_path, buffer);//0 cost macro to construct the buffer in the way we want.
-
+        let base_len = init_path_buffer_readdir!(dir_path, buffer); //0 cost macro to construct the buffer in the way we want.
 
         Ok(Self {
             dir,
             buffer,
-            base_len:base_len as _,
+            base_len: base_len as _,
             depth: dir_path.depth(),
             error: None,
         })
     }
- 
 }
 
-
-
-
 impl Iterator for DirIter {
-    type Item = DirEntry;    
+    type Item = DirEntry;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
@@ -71,11 +66,11 @@ impl Iterator for DirIter {
             let name_file: *const u8 = unsafe { offset_ptr!(entry, d_name).cast() };
             let dir_info: u8 = unsafe { *offset_ptr!(entry, d_type).cast() };
             skip_dot_entries!(dir_info, name_file);
-            let total_path_len = copy_name_to_buffer!(self, name_file,  self.base_len as usize);
+            let total_path_len = copy_name_to_buffer!(self, name_file);
             let full_path = unsafe { self.buffer.get_unchecked_mut(..total_path_len) };
             return Some(DirEntry {
                 path: full_path.into(),
-                file_type:FileType::from_dtype_fallback(dir_info, full_path),
+                file_type: FileType::from_dtype_fallback(dir_info, full_path),
                 inode: unsafe { *offset_ptr!(entry, d_ino) },
                 depth: self.depth + 1,
                 base_len: self.base_len,
@@ -90,5 +85,3 @@ impl Drop for DirIter {
         }
     }
 }
-
-

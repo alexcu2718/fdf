@@ -15,7 +15,7 @@ pub fn build_type_filter(types: &[String]) -> fn(&DirEntry) -> bool {
 }
 
 fn filter_by_type(entry: &DirEntry) -> bool {
-    let types = unsafe{TYPE_FILTER_TYPES.get().unwrap_unchecked()};
+    let types = unsafe { TYPE_FILTER_TYPES.get().unwrap_unchecked() };// safe because we initialized it in build_type_filter
 
     for type_char in types.iter().flat_map(|s| s.chars()) {
         match type_char {

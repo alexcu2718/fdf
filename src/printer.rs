@@ -1,6 +1,6 @@
 use fdf::{DirEntry, Result};
 use std::collections::HashMap;
-use std::io::{stdout, BufWriter, IsTerminal, Write};
+use std::io::{BufWriter, IsTerminal, Write, stdout};
 use std::sync::OnceLock;
 
 const NEWLINE: &[u8] = b"\n";
@@ -118,8 +118,8 @@ where
 
     let limit_opt: usize = limit.unwrap_or(usize::MAX);
 
-
-    let check_std_colours=std::env::var("FDF_NO_COLOR").is_ok_and(|x|x.eq_ignore_ascii_case("TRUE"));
+    let check_std_colours =
+        std::env::var("FDF_NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
 
     //TODO! fix broken pipe errors.
     if use_colors && !check_std_colours {
@@ -171,7 +171,6 @@ fn parse_ls_colors(key: &str, default_color: &[u8]) -> Box<[u8]> {
             .filter_map(|entry| {
                 let parts: Vec<&str> = entry.splitn(2, '=').collect();
                 (parts.len() == 2).then(|| (parts[0], parts[1]))
-                
             })
             .collect();
 

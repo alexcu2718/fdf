@@ -12,4 +12,6 @@ fn main() {
     } else {
         println!("cargo:rustc-env=CPU_COUNT={num_threads}");
     }
+
+    //clippy was nagging.
 }

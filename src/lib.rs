@@ -59,11 +59,16 @@ use std::{
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 
+mod dirent_macro;
+//
+//pub(crate) use dirent_macro::construct_path;
+
 //end library imports
 
 //crate imports
 mod iter;
 pub(crate) use iter::DirIter;
+
 mod test;
 
 mod metadata;
@@ -71,7 +76,6 @@ mod metadata;
 mod buffer;
 pub(crate) use buffer::AlignedBuffer;
 
-mod dirent_macro;
 mod direntry;
 pub use direntry::DirEntry;
 
@@ -79,7 +83,9 @@ mod error;
 pub use error::DirEntryError;
 
 mod custom_types_result;
-pub use custom_types_result::{OsBytes, Result,LOCAL_PATH_MAX,BUFFER_SIZE,PathBuffer, SyscallBuffer,AsU8};
+pub use custom_types_result::{
+    AsU8, BUFFER_SIZE, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result, SyscallBuffer,
+};
 
 mod traits_and_conversions;
 pub use traits_and_conversions::{AsOsStr, BytesToCstrPointer, PathAsBytes, ToStat};
@@ -87,7 +93,7 @@ pub use traits_and_conversions::{AsOsStr, BytesToCstrPointer, PathAsBytes, ToSta
 mod utils;
 
 pub(crate) use utils::strlen_asm;
-pub use utils::{ unix_time_to_system_time};
+pub use utils::unix_time_to_system_time;
 mod glob;
 pub use glob::glob_to_regex;
 mod config;
@@ -167,7 +173,6 @@ impl Finder {
 
         let construct_dir = DirEntry::new(&self.root);
 
-
         if !construct_dir.as_ref().is_ok_and(DirEntry::is_dir) {
             return Err(DirEntryError::InvalidPath);
         }
@@ -190,7 +195,6 @@ impl Finder {
         Ok(receiver)
     }
 
-
     #[inline]
     fn process_directory(
         dir: DirEntry,
@@ -210,17 +214,19 @@ impl Finder {
             return; // stop processing this directory if depth limit is reached
         }
 
-        //let test_all_conditions=filter.is_none() && config.extension_match.is_none() ;
-
-        match dir.as_iter() {
+        match dir.getdents() {
             Ok(entries) => {
                 // Store only directories for parallel recursive call
                 let mut dirs = Vec::new();
 
-                for entry in entries .filter(|e| !config.hide_hidden || !e.is_hidden())
-                {
+             
+
+                for entry in entries.filter(|e| !config.hide_hidden || !e.is_hidden()) {
                     // NOTA || NOTB ===  NOT
                     if entry.is_dir() {
+                        //this is an optional compile time bit for funsies, ignore this.
+              
+
                         dirs.push(entry); // save dir for parallel traversal
                     } else {
                         // apply filters and send files immediately
@@ -236,7 +242,7 @@ impl Finder {
                     }
                 }
 
-                // Process directories in parallel
+                // send into  directories in parallel, threadsafe wrapper.
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(dir, sender, config, filter);
                 });

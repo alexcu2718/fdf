@@ -1,28 +1,27 @@
-##THIS CODE IS PRETTY INACCURATE TILL I FIX IT, DONT RELY ON IT, USE --help
 
+# fdf - Fast Directory Finder(LINUX ONLY!!!!!!!!!!!!! )
 
+This project began as a way to deepen my understanding of Rust, particularly
+its low-level capabilities and performance optimisations.
+By building a filesystem traversal tool from scratch, I aimed to explore syscalls, memory safety,
+and parallelism—while challenging myself to match or exceed the speed of established tools like fd.
 
-# fdf - Fast Directory Finder
+I only picked up linux about half a year ago so I wanted to do something involving C/Rust/Linux/Assembly(if required) because
+there's no point in making some cookie cutter TODO project. Go hard or go home.
 
+Philosophical aspect:
+One could argue that despite this crate having some merits, was it WORTH it?
+Yes, because almost everything here will be reused in some concept/form/etc, you learn a tool properly, you don't need to create quantity,
+just quality.
 
+*nix Compatibility::::::::(I'm not sure, openbsd may be easier to write, i'm pretty sure the same syscall works but i think)
+Tested on EXT4/BTRFS on Debian/Ubuntu/Arch, no issues.
+NO CLUE on BSD-MAY WORK (might just do some experiments on a VM)
+MacOS
 
-
-
-
-
-
-
-
-
-
-## LINUX ONLY!!!!!!!!!!!!! (should work on openbsd?)
+****THIS IS NOT FINISHED, THIS WILL BE ABOUT 2025/06-07 for semi-comparable featureset with fd.
 
 **A high-performance file search utility for Linux systems**, designed to quickly traverse and filter your filesystem.
-
-## PLEASE NOTE
-
-THIS PROJECT IS MEANT TO BE USED AS A COMMIT TO
-FD AND IS ***NOWHERE*** NEAR COMPLETION.
 
 ---
 
@@ -43,7 +42,7 @@ FD AND IS ***NOWHERE*** NEAR COMPLETION.
 
 ## Requirements
 
-- **Linux only**: Optimized for Linux filesystems
+- **Linux only**: Specific linux syscalls for Linux filesystems
 - **Rust 1.74+** (recommended for building from source)
 
 ---
@@ -73,18 +72,35 @@ fdf . ~ -E jpg
 # Find all  Python files in /usr/local (including hidden files)
 fdf . /usr/local -E py -H
 
-## Options
+## Options (T)
 
--c, --current-directory   Uses the current directory instead of the default path
--E, --extension <EXT>     Filters results by file extension
--H, --hidden              Shows hidden files (those starting with .)
--s, --case-sensitive      Enables case-sensitive pattern matching
--j, --threads <NUM>       Sets the number of threads to use (default: system available)
--I, --include-dirs        Includes directories in results
--g, --glob                Treats the pattern as a glob pattern
--d, --max-depth <NUM>     Limits results to first N matches
--t, --type <TYPE>...      Filters by file type (can be used multiple times)
--p, --full-path           Matches against full file paths rather than just names
--F, --fixed-strings       Treats pattern as a fixed string, not a regex
--h, --help                Displays help information
--V, --version             Displays version information
+Usage: fdf [OPTIONS] [PATTERN] [PATH]
+
+Arguments:
+  [PATTERN]  Pattern to search for
+  [PATH]     Path to search (defaults to /)
+             Use -c to do current directory
+
+Options:
+  -c, --current-directory      Uses the current directory to load
+
+  -E, --extension <EXTENSION>  filters based on extension, options are ['d', 'u', 'l', 'f', 'p', 'c', 'b', 's', 'e', 'x']
+
+  -H, --hidden                 Shows hidden files eg .gitignore or .bashrc
+
+  -s, --case-sensitive         Enable case-sensitive matching
+
+  -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads [default: X]
+  -a, --absolute-path          Show absolute path
+  -I, --include-dirs           Include directories
+
+  -g, --glob                   Use a glob pattern
+  -n, --max-results <TOP_N>    Retrieves the first eg 10 results, rlib rs$ -d 10
+  -d, --depth <DEPTH>          Retrieves only traverse to x depth
+      --generate <GENERATE>    Generate shell completions [possible values: bash, elvish, fish, powershell, zsh]
+  -t, --type <TYPE_OF>...      Select type of files (can use multiple times)
+  -p, --full-path              Use a full path for regex matching
+  -F, --fixed-strings          Use a fixed string not a regex
+  -h, --help                   Print help
+  -V, --version                Print version
+  

@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
-    use crate::{DirEntry, DirIter, FileType, debug_print};
     use crate::traits_and_conversions::AsOsStr;
+    use crate::{DirEntry, DirIter, FileType, debug_print};
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
@@ -62,11 +62,12 @@ mod tests {
         let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
 
         let dir_entry = DirEntry::new(dir_path.as_os_str()).unwrap();
-        let entries = dir_entry.read_dir().unwrap();
+        let entries = dir_entry.getdents().unwrap();
+        let entries_clone: Vec<_> = dir_entry.getdents().unwrap().collect();
 
-        let mut names: Vec<_> = entries.iter().map(|e| e.file_name().to_vec()).collect();
-        let _ = std::fs::remove_dir_all(&dir_path);
-        assert_eq!(entries.len(), 3);
+        let mut names: Vec<_> = entries.map(|e| e.file_name().to_vec()).collect();
+
+        assert_eq!(entries_clone.len(), 3);
 
         names.sort();
         assert_eq!(
@@ -78,7 +79,10 @@ mod tests {
             ]
         );
 
-        for entry in entries {
+        let entries_clone2: Vec<_> = dir_entry.getdents().unwrap().collect();
+
+        let _ = std::fs::remove_dir_all(&dir_path);
+        for entry in entries_clone2 {
             assert_eq!(entry.depth(), 1);
             assert_eq!(entry.base_len() as usize, dir_path.as_os_str().len() + 1);
         }
@@ -195,7 +199,7 @@ mod tests {
         );
 
         // iteration
-        let mut entries = dir_entry.read_dir()?.into_iter().collect::<Vec<_>>();
+        let mut entries = dir_entry.getdents()?.into_iter().collect::<Vec<_>>();
 
         assert!(
             !entries.is_empty(),

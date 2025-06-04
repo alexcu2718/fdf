@@ -1,41 +1,31 @@
-use slimmer_box::SlimmerBox;
-use crate::DirEntryError;
-use std::sync::Arc;
 use crate::AlignedBuffer;
-use libc::{PATH_MAX,dirent64};
+use crate::DirEntryError;
+use libc::{PATH_MAX, dirent64};
+use slimmer_box::SlimmerBox;
 use std::mem::offset_of;
+use std::sync::Arc;
 
 use std::ops::Deref;
 
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 
+pub const LOCAL_PATH_MAX: usize = 512;
 
-
-
-pub const LOCAL_PATH_MAX: usize = 512; 
-
-
-
-
-pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize;
+pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize +200;//my experiments tend to prefer this. maybe entirely anecdata.
 //local path max, this is a bit of a guess but should be fine, as long as its >~300
 
-pub type PathBuffer=AlignedBuffer<u8,LOCAL_PATH_MAX>;
-pub type SyscallBuffer = AlignedBuffer<u8,BUFFER_SIZE>;
+pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
+pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
-
-
-
-
-// Define a trait that all storage types must implement
-pub trait BytesStorage: Deref<Target = [u8]>  {
+// Define the trait that all storage types must implement (for our main types)
+//I can probably extend this more.
+pub trait BytesStorage: Deref<Target = [u8]> {
     fn from_slice(bytes: &[u8]) -> Self;
 }
 
-pub trait AsU8  {
+pub trait AsU8 {
     fn as_bytes(&self) -> &[u8];
 }
-
 
 impl AsU8 for SlimmerBox<[u8], u16> {
     fn as_bytes(&self) -> &[u8] {
@@ -43,59 +33,49 @@ impl AsU8 for SlimmerBox<[u8], u16> {
     }
 }
 
-
-impl AsU8 for Arc<[u8]>{
+impl AsU8 for Arc<[u8]> {
     fn as_bytes(&self) -> &[u8] {
         self.as_ref()
     }
 }
 
-
-impl AsU8 for Vec<u8>{
+impl AsU8 for Vec<u8> {
     fn as_bytes(&self) -> &[u8] {
         self.as_ref()
     }
 }
 
-
-
-
-impl AsU8 for Box<[u8]>{
+impl AsU8 for Box<[u8]> {
     fn as_bytes(&self) -> &[u8] {
         self.as_ref()
     }
 }
 
-
-
-// Implement BytesStorage for SlimmerBox
+// BytesStorage for SlimmerBox
 impl BytesStorage for SlimmerBox<[u8], u16> {
+    /// # Safety
+    /// The input must have a length less than `u16::MAX`
     fn from_slice(bytes: &[u8]) -> Self {
-        unsafe {Self::new_unchecked(bytes) }
+        debug_assert!(bytes.len() < u16::MAX as usize, "Input bytes length exceeds u16::MAX");
+        unsafe { Self::new_unchecked(bytes) }
     }
 }
 
-
-
-
-
-
-// Implement BytesStorage for Arc<[u8]>
+//  BytesStorage for Arc<[u8]>
 impl BytesStorage for Arc<[u8]> {
     fn from_slice(bytes: &[u8]) -> Self {
         Self::from(bytes)
     }
 }
 
- // Implement BytesStorage for Vec<[u8]>
+//BytesStorage for Vec<[u8]>
 impl BytesStorage for Vec<u8> {
     fn from_slice(bytes: &[u8]) -> Self {
         bytes.to_vec()
     }
 }
 
-
- // Implement BytesStorage for Box<[u8]>
+// BytesStorage for Box<[u8]>
 impl BytesStorage for Box<[u8]> {
     fn from_slice(bytes: &[u8]) -> Self {
         Self::from(bytes)
@@ -103,7 +83,7 @@ impl BytesStorage for Box<[u8]> {
 }
 
 // OsBytes generic over the storage type, this allows easy switch to arc for multithreading to avoid race conditions:)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug)] //#[repr(C, align(8))]
 pub struct OsBytes<S: BytesStorage> {
     pub(crate) bytes: S,
 }
@@ -111,6 +91,7 @@ pub struct OsBytes<S: BytesStorage> {
 impl<S: BytesStorage> OsBytes<S> {
     #[inline]
     #[must_use]
+    /// Creates a new `OsBytes` from a byte slice with storage backend type S, eg Box/Arc/Vec/SlimmerBox
     pub fn new(bytes: &[u8]) -> Self {
         Self {
             bytes: S::from_slice(bytes),
@@ -120,6 +101,7 @@ impl<S: BytesStorage> OsBytes<S> {
     #[inline]
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
+    /// Returns a reference to the underlying bytes.
     pub fn as_bytes(&self) -> &[u8] {
         self.bytes.as_ref()
     }

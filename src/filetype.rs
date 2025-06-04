@@ -1,13 +1,12 @@
 #[allow(unused_imports)]
 use crate::traits_and_conversions::AsOsStr;
 use crate::traits_and_conversions::ToStat;
-//use crate::AsOsStr;
 use libc::{
     DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO,
     S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t,
 };
 
-use std::{ os::unix::fs::FileTypeExt as _, path::Path};
+use std::{os::unix::fs::FileTypeExt as _, path::Path};
 /// Represents the type of a file in the filesystem
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FileType {
@@ -42,11 +41,10 @@ impl FileType {
 
     #[must_use]
     #[inline]
-    ///this is a fallback for when we can't get the file type from the libc
-    ///this can happen on funky filesystems like NTFS
-    //im probably going to handle this
+    ///this is a fallback for when we can't get the file type from libc
+    ///this can happen on funky filesystems like NTFS/XFS, BTRFS/ext4 work fine.
+    //fortunately we can just check the dtype, if it's unknowm, it means we have to do another syscall, yay!
     pub fn from_dtype_fallback(d_type: u8, file_path: &[u8]) -> Self {
-      //  eprintln!(" testing {}",file_path.as_os_str().to_string_lossy());
         match d_type {
             DT_REG => Self::RegularFile,
             DT_DIR => Self::Directory,
@@ -64,11 +62,9 @@ impl FileType {
     ///uses a stat call to get the file type, more costly but more accurate
     /// this is used when we can't get the file type from dirent64 due to funky filesystems
     pub fn from_bytes(file_path: &[u8]) -> Self {
-     
         file_path
             .get_stat()
             .map_or(Self::Unknown, |stat| Self::from_mode(stat.st_mode))
-
     }
 
     #[must_use]
@@ -88,11 +84,11 @@ impl FileType {
     /// converts a `FileType` from a path
     #[must_use]
     #[inline]
-    pub fn from_path<P:AsRef<Path>>(path_start: P) -> Self {
+    pub fn from_path<P: AsRef<Path>>(path_start: P) -> Self {
         Path::new(path_start.as_ref())
             .symlink_metadata()
             .map_or(Self::Unknown, |metadata| match metadata.file_type() {
-                 ft if ft.is_dir() => Self::Directory,
+                ft if ft.is_dir() => Self::Directory,
                 ft if ft.is_file() => Self::RegularFile,
                 ft if ft.is_symlink() => Self::Symlink,
                 ft if ft.is_block_device() => Self::BlockDevice,

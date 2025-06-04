@@ -13,8 +13,16 @@ pub trait ValueType: sealed::Sealed {}
 impl ValueType for i8 {}
 impl ValueType for u8 {}
 
-#[repr(C, align(8))]
+// This buffer is in this crate to do a few things: 
+//1.serve as a generic buffer for syscall operations
+//2.ensure that the buffer is always aligned to 8 bytes, which is required for some syscalls.
+//3. provide a safe interface for accessing the buffer's data.
+//4. It is generic over type T, which can be either i8 or u8, and the size of the buffer. which are equivalent in our case.
+//5. It uses MaybeUninit to avoid initialising the buffer until it is actually used, which is useful for performance.
+//6. it provides a buffer to construct byte path
+// It is generic over the type of data it stores (i8 or u8) and the size of the buffer.
 #[derive(Debug)]
+#[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T, const SIZE: usize>
 where
     T: ValueType, //only generic over i8 and u8!
@@ -91,11 +99,11 @@ where
     /// The buffer must be initialised before calling this
     #[inline]
     pub const unsafe fn next_getdents_read(&self, index: usize) -> *const dirent64 {
-        unsafe { self.as_ptr().add(index).cast::<_>() }
+        unsafe { self.as_ptr().add(index).cast::<_>() }//cast into off branch
     }
 
     /// # Safety
-    /// this is only to be called when using direntry, not explaining this complexity rn.
+    /// this is only to be called when using syscalls
     #[inline]
     pub unsafe fn getdents(&mut self, fd: i32) -> i64 {
         unsafe { syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }

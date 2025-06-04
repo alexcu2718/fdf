@@ -3,28 +3,50 @@
 #![allow(clippy::single_call_fn)]
 
 use libc::{
- F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK, X_OK,
-    access, close, open, strlen,//dirent64
+    F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK, X_OK, access, close, dirent64,
+    open, strlen,
 };
 #[allow(unused_imports)]
 use std::{
     ffi::OsStr,
     fmt,
     io::Error,
-    sync::Arc,
+    marker::PhantomData,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
+    sync::Arc,
     time::SystemTime,
 };
+
 
 //this is from a wizardy C forum. basically, the final directory name length (256 bytes aka 4096 bits aka path max +final filename length)
 //is 256 bytes(CAN DIFFER DEPENDING ON LIBC), so we can use that to calculate the size of the buffer. there should NEVER be anything bigger than the buffer
 ///check assert in the code below
 //c code is offsetof(struct dirent, d_name) + PATH_MAX is enough to one shot.
 #[allow(unused_imports)]
-use crate::{process_getdents_loop,DirIter, ToStat,//strlen_asm,offset_ptr,skip_dot_entries,
-    OsBytes, Result, error::DirEntryError, filetype::FileType,PathBuffer,SyscallBuffer,custom_types_result::SlimOsBytes ,init_path_buffer_syscall,AsU8,
-    traits_and_conversions::BytesToCstrPointer, utils::unix_time_to_system_time,utils::get_baselen,//init_path_with_slash
+use crate::{
+    AsU8,
+    DirIter,
+    AsOsStr,
+    OsBytes,
+    PathBuffer,
+    Result,
+    SyscallBuffer,
+    ToStat,
+    construct_path,
+    cstr,
+    cstr_n,
+    custom_types_result::SlimOsBytes,
+    error::DirEntryError,
+    filetype::FileType,
+    init_path_buffer_syscall,
+    offset_ptr,
+    prefetch_next_buffer,
+    prefetch_next_entry,
+    skip_dot_entries,
+    traits_and_conversions::BytesToCstrPointer,
+    utils::get_baselen,
+    utils::unix_time_to_system_time,
 };
 
 //this is a 4k buffer, which is the maximum size of a directory entry on most filesystems
@@ -34,19 +56,11 @@ use crate::{process_getdents_loop,DirIter, ToStat,//strlen_asm,offset_ptr,skip_d
 pub struct DirEntry {
     pub(crate) path: SlimOsBytes, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
     pub(crate) file_type: FileType, //1 byte
-    pub(crate) inode: u64,    //8 bytes, i may drop this in the future, it's not very useful.
+    pub(crate) inode: u64,        //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
     pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
-                              //3 bytes padding, possible uses? not sure.
-
-                              //maybe i can add is is_hidden attribute, this is 'free' and can be used to check if the file is hidden.
-                              //this is a 1 byte attribute, so it keeps the struct below 24 bytes (22 bytes with that)
-                              //other ideas are yet to be made
-
-                              //possible ideas is storing the dirents value, as a direct struct, with handy functions to get the details
-                              //except for the name, the filename is easy to grab from the pointer but it's then resolving to form
-                              //a full path, the preceeding path is not stored, maybe i can store it in a buffer
+                              //2 bytes padding, possible uses? not sure.
 }
 
 impl fmt::Display for DirEntry {
@@ -105,8 +119,6 @@ impl fmt::Debug for DirEntry {
         )
     }
 }
-
-
 
 impl DirEntry {
     #[inline]
@@ -183,14 +195,16 @@ impl DirEntry {
     #[must_use]
     ///costly check for empty files
     ///i dont see much use for this function
+    /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
+    /// for files, it checks if the size is zero without loading all metadata
+    /// for directories, it checks if they have no entries
+    /// for special files like devices, sockets, etc., it returns false
     pub fn is_empty(&self) -> bool {
         if self.is_regular_file() {
             // for files, check if size is zero without loading all metadata
-            //  self.metadata().is_ok_and(|meta| meta.len() == 0)
             self.size().is_ok_and(|size| size == 0)
         } else if self.is_dir() {
-            //  efficient directory check - just get the first entry
-            // std::fs::read_dir(self.as_path()).is_ok_and(|mut entries| entries.next().is_none())
+            // for directories, check if they have no entries
             self.as_iter()
                 .is_ok_and(|mut entries| entries.next().is_none())
         } else {
@@ -208,15 +222,16 @@ impl DirEntry {
         if self.is_absolute() {
             return Ok(self.as_bytes());
         }
-
+        //cast byte slice into a *const c_char/i8 pointer with a null terminator THEN pass it to realpath along with a null mut pointer
         let ptr = unsafe {
             self.as_bytes()
                 .as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
         };
-        if ptr.is_null() {
+        if ptr.is_null() { //check for null
             return Err(Error::last_os_error().into());
         }
         //better to use strlen here because path is likely to be too long to benefit from repne scasb
+        //we also use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
         Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), strlen(ptr) as usize) })
     }
 
@@ -235,14 +250,13 @@ impl DirEntry {
             self.as_bytes()
                 .as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
         };
-
+        //we use strlen here because path is likely to be too long to benefit from repne scasb
         unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast::<u8>(), strlen(ptr)) }
     }
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Converts a path to a proper path, if it is not already
-    /// Errors if i've fucked up my pointer shit here lol,not properly tested.
     pub fn as_full_path(self) -> Result<Self> {
         if self.is_absolute() {
             //doesnt convert
@@ -267,6 +281,7 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
+    ///determines if the path is relative
     pub fn is_relative(&self) -> bool {
         !self.is_absolute()
     }
@@ -289,25 +304,29 @@ impl DirEntry {
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
+    ///returns the std definition of metadata for easy validation/whatever purposes.
     pub fn metadata(&self) -> Result<std::fs::Metadata> {
         std::fs::metadata(self.as_os_str()).map_err(|_| DirEntryError::MetadataError)
     }
     #[inline]
-    #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING AGAIN
+    #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned, 
+    //so in my case, because it's 10 bytes, we're looking for an 8 byte reference, so it doesnt work
     #[must_use]
     ///Cost free conversion to bytes (because it is already is bytes)
-    pub  fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         self.path.as_bytes()
     }
 
     #[inline]
     #[must_use]
-    ///checks if the path is absolute
+    ///checks if the path is absolute,
     pub fn is_absolute(&self) -> bool {
-        self.as_bytes()[0]==b'/'
+        self.as_bytes()[0] == b'/'
     }
 
     #[inline]
+    // Returns an iterator over the components of the path.
+    /// This splits the path by '/' and filters out empty components.
     pub fn components(&self) -> impl Iterator<Item = &[u8]> {
         self.as_bytes()
             .split(|&b| b == b'/')
@@ -442,6 +461,7 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
+    ///checks if the file exists, this, makes a syscall
     pub fn exists(&self) -> bool {
         unsafe { self.as_bytes().as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
     }
@@ -454,11 +474,15 @@ impl DirEntry {
     }
     #[inline]
     #[must_use]
+    ///returns the directory name of the file (as bytes)
     pub fn dirname(&self) -> &[u8] {
-       unsafe{self.as_bytes().get_unchecked(..self.base_len as usize - 1)
-            .rsplit(|&b| b == b'/')
-            .next()
-            .unwrap_or(self.as_bytes())}
+        unsafe {
+            self.as_bytes()
+                .get_unchecked(..self.base_len as usize - 1)
+                .rsplit(|&b| b == b'/')
+                .next()
+                .unwrap_or(self.as_bytes())
+        }
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
     }
@@ -510,7 +534,7 @@ impl DirEntry {
         self.get_stat().map(|s| s.st_size as u64)
     }
 
-    /// Get last modification time
+    /// Get last modification time, this will be more useful when I implement filters for it.
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     pub fn modified_time(&self) -> Result<SystemTime> {
@@ -519,33 +543,124 @@ impl DirEntry {
                 .map_err(|_| DirEntryError::TimeError)
         })
     }
-    
+
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]
-    pub fn read_dir(&self) -> Result<Vec<Self>> {
-    let dir_path = self.as_bytes();
-    let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-    //alternatively
-    //use crate::cstr;
-    //use libc::open;
-    //let fd=unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)};
-    if fd < 0 {
-        return Err(Error::last_os_error().into());
+    ///`read_dir` is an iterator over fd,where each consequent index is a directory entry.
+    /// This function is a low-level syscall wrapper that reads directory entries.
+    /// It returns an iterator that yields `DirEntry` objects.
+    /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
+    /// which in theory allows it to be offered turned parameters, ie by purposeley restriction the depth,
+    ///  you can likely make the stack copies extremely cheap
+    /// EG I use a ~4.3k buffer, which is the maximum size of a directory entry on most filesystems.
+    /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
+    pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
+        let dir_path = self.as_bytes();
+        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        //alternatively syntaxes I made.
+        //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+        //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+
+        if fd < 0 {
+            return Err(Error::last_os_error().into());
+        }
+
+        let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used to construct the full path of the entry, this is actually
+        //a uninitialised buffer, which is then initialised with the directory path
+        let mut path_len = dir_path.len();
+        init_path_buffer_syscall!(path_buffer, path_len, dir_path, self);// initialise the path buffer with the directory path
+
+        Ok(DirEntryIterator {
+            fd,
+            buffer: SyscallBuffer::new(),
+            path_buffer,
+            base_path_len: path_len as _,
+            parent_depth: self.depth,
+            offset: 0,
+            remaining_bytes: 0,
+            
+        })
     }
-
-    let mut entries = Vec::with_capacity(8);//arbitrary number I made up.
-    let mut path_buffer = PathBuffer::new();
-    let mut path_len = dir_path.len();
-
-    init_path_buffer_syscall!(path_buffer, path_len, dir_path, self);
-    
-    let mut buffer = SyscallBuffer::new();
-    process_getdents_loop!(buffer, fd, entries, path_buffer, path_len, self);
-
-    unsafe { close(fd) };
-
-    Ok(entries)
 }
 
+///Iterator for directory entries using getdents syscall
+pub struct DirEntryIterator {
+    pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
+    pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.3k bytes~ish
+    pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
+    pub(crate) base_path_len: u16, // base path length, this is the length of the path up to and including the last slash
+    pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
+    pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
+    pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
+  
+}
+
+impl Drop for DirEntryIterator {
+    /// Drops the iterator, closing the file descriptor.
+    /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
+    /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
+    fn drop(&mut self) {
+        unsafe { close(self.fd) };
+    }
+}
+
+impl Iterator for DirEntryIterator {
+    type Item = DirEntry;
+     #[inline]
+     /// Returns the next directory entry in the iterator.
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            // If we have remaining data in buffer, process it
+            if self.offset < self.remaining_bytes as usize {
+             
+                let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
+                // this is a pointer to the dirent64 structure, which contains the directory entry information
+
+                #[cfg(target_arch = "x86_64")]
+                prefetch_next_entry!(self);
+
+                // Extract the fields from the dirent structure
+                let name_ptr: *const u8 = unsafe { offset_ptr!(d, d_name).cast() };
+                let d_type: u8 = unsafe { *offset_ptr!(d, d_type) };
+                let reclen: usize = unsafe { *offset_ptr!(d, d_reclen) as _ };
+                let inode: u64 = unsafe { *offset_ptr!(d, d_ino) };
+
+                self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
+
+                // skip entries that are not valid or are dot entries
+                skip_dot_entries!(d_type, name_ptr); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
+
+                let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
+                //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
+                //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
+
+                let entry = DirEntry {
+                    path: full_path.into(),
+                    file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
+                    inode,
+                    depth: self.parent_depth + 1, // increment depth for child entries
+                    base_len: self.base_path_len,
+                };
+
+                return Some(entry);
+            }
+
+            // prefetch the next buffer content before reading
+            #[cfg(target_arch = "x86_64")]
+            prefetch_next_buffer!(self);
+
+            // check remaining bytes
+            self.remaining_bytes = unsafe { self.buffer.getdents(self.fd) };
+            self.offset = 0;
+     
+
+           if self.remaining_bytes <= 0 {
+                // If no more entries, return None, 
+                return None;
+            }
+
+            //eprintln!("Remaining bytes after read: {}", self.remaining_bytes);
+        }
+    }
 }

@@ -1,6 +1,5 @@
 #![allow(clippy::all)]
 #![allow(clippy::expect_used)]
-
 #![allow(clippy::all)]
 #![allow(clippy::absolute_paths)]
 #![allow(clippy::print_stderr)]
@@ -57,10 +56,12 @@
 #![allow(clippy::semicolon_outside_block)]
 #![allow(clippy::return_and_then)]
 #![allow(clippy::cast_possible_wrap)]
-
-
-
 #![allow(clippy::error_impl_error)]
+
+
+//#! BIG EXPLANATION
+//#! I WANTED TO USE THIS CRATE FOR GLOB MATCHING, BUT I DIDNT WANT TO USE THE FULL DEPENDENCY. SO I REMOVED EVERY DEPENDENCY :)
+//#! we've isolated the code here to be not reliant on any library.
 //#![allow(warnings)]
 //!THIS IS SHAMELESSLY COPY PASTED, I ADMIT THE FULL LICENCE HERE, I EDITED IT TO REMOVE THE CRATES I DIDNT WANT(NO DEPENDENCY EXCEPT REGEX).
 //! THIS IS COPY PASTED+EDITED ~10%
@@ -698,7 +699,7 @@ where
     })
 }
 
-/// Parse a shell glob-like pattern into a regular expression.
+/// Parse a shell glob-like pattern into a regular expression(String)
 ///
 /// See the module-level documentation for a description of the pattern
 /// features supported.
@@ -721,6 +722,10 @@ pub fn glob_to_regex(pattern: &str) -> Result<String, Error> {
     Ok(result.join(""))
 }
 
+
+
+//the below commented out code is some interesting attempt to use a rust function from C, so we can use globs->regex  in C code. HAHAHAHAHAHAHA
+/* 
 ////////////////EXTRA   for FFI
 
 use std::ffi::{CStr, CString};
@@ -782,3 +787,4 @@ pub unsafe extern "C" fn glob_to_regex_ffi(
         }
     }
 }
+*/

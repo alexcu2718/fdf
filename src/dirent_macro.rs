@@ -4,14 +4,14 @@
 
 #![allow(clippy::macro_metavars_in_unsafe)]
 
-
+#[allow(clippy::ptr_as_ptr)]
 #[macro_export]
-//#[allow(clippy::ptr_as_ptr)]
 macro_rules! offset_ptr {
     ($entry_ptr:expr, $field:ident) => {{
         const OFFSET: isize = std::mem::offset_of!(libc::dirent64, $field) as isize;
         if true {
             // Cast to the same type determined by the else branch.
+
             $entry_ptr.byte_offset(OFFSET).cast::<_>()
         } else {
             #[allow(deref_nullptr)]
@@ -34,6 +34,7 @@ macro_rules! debug_print {
 }
 
 #[macro_export]
+/// A macro to create a C-style string pointer from a byte slice
 macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
@@ -42,9 +43,8 @@ macro_rules! cstr {
             "Input too large for buffer"
         );
 
-        // Create a PathBuffer
-        let mut path_buf = $crate::PathBuffer::new();
-        let c_path_buf = path_buf.as_mut_ptr();
+        // Create a  and make into a pointer
+        let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
         #[allow(unused_unsafe)] //macro collision i cant be bothered to fix rn
         // Copy bytes and null-terminate
         unsafe {
@@ -56,10 +56,41 @@ macro_rules! cstr {
     }};
 }
 
-#[macro_export(local_inner_macros)]
+
+
+
+#[macro_export]
+/// A version of `cstr!` that allows specifying a maximum length for the buffer, intended to be used publically
+///so eg libc::open(cstr_n!(b"/",2),libc::O_RDONLY)
+macro_rules! cstr_n {
+    ($bytes:expr,$n:expr) => {{
+        // Debug assert to check test builds for unexpected conditions
+        debug_assert!(
+            $bytes.len() < $n,
+            "Input too large for buffer"
+        );
+
+        // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
+        let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
+       // #[allow(unused_unsafe)] //macro collision i cant be bothered to fix rn
+        // Copy bytes and null-terminate
+        unsafe {
+            std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
+            c_path_buf.add($bytes.len()).write(0);
+        }
+
+        c_path_buf.cast::<_>()
+    }};
+}
+
+#[macro_export]
+///a macro to skip . and .. entries when traversing, takes 2 mandatory args, d_type, which is if eg let dirnt:*const dirent64; then d_type=(*dirnt).d_type
+//so it's expecting a `u8` basically. then it optionally takes offset and reclen, these are now deprecated but they were in use in a previous build
+//ive kept them because naturally variadic macros will give no performance hit (Eg why this crate even exists)
 macro_rules! skip_dot_entries {
     ($d_type:expr, $name_ptr:expr $(, $offset:expr, $reclen:expr)?) => {
-        //ddd=indicator of whether the dent struct is dir/unknown, if it's unknown, we just need to check the pointer first index, which will eliminate 50%
+        //ddd=indicator of whether the dent struct is dir/unknown, if it's unknown, we just need to check the pointer first index
+        // which will eliminate 50%
        #[allow(clippy::macro_metavars_in_unsafe)]//stupid error let me use my hack macros.
         unsafe {
             let ddd = $d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN;
@@ -76,62 +107,14 @@ macro_rules! skip_dot_entries {
     };
 }
 
-#[macro_export(local_inner_macros)]
-macro_rules! process_getdents_loop {
-    ($buffer:ident, $fd:ident, $entries:ident, $path_buffer:ident, $path_len:ident, $self:ident) => {
-        loop {
-            let nread: i64 = unsafe { $buffer.getdents($fd) };
-
-            match nread {
-                0 => break, // End of directory
-                n if n < 0 => return Err(Error::last_os_error().into()),
-                n => {
-                    let mut offset = 0;
-                    while offset < n as usize {
-                        let d: *const libc::dirent64 =
-                            unsafe { $buffer.next_getdents_read(offset) };
-                        let name_ptr: *const u8 = unsafe { $crate::offset_ptr!(d, d_name).cast() };
-                        let d_type: u8 = unsafe { *$crate::offset_ptr!(d, d_type) };
-                        let reclen: usize = unsafe { *$crate::offset_ptr!(d, d_reclen) as _ };
-
-                        skip_dot_entries!(d_type, name_ptr, offset, reclen);
-
-                        let name_len = unsafe { $crate::strlen_asm(name_ptr) };
-                        let name_bytes =
-                            unsafe { &*std::ptr::slice_from_raw_parts(name_ptr, name_len) };
-                        let total_len = $path_len + name_len;
-
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(
-                                name_bytes.as_ptr(),
-                                $path_buffer.as_mut_ptr().add($path_len),
-                                name_len,
-                            );
-                        }
-
-                        let full_path = unsafe { $path_buffer.get_unchecked_mut(..total_len) };
-
-                        $entries.push(Self {
-                            path: full_path.into(),
-                            file_type: $crate::FileType::from_dtype_fallback(d_type, full_path),
-                            inode: unsafe { *$crate::offset_ptr!(d, d_ino) },
-                            depth: $self.depth + 1,
-                            base_len: $path_len as u16,
-                        });
-
-                        offset += reclen;
-                    }
-                }
-            }
-        }
-    };
-}
-
-#[macro_export(local_inner_macros)]
+#[macro_export]
+//this isnt meant to be public, i cant be  bothered with the boilerplate, dunno, enjoy some unsafe code!
+/// initialises a path buffer for syscall operations, 
+// appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument)
 macro_rules! init_path_buffer_syscall {
     ($path_buffer:expr, $path_len:ident, $dir_path:expr, $self:expr) => {{
         let buffer_ptr = $path_buffer.as_mut_ptr();
-        let needs_slash = $self.depth != 0 || $dir_path != b"/";
+        let needs_slash = $self.depth != 0 || $dir_path != b"/"; //easier boolean shortcircuit on LHS
 
         unsafe {
             std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, $path_len);
@@ -146,12 +129,15 @@ macro_rules! init_path_buffer_syscall {
     }};
 }
 
-#[macro_export(local_inner_macros)]
+#[macro_export]
+/// initialises a path buffer for readdir operations, 
+/// //appending a slash if necessary and returning the base length of the path
+/// returns the base length of the path, which is the length of the directory path plus one if a slash is needed
 macro_rules! init_path_buffer_readdir {
     ($dir_path:expr, $buffer:expr) => {{
         let dirp = $dir_path.as_bytes();
         let dirp_len = dirp.len();
-        let needs_slash = $dir_path.depth != 0 || dirp != b"/";
+        let needs_slash = $dir_path.depth != 0 || dirp != b"/"; //easier boolean shortcircuit on LHS
         let base_len = dirp_len + needs_slash as usize;
 
         let buffer_ptr = $buffer.as_mut_ptr();
@@ -168,17 +154,19 @@ macro_rules! init_path_buffer_readdir {
     }};
 }
 
-#[macro_export(local_inner_macros)]
+#[macro_export]
+/// copies the name from the `name_file` pointer into the buffer of the `self` object, starting after the base length.
 macro_rules! copy_name_to_buffer {
-    ($self:expr, $name_file:expr, $base_len:expr) => {{
-        let name_len = unsafe { $crate::strlen_asm($name_file) };
-        let name_bytes: &[u8] = unsafe { &*std::ptr::slice_from_raw_parts($name_file, name_len) };
-        let total_path_len = $base_len + name_len;
+    ($self:expr, $name_file:expr) => {{
+        let base_len = $self.base_len as usize;
+        let name_len = unsafe { $crate::strlen_asm($name_file) };//we use specified repne scasb because its likely<=8bytes 
+        let name_bytes: &[u8] = unsafe { &*std::ptr::slice_from_raw_parts($name_file, name_len) };//no ub check suck it
+        let total_path_len = base_len + name_len;
 
         unsafe {
             std::ptr::copy_nonoverlapping(
                 name_bytes.as_ptr(),
-                $self.as_mut_ptr().add($base_len),
+                $self.as_mut_ptr().add(base_len),
                 name_len,
             );
         }
@@ -187,3 +175,51 @@ macro_rules! copy_name_to_buffer {
     }};
 }
 
+#[cfg(target_arch = "x86_64")]
+#[macro_export]
+/// Prefetches the next likely entry in the buffer, basically trying to keep cache warm
+macro_rules! prefetch_next_entry {
+    ($self:ident) => {
+        if $self.offset + 128 < $self.remaining_bytes as usize {
+            unsafe {
+                use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                let next_entry = $self.buffer.as_ptr().add($self.offset + 64).cast();
+                _mm_prefetch(next_entry, _MM_HINT_T0);// bvvvvvvvv333333333333 CAT DID THIS IM LK\\\Z
+            }
+        }
+    };
+}
+
+#[cfg(target_arch = "x86_64")]
+#[macro_export]
+/// Prefetches the next buffer for reading, this is used to keep the cache warm for the next read operation
+macro_rules! prefetch_next_buffer {
+    ($self:ident) => {
+        unsafe {
+            use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+            _mm_prefetch($self.buffer.as_ptr().cast(), _MM_HINT_T0);
+        }
+    };
+}
+
+#[macro_export]
+/// Constructs a path from the base path and the name pointer, returning a mutable slice of the full path
+macro_rules! construct_path {
+    ($self:ident, $name_ptr:ident) => {{
+        let name_len = $crate::strlen_asm($name_ptr);
+        let name_bytes = &*std::ptr::slice_from_raw_parts($name_ptr, name_len);
+        let total_len = $self.base_path_len as usize + name_len;
+
+        std::ptr::copy_nonoverlapping(
+            name_bytes.as_ptr(),
+            $self
+                .path_buffer
+                .as_mut_ptr()
+                .add($self.base_path_len as usize),
+            name_len,
+        );
+
+        let full_path = $self.path_buffer.get_unchecked_mut(..total_len);
+        full_path
+    }};
+}

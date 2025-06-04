@@ -18,10 +18,7 @@ use std::{
     time::SystemTime,
 };
 
-//this is from a wizardy C forum. basically, the final directory name length (256 bytes aka 4096 bits aka path max +final filename length)
-//is 256 bytes(CAN DIFFER DEPENDING ON LIBC), so we can use that to calculate the size of the buffer. there should NEVER be anything bigger than the buffer
-///check assert in the code below
-//c code is offsetof(struct dirent, d_name) + PATH_MAX is enough to one shot.
+
 #[allow(unused_imports)]
 use crate::{
     AsOsStr, AsU8, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, ToStat, construct_path,
@@ -43,6 +40,7 @@ pub struct DirEntry {
     pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
                               //2 bytes padding, possible uses? not sure.
+                              //due to my pointer checks i could get this for free (bool) but dont really want massive structs
 }
 
 impl fmt::Display for DirEntry {

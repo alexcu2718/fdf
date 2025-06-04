@@ -6,6 +6,10 @@ its low-level capabilities and performance optimisations.
 By building a filesystem traversal tool from scratch, I aimed to explore syscalls, memory safety,
 and parallelism—while challenging myself to match or exceed the speed of established tools like fd.
 
+There's a lot of extremely niche optimisations hidden within this crate, also things I have never seen elsewhere!
+I'm quite proud of my cstr! macro, it takes a &[u8] and returns a *const i8 (c_char) so it's perfect for FFI.
+There's a lot of other things but sometimes simplicity is it's own beauty!
+
 
 instant build guide script for testing/the impatient:
 ```
@@ -46,16 +50,13 @@ Regarding the above: FD and FDF determine extensions differently. My implementat
 
 Motivation
 
-I began using Linux around mid-2024, and from the outset, I wanted to avoid cookie-cutter projects like yet another TODO app. Instead, I aimed to dive into something challenging—C, Rust, Linux syscalls, and even Assembly if necessary. The philosophy? Go hard or go home.
+I began using Linux around mid-2024, and from the outset, I wanted to avoid cookie-cutter projects like yet another TODO app. Instead, I aimed to dive into something challenging, I'm also great at losing stuff, how can I find it faster? Well this stupid 40k star library wont do, its time to get raw silicon out.
+Joking aside, mostly, it's actually the thought I could make a tool that's generally useful.
+
 
 Philosophical aspect:
-One could argue that despite this crate having some merits, was it WORTH it?
-Yes, because almost everything here will be reused in some concept/form/etc, you learn a tool properly, you don't need to create quantity,
-just quality.
-
-Was It Worth It?
-
-One might question whether this effort was justified. Absolutely. Nearly every component here will be reused in some form or another. The goal isn’t to churn out quantity but to deeply understand the tools and produce something of quality.
+One might question whether this effort was justified. Absolutely. Nearly every component here will be reused in some form or another. The goal here 
+is primary that of my own learning! if I write an arena allocator here,do you think that knowledge gets deleted when I'm not on this project?
 
 
 Compatibility Notes:

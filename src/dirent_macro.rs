@@ -56,23 +56,17 @@ macro_rules! cstr {
     }};
 }
 
-
-
-
 #[macro_export]
 /// A version of `cstr!` that allows specifying a maximum length for the buffer, intended to be used publically
 ///so eg libc::open(cstr_n!(b"/",2),libc::O_RDONLY)
 macro_rules! cstr_n {
     ($bytes:expr,$n:expr) => {{
         // Debug assert to check test builds for unexpected conditions
-        debug_assert!(
-            $bytes.len() < $n,
-            "Input too large for buffer"
-        );
+        debug_assert!($bytes.len() < $n, "Input too large for buffer");
 
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
-       // #[allow(unused_unsafe)] //macro collision i cant be bothered to fix rn
+        // #[allow(unused_unsafe)] //macro collision i cant be bothered to fix rn
         // Copy bytes and null-terminate
         unsafe {
             std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
@@ -109,7 +103,7 @@ macro_rules! skip_dot_entries {
 
 #[macro_export]
 //this isnt meant to be public, i cant be  bothered with the boilerplate, dunno, enjoy some unsafe code!
-/// initialises a path buffer for syscall operations, 
+/// initialises a path buffer for syscall operations,
 // appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument)
 macro_rules! init_path_buffer_syscall {
     ($path_buffer:expr, $path_len:ident, $dir_path:expr, $self:expr) => {{
@@ -130,7 +124,7 @@ macro_rules! init_path_buffer_syscall {
 }
 
 #[macro_export]
-/// initialises a path buffer for readdir operations, 
+/// initialises a path buffer for readdir operations,
 /// //appending a slash if necessary and returning the base length of the path
 /// returns the base length of the path, which is the length of the directory path plus one if a slash is needed
 macro_rules! init_path_buffer_readdir {
@@ -159,7 +153,7 @@ macro_rules! init_path_buffer_readdir {
 macro_rules! copy_name_to_buffer {
     ($self:expr, $name_file:expr) => {{
         let base_len = $self.base_len as usize;
-        let name_len = unsafe { $crate::strlen_asm($name_file) };//we use specified repne scasb because its likely<=8bytes 
+        let name_len = unsafe { $crate::strlen_asm($name_file) };//we use specified repne scasb because its likely<=8bytes
         let name_bytes: &[u8] = unsafe { &*std::ptr::slice_from_raw_parts($name_file, name_len) };//no ub check suck it
         let total_path_len = base_len + name_len;
 

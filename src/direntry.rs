@@ -18,34 +18,16 @@ use std::{
     time::SystemTime,
 };
 
-
 //this is from a wizardy C forum. basically, the final directory name length (256 bytes aka 4096 bits aka path max +final filename length)
 //is 256 bytes(CAN DIFFER DEPENDING ON LIBC), so we can use that to calculate the size of the buffer. there should NEVER be anything bigger than the buffer
 ///check assert in the code below
 //c code is offsetof(struct dirent, d_name) + PATH_MAX is enough to one shot.
 #[allow(unused_imports)]
 use crate::{
-    AsU8,
-    DirIter,
-    AsOsStr,
-    OsBytes,
-    PathBuffer,
-    Result,
-    SyscallBuffer,
-    ToStat,
-    construct_path,
-    cstr,
-    cstr_n,
-    custom_types_result::SlimOsBytes,
-    error::DirEntryError,
-    filetype::FileType,
-    init_path_buffer_syscall,
-    offset_ptr,
-    prefetch_next_buffer,
-    prefetch_next_entry,
-    skip_dot_entries,
-    traits_and_conversions::BytesToCstrPointer,
-    utils::get_baselen,
+    AsOsStr, AsU8, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, ToStat, construct_path,
+    cstr, cstr_n, custom_types_result::SlimOsBytes, error::DirEntryError, filetype::FileType,
+    init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
+    skip_dot_entries, traits_and_conversions::BytesToCstrPointer, utils::get_baselen,
     utils::unix_time_to_system_time,
 };
 
@@ -227,7 +209,8 @@ impl DirEntry {
             self.as_bytes()
                 .as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
         };
-        if ptr.is_null() { //check for null
+        if ptr.is_null() {
+            //check for null
             return Err(Error::last_os_error().into());
         }
         //better to use strlen here because path is likely to be too long to benefit from repne scasb
@@ -309,7 +292,8 @@ impl DirEntry {
         std::fs::metadata(self.as_os_str()).map_err(|_| DirEntryError::MetadataError)
     }
     #[inline]
-    #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned, 
+    #[allow(clippy::missing_const_for_fn)]
+    //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned,
     //so in my case, because it's 10 bytes, we're looking for an 8 byte reference, so it doesnt work
     #[must_use]
     ///Cost free conversion to bytes (because it is already is bytes)
@@ -557,7 +541,8 @@ impl DirEntry {
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        let fd = dir_path
+            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
@@ -569,7 +554,7 @@ impl DirEntry {
         let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used to construct the full path of the entry, this is actually
         //a uninitialised buffer, which is then initialised with the directory path
         let mut path_len = dir_path.len();
-        init_path_buffer_syscall!(path_buffer, path_len, dir_path, self);// initialise the path buffer with the directory path
+        init_path_buffer_syscall!(path_buffer, path_len, dir_path, self); // initialise the path buffer with the directory path
 
         Ok(DirEntryIterator {
             fd,
@@ -579,7 +564,6 @@ impl DirEntry {
             parent_depth: self.depth,
             offset: 0,
             remaining_bytes: 0,
-            
         })
     }
 }
@@ -593,7 +577,6 @@ pub struct DirEntryIterator {
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-  
 }
 
 impl Drop for DirEntryIterator {
@@ -607,13 +590,12 @@ impl Drop for DirEntryIterator {
 
 impl Iterator for DirEntryIterator {
     type Item = DirEntry;
-     #[inline]
-     /// Returns the next directory entry in the iterator.
+    #[inline]
+    /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-             
                 let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
 
@@ -653,10 +635,9 @@ impl Iterator for DirEntryIterator {
             // check remaining bytes
             self.remaining_bytes = unsafe { self.buffer.getdents(self.fd) };
             self.offset = 0;
-     
 
-           if self.remaining_bytes <= 0 {
-                // If no more entries, return None, 
+            if self.remaining_bytes <= 0 {
+                // If no more entries, return None,
                 return None;
             }
 

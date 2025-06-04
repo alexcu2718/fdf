@@ -11,7 +11,7 @@ pub type Result<T> = std::result::Result<T, DirEntryError>;
 
 pub const LOCAL_PATH_MAX: usize = 512;
 
-pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize +200;//my experiments tend to prefer this. maybe entirely anecdata.
+pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize + 200; //my experiments tend to prefer this. maybe entirely anecdata.
 //local path max, this is a bit of a guess but should be fine, as long as its >~300
 
 pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
@@ -56,7 +56,10 @@ impl BytesStorage for SlimmerBox<[u8], u16> {
     /// # Safety
     /// The input must have a length less than `u16::MAX`
     fn from_slice(bytes: &[u8]) -> Self {
-        debug_assert!(bytes.len() < u16::MAX as usize, "Input bytes length exceeds u16::MAX");
+        debug_assert!(
+            bytes.len() < u16::MAX as usize,
+            "Input bytes length exceeds u16::MAX"
+        );
         unsafe { Self::new_unchecked(bytes) }
     }
 }

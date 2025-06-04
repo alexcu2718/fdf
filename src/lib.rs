@@ -219,13 +219,10 @@ impl Finder {
                 // Store only directories for parallel recursive call
                 let mut dirs = Vec::new();
 
-             
-
                 for entry in entries.filter(|e| !config.hide_hidden || !e.is_hidden()) {
                     // NOTA || NOTB ===  NOT
                     if entry.is_dir() {
                         //this is an optional compile time bit for funsies, ignore this.
-              
 
                         dirs.push(entry); // save dir for parallel traversal
                     } else {

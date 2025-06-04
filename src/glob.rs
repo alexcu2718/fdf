@@ -57,8 +57,6 @@
 #![allow(clippy::return_and_then)]
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::error_impl_error)]
-
-
 //#! BIG EXPLANATION
 //#! I WANTED TO USE THIS CRATE FOR GLOB MATCHING, BUT I DIDNT WANT TO USE THE FULL DEPENDENCY. SO I REMOVED EVERY DEPENDENCY :)
 //#! we've isolated the code here to be not reliant on any library.
@@ -722,10 +720,8 @@ pub fn glob_to_regex(pattern: &str) -> Result<String, Error> {
     Ok(result.join(""))
 }
 
-
-
 //the below commented out code is some interesting attempt to use a rust function from C, so we can use globs->regex  in C code. HAHAHAHAHAHAHA
-/* 
+/*
 ////////////////EXTRA   for FFI
 
 use std::ffi::{CStr, CString};

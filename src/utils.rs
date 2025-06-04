@@ -36,7 +36,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
         .ok_or(DirEntryError::TimeError)
 }
- 
+
 #[cfg(target_arch = "x86_64")]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[inline]
@@ -45,7 +45,10 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 /// This function is only available on `x86_64` architectures.
 /// it's generic over the `ValueType`, which is i8 or u8.
 pub(crate) unsafe fn strlen_asm<T>(s: *const T) -> usize
-where T:ValueType { //aka i8/u8 
+where
+    T: ValueType,
+{
+    //aka i8/u8
     unsafe {
         let len: usize;
         core::arch::asm!(
@@ -72,7 +75,8 @@ where T:ValueType { //aka i8/u8
 ///Uses libc's strlen function to calculate the length of a null-terminated string.
 /// it's generic over the `ValueType`, which is usually i8 or u8.
 pub(crate) unsafe fn strlen_asm<T>(s: *const T) -> usize
-where T:ValueType //aka i8/u8 
+where
+    T: ValueType, //aka i8/u8
 {
-    unsafe{libc::strlen(s.cast::<i8>())}
+    unsafe { libc::strlen(s.cast::<i8>()) }
 }

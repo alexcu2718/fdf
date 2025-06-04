@@ -6,6 +6,20 @@ its low-level capabilities and performance optimisations.
 By building a filesystem traversal tool from scratch, I aimed to explore syscalls, memory safety,
 and parallelism—while challenging myself to match or exceed the speed of established tools like fd.
 
+
+instant build guide script for testing/the impateitn:
+```
+#!/bin/bash
+dest_dir=$HOME/Downloads/fdf
+mkdir -p $dest_dir
+git clone https://github.com/alexcu2718/fdf $dest_dir
+cd $dest_dir
+cargo b -r -q 
+export PATH="$PATH:$dest_dir/target/release"
+echo "$(which fdf)"
+```
+
+
 For reference fd: https://github.com/sharkdp/fd (it has 19000* more stars than this repo!)
 
 And to my pleasure, I did succeed! Although, my featureset is dramatically lessened, somethings are a pain to implement,

@@ -75,6 +75,7 @@ const CHARS: [char; 10] = ['d', 'u', 'l', 'f', 'p', 'c', 'b', 's', 'e', 'x'];
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[allow(clippy::struct_excessive_bools)]
+///generate our arguments and parse them.
 pub struct Args {
     #[arg(value_name = "PATTERN", help = "Pattern to search for", index = 1)]
     pattern: Option<String>,
@@ -253,7 +254,8 @@ fn main() -> Result<(), DirEntryError> {
 }
 
 #[allow(clippy::must_use_candidate)]
-pub fn resolve_directory(
+///simple function to resolve the directory to use.
+fn resolve_directory(
     args_cd: bool,
     args_directory: Option<std::ffi::OsString>,
     canonicalise: bool,
@@ -299,8 +301,8 @@ pub fn resolve_directory(
     }
 }
 
-#[must_use]
-pub fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
+
+fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     if !args_glob {
         return pattern.into();
     }

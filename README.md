@@ -42,35 +42,37 @@ Please check the fd_benchmarks for more(run them yourself, please!)
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
 
 
-[*SMALL PEDANTIC NOTE ON THE ABOVE, FD AND FDF determine extensions different, I look for a .jpg (case-insensititively) meanwhile fd is just a case insensitive regex search on jpg$, so I will actually defend mine as better!]
+Regarding the above: FD and FDF determine extensions differently. My implementation searches for .jpg (case-insensitively), whereas fd performs a case-insensitive regex match on jpg$. I contend that my approach is superior!
 
-I only picked up linux about midway 2024 so I wanted to do something involving C/Rust/Linux/Assembly(if required) because
-there's no point in making some cookie cutter TODO project. Go hard or go home.
+Motivation
+
+I began using Linux around mid-2024, and from the outset, I wanted to avoid cookie-cutter projects like yet another TODO app. Instead, I aimed to dive into something challenging—C, Rust, Linux syscalls, and even Assembly if necessary. The philosophy? Go hard or go home.
 
 Philosophical aspect:
 One could argue that despite this crate having some merits, was it WORTH it?
 Yes, because almost everything here will be reused in some concept/form/etc, you learn a tool properly, you don't need to create quantity,
 just quality.
 
-*nix Compatibility::::::::(I'm not sure, openbsd** may be easier to write, i'm pretty sure the same syscall works but i think)
-Tested on EXT4/BTRFS on Debian/Ubuntu/Arch, no issues.
-NO CLUE on BSD-MAY WORK (might just do some experiments on a VM)
-MacOS
+Was It Worth It?
+
+One might question whether this effort was justified. Absolutely. Nearly every component here will be reused in some form or another. The goal isn’t to churn out quantity but to deeply understand the tools and produce something of quality.
 
 
-[openbsd/freebsd comment* (TBF I don't know if they're significantly distinct, someone shoot me) this may actually be more efficient on bsd because the dirent struct has d_namelen (i believe), which allows us to avoid strlen a lot which a nice win, need to boot up a VM]
-
+Compatibility Notes:
+    Tested on: EXT4/BTRFS (Debian/Ubuntu/Arch) — no issues.
+    BSD/macOS: Untested (might work; OpenBSD/FreeBSD could even offer performance benefits due to d_namelen in dirent, eliminating some strlen calls). I’ll need to experiment in a VM.
+    Side note: Are OpenBSD and FreeBSD meaningfully distinct here? (Someone enlighten me!)
 
 #TODO LIST MAYBE:
 --Arena allocator potentially,  written from scratch (see microsoft's edit for a nice one) //github.com/microsoft/edit/tree/main/src/arena
 
---IOUring for batched called like open/etc, this will be a extremely difficult adaptation.
+--io_uring for Batched Syscalls: E.g., batched open/read ops. This will be extremely challenging.
 
---Maybe some kind of string interning, it's easy if everyone were ascii but honestly probably extremely difficult to implement 'efficiently'
+--String Interning: Trivial for ASCII, but efficient Unicode handling is another beast entirely.
 
---I would like to rewrite my threading to not rely on rayon, i've had attempts get close but no cigar
+--Threading Without Rayon: My attempts have come close but aren’t quite there yet. I can get within 10% speed wise but........thats not acceptable.
 
---Some sort of iterator adaptor+filter, which would allow one to not allocate heap memory to store the Dirent
+--Some sort of iterator adaptor+filter, which would allow one to avoid a lot more allocations
 
 --I think there's ultimately a hard limit in syscalls, I've played around with an experimental zig iouring getdents implementation but it's out of my comfort zone, A LOT, I'll probably do it still(if possible)
 
@@ -90,7 +92,7 @@ MacOS
 - **Case sensitivity control** (`-s` for case-sensitive)
 - **File type filtering** (files, directories via `-t`)
 - **Thread configuration** for performance tuning (`-j 8`)
-- **Max results limit** (`-d 100`)
+- **Max results limit** (`-n 100`)
 - **Full path matching** (`-p`)
 - **Fixed-string search** (non-regex via `-F`)
 

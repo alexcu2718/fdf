@@ -7,7 +7,7 @@ By building a filesystem traversal tool from scratch, I aimed to explore syscall
 and parallelism—while challenging myself to match or exceed the speed of established tools like fd.
 
 
-instant build guide script for testing/the impateitn:
+instant build guide script for testing/the impatient:
 ```
 #!/bin/bash
 dest_dir=$HOME/Downloads/fdf
@@ -146,17 +146,16 @@ Options:
 
   -s, --case-sensitive         Enable case-sensitive matching
 
-  -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads [default: X]
+  -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads [default: 12]
   -a, --absolute-path          Show absolute path
   -I, --include-dirs           Include directories
 
   -g, --glob                   Use a glob pattern
-  -n, --max-results <TOP_N>    Retrieves the first eg 10 results, rlib rs$ -d 10
+  -n, --max-results <TOP_N>    Retrieves the first eg 10 results, '\.cache' / -n 10
   -d, --depth <DEPTH>          Retrieves only traverse to x depth
       --generate <GENERATE>    Generate shell completions [possible values: bash, elvish, fish, powershell, zsh]
   -t, --type <TYPE_OF>...      Select type of files (can use multiple times)
   -p, --full-path              Use a full path for regex matching
-  -F, --fixed-strings          Use a fixed string not a regex
+  -F, --fixed-strings          Use a fixed string not a regex, eg '.bashrc' / -FH 
   -h, --help                   Print help
   -V, --version                Print version
-  

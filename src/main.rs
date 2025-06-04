@@ -149,7 +149,7 @@ pub struct Args {
     #[arg(
         short = 'n',
         long = "max-results",
-        help = "Retrieves the first eg 10 results, rlib rs$ -d 10"
+        help = "Retrieves the first eg 10 results, '.cache' / -n 10"
     )]
     top_n: Option<usize>,
     #[arg(

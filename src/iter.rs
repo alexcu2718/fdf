@@ -37,7 +37,7 @@ impl DirIter {
         if dir.is_null() {
             return Err(std::io::Error::last_os_error().into());
         }
-        let mut buffer = PathBuffer::new();
+        let mut buffer = PathBuffer::new();//
         let base_len = init_path_buffer_readdir!(dir_path, buffer); //0 cost macro to construct the buffer in the way we want.
 
         Ok(Self {

@@ -3,8 +3,8 @@
 #[allow(clippy::ptr_as_ptr)]
 #[macro_export]
 ///copied this macro from the standard library
-///using it to access offsets in a more strict way, doing this in dirent64 is possible but im considering
-///the performance impact of that, this is a bit more readable and less error prone
+///using it to access offsets in a more strict way, basically it's assumed the `libc::dirent64` struct is the same as the one in the standard library
+/// this is used to get a pointer to a field in the `libc::dirent64` struct and avoid intermediate references
 macro_rules! offset_ptr {
     ($entry_ptr:expr, $field:ident) => {{
         const OFFSET: isize = std::mem::offset_of!(libc::dirent64, $field) as isize;
@@ -196,6 +196,7 @@ macro_rules! prefetch_next_buffer {
 }
 
 #[macro_export]
+///not intended for public use, will be private when boilerplate is done
 /// Constructs a path from the base path and the name pointer, returning a mutable slice of the full path
 macro_rules! construct_path {
     ($self:ident, $name_ptr:ident) => {{

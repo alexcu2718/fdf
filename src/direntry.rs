@@ -602,7 +602,7 @@ impl Iterator for DirEntryIterator {
                 // Extract the fields from the dirent structure
                 let name_ptr: *const u8 = unsafe { offset_ptr!(d, d_name).cast() };
                 let d_type: u8 = unsafe { *offset_ptr!(d, d_type) };
-                let reclen: usize = unsafe { *offset_ptr!(d, d_reclen) as _ };
+                let reclen: usize = unsafe { *offset_ptr!(d, d_reclen) as _ };//deref to get record length, 
                 let inode: u64 = unsafe { *offset_ptr!(d, d_ino) };
 
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer

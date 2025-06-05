@@ -101,7 +101,7 @@ pub use config::SearchConfig;
 pub mod filetype;
 pub use filetype::FileType;
 
-//this allocator is more efficient than jemalloc through my testing
+//this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

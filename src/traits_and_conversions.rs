@@ -4,12 +4,41 @@ use std::mem::MaybeUninit;
 use std::mem::transmute;
 use std::path::Path;
 
+use crate::buffer::ValueType;
+
 pub trait BytesToCstrPointer {
-    fn as_cstr_ptr<F, R>(&self, f: F) -> R
+    fn as_cstr_ptr<F, R,T>(&self, f: F) -> R
     where
-        F: FnOnce(*const i8) -> R;
+        F: FnOnce(*const T) -> R,T:ValueType; //T is u8/i8
 }
-//convenience thing for me suck it
+
+impl BytesToCstrPointer for [u8] {
+    #[inline]
+    /// Converts a byte slice into a C string pointer
+    /// Utilizes `LOCAL_PATH_MAX` to create an upper bounded array
+    fn as_cstr_ptr<F, R,T>(&self, f: F) -> R
+    where
+        F: FnOnce(*const T) -> R,T:ValueType// T is u8/i8
+    {
+        debug_assert!(
+            self.len() < crate::LOCAL_PATH_MAX,
+            "Input too large for buffer"
+        );
+
+        let c_path_buf = crate::PathBuffer::new().as_mut_ptr();
+
+        // copy bytes using copy_nonoverlapping to avoid ub check 
+        unsafe {
+            std::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
+            c_path_buf.add(self.len()).write(0); // Null terminate the string
+        }
+
+        f(c_path_buf.cast::<_>())
+    }
+}
+
+
+
 pub trait AsOsStr {
     fn as_os_str(&self) -> &OsStr;
 }
@@ -23,30 +52,6 @@ impl AsOsStr for [u8] {
     }
 }
 
-impl BytesToCstrPointer for [u8] {
-    #[inline]
-    /// Converts a byte slice into a C string pointer
-    /// Utilizes `LOCAL_PATH_MAX` to create an upper bounded array
-    fn as_cstr_ptr<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(*const i8) -> R,
-    {
-        debug_assert!(
-            self.len() < crate::LOCAL_PATH_MAX,
-            "Input too large for buffer"
-        );
-
-        let c_path_buf = crate::PathBuffer::new().as_mut_ptr();
-
-        // copy bytes using copy_nonoverlapping
-        unsafe {
-            std::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
-            c_path_buf.add(self.len()).write(0); // Null terminate the string
-        }
-
-        f(c_path_buf.cast::<_>())
-    }
-}
 
 pub trait PathAsBytes {
     fn as_bytes(&self) -> &[u8];
@@ -55,8 +60,8 @@ pub trait PathAsBytes {
 #[allow(clippy::transmute_ptr_to_ptr)]
 impl PathAsBytes for Path {
     #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        unsafe { transmute::<&Self, _>(self) }
+    fn as_bytes(&self) -> &[u8] { //&[u8] <=> &OsStr <=> &Path on linux
+         unsafe { transmute::<&Self, _>(self) }
     }
 }
 

@@ -1,4 +1,5 @@
-//this probably needs to be reworked to reduce struct size, im not knowledgeable enough yet to do so.
+//this probably needs to be reworked to reduce struct size, it's on the todo, not important.
+//this is abit rough, but it's not too important. well.
 use libc::{EACCES, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use std::{fmt, io};
 

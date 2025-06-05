@@ -28,24 +28,28 @@ pub trait AsU8 {
 }
 
 impl AsU8 for SlimmerBox<[u8], u16> {
+        #[inline]
     fn as_bytes(&self) -> &[u8] {
         self.as_ref()
     }
 }
 
 impl AsU8 for Arc<[u8]> {
+        #[inline]
     fn as_bytes(&self) -> &[u8] {
         self.as_ref()
     }
 }
 
 impl AsU8 for Vec<u8> {
+        #[inline]
     fn as_bytes(&self) -> &[u8] {
         self.as_ref()
     }
 }
 
 impl AsU8 for Box<[u8]> {
+        #[inline]
     fn as_bytes(&self) -> &[u8] {
         self.as_ref()
     }
@@ -55,6 +59,7 @@ impl AsU8 for Box<[u8]> {
 impl BytesStorage for SlimmerBox<[u8], u16> {
     /// # Safety
     /// The input must have a length less than `u16::MAX`
+  #[inline]
     fn from_slice(bytes: &[u8]) -> Self {
         debug_assert!(
             bytes.len() < u16::MAX as usize,
@@ -66,6 +71,7 @@ impl BytesStorage for SlimmerBox<[u8], u16> {
 
 //  BytesStorage for Arc<[u8]>
 impl BytesStorage for Arc<[u8]> {
+        #[inline]
     fn from_slice(bytes: &[u8]) -> Self {
         Self::from(bytes)
     }
@@ -73,6 +79,7 @@ impl BytesStorage for Arc<[u8]> {
 
 //BytesStorage for Vec<[u8]>
 impl BytesStorage for Vec<u8> {
+        #[inline]
     fn from_slice(bytes: &[u8]) -> Self {
         bytes.to_vec()
     }
@@ -80,6 +87,7 @@ impl BytesStorage for Vec<u8> {
 
 // BytesStorage for Box<[u8]>
 impl BytesStorage for Box<[u8]> {
+        #[inline]
     fn from_slice(bytes: &[u8]) -> Self {
         Self::from(bytes)
     }

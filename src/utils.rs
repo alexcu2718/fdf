@@ -73,7 +73,7 @@ where
 #[cfg(not(target_arch = "x86_64"))]
 #[inline]
 ///Uses libc's strlen function to calculate the length of a null-terminated string.
-/// it's generic over the `ValueType`, which is usually i8 or u8.
+/// it's generic over the `ValueType`, which is i8 or u8.
 pub(crate) unsafe fn strlen_asm<T>(s: *const T) -> usize
 where
     T: ValueType, //aka i8/u8

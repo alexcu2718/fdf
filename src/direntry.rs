@@ -16,6 +16,8 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
     time::SystemTime,
+    mem::offset_of,
+    convert::TryFrom,
 };
 
 #[allow(unused_imports)]
@@ -545,7 +547,7 @@ impl DirEntry {
             return Err(Error::last_os_error().into());
         }
 
-        let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used to construct the full path of the entry, this is actually
+        let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used(the pointer is mutated) to construct the full path of the entry, this is actually
         //a uninitialised buffer, which is then initialised with the directory path
         let mut path_len = dir_path.len();
         init_path_buffer_syscall!(path_buffer, path_len, dir_path, self); // initialise the path buffer with the directory path
@@ -577,6 +579,7 @@ impl Drop for DirEntryIterator {
     /// Drops the iterator, closing the file descriptor.
     /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
+        #[inline]
     fn drop(&mut self) {
         unsafe { close(self.fd) };
     }
@@ -596,6 +599,10 @@ impl Iterator for DirEntryIterator {
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self);
 
+
+
+      
+
                 // Extract the fields from the dirent structure
                 let name_ptr: *const u8 = unsafe { offset_ptr!(d, d_name).cast() };
                 let d_type: u8 = unsafe { *offset_ptr!(d, d_type) };
@@ -609,7 +616,9 @@ impl Iterator for DirEntryIterator {
 
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
-                //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
+                //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.  
+              
+
 
                 let entry = DirEntry {
                     path: full_path.into(),

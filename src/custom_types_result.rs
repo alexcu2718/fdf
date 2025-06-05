@@ -13,7 +13,6 @@ pub const LOCAL_PATH_MAX: usize = 512;
 //basically this is the should allow getdents to grab a lot of entries in one go
 pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 
-
 pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
@@ -112,7 +111,7 @@ impl<S: BytesStorage> OsBytes<S> {
 
     #[inline]
     #[must_use]
-     /// Returns a reference to the underlying bytes as  `&Path` 
+    /// Returns a reference to the underlying bytes as  `&Path`
     #[allow(clippy::missing_const_for_fn)]
     pub fn as_path(&self) -> &std::path::Path {
         self.as_os_str().as_ref()
@@ -123,7 +122,8 @@ impl<S: BytesStorage> OsBytes<S> {
     #[allow(clippy::transmute_ptr_to_ptr)]
     /// Returns a reference to the underlying bytes as an `OsStr`.
     /// This is unsafe because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
-    pub fn as_os_str(&self) -> &std::ffi::OsStr { //transmute is safe because osstr <=> bytes on linux (NOT windows)
+    pub fn as_os_str(&self) -> &std::ffi::OsStr {
+        //transmute is safe because osstr <=> bytes on linux (NOT windows)
         unsafe { std::mem::transmute(self.as_bytes()) }
     }
 }

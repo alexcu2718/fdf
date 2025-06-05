@@ -1,5 +1,3 @@
-
-
 #[allow(clippy::ptr_as_ptr)]
 #[macro_export]
 ///copied this macro from the standard library

@@ -98,13 +98,13 @@ where
     /// The buffer must be initialised before calling this
     #[inline]
     pub const unsafe fn next_getdents_read(&self, index: usize) -> *const dirent64 {
-        unsafe { self.as_ptr().add(index).cast::<_>() } //cast into off branch
+        unsafe { self.as_ptr().add(index).cast::<_>() } //cast into  above
     }
 
     /// # Safety
-    /// this is only to be called when using syscalls
+    /// this is only to be called when using syscalls in the getdents interface
     #[inline]
-    pub unsafe fn getdents(&mut self, fd: i32) -> i64 {
+    pub unsafe fn getdents64(&mut self, fd: i32) -> i64 {
         unsafe { syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
     }
 

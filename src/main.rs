@@ -301,7 +301,6 @@ fn resolve_directory(
     }
 }
 
-
 fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     if !args_glob {
         return pattern.into();

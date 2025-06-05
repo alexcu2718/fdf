@@ -18,7 +18,6 @@ use std::{
     time::SystemTime,
 };
 
-
 #[allow(unused_imports)]
 use crate::{
     AsOsStr, AsU8, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, ToStat, construct_path,
@@ -27,8 +26,6 @@ use crate::{
     skip_dot_entries, traits_and_conversions::BytesToCstrPointer, utils::get_baselen,
     utils::unix_time_to_system_time,
 };
-
-
 
 #[derive(Clone)]
 pub struct DirEntry {
@@ -602,7 +599,7 @@ impl Iterator for DirEntryIterator {
                 // Extract the fields from the dirent structure
                 let name_ptr: *const u8 = unsafe { offset_ptr!(d, d_name).cast() };
                 let d_type: u8 = unsafe { *offset_ptr!(d, d_type) };
-                let reclen: usize = unsafe { *offset_ptr!(d, d_reclen) as _ };//deref to get record length, 
+                let reclen: usize = unsafe { *offset_ptr!(d, d_reclen) as _ }; //deref to get record length, 
                 let inode: u64 = unsafe { *offset_ptr!(d, d_ino) };
 
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
@@ -630,7 +627,7 @@ impl Iterator for DirEntryIterator {
             prefetch_next_buffer!(self);
 
             // check remaining bytes
-            self.remaining_bytes = unsafe { self.buffer.getdents(self.fd) };
+            self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
             self.offset = 0;
 
             if self.remaining_bytes <= 0 {

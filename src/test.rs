@@ -34,19 +34,12 @@ mod tests {
 
         // Clean up from previous if errored
         let _ = std::fs::remove_dir_all(test_dir);
-
-        //
         std::fs::create_dir_all(test_dir).expect("Failed to create test directory");
         std::fs::write(&test_file_path, "test").expect("Failed to write test file");
-
-        //
         let entry = DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
-
         assert_eq!(entry.file_name(), b"child.txt");
         assert_eq!(entry.extension().unwrap(), b"txt");
         assert_eq!(entry.parent(), test_dir.as_os_str().as_bytes());
-
-        // Clean up (optional - some prefer to leave for inspection)
         let _ = std::fs::remove_dir_all(test_dir);
     }
 

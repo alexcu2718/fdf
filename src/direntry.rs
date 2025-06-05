@@ -528,7 +528,7 @@ impl DirEntry {
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]
-    ///`read_dir` is an iterator over fd,where each consequent index is a directory entry.
+    ///`getdents` is an iterator over fd,where each consequent index is a directory entry.
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.
     /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`

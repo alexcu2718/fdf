@@ -4,15 +4,19 @@
 This project began as a way to deepen my understanding of Rust, particularly
 its low-level capabilities and performance optimisations.
 By building a filesystem traversal tool from scratch, I aimed to explore syscalls, memory safety,
-and parallelism—while challenging myself to match or exceed the speed of established tools like fd.
+and parallelism—while challenging myself to match or exceed the speed of established tools like fd(the fastest directory traversal tool with regex/glob others parameters)
+
+(*For reference fd: https://github.com/sharkdp/fd (it has 19000* more stars than this repo!))
 
 There's a lot of extremely niche optimisations hidden within this crate, also things I have never seen elsewhere!
 I'm quite proud of my cstr! macro, it takes a &[u8] and returns a *const i8 (c_char) so it's perfect for FFI.
 There's a lot of other things but sometimes simplicity is it's own beauty!
 
-
 instant build guide script for testing/the impatient:
-```
+(If you're on EXT4/BTRFS with a somewhat modern kernel, it'll work)
+
+```bash
+
 #!/bin/bash
 dest_dir=$HOME/Downloads/fdf
 mkdir -p $dest_dir
@@ -23,11 +27,8 @@ export PATH="$PATH:$dest_dir/target/release"
 echo "$(which fdf)"
 ```
 
-
-For reference fd: https://github.com/sharkdp/fd (it has 19000* more stars than this repo!)
-
 And to my pleasure, I did succeed! Although, my featureset is dramatically lessened, somethings are a pain to implement,
-It's also a hobby project I do when I'm bored, so I do things when I feel like them, why yes, how did you know I worked on half-l....
+It's also a hobby project I do when I'm bored, so I do things when I feel like them, why yes, how did you know I worked on Half-L....
 
 Feature set match: regex/glob/type filtering/extension matching, i've got to implement some gitignore stuff together, that's going to be very enjoyable lol.
 but actually I have some ideas on how to do to this. I've got internal features for lots of things, but this doesn't extend to the CLI.
@@ -35,16 +36,12 @@ but actually I have some ideas on how to do to this. I've got internal features 
 Please check the fd_benchmarks for more(run them yourself, please!)
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-|:---|---:|---:|---:|---:|
 | `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 |
 | `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
 
-
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-|:---|---:|---:|---:|---:|
 | `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 |  
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
-
 
 Regarding the above: FD and FDF determine extensions differently. My implementation searches for .jpg (case-insensitively), whereas fd performs a case-insensitive regex match on jpg$. I contend that my approach is superior!
 
@@ -53,18 +50,16 @@ Motivation
 I began using Linux around mid-2024, and from the outset, I wanted to avoid cookie-cutter projects like yet another TODO app. Instead, I aimed to dive into something challenging, I'm also great at losing stuff, how can I find it faster? Well this stupid 40k star library wont do, its time to get raw silicon out.
 Joking aside, mostly, it's actually the thought I could make a tool that's generally useful.
 
-
 Philosophical aspect:
 One might question whether this effort was justified. Absolutely. Nearly every component here will be reused in some form or another. The goal here 
 is primary that of my own learning! if I write an arena allocator here,do you think that knowledge gets deleted when I'm not on this project?
-
 
 Compatibility Notes:
     Tested on: EXT4/BTRFS (Debian/Ubuntu/Arch) — no issues.
     BSD/macOS: Untested (might work; OpenBSD/FreeBSD could even offer performance benefits due to d_namelen in dirent, eliminating some strlen calls). I’ll need to experiment in a VM.
     Side note: Are OpenBSD and FreeBSD meaningfully distinct here? (Someone enlighten me!)
 
-#TODO LIST MAYBE:
+TODO LIST MAYBE:
 --Arena allocator potentially,  written from scratch (see microsoft's edit for a nice one) //github.com/microsoft/edit/tree/main/src/arena
 
 --io_uring for Batched Syscalls: E.g., batched open/read ops. This will be extremely challenging.
@@ -73,14 +68,11 @@ Compatibility Notes:
 
 --Threading Without Rayon: My attempts have come close but aren’t quite there yet. I can get within 10% speed wise but........thats not acceptable.
 
---Some sort of iterator adaptor+filter, which would allow one to avoid a lot more allocations
+--Some sort of iterator adaptor+filter, which would allow one to avoid a lot more allocations on non-directories.
 
 --I think there's ultimately a hard limit in syscalls, I've played around with an experimental zig iouring getdents implementation but it's out of my comfort zone, A LOT, I'll probably do it still(if possible)
 
-
 ****THIS IS NOT FINISHED, THIS WILL BE ABOUT 2025/06-07 for semi-comparable featureset with fd.
-
-**A high-performance file search utility for Linux systems**, designed to quickly traverse and filter your filesystem.
 
 ---
 

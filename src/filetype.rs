@@ -82,7 +82,7 @@ impl FileType {
             _ => Self::Unknown,
         }
     }
-    /// converts a `FileType` from a path via stdlib's `Path` APIm this is handy for verification, its not meant for use
+    /// converts a `FileType` from a path via stdlib's `Path`  this is handy for verification, its not meant for use within iteration
     #[must_use]
     #[inline]
     pub fn from_path<P: AsRef<Path>>(path_start: P) -> Self {

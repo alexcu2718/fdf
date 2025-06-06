@@ -41,7 +41,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[inline]
 /// Uses inline assembly to calculate the length of a null-terminated string.
-/// this is specifically more efficient for small strings, which dirent d_names usually are.
+/// this is specifically more efficient for small strings, which dirent `d_name`'s usually are.
 /// This function is only available on `x86_64` architectures.
 /// it's generic over the `ValueType`, which is i8 or u8.
 pub(crate) unsafe fn strlen_asm<T>(s: *const T) -> usize
@@ -56,9 +56,9 @@ where
         "xor eax, eax",  // xor is smaller than xor al,al
         "mov rcx, -1",   // directly set to max instead of xor/not
         "repne scasb",
-        "not rcx",
-        "dec rcx",
-        "mov {len}, rcx",
+        "not rcx", // invert rcx to get the length
+        "dec rcx", //subtract 1 to account for null
+        "mov {len}, rcx", //move length to len
             ptr = in(reg) s,
             len = out(reg) len,
             out("rdi") _,  // mark rdi as clobbered
@@ -69,6 +69,8 @@ where
         len
     }
 }
+
+
 
 #[cfg(not(target_arch = "x86_64"))]
 #[inline]

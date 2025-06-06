@@ -118,7 +118,6 @@ impl Finder {
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::too_many_arguments)]
     #[inline]
-
     /// Create a new Finder instance.
     pub fn new(
         root: impl AsRef<OsStr>,

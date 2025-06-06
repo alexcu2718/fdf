@@ -1,4 +1,5 @@
 #[allow(clippy::ptr_as_ptr)]
+#[allow(clippy::too_long_first_doc_paragraph)]
 #[macro_export]
 ///copied this macro from the standard library
 ///using it to access offsets in a more strict way, basically it's assumed the `libc::dirent64` struct is the same as the one in the standard library
@@ -54,8 +55,9 @@ macro_rules! cstr {
 }
 
 #[macro_export]
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// A version of `cstr!` that allows specifying a maximum length for the buffer, intended to be used publically
-///so eg libc::open(cstr_n!(b"/",2),libc::O_RDONLY)
+///so eg `libc::open(cstr_n!(b"/",2),libc::O_RDONLY)`
 macro_rules! cstr_n {
     ($bytes:expr,$n:expr) => {{
         // Debug assert to check test builds for unexpected conditions
@@ -75,7 +77,9 @@ macro_rules! cstr_n {
 }
 
 #[macro_export]
-///a macro to skip . and .. entries when traversing, takes 2 mandatory args, d_type, which is if eg let dirnt:*const dirent64; then d_type=(*dirnt).d_type
+#[allow(clippy::too_long_first_doc_paragraph)]
+///a macro to skip . and .. entries when traversing, takes 2 mandatory args, `d_type`, 
+/// which is if eg let dirnt:*const dirent64; then `d_type`=`(*dirnt).d_type`
 //so it's expecting a `u8` basically. then it optionally takes offset and reclen, these are now deprecated but they were in use in a previous build
 //ive kept them because naturally variadic macros will give no performance hit (Eg why this crate even exists)
 macro_rules! skip_dot_entries {
@@ -99,9 +103,10 @@ macro_rules! skip_dot_entries {
 }
 
 #[macro_export]
+#[allow(clippy::too_long_first_doc_paragraph)]
 //this isnt meant to be public, i cant be  bothered with the boilerplate, dunno, enjoy some unsafe code!
 /// initialises a path buffer for syscall operations,
-// appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument)
+// appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument).
 macro_rules! init_path_buffer_syscall {
     ($path_buffer:expr, $path_len:ident, $dir_path:expr, $self:expr) => {{
         let buffer_ptr = $path_buffer.as_mut_ptr();
@@ -121,9 +126,11 @@ macro_rules! init_path_buffer_syscall {
 }
 
 #[macro_export]
-/// initialises a path buffer for readdir operations,
-/// //appending a slash if necessary and returning the base length of the path
-/// returns the base length of the path, which is the length of the directory path plus one if a slash is needed
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// initialises a path buffer for readdir operations-
+/// appending a slash if necessary and returning the base length of the path.
+/// Returns the base length of the path, which is the length of the directory
+///  path plus one if a slash is needed.
 macro_rules! init_path_buffer_readdir {
     ($dir_path:expr, $buffer:expr) => {{
         let dirp = $dir_path.as_bytes();
@@ -146,6 +153,7 @@ macro_rules! init_path_buffer_readdir {
 }
 
 #[macro_export]
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// copies the name from the `name_file` pointer into the buffer of the `self` object, starting after the base length.
 macro_rules! copy_name_to_buffer {
     ($self:expr, $name_file:expr) => {{

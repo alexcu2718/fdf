@@ -8,16 +8,16 @@ use libc::{
 };
 #[allow(unused_imports)]
 use std::{
+    convert::TryFrom,
     ffi::OsStr,
     fmt,
     io::Error,
     marker::PhantomData,
+    mem::offset_of,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     sync::Arc,
     time::SystemTime,
-    mem::offset_of,
-    convert::TryFrom,
 };
 
 #[allow(unused_imports)]
@@ -498,7 +498,7 @@ impl DirEntry {
         })
     }
 
-    /// Returns an iterator over the directory entries.
+    /// Returns an iterator over the directory entries using `readdir64`
     /// very unique API compared to my other one, was an experiment.
     /// im not sure about this...its a complex type.
     #[inline]
@@ -533,7 +533,7 @@ impl DirEntry {
     /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
     /// which in theory allows it to be offered turned parameters, ie by purposeley restriction the depth,
     ///  you can likely make the stack copies extremely cheap
-    /// EG I use a ~4.3k buffer, which is the maximum size of a directory entry on most filesystems.
+    /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
@@ -579,7 +579,7 @@ impl Drop for DirEntryIterator {
     /// Drops the iterator, closing the file descriptor.
     /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
-        #[inline]
+    #[inline]
     fn drop(&mut self) {
         unsafe { close(self.fd) };
     }
@@ -599,10 +599,6 @@ impl Iterator for DirEntryIterator {
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self);
 
-
-
-      
-
                 // Extract the fields from the dirent structure
                 let name_ptr: *const u8 = unsafe { offset_ptr!(d, d_name).cast() };
                 let d_type: u8 = unsafe { *offset_ptr!(d, d_type) };
@@ -616,9 +612,7 @@ impl Iterator for DirEntryIterator {
 
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
-                //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.  
-              
-
+                //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
 
                 let entry = DirEntry {
                     path: full_path.into(),

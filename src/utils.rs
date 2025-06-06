@@ -70,8 +70,6 @@ where
     }
 }
 
-
-
 #[cfg(not(target_arch = "x86_64"))]
 #[inline]
 ///Uses libc's strlen function to calculate the length of a null-terminated string.

@@ -183,7 +183,7 @@ impl DirEntry {
             self.size().is_ok_and(|size| size == 0)
         } else if self.is_dir() {
             // for directories, check if they have no entries
-            self.as_iter()
+            self.readdir()
                 .is_ok_and(|mut entries| entries.next().is_none())
         } else {
             // special files like devices, sockets, etc.
@@ -421,7 +421,8 @@ impl DirEntry {
     #[must_use]
     ///Minimal cost conversion  to `OsStr`
     pub fn as_os_str(&self) -> &OsStr {
-        OsStr::from_bytes(self.as_bytes())
+        // this is safe because the bytes are always valid utf8, same represetation on linux
+        unsafe { std::mem::transmute(self.as_bytes()) }
     }
 
     #[inline]
@@ -454,17 +455,15 @@ impl DirEntry {
     }
     #[inline]
     #[must_use]
-    ///returns the directory name of the file (as bytes)
+    ///returns the directory name of the file (as bytes) or failing that (/ is problematic) will return the full path,
     pub fn dirname(&self) -> &[u8] {
         unsafe {
-            self.as_bytes()
+            self.as_bytes() //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
                 .get_unchecked(..self.base_len as usize - 1)
                 .rsplit(|&b| b == b'/')
                 .next()
                 .unwrap_or(self.as_bytes())
         }
-        //we need to be careful if it's root,im not a fan of this method but eh.
-        //theres probably a more elegant way.
     }
 
     #[inline]
@@ -483,6 +482,8 @@ impl DirEntry {
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Creates a new `DirEntry` from a path
+    /// Rreturns a `Result<DirEntry, DirEntryError>`.
+    /// This will error if path isn't valid/permission problems etc.
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
         let path_ref = path.as_ref().as_bytes();
 
@@ -498,12 +499,10 @@ impl DirEntry {
         })
     }
 
-    /// Returns an iterator over the directory entries using `readdir64`
-    /// very unique API compared to my other one, was an experiment.
-    /// im not sure about this...its a complex type.
+    /// Returns an iterator over the directory entries using `readdir64` as opposed to `getdents`, this uses a higher level api
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    pub fn as_iter(&self) -> Result<impl Iterator<Item = Self> + '_> {
+    pub fn readdir(&self) -> Result<impl Iterator<Item = Self> + '_> {
         DirIter::new(self)
     }
 

@@ -78,7 +78,7 @@ macro_rules! cstr_n {
 
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
-///a macro to skip . and .. entries when traversing, takes 2 mandatory args, `d_type`, 
+///a macro to skip . and .. entries when traversing, takes 2 mandatory args, `d_type`,
 /// which is if eg let dirnt:*const dirent64; then `d_type`=`(*dirnt).d_type`
 //so it's expecting a `u8` basically. then it optionally takes offset and reclen, these are now deprecated but they were in use in a previous build
 //ive kept them because naturally variadic macros will give no performance hit (Eg why this crate even exists)

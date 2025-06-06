@@ -562,23 +562,21 @@ impl DirEntry {
             offset: 0,
             remaining_bytes: 0,
         })
-
-
-
     }
 
-
-
-        #[inline]
+    #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]
     ///`getdents_filter` is an iterator over fd,where each consequent index is a directory entry.
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.
     /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
-   ///this differs from `getdents` in that it allows you to filter the entries by a function.
-   /// so it avoids a lot of unnecessary allocations and copies :)
-    pub fn getdents_filter(&self,func:fn(&[u8],usize)->bool) -> Result<impl Iterator<Item = Self>> {
+    ///this differs from `getdents` in that it allows you to filter the entries by a function.
+    /// so it avoids a lot of unnecessary allocations and copies :)
+    pub fn getdents_filter(
+        &self,
+        func: fn(&[u8], usize) -> bool,
+    ) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
         let fd = dir_path
             .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
@@ -595,9 +593,6 @@ impl DirEntry {
         let mut path_len = dir_path.len();
         init_path_buffer_syscall!(path_buffer, path_len, dir_path, self); // initialise the path buffer with the directory path
 
-
-
-
         Ok(DirEntryIteratorFilter {
             fd,
             buffer: SyscallBuffer::new(),
@@ -607,13 +602,9 @@ impl DirEntry {
             offset: 0,
             remaining_bytes: 0,
             filter_func: func,
-
         })
+    }
 }
-}
-
-
-
 
 ///Iterator for directory entries using getdents syscall
 pub struct DirEntryIterator {
@@ -651,14 +642,15 @@ impl Iterator for DirEntryIterator {
                 prefetch_next_entry!(self);
 
                 // Extract the fields from the dirent structure
-      
-                let (name_ptr,d_type, reclen, inode):(*const u8,u8,usize,u64) = unsafe {
-                    (    offset_ptr!(d, d_name).cast() ,
+
+                let (name_ptr, d_type, reclen, inode): (*const u8, u8, usize, u64) = unsafe {
+                    (
+                        offset_ptr!(d, d_name).cast(),
                         *offset_ptr!(d, d_type),
                         *offset_ptr!(d, d_reclen) as _,
-                        *offset_ptr!(d, d_ino)
+                        *offset_ptr!(d, d_ino),
                     )
-                };//ideally compiler optimises this to a single load, but it is not guaranteed, so we do it manually.
+                }; //ideally compiler optimises this to a single load, but it is not guaranteed, so we do it manually.
 
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
@@ -696,9 +688,6 @@ impl Iterator for DirEntryIterator {
     }
 }
 
-
-
-
 pub struct DirEntryIteratorFilter {
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.3k bytes~ish
@@ -706,21 +695,18 @@ pub struct DirEntryIteratorFilter {
     pub(crate) base_path_len: u16, // base path length, this is the length of the path up to and including the last slash
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
-    pub(crate) remaining_bytes: i64,                   // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-    pub(crate) filter_func: fn(&[u8], usize) -> bool// filter function, this is used to filter the entries based on the provided function
+    pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
+    pub(crate) filter_func: fn(&[u8], usize) -> bool, // filter function, this is used to filter the entries based on the provided function
 }
 
 impl Drop for DirEntryIteratorFilter {
     /// Drops the iterator, closing the file descriptor.
-    /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
-    /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
+    /// same as above, we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     #[inline]
     fn drop(&mut self) {
         unsafe { close(self.fd) };
     }
 }
-
-
 
 impl Iterator for DirEntryIteratorFilter {
     type Item = DirEntry;
@@ -737,14 +723,15 @@ impl Iterator for DirEntryIteratorFilter {
                 prefetch_next_entry!(self);
 
                 // Extract the fields from the dirent structure
-      
-                let (name_ptr,d_type, reclen, inode):(*const u8,u8,usize,u64) = unsafe {
-                    (    offset_ptr!(d, d_name).cast() ,
+
+                let (name_ptr, d_type, reclen, inode): (*const u8, u8, usize, u64) = unsafe {
+                    (
+                        offset_ptr!(d, d_name).cast(),
                         *offset_ptr!(d, d_type),
                         *offset_ptr!(d, d_reclen) as _,
-                        *offset_ptr!(d, d_ino)
+                        *offset_ptr!(d, d_ino),
                     )
-                };//ideally compiler optimises this to a single load, but it is not guaranteed, so we do it manually.
+                }; //ideally compiler optimises this to a single load, but it is not guaranteed, so we do it manually.
 
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
@@ -757,7 +744,7 @@ impl Iterator for DirEntryIteratorFilter {
 
                 let current_depth = self.parent_depth + 1; // increment depth for child entries
 
-                if !(self.filter_func)(full_path, current_depth as usize)  {
+                if !(self.filter_func)(full_path, current_depth as usize) {
                     //if the entry does not match the filter, skip it
                     continue;
                 }

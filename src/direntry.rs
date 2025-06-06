@@ -562,8 +562,58 @@ impl DirEntry {
             offset: 0,
             remaining_bytes: 0,
         })
+
+
+
     }
+
+
+
+        #[inline]
+    #[allow(clippy::missing_errors_doc)] //fixing errors later
+    #[allow(clippy::cast_possible_wrap)]
+    ///`getdents_filter` is an iterator over fd,where each consequent index is a directory entry.
+    /// This function is a low-level syscall wrapper that reads directory entries.
+    /// It returns an iterator that yields `DirEntry` objects.
+    /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
+   ///this differs from `getdents` in that it allows you to filter the entries by a function.
+   /// so it avoids a lot of unnecessary allocations and copies :)
+    pub fn getdents_filter(&self,func:fn(&[u8],usize)->bool) -> Result<impl Iterator<Item = Self>> {
+        let dir_path = self.as_bytes();
+        let fd = dir_path
+            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        //alternatively syntaxes I made.
+        //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+        //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+
+        if fd < 0 {
+            return Err(Error::last_os_error().into());
+        }
+
+        let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used(the pointer is mutated) to construct the full path of the entry, this is actually
+        //a uninitialised buffer, which is then initialised with the directory path
+        let mut path_len = dir_path.len();
+        init_path_buffer_syscall!(path_buffer, path_len, dir_path, self); // initialise the path buffer with the directory path
+
+
+
+
+        Ok(DirEntryIteratorFilter {
+            fd,
+            buffer: SyscallBuffer::new(),
+            path_buffer,
+            base_path_len: path_len as _,
+            parent_depth: self.depth,
+            offset: 0,
+            remaining_bytes: 0,
+            filter_func: func,
+
+        })
 }
+}
+
+
+
 
 ///Iterator for directory entries using getdents syscall
 pub struct DirEntryIterator {
@@ -624,6 +674,99 @@ impl Iterator for DirEntryIterator {
                     file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
                     inode,
                     depth: self.parent_depth + 1, // increment depth for child entries
+                    base_len: self.base_path_len,
+                };
+
+                return Some(entry);
+            }
+
+            // prefetch the next buffer content before reading
+            #[cfg(target_arch = "x86_64")]
+            prefetch_next_buffer!(self);
+
+            // check remaining bytes
+            self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+            self.offset = 0;
+
+            if self.remaining_bytes <= 0 {
+                // If no more entries, return None,
+                return None;
+            }
+        }
+    }
+}
+
+
+
+
+pub struct DirEntryIteratorFilter {
+    pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
+    pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.3k bytes~ish
+    pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
+    pub(crate) base_path_len: u16, // base path length, this is the length of the path up to and including the last slash
+    pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
+    pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
+    pub(crate) remaining_bytes: i64,                   // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
+    pub(crate) filter_func: fn(&[u8], usize) -> bool// filter function, this is used to filter the entries based on the provided function
+}
+
+impl Drop for DirEntryIteratorFilter {
+    /// Drops the iterator, closing the file descriptor.
+    /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
+    /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
+    #[inline]
+    fn drop(&mut self) {
+        unsafe { close(self.fd) };
+    }
+}
+
+
+
+impl Iterator for DirEntryIteratorFilter {
+    type Item = DirEntry;
+    #[inline]
+    /// Returns the next directory entry in the iterator.
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            // If we have remaining data in buffer, process it
+            if self.offset < self.remaining_bytes as usize {
+                let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
+                // this is a pointer to the dirent64 structure, which contains the directory entry information
+
+                #[cfg(target_arch = "x86_64")]
+                prefetch_next_entry!(self);
+
+                // Extract the fields from the dirent structure
+      
+                let (name_ptr,d_type, reclen, inode):(*const u8,u8,usize,u64) = unsafe {
+                    (    offset_ptr!(d, d_name).cast() ,
+                        *offset_ptr!(d, d_type),
+                        *offset_ptr!(d, d_reclen) as _,
+                        *offset_ptr!(d, d_ino)
+                    )
+                };//ideally compiler optimises this to a single load, but it is not guaranteed, so we do it manually.
+
+                self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
+
+                // skip entries that are not valid or are dot entries
+                skip_dot_entries!(d_type, name_ptr); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
+
+                let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
+                //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
+                //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
+
+                let current_depth = self.parent_depth + 1; // increment depth for child entries
+
+                if !(self.filter_func)(full_path, current_depth as usize)  {
+                    //if the entry does not match the filter, skip it
+                    continue;
+                }
+
+                let entry = DirEntry {
+                    path: full_path.into(),
+                    file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
+                    inode,
+                    depth: current_depth,
                     base_len: self.base_path_len,
                 };
 

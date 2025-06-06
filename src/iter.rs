@@ -39,6 +39,9 @@ impl DirIter {
         }
         let mut buffer = PathBuffer::new(); //
         let base_len = init_path_buffer_readdir!(dir_path, buffer); //0 cost macro to construct the buffer in the way we want.
+        // The base_len is the length of the path up to the directory being read.
+        //mutate the buffer to contain the path up to the directory being read.
+        // This is used to avoid copying the path every time we read a directory entry.
 
         Ok(Self {
             dir,

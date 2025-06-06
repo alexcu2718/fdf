@@ -318,29 +318,26 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let test_dir = temp_dir.join("test_dirname");
         let file_path = test_dir.join("parent/child.txt");
-        
+
         // Cleanup any previous test runs (ignore errors)
         let _ = std::fs::remove_dir_all(&test_dir);
 
         // verify operations succeed
         std::fs::create_dir_all(file_path.parent().unwrap())
             .expect("Failed to create parent directory");
-        std::fs::write(&file_path, "test")
-            .expect("Failed to create test file");
+        std::fs::write(&file_path, "test").expect("Failed to create test file");
 
         // check the file was actually created
         assert!(file_path.exists(), "Test file was not created");
         assert!(file_path.is_file(), "Test path is not a file");
 
         // the actual functionality
-        let entry = DirEntry::new(file_path.as_os_str())
-            .expect("Failed to create DirEntry");
+        let entry = DirEntry::new(file_path.as_os_str()).expect("Failed to create DirEntry");
         assert_eq!(entry.dirname(), b"parent", "Incorrect directory name");
 
         // verify removal
-        std::fs::remove_dir_all(&test_dir)
-            .expect("Failed to clean up test directory");
-        
+        std::fs::remove_dir_all(&test_dir).expect("Failed to clean up test directory");
+
         assert!(!test_dir.exists(), "Test directory was not removed");
     }
     #[test]

@@ -88,7 +88,7 @@ pub use custom_types_result::{
 };
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{AsOsStr, BytesToCstrPointer, PathAsBytes, ToStat};
+pub use traits_and_conversions::{ BytesToCstrPointer, PathAsBytes, ToStat};
 
 mod utils;
 

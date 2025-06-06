@@ -42,12 +42,15 @@ where
         f(c_path_buf.cast::<_>())
     }
 }
-
-pub trait AsOsStr {
+#[allow(dead_code)]
+pub(crate) trait AsOsStr {
     fn as_os_str(&self) -> &OsStr;
 }
 
-impl AsOsStr for [u8] {
+impl<T> AsOsStr for T
+where
+    T: Deref<Target = [u8]>,
+{
     #[inline]
     #[allow(clippy::transmute_ptr_to_ptr)]
     ///cheap conversion from byte slice to `OsStr`

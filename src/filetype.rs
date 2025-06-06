@@ -7,7 +7,7 @@ use libc::{
 };
 
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
-/// Represents the type of a file in the filesystem
+/// Represents the type of a file in the filesystem, tiny enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FileType {
     BlockDevice,

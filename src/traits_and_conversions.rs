@@ -5,7 +5,7 @@ use std::mem::MaybeUninit;
 use std::mem::transmute;
 use std::ops::Deref;
 use std::path::Path;
-///a trait over anything which derefs to `&[u8]` then conver to *const i8 or *const u8
+///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
 pub trait BytesToCstrPointer<T> {
     fn as_cstr_ptr<F, R, VT>(&self, f: F) -> R
     where

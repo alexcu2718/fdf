@@ -38,7 +38,8 @@ impl DirIter {
             return Err(std::io::Error::last_os_error().into());
         }
         let mut buffer = PathBuffer::new(); //
-        let base_len = init_path_buffer_readdir!(dir_path, buffer); //0 cost macro to construct the buffer in the way we want.
+        //we know it won't be greater than u16::MAX because we limit the path
+        let base_len :u16= init_path_buffer_readdir!(dir_path, buffer) as _; //0 cost macro to construct the buffer in the way we want.
         // The base_len is the length of the path up to the directory being read.
         //mutate the buffer to contain the path up to the directory being read.
         // This is used to avoid copying the path every time we read a directory entry.
@@ -47,7 +48,7 @@ impl DirIter {
         Ok(Self {
             dir,
             buffer,
-            base_len: base_len as _,
+            base_len: base_len,
             depth: dir_path.depth(),
             error: None,
         })

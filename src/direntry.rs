@@ -420,6 +420,7 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
+    #[allow(clippy::transmute_ptr_to_ptr)]
     ///Minimal cost conversion  to `OsStr`
     pub fn as_os_str(&self) -> &OsStr {
         // this is safe because the bytes are always valid utf8, same represetation on linux
@@ -600,10 +601,14 @@ impl Iterator for DirEntryIterator {
                 prefetch_next_entry!(self);
 
                 // Extract the fields from the dirent structure
-                let name_ptr: *const u8 = unsafe { offset_ptr!(d, d_name).cast() };
-                let d_type: u8 = unsafe { *offset_ptr!(d, d_type) };
-                let reclen: usize = unsafe { *offset_ptr!(d, d_reclen) as _ }; //deref to get record length, 
-                let inode: u64 = unsafe { *offset_ptr!(d, d_ino) };
+      
+                let (name_ptr,d_type, reclen, inode):(*const u8,u8,usize,u64) = unsafe {
+                    (    offset_ptr!(d, d_name).cast() ,
+                        *offset_ptr!(d, d_type),
+                        *offset_ptr!(d, d_reclen) as _,
+                        *offset_ptr!(d, d_ino)
+                    )
+                };//ideally compiler optimises this to a single load, but it is not guaranteed, so we do it manually.
 
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 

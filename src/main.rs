@@ -4,7 +4,6 @@
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
 #![allow(clippy::str_to_string)]
-//#![allow(clippy::print_stdin)]
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]

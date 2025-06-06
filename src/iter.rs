@@ -42,6 +42,7 @@ impl DirIter {
         // The base_len is the length of the path up to the directory being read.
         //mutate the buffer to contain the path up to the directory being read.
         // This is used to avoid copying the path every time we read a directory entry.
+        //i concede this isn't the clearest and ill tidy it up un future.
 
         Ok(Self {
             dir,
@@ -66,15 +67,21 @@ impl Iterator for DirIter {
             if entry.is_null() {
                 return None;
             }
-            let name_file: *const u8 = unsafe { offset_ptr!(entry, d_name).cast() };
-            let dir_info: u8 = unsafe { *offset_ptr!(entry, d_type).cast() };
+       
+
+            let (name_file ,dir_info ,inode):(*const u8,u8,u64)=unsafe{(
+                    offset_ptr!(entry, d_name).cast(),
+                    *offset_ptr!(entry, d_type),
+                    *offset_ptr!(entry, d_ino))
+            };
+      
             skip_dot_entries!(dir_info, name_file);
             let total_path_len = copy_name_to_buffer!(self, name_file);
             let full_path = unsafe { self.buffer.get_unchecked_mut(..total_path_len) };
             return Some(DirEntry {
                 path: full_path.into(),
                 file_type: FileType::from_dtype_fallback(dir_info, full_path),
-                inode: unsafe { *offset_ptr!(entry, d_ino) },
+                inode,
                 depth: self.depth + 1,
                 base_len: self.base_len,
             });

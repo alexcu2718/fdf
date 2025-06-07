@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FDF="../target/release/fdf"
+FDF="fdf"
 FD="fd"
 DIR="."
 STRACE_OUT_DIR="strace_outputs"

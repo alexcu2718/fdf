@@ -1,5 +1,5 @@
 #!/bin/bash
-
+echo 'this isnt  in here so left untouched'
 source "prelude.sh"
 
 COMMAND_FIND_EXEC="find '$SEARCH_ROOT' -iname '*.txt' -exec wc -l {} \\;"

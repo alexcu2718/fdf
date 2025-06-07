@@ -552,6 +552,7 @@ impl DirEntry {
         //a uninitialised buffer, which is then initialised with the directory path
         let mut path_len = dir_path.len();
         init_path_buffer_syscall!(path_buffer, path_len, dir_path, self); // initialise the path buffer with the directory path
+        //using macros is ideal here and i need generics 
 
         Ok(DirEntryIterator {
             fd,
@@ -575,7 +576,7 @@ impl DirEntry {
     /// so it avoids a lot of unnecessary allocations and copies :)
     pub fn getdents_filter(
         &self,
-        func: fn(&[u8], usize) -> bool,
+        func: fn(&[u8], usize,u8) -> bool,
     ) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
         let fd = dir_path
@@ -696,7 +697,8 @@ pub struct DirEntryIteratorFilter {
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-    pub(crate) filter_func: fn(&[u8], usize) -> bool, // filter function, this is used to filter the entries based on the provided function
+    pub(crate) filter_func: fn(&[u8], usize,u8) -> bool, // filter function, this is used to filter the entries based on the provided function
+    //mainly the arguments would be full path,depth,filetype, this is a shoddy implementation but im testing waters.
 }
 
 impl Drop for DirEntryIteratorFilter {
@@ -742,18 +744,24 @@ impl Iterator for DirEntryIteratorFilter {
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
 
-                let current_depth = self.parent_depth + 1; // increment depth for child entries
+                let depth = self.parent_depth + 1; // increment depth for child entries
 
-                if !(self.filter_func)(full_path, current_depth as usize) {
+                let file_type = FileType::from_dtype_fallback(d_type, full_path); //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
+
+
+                // apply the filter function to the entry
+                //ive had to map the filetype to a value, it's mapped to libc dirent dtype values, this is temporary
+                //while i look at implementing a decent state machine for this
+                if !(self.filter_func)(full_path, depth as usize,file_type.d_type_value()) {
                     //if the entry does not match the filter, skip it
                     continue;
                 }
 
                 let entry = DirEntry {
                     path: full_path.into(),
-                    file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
+                    file_type, //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
                     inode,
-                    depth: current_depth,
+                    depth,
                     base_len: self.base_path_len,
                 };
 

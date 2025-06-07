@@ -43,7 +43,7 @@ impl FileType {
     #[inline]
     ///this is a fallback for when we can't get the file type from libc
     ///this can happen on funky filesystems like NTFS/XFS, BTRFS/ext4 work fine.
-    //fortunately we can just check the dtype, if it's unknowm, it means we have to do another syscall, yay!
+    //fortunately we can just check the dtype, if it's unknowm, it means we have to do a stat call, yay!
     pub fn from_dtype_fallback(d_type: u8, file_path: &[u8]) -> Self {
         //i wouldve just chained the function calls but it's clearer this way
         match d_type {
@@ -60,7 +60,7 @@ impl FileType {
 
     #[must_use]
     #[inline]
-    ///uses a stat call to get the file type, more costly but more accurate
+    ///uses a lstat call to get the file type, more costly but more accurate
     /// this is used when we can't get the file type from dirent64 due to funky filesystems
     pub fn from_bytes(file_path: &[u8]) -> Self {
         file_path
@@ -99,11 +99,26 @@ impl FileType {
                 _ => Self::Unknown,
             })
     }
+
+    #[must_use]
+    #[inline]
+    /// Returns the corresponding libc dirent d_type value
+    pub const fn d_type_value(&self) -> u8 {
+        match self {
+            Self::RegularFile => DT_REG,
+            Self::Directory => DT_DIR,
+            Self::BlockDevice => DT_BLK,
+            Self::CharDevice => DT_CHR,
+            Self::Fifo => DT_FIFO,
+            Self::Symlink => DT_LNK,
+            Self::Socket => DT_SOCK,
+            Self::Unknown => 0,  // DT_UNKNOWN
+        }
+    }
 }
 
 impl std::fmt::Display for FileType {
     #[inline]
-    #[allow(clippy::pattern_type_mismatch)] //bug
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BlockDevice => write!(f, "Block device"),
@@ -113,7 +128,7 @@ impl std::fmt::Display for FileType {
             Self::Symlink => write!(f, "Symlink"),
             Self::RegularFile => write!(f, "Regular file"),
             Self::Socket => write!(f, "Socket"),
-            Self::Unknown => write!(f, "Unknown"),
+            _ => write!(f, "Unknown"),
         }
     }
 }

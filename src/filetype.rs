@@ -102,7 +102,7 @@ impl FileType {
 
     #[must_use]
     #[inline]
-    /// Returns the corresponding libc dirent d_type value
+    /// Returns the corresponding libc dirent `d_type` value
     pub const fn d_type_value(&self) -> u8 {
         match self {
             Self::RegularFile => DT_REG,
@@ -112,7 +112,7 @@ impl FileType {
             Self::Fifo => DT_FIFO,
             Self::Symlink => DT_LNK,
             Self::Socket => DT_SOCK,
-            Self::Unknown => 0,  // DT_UNKNOWN
+            Self::Unknown => 0, // DT_UNKNOWN
         }
     }
 }
@@ -128,7 +128,7 @@ impl std::fmt::Display for FileType {
             Self::Symlink => write!(f, "Symlink"),
             Self::RegularFile => write!(f, "Regular file"),
             Self::Socket => write!(f, "Socket"),
-            _ => write!(f, "Unknown"),
+            Self::Unknown => write!(f, "Unknown"),
         }
     }
 }

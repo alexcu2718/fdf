@@ -84,7 +84,7 @@ pub use error::DirEntryError;
 
 mod custom_types_result;
 pub use custom_types_result::{
-    AsU8, BUFFER_SIZE, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result, SyscallBuffer,FilterType
+    AsU8, BUFFER_SIZE, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result, SyscallBuffer,
 };
 
 mod traits_and_conversions;
@@ -111,9 +111,8 @@ pub struct Finder {
     root: OsString,
     search_config: SearchConfig,
     filter: Option<fn(&DirEntry) -> bool>,
-    dir_filter:FilterType,
-    non_dir_filter:FilterType
-
+    dir_filter: FilterType,
+    non_dir_filter: FilterType,
 }
 ///The Finder struct is used to find files in a directory.
 impl Finder {
@@ -149,8 +148,8 @@ impl Finder {
                 std::process::exit(1);
             }
         };
-                // The lambda functions are used to filter directories and non-directories based on the search configuration.
-                let lambda1 =
+        // The lambda functions are used to filter directories and non-directories based on the search configuration.
+        let lambda1 =
             |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
                 rconfig.keep_dirs
                     && rconfig.matches_path(rdir, rconfig.file_name)
@@ -158,7 +157,7 @@ impl Finder {
                     && rconfig.extension_match.as_ref().is_none()
             };
 
-                    let lambda2 =
+        let lambda2 =
             |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_path(rdir, rconfig.file_name)
@@ -168,16 +167,12 @@ impl Finder {
                         .is_none_or(|ext| rdir.matches_extension(ext))
             };
 
-
-
-
         Self {
             root: root.as_ref().to_owned(),
             search_config,
             filter: None,
             dir_filter: lambda1,
             non_dir_filter: lambda2,
-
         }
     }
 
@@ -195,7 +190,7 @@ impl Finder {
     pub fn traverse(self) -> Result<Receiver<Vec<DirEntry>>> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
-       // let search_config = self.search_config.clone();
+        // let search_config = self.search_config.clone();
 
         let construct_dir = DirEntry::new(&self.root);
 
@@ -203,17 +198,16 @@ impl Finder {
             return Err(DirEntryError::InvalidPath);
         }
 
-  
-
         //we have to arbitrarily construct a direntry to start the search.
 
         //spawn the search in a new thread.
         //this is safe because we've already checked that the directory exists.
         rayon::spawn(move || {
-            Self::process_directory(&self,
+            Self::process_directory(
+                &self,
                 unsafe { construct_dir.unwrap_unchecked() },
                 &sender,
-             //   &search_config,
+                //   &search_config,
                 //filter,
             );
         });
@@ -222,23 +216,14 @@ impl Finder {
     }
 
     #[inline]
-    fn process_directory(&self,
-        dir: DirEntry,
-        sender: &Sender<Vec<DirEntry>>,
-  
-    ) {
-
-
+    fn process_directory(&self, dir: DirEntry, sender: &Sender<Vec<DirEntry>>) {
         let should_send = (self.dir_filter)(&self.search_config, &dir, self.filter);
-
-
 
         if should_send && self.search_config.depth.is_some_and(|d| dir.depth() >= d) {
             let _ = sender.send(vec![dir]); //have to put into a vec, this doesnt matter because this only happens when we depth limit
 
             return; // stop processing this directory if depth limit is reached
         }
-
 
         match dir.getdents() {
             Ok(entries) => {
@@ -249,7 +234,7 @@ impl Finder {
                     .partition(direntry::DirEntry::is_dir);
 
                 dirs.into_par_iter().for_each(|dir| {
-                    Self::process_directory(self,dir, sender);
+                    Self::process_directory(self, dir, sender);
                 });
 
                 let mut matched_files: Vec<_> = files
@@ -263,16 +248,14 @@ impl Finder {
 
                 let _ = sender.send(matched_files);
                 //send files as a vector(to prevent contention on the channel)
-
-            
             }
-            Err(DirEntryError::Success 
-                |DirEntryError::TemporarilyUnavailable
+            Err(
+                DirEntryError::Success
+                | DirEntryError::TemporarilyUnavailable
                 | DirEntryError::AccessDenied(_)
                 | DirEntryError::InvalidPath,
             ) => {}
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
-
     }
 }

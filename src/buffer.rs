@@ -108,28 +108,27 @@ where
         unsafe { syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
     }
 
-
-
-        /// # Safety
+    /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     #[inline]
     #[allow(clippy::inline_asm_x86_intel_syntax)]
     pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         let output;
-        unsafe{asm!(
-    "syscall",
-    inout("rax") libc::SYS_getdents64 => output,
-    in("rdi") fd,
-    in("rsi") self.as_mut_ptr(),
-    in("rdx") SIZE,
-    out("rcx") _,  // syscall clobbers rcx
-    out("r11") _,  // syscall clobbers r11
-    options(nostack, preserves_flags)
-)};
+        unsafe {
+            asm!(
+                "syscall",
+                inout("rax") libc::SYS_getdents64 => output,
+                in("rdi") fd,
+                in("rsi") self.as_mut_ptr(),
+                in("rdx") SIZE,
+                out("rcx") _,  // syscall clobbers rcx
+                out("r11") _,  // syscall clobbers r11
+                options(nostack, preserves_flags)
+            )
+        };
 
         output
     }
-
 
     /// # Safety
     /// The range must be within initialised portion of the buffer

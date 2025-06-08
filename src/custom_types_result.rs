@@ -1,4 +1,4 @@
-use crate::{AlignedBuffer,DirEntry, SearchConfig,DirEntryError};
+use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 use libc::{PATH_MAX, dirent64};
 use slimmer_box::SlimmerBox;
 use std::mem::offset_of;

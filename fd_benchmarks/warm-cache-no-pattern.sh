@@ -2,7 +2,7 @@
 
 source "prelude.sh"
 echo I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE NO GIT IGNORE IN MINE YET.
-
+echo "there is a bug in hyperfine i believe, if there is a discrepancy, please run the commands and test output yourself, i am clueless on as to why..."
 
 COMMAND_FIND="fdf  '.' '$SEARCH_ROOT' -HI"
 #COMMAND_FIND="find '$SEARCH_ROOT'"

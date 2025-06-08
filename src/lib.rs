@@ -205,7 +205,7 @@ impl Finder {
     
 
 
-
+        //these are only temporarily here before i move them to the struct.
         let lambda1=|rconfig:&SearchConfig,rdir:&DirEntry,rfilter:Option<fn(&DirEntry) -> bool>| {
             rconfig.keep_dirs &&
             rconfig.matches_path(rdir, rconfig.file_name)
@@ -222,7 +222,7 @@ impl Finder {
             return; // stop processing this directory if depth limit is reached
         }
 
-
+            //these are only temporarily here before i move them to the struct.
         let lambda2=|rconfig:&SearchConfig,rdir:&DirEntry,rfilter:Option<fn(&DirEntry) -> bool>| {
             rfilter.is_none_or(|f| f(&rdir)) && 
             rconfig.matches_path(rdir, rconfig.file_name) &&
@@ -262,7 +262,7 @@ impl Finder {
                 // use rayon::iter::IntoParallelIterator for more efficient parallel processing , ill try that in an experimental build.
                 
             }
-            Err(DirEntryError::AccessDenied(_) | DirEntryError::InvalidPath) => {}
+            Err(DirEntryError::TemporarilyUnavailable |DirEntryError::Success | DirEntryError::AccessDenied(_) | DirEntryError::InvalidPath) => {}
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
 

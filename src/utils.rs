@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use crate::buffer::ValueType;
 use crate::{DirEntryError, Result, cstr};
+use libc::{dirent64};
 #[cfg(target_arch = "x86_64")]
 use std::arch::asm;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -135,4 +136,45 @@ pub unsafe fn close_asm(fd: i32) {
             options(preserves_flags, nomem)
         )
     };
+}
+
+
+
+
+
+#[inline(always)]
+///OK this technically isn't constant time but it's a much lower complexity than the naive approach of iterating over each byte
+pub unsafe fn dirent_const_time_strlen(dirent: *const dirent64,reclen:usize) -> usize {
+    let reclen_in_u64s = reclen / 8; //reclen is in bytes, we need to convert it to u64s
+   // Cast dirent to u64 slice 
+       // Treat the dirent structure as a slice of u64 for word-wise processing
+       //use `std::ptr::slice_from_raw_parts` to create a slice from the raw pointer and avoid ubcheck
+    let u64_slice = unsafe{&*std::ptr::slice_from_raw_parts( dirent as *const u64,  reclen_in_u64s  )};
+    //  verify alignment/size
+    debug_assert!(reclen % 8 == 0 && reclen >= 24, "reclen={}", reclen);
+    // Calculate position of last word
+       // Get the last u64 word in the structure
+    let last_word_index = unsafe{reclen_in_u64s .checked_sub(1).unwrap_unchecked()};
+    let last_word = u64_slice[last_word_index];
+
+        // Special case: When processing the 3rd u64 word (index 2), we need to mask
+    // the non-name bytes (d_type and padding) to avoid false null detection.
+    // The 0xFFFFFF mask preserves only the LSB 3 bytes where the name could start.
+    let last_word = if last_word_index == 2 {
+        last_word | 0xFFFFFF //evil integer bit level hacking
+    } else { //what the fuck?
+        last_word
+    };
+
+    // Find null terminator position within the last word using our repne scasb(very efficient for len<8)
+    let ignore=unsafe{7-strlen_asm(last_word.to_le_bytes().as_ptr())};
+
+        // Calculate true string length:
+    // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type)
+    // 2. Subtract ignored bytes (after null terminator in last word)
+    let dirent_header_size= 8 + 8 + 2 + 2;
+
+    let truestrlen=reclen - dirent_header_size- ignore;
+    truestrlen
+
 }

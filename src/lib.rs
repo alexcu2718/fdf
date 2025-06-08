@@ -252,10 +252,14 @@ impl Finder {
                     Self::process_directory(self,dir, sender, config);
                 });
 
-                let matched_files: Vec<_> = files
+                let mut matched_files: Vec<_> = files
                     .into_iter()
                     .filter(|entry| (self.non_dir_filter)(config, entry, self.filter))
                     .collect();
+
+                if should_send {
+                    matched_files.push(dir.clone()); //accepting the clone cost here to avoid contention on the channel
+                }
 
                 let _ = sender.send(matched_files);
                 //send files as a vector(to prevent contention on the channel)
@@ -270,8 +274,5 @@ impl Finder {
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
 
-        if should_send {
-            let _ = sender.send(vec![dir]);
-        }
     }
 }

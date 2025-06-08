@@ -109,7 +109,7 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 #[inline(always)]
 pub fn write_paths_coloured<I>(paths: I, limit: Option<usize>) -> Result<()>
 where
-    I: Iterator<Item = DirEntry>,
+    I: Iterator<Item = Vec<DirEntry>>,
 {
     let std_out = stdout();
     let use_colors = std_out.is_terminal();
@@ -124,11 +124,12 @@ where
     //TODO! fix broken pipe errors.
     if use_colors && !check_std_colours {
         for path in paths.take(limit_opt) {
-            writer.write_all(extension_colour(&path))?;
-            writer.write_all(path.as_bytes())?;
+            for small_path in path{
+            writer.write_all(extension_colour(&small_path))?;
+            writer.write_all(small_path.as_bytes())?;
 
             // add a trailing slash+newline for directories
-            if path.is_dir() {
+            if small_path.is_dir() {
                 writer.write_all(NEWLINE_CRLF_RESET)?;
             }
             // add a trailing newline for files
@@ -136,19 +137,22 @@ where
                 writer.write_all(NEWLINE_RESET)?;
             }
         }
+    }
     } else
     // let pipe_writer = PipeWriter::new(std_out.lock());
     {
         for path in paths.take(limit_opt) {
-            writer.write_all(path.as_bytes())?;
+            for small_path in path{
+            writer.write_all(small_path.as_bytes())?;
             // add a trailing slash+newline for directories
-            if path.is_dir() {
+            if small_path.is_dir() {
                 writer.write_all(NEWLINE_CRLF)?;
             }
             // add a trailing newline for files
             else {
                 writer.write_all(NEWLINE)?;
             }
+        }
         }
     }
     writer.flush()?;

@@ -244,7 +244,7 @@ fn main() -> Result<(), DirEntryError> {
 
     if let Some(types) = args.type_of {
         let type_filter = build_type_filter(&types);
-        finder = finder.with_filter(type_filter);
+        finder = finder.with_type_filter(type_filter);
     }
 
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n); //.map_err(|e| DirEntryError::from(e))?;

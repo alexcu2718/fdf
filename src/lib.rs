@@ -195,7 +195,7 @@ impl Finder {
     pub fn traverse(self) -> Result<Receiver<Vec<DirEntry>>> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
-        let search_config = self.search_config.clone();
+       // let search_config = self.search_config.clone();
 
         let construct_dir = DirEntry::new(&self.root);
 
@@ -213,7 +213,7 @@ impl Finder {
             Self::process_directory(&self,
                 unsafe { construct_dir.unwrap_unchecked() },
                 &sender,
-                &search_config,
+             //   &search_config,
                 //filter,
             );
         });
@@ -225,16 +225,16 @@ impl Finder {
     fn process_directory(&self,
         dir: DirEntry,
         sender: &Sender<Vec<DirEntry>>,
-        config: &SearchConfig,
+  
     ) {
 
 
-        let should_send = (self.dir_filter)(config, &dir, self.filter);
+        let should_send = (self.dir_filter)(&self.search_config, &dir, self.filter);
 
 
 
-        if should_send && config.depth.is_some_and(|d| dir.depth() >= d) {
-            let _ = sender.send(vec![dir]); //have to put into a vec 
+        if should_send && self.search_config.depth.is_some_and(|d| dir.depth() >= d) {
+            let _ = sender.send(vec![dir]); //have to put into a vec, this doesnt matter because this only happens when we depth limit
 
             return; // stop processing this directory if depth limit is reached
         }
@@ -245,16 +245,16 @@ impl Finder {
                 // Store only directories for parallel recursive call
 
                 let (dirs, files): (Vec<_>, Vec<_>) = entries
-                    .filter(|e| !config.hide_hidden || !e.is_hidden())
+                    .filter(|e| !self.search_config.hide_hidden || !e.is_hidden())
                     .partition(direntry::DirEntry::is_dir);
 
                 dirs.into_par_iter().for_each(|dir| {
-                    Self::process_directory(self,dir, sender, config);
+                    Self::process_directory(self,dir, sender);
                 });
 
                 let mut matched_files: Vec<_> = files
                     .into_iter()
-                    .filter(|entry| (self.non_dir_filter)(config, entry, self.filter))
+                    .filter(|entry| (self.non_dir_filter)(&self.search_config, entry, self.filter))
                     .collect();
 
                 if should_send {

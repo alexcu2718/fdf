@@ -1,4 +1,4 @@
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `fdf .  '/home/alexc' -HI --type l` | 276.4 ± 7.3 | 267.1 | 286.6 | 1.00 |
-| `fd -HI '' '/home/alexc' --type l` | 395.8 ± 7.5 | 386.0 | 406.2 | 1.43 ± 0.05 |
+| `fdf .  '/home/alexc' -HI --type l` | 282.6 ± 6.5 | 271.1 | 288.4 | 1.00 |
+| `fd -HI '' '/home/alexc' --type l` | 390.6 ± 3.7 | 384.7 | 396.1 | 1.38 ± 0.03 |

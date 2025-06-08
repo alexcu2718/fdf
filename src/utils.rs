@@ -174,7 +174,11 @@ pub unsafe fn dirent_const_time_strlen(dirent: *const dirent64, reclen: usize) -
     // Calculate true string length:
     // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type)
     // 2. Subtract ignored bytes (after null terminator in last word)
-    const DIRENT_HEADER_SIZE: usize = std::mem::size_of::<u64>() + std::mem::size_of::<i64>() +std::mem::size_of::<u8>()+std::mem::size_of::<u16>()+1 ;//start pos
+    const DIRENT_HEADER_SIZE: usize = std::mem::size_of::<u64>()
+        + std::mem::size_of::<i64>()
+        + std::mem::size_of::<u8>()
+        + std::mem::size_of::<u16>()
+        + 1; //start pos
     //std::mem::offset_of!(libc::dirent64,d_name)
     //return true strlen
     reclen - DIRENT_HEADER_SIZE - ignore

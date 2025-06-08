@@ -26,8 +26,8 @@ use crate::{
     construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, error::DirEntryError,
     filetype::FileType, init_path_buffer_syscall, offset_ptr, prefetch_next_buffer,
     prefetch_next_entry, skip_dot_entries, traits_and_conversions::AsOsStr as _,
-    traits_and_conversions::BytesToCstrPointer, utils::get_baselen, utils::open_asm,utils::close_asm,
-    utils::unix_time_to_system_time,
+    traits_and_conversions::BytesToCstrPointer, utils::close_asm, utils::get_baselen,
+    utils::open_asm, utils::unix_time_to_system_time,
 };
 
 #[derive(Clone)]
@@ -532,7 +532,7 @@ impl DirEntry {
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.
     /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
-    /// which in theory allows it to be offered turned parameters, ie by purposeley restriction the depth,
+    /// which in theory allows it to be offered turned parameters, ie by purposely restriction the depth,
     ///  you can likely make the stack copies extremely cheap
     /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
@@ -580,11 +580,12 @@ impl DirEntry {
         func: fn(&[u8], usize, u8) -> bool,
     ) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        let fd = dir_path
+            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-       // let fd=unsafe{open_asm(dir_path)};
+        // let fd=unsafe{open_asm(dir_path)};
 
         if fd < 0 {
             return Err(Error::last_os_error().into());
@@ -611,7 +612,7 @@ impl DirEntry {
 ///Iterator for directory entries using getdents syscall
 pub struct DirEntryIterator {
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
-    pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.3k bytes~ish
+    pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.1k bytes~ish
     pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
     pub(crate) base_path_len: u16, // base path length, this is the length of the path up to and including the last slash
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries

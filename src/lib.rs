@@ -111,6 +111,9 @@ pub struct Finder {
     root: OsString,
     search_config: SearchConfig,
     filter: Option<fn(&DirEntry) -> bool>,
+    dir_filter:fn(&SearchConfig, &DirEntry, Option<fn(&DirEntry) -> bool>) -> bool,
+    non_dir_filter:fn(&SearchConfig, &DirEntry, Option<fn(&DirEntry) -> bool>) -> bool
+
 }
 ///The Finder struct is used to find files in a directory.
 impl Finder {
@@ -147,10 +150,34 @@ impl Finder {
             }
         };
 
+                let lambda1 =
+            |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
+                rconfig.keep_dirs
+                    && rconfig.matches_path(rdir, rconfig.file_name)
+                    && rfilter.is_none_or(|f| f(rdir))
+                    && rconfig.extension_match.as_ref().is_none()
+            };
+
+                    let lambda2 =
+            |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
+                rfilter.is_none_or(|f| f(rdir))
+                    && rconfig.matches_path(rdir, rconfig.file_name)
+                    && rconfig
+                        .extension_match
+                        .as_ref()
+                        .is_none_or(|ext| rdir.matches_extension(ext))
+            };
+
+
+
+
         Self {
             root: root.as_ref().to_owned(),
             search_config,
             filter: None,
+            dir_filter: lambda1,
+            non_dir_filter: lambda2,
+
         }
     }
 
@@ -165,7 +192,7 @@ impl Finder {
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     /// Traverse the directory and return a receiver for the entries.
-    pub fn traverse(&self) -> Result<Receiver<Vec<DirEntry>>> {
+    pub fn traverse(self) -> Result<Receiver<Vec<DirEntry>>> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
         let search_config = self.search_config.clone();
@@ -176,18 +203,18 @@ impl Finder {
             return Err(DirEntryError::InvalidPath);
         }
 
-        let filter = self.filter;
+  
 
         //we have to arbitrarily construct a direntry to start the search.
 
         //spawn the search in a new thread.
         //this is safe because we've already checked that the directory exists.
         rayon::spawn(move || {
-            Self::process_directory(
+            Self::process_directory(&self,
                 unsafe { construct_dir.unwrap_unchecked() },
                 &sender,
                 &search_config,
-                filter,
+                //filter,
             );
         });
 
@@ -195,39 +222,23 @@ impl Finder {
     }
 
     #[inline]
-    fn process_directory(
+    fn process_directory(&self,
         dir: DirEntry,
         sender: &Sender<Vec<DirEntry>>,
         config: &SearchConfig,
-        filter: Option<fn(&DirEntry) -> bool>,
     ) {
-        //these are only temporarily here before i move them to the struct.
-        let lambda1 =
-            |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
-                rconfig.keep_dirs
-                    && rconfig.matches_path(rdir, rconfig.file_name)
-                    && rfilter.is_none_or(|f| f(rdir))
-                    && rconfig.extension_match.as_ref().is_none()
-            };
 
-        let should_send = lambda1(config, &dir, filter);
+
+        let should_send = (self.dir_filter)(config, &dir, self.filter);
+
+
 
         if should_send && config.depth.is_some_and(|d| dir.depth() >= d) {
-            let _ = sender.send(vec![dir]);
+            let _ = sender.send(vec![dir]); //have to put into a vec 
 
             return; // stop processing this directory if depth limit is reached
         }
 
-        //these are only temporarily here before i move them to the struct.
-        let lambda2 =
-            |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
-                rfilter.is_none_or(|f| f(rdir))
-                    && rconfig.matches_path(rdir, rconfig.file_name)
-                    && rconfig
-                        .extension_match
-                        .as_ref()
-                        .is_none_or(|ext| rdir.matches_extension(ext))
-            };
 
         match dir.getdents() {
             Ok(entries) => {
@@ -238,12 +249,12 @@ impl Finder {
                     .partition(direntry::DirEntry::is_dir);
 
                 dirs.into_par_iter().for_each(|dir| {
-                    Self::process_directory(dir, sender, config, filter);
+                    Self::process_directory(self,dir, sender, config);
                 });
 
                 let matched_files: Vec<_> = files
                     .into_iter()
-                    .filter(|entry| lambda2(config, entry, filter))
+                    .filter(|entry| (self.non_dir_filter)(config, entry, self.filter))
                     .collect();
 
                 let _ = sender.send(matched_files);

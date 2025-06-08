@@ -254,7 +254,7 @@ impl Finder {
 
 
 
-                   sender.send(matched_files).unwrap();
+                   let _=sender.send(matched_files);
 
           
 

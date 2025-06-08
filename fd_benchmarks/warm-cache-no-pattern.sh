@@ -22,4 +22,5 @@ echo "The total difference is $(($total_diff / 2))"
 check_missing=$(diff /tmp/results.fd /tmp/results.find | awk '{print $2}' | tr -s ' ')
 echo "The missing files are: $check_missing"
 echo "however, when searching directly for $check_missing, we find that they are not missing."
+echo "this is a bit broken currently, basically there's a weird off by 1 error i get sometimes, im not desperately trying to fix it because i believe its hyperfine related"
 

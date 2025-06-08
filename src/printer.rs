@@ -124,35 +124,35 @@ where
     //TODO! fix broken pipe errors.
     if use_colors && !check_std_colours {
         for path in paths.take(limit_opt) {
-            for small_path in path{
-            writer.write_all(extension_colour(&small_path))?;
-            writer.write_all(small_path.as_bytes())?;
+            for small_path in path {
+                writer.write_all(extension_colour(&small_path))?;
+                writer.write_all(small_path.as_bytes())?;
 
-            // add a trailing slash+newline for directories
-            if small_path.is_dir() {
-                writer.write_all(NEWLINE_CRLF_RESET)?;
-            }
-            // add a trailing newline for files
-            else {
-                writer.write_all(NEWLINE_RESET)?;
+                // add a trailing slash+newline for directories
+                if small_path.is_dir() {
+                    writer.write_all(NEWLINE_CRLF_RESET)?;
+                }
+                // add a trailing newline for files
+                else {
+                    writer.write_all(NEWLINE_RESET)?;
+                }
             }
         }
-    }
     } else
     // let pipe_writer = PipeWriter::new(std_out.lock());
     {
         for path in paths.take(limit_opt) {
-            for small_path in path{
-            writer.write_all(small_path.as_bytes())?;
-            // add a trailing slash+newline for directories
-            if small_path.is_dir() {
-                writer.write_all(NEWLINE_CRLF)?;
+            for small_path in path {
+                writer.write_all(small_path.as_bytes())?;
+                // add a trailing slash+newline for directories
+                if small_path.is_dir() {
+                    writer.write_all(NEWLINE_CRLF)?;
+                }
+                // add a trailing newline for files
+                else {
+                    writer.write_all(NEWLINE)?;
+                }
             }
-            // add a trailing newline for files
-            else {
-                writer.write_all(NEWLINE)?;
-            }
-        }
         }
     }
     writer.flush()?;

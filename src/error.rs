@@ -1,6 +1,6 @@
 //this probably needs to be reworked to reduce struct size, it's on the todo, not important.
 //this is abit rough, but it's not too important. well.
-use libc::{EACCES, EINVAL, ELOOP, ENOENT, ENOTDIR,EAGAIN};
+use libc::{EACCES, EAGAIN, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use std::{fmt, io};
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl From<io::Error> for DirEntryError {
         // map OS error codes to variants
         if let Some(code) = error.raw_os_error() {
             match code {
-                0 => Self::Success, // no error, operation was successful
+                0 => Self::Success,                     // no error, operation was successful
                 EAGAIN => Self::TemporarilyUnavailable, // EAGAIN is not a fatal error, just try again later
                 EINVAL | ENOENT => Self::InvalidPath,
                 ENOTDIR => Self::NotADirectory,
@@ -60,7 +60,9 @@ impl fmt::Display for DirEntryError {
             Self::InvalidStat => write!(f, "Invalid file stat"),
             Self::TimeError => write!(f, "Invalid time conversion"),
             Self::Success => write!(f, "Operation was successful"),
-            Self::TemporarilyUnavailable => write!(f, "Operation temporarily unavailable, retry later"),
+            Self::TemporarilyUnavailable => {
+                write!(f, "Operation temporarily unavailable, retry later")
+            }
             Self::MetadataError => write!(f, "Metadata error"),
             Self::Utf8Error(e) => write!(f, "UTF-8 conversion error: {e}"),
             Self::BrokenPipe(e) => write!(f, "Broken pipe: {e}"),

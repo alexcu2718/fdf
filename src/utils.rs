@@ -1,8 +1,8 @@
 #![allow(dead_code)]
+use crate::buffer::ValueType;
+use crate::{DirEntryError, Result, cstr};
 #[cfg(target_arch = "x86_64")]
 use std::arch::asm;
-use crate::buffer::ValueType;
-use crate::{DirEntryError, Result,cstr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const DOT_PATTERN: &str = ".";
@@ -82,23 +82,17 @@ where
     unsafe { libc::strlen(s.cast::<i8>()) }
 }
 
+#[inline]
+/// Opens a directory using `libc::opendir` and returns the file descriptor.
+/// Returns -1 on error.
+pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
+    let filename: *const u8 = cstr!(bytepath); //convert byte slice to C string pointer
+    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY; // | libc::O_NONBLOCK; //construct flags
+    const OPEN_SYSCALL: i32 = libc::SYS_open as _; //syscall number for open
 
-
-
-
-
- #[inline]
-    /// Opens a directory using `libc::opendir` and returns the file descriptor.
-    /// Returns -1 on error.
-    pub unsafe fn open_asm(bytepath:&[u8]) -> i32 {
-        let filename:*const u8=cstr!(bytepath);//convert byte slice to C string pointer
-        const FLAGS:i32=libc::O_CLOEXEC  | libc::O_DIRECTORY;// | libc::O_NONBLOCK; //construct flags
-        const OPEN_SYSCALL:i32= libc::SYS_open as _; //syscall number for open
-
-
-       
-    let fd:i32;
-    unsafe{asm!("
+    let fd: i32;
+    unsafe {
+        asm!("
         push rcx
         push r11
         syscall
@@ -106,11 +100,12 @@ where
         popf
         pop r11
         pop rcx",
-        inout("rax") OPEN_SYSCALL => fd, //syscall number for open
-        in("rdi") filename, //load filename into rdi
-        in("rsi") FLAGS, //load flags
-        in("rdx") libc::O_RDONLY , //mode (0)
-        options(preserves_flags,readonly)
-    )};
-    return fd
+            inout("rax") OPEN_SYSCALL => fd, //syscall number for open
+            in("rdi") filename, //load filename into rdi
+            in("rsi") FLAGS, //load flags
+            in("rdx") libc::O_RDONLY , //mode (0)
+            options(preserves_flags,readonly)
+        )
+    };
+    return fd;
 }

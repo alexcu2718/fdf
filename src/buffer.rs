@@ -1,8 +1,8 @@
 use libc::{SYS_getdents64, dirent64, syscall};
+use std::arch::asm;
 use std::mem::MaybeUninit;
 use std::ops::{Index, IndexMut};
 use std::slice::SliceIndex;
-use std::arch::asm;
 mod sealed {
     pub trait Sealed {}
     impl Sealed for i8 {}
@@ -108,12 +108,10 @@ where
         unsafe { syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
     }
 
-        /// # Safety
+    /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     #[inline]
     pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
-      
-
         let output;
         unsafe {
             asm!("

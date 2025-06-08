@@ -56,13 +56,13 @@ use std::{
     ffi::{OsStr, OsString},
     sync::Arc,
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
-   // sync::mpsc::{Receiver, Sender, channel as unbounded},
+    // sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 
 mod dirent_macro;
 //
 //pub(crate) use dirent_macro::construct_path;
-use crossbeam_channel::{unbounded,Sender,Receiver};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 //end library imports
 
 //crate imports
@@ -154,7 +154,6 @@ impl Finder {
         }
     }
 
-
     #[must_use]
     #[inline]
     /// Set a filter function to filter out entries.
@@ -167,7 +166,7 @@ impl Finder {
     #[allow(clippy::missing_errors_doc)]
     /// Traverse the directory and return a receiver for the entries.
     pub fn traverse(&self) -> Result<Receiver<Vec<DirEntry>>> {
-        let (sender, receiver) :(_,Receiver<Vec<DirEntry>>)= unbounded();
+        let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
         let search_config = self.search_config.clone();
 
@@ -202,19 +201,16 @@ impl Finder {
         config: &SearchConfig,
         filter: Option<fn(&DirEntry) -> bool>,
     ) {
-    
-
-
         //these are only temporarily here before i move them to the struct.
-        let lambda1=|rconfig:&SearchConfig,rdir:&DirEntry,rfilter:Option<fn(&DirEntry) -> bool>| {
-            rconfig.keep_dirs &&
-            rconfig.matches_path(rdir, rconfig.file_name)
-                && rfilter.is_none_or(|f| f(rdir))
-                && rconfig.extension_match.as_ref().is_none()
-        };
+        let lambda1 =
+            |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
+                rconfig.keep_dirs
+                    && rconfig.matches_path(rdir, rconfig.file_name)
+                    && rfilter.is_none_or(|f| f(rdir))
+                    && rconfig.extension_match.as_ref().is_none()
+            };
 
-
-        let should_send=lambda1(config, &dir, filter);
+        let should_send = lambda1(config, &dir, filter);
 
         if should_send && config.depth.is_some_and(|d| dir.depth() >= d) {
             let _ = sender.send(vec![dir]);
@@ -222,47 +218,45 @@ impl Finder {
             return; // stop processing this directory if depth limit is reached
         }
 
-            //these are only temporarily here before i move them to the struct.
-        let lambda2=|rconfig:&SearchConfig,rdir:&DirEntry,rfilter:Option<fn(&DirEntry) -> bool>| {
-            rfilter.is_none_or(|f| f(&rdir)) && 
-            rconfig.matches_path(rdir, rconfig.file_name) &&
-            rconfig.extension_match.as_ref().is_none_or(|ext| rdir.matches_extension(ext))
-        };
-
-
-
-
-
+        //these are only temporarily here before i move them to the struct.
+        let lambda2 =
+            |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
+                rfilter.is_none_or(|f| f(&rdir))
+                    && rconfig.matches_path(rdir, rconfig.file_name)
+                    && rconfig
+                        .extension_match
+                        .as_ref()
+                        .is_none_or(|ext| rdir.matches_extension(ext))
+            };
 
         match dir.getdents() {
             Ok(entries) => {
                 // Store only directories for parallel recursive call
-              
+
                 let (dirs, files): (Vec<_>, Vec<_>) = entries
-                .filter(|e| !config.hide_hidden || !e.is_hidden())
-                .partition(|e| e.is_dir());
+                    .filter(|e| !config.hide_hidden || !e.is_hidden())
+                    .partition(|e| e.is_dir());
 
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(dir, sender, config, filter);
                 });
 
+                let matched_files: Vec<_> = files
+                    .into_iter()
+                    .filter(|entry| lambda2(config, &entry, filter))
+                    .collect();
 
-                     let matched_files: Vec<_> = files
-            .into_iter()
-            .filter(|entry| lambda2(config, &entry, filter))
-            .collect();
-
-
-
-                   let _=sender.send(matched_files);
-
-          
+                let _ = sender.send(matched_files);
 
                 // send into  directories in parallel (via vec) which is threadsafe, we could ideally switch storage type to arc and then
                 // use rayon::iter::IntoParallelIterator for more efficient parallel processing , ill try that in an experimental build.
-                
             }
-            Err(DirEntryError::TemporarilyUnavailable |DirEntryError::Success | DirEntryError::AccessDenied(_) | DirEntryError::InvalidPath) => {}
+            Err(
+                DirEntryError::TemporarilyUnavailable
+                | DirEntryError::Success
+                | DirEntryError::AccessDenied(_)
+                | DirEntryError::InvalidPath,
+            ) => {}
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
 

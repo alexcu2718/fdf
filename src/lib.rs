@@ -221,7 +221,7 @@ impl Finder {
         //these are only temporarily here before i move them to the struct.
         let lambda2 =
             |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
-                rfilter.is_none_or(|f| f(&rdir))
+                rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_path(rdir, rconfig.file_name)
                     && rconfig
                         .extension_match
@@ -235,7 +235,7 @@ impl Finder {
 
                 let (dirs, files): (Vec<_>, Vec<_>) = entries
                     .filter(|e| !config.hide_hidden || !e.is_hidden())
-                    .partition(|e| e.is_dir());
+                    .partition(direntry::DirEntry::is_dir);
 
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(dir, sender, config, filter);
@@ -243,7 +243,7 @@ impl Finder {
 
                 let matched_files: Vec<_> = files
                     .into_iter()
-                    .filter(|entry| lambda2(config, &entry, filter))
+                    .filter(|entry| lambda2(config, entry, filter))
                     .collect();
 
                 let _ = sender.send(matched_files);

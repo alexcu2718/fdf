@@ -26,7 +26,7 @@ use crate::{
     construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, error::DirEntryError,
     filetype::FileType, init_path_buffer_syscall, offset_ptr, prefetch_next_buffer,
     prefetch_next_entry, skip_dot_entries, traits_and_conversions::AsOsStr as _,
-    traits_and_conversions::BytesToCstrPointer, utils::get_baselen, utils::open_asm,
+    traits_and_conversions::BytesToCstrPointer, utils::get_baselen, utils::open_asm,utils::close_asm,
     utils::unix_time_to_system_time,
 };
 
@@ -580,11 +580,11 @@ impl DirEntry {
         func: fn(&[u8], usize, u8) -> bool,
     ) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path
-            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        let fd = dir_path .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+       // let fd=unsafe{open_asm(dir_path)};
 
         if fd < 0 {
             return Err(Error::last_os_error().into());
@@ -626,6 +626,7 @@ impl Drop for DirEntryIterator {
     #[inline]
     fn drop(&mut self) {
         unsafe { close(self.fd) };
+        //unsafe { close_asm(self.fd) };
     }
 }
 
@@ -680,6 +681,7 @@ impl Iterator for DirEntryIterator {
 
             // check remaining bytes
             self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+            //self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) }; //see for asm implemetation
             self.offset = 0;
 
             if self.remaining_bytes <= 0 {

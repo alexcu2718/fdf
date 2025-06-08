@@ -83,17 +83,23 @@ where
 }
 
 #[inline]
-/// Opens a directory using `libc::opendir` and returns the file descriptor.
+#[allow(clippy::items_after_statements)]
+   #[allow(clippy::cast_possible_truncation)]//stupid
+   #[allow(clippy::inline_asm_x86_intel_syntax)]
+/// Opens a directory using an assembly implementation of open(to reduce libc overplay) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     let filename: *const u8 = cstr!(bytepath); //convert byte slice to C string pointer
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY; // | libc::O_NONBLOCK; //construct flags
+    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY| libc::O_NONBLOCK; //construct flags
     const OPEN_SYSCALL: i32 = libc::SYS_open as _; //syscall number for open
 
     let fd: i32;
-    unsafe {
+    unsafe {       //typical syscall prelude 
+        //push r11 and rcx to preserve them, then call syscall
+        //after syscall, pop r11 and rcx to restore them
+        //this is necessary because the syscall clobbers r11 and rcx, and we need to preserve them.
         asm!("
-        push rcx
+        push rcx  
         push r11
         syscall
         push r11
@@ -107,5 +113,26 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
             options(preserves_flags,readonly)
         )
     };
-    return fd;
+    fd
+}
+#[inline]
+#[allow(clippy::inline_asm_x86_intel_syntax)]
+#[allow(clippy::used_underscore_binding)] //its a procedure.
+pub unsafe fn close_asm(fd: i32) {
+
+    let _output: isize;
+    unsafe {
+        asm!("
+        push rcx
+        push r11
+        syscall
+        push r11
+        popf
+        pop r11
+        pop rcx",
+            inout("rax") libc::SYS_close => _output, //syscall number for close
+            in("rdi") fd, // push file descriptor into rdi
+            options(preserves_flags, nomem)
+        )
+    };
 }

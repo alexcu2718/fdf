@@ -111,6 +111,7 @@ where
     /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     #[inline]
+    #[allow(clippy::inline_asm_x86_intel_syntax)]
     pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         let output;
         unsafe {
@@ -129,7 +130,7 @@ where
             options(preserves_flags))
         };
 
-        return output;
+        output
     }
 
     /// # Safety

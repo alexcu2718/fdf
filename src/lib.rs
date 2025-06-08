@@ -56,13 +56,13 @@ use std::{
     ffi::{OsStr, OsString},
     sync::Arc,
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
-    // sync::mpsc::{Receiver, Sender, channel as unbounded},
+    sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 
 mod dirent_macro;
 //
 //pub(crate) use dirent_macro::construct_path;
-use crossbeam_channel::{Receiver, Sender, unbounded};
+//use crossbeam_channel::{Receiver, Sender, unbounded};
 //end library imports
 
 //crate imports

@@ -108,37 +108,13 @@ where
         unsafe { syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
     }
 
-    /// # Safety
-    /// this is only to be called when using syscalls in the getdents interface
-    #[inline]
-    #[allow(clippy::inline_asm_x86_intel_syntax)]
-    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
-        let output;
-        unsafe {
-            asm!("
-            push rcx
-            push r11
-            syscall
-            push r11
-            popf
-            pop r11
-            pop rcx",
-            inout("rax") libc::SYS_getdents64 => output,
-            in("rdi") fd,
-            in("rsi") self.as_mut_ptr(),
-            in("rdx") SIZE,
-            options(preserves_flags))
-        };
-
-        output
-    }
 
 
         /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     #[inline]
     #[allow(clippy::inline_asm_x86_intel_syntax)]
-    pub unsafe fn getdents64_asm2(&mut self, fd: i32) -> i64 {
+    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         let output;
         unsafe{asm!(
     "syscall",

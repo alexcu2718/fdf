@@ -681,7 +681,7 @@ impl Iterator for DirEntryIterator {
             prefetch_next_buffer!(self);
 
             // check remaining bytes
-            self.remaining_bytes = unsafe { self.buffer.getdents64_asm2(self.fd) };
+            self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
             //self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) }; //see for asm implemetation
             self.offset = 0;
 

@@ -216,6 +216,7 @@ impl Finder {
     }
 
     #[inline]
+    #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry, sender: &Sender<Vec<DirEntry>>) {
         let should_send = (self.dir_filter)(&self.search_config, &dir, self.filter);
 

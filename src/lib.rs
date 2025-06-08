@@ -84,7 +84,7 @@ pub use error::DirEntryError;
 
 mod custom_types_result;
 pub use custom_types_result::{
-    AsU8, BUFFER_SIZE, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result, SyscallBuffer,
+    AsU8, BUFFER_SIZE, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result, SyscallBuffer,FilterType
 };
 
 mod traits_and_conversions;
@@ -111,8 +111,8 @@ pub struct Finder {
     root: OsString,
     search_config: SearchConfig,
     filter: Option<fn(&DirEntry) -> bool>,
-    dir_filter:fn(&SearchConfig, &DirEntry, Option<fn(&DirEntry) -> bool>) -> bool,
-    non_dir_filter:fn(&SearchConfig, &DirEntry, Option<fn(&DirEntry) -> bool>) -> bool
+    dir_filter:FilterType,
+    non_dir_filter:FilterType
 
 }
 ///The Finder struct is used to find files in a directory.
@@ -149,7 +149,7 @@ impl Finder {
                 std::process::exit(1);
             }
         };
-
+                // The lambda functions are used to filter directories and non-directories based on the search configuration.
                 let lambda1 =
             |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
                 rconfig.keep_dirs
@@ -258,13 +258,12 @@ impl Finder {
                     .collect();
 
                 let _ = sender.send(matched_files);
+                //send files as a vector(to prevent contention on the channel)
 
-                // send into  directories in parallel (via vec) which is threadsafe, we could ideally switch storage type to arc and then
-                // use rayon::iter::IntoParallelIterator for more efficient parallel processing , ill try that in an experimental build.
+            
             }
-            Err(
-                DirEntryError::TemporarilyUnavailable
-                | DirEntryError::Success
+            Err(DirEntryError::Success 
+                |DirEntryError::TemporarilyUnavailable
                 | DirEntryError::AccessDenied(_)
                 | DirEntryError::InvalidPath,
             ) => {}

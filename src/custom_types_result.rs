@@ -1,5 +1,4 @@
-use crate::AlignedBuffer;
-use crate::DirEntryError;
+use crate::{AlignedBuffer,DirEntry, SearchConfig,DirEntryError};
 use libc::{PATH_MAX, dirent64};
 use slimmer_box::SlimmerBox;
 use std::mem::offset_of;
@@ -147,3 +146,6 @@ impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
 pub type SlimOsBytes = OsBytes<SlimmerBox<[u8], u16>>;
 #[allow(dead_code)]
 pub type ArcOsBytes = OsBytes<std::sync::Arc<[u8]>>;
+
+///filter function type for directory entries
+pub type FilterType = fn(&SearchConfig, &DirEntry, Option<fn(&DirEntry) -> bool>) -> bool;

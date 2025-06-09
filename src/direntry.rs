@@ -212,7 +212,7 @@ impl DirEntry {
         }
         //better to use strlen here because path is likely to be too long to benefit from repne scasb
         //we also use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
-        Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), strlen(ptr) as usize) })
+        Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), strlen(ptr)) })
     }
 
     #[inline]
@@ -566,47 +566,7 @@ impl DirEntry {
         })
     }
 
-    #[inline]
-    #[allow(clippy::missing_errors_doc)] //fixing errors later
-    #[allow(clippy::cast_possible_wrap)]
-    ///`getdents_filter` is an iterator over fd,where each consequent index is a directory entry.
-    /// This function is a low-level syscall wrapper that reads directory entries.
-    /// It returns an iterator that yields `DirEntry` objects.
-    /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
-    ///this differs from `getdents` in that it allows you to filter the entries by a function.
-    /// so it avoids a lot of unnecessary allocations and copies :)
-    pub fn getdents_filter(
-        &self,
-        func: fn(&[u8], usize, u8) -> bool,
-    ) -> Result<impl Iterator<Item = Self>> {
-        let dir_path = self.as_bytes();
-        let fd = dir_path
-            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-        //alternatively syntaxes I made.
-        //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-        //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-        // let fd=unsafe{open_asm(dir_path)};
-
-        if fd < 0 {
-            return Err(Error::last_os_error().into());
-        }
-
-        let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used(the pointer is mutated) to construct the full path of the entry, this is actually
-        //a uninitialised buffer, which is then initialised with the directory path
-        let mut path_len = dir_path.len();
-        init_path_buffer_syscall!(path_buffer, path_len, dir_path, self); // initialise the path buffer with the directory path
-
-        Ok(DirEntryIteratorFilter {
-            fd,
-            buffer: SyscallBuffer::new(),
-            path_buffer,
-            base_path_len: path_len as _,
-            parent_depth: self.depth,
-            offset: 0,
-            remaining_bytes: 0,
-            filter_func: func,
-        })
-    }
+   
 }
 
 ///Iterator for directory entries using getdents syscall
@@ -691,6 +651,56 @@ impl Iterator for DirEntryIterator {
             }
         }
     }
+}
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// // Iterator for directory entries using getdents syscall with a filter function
+impl DirEntry{
+    #[inline]
+    #[allow(clippy::missing_errors_doc)] //fixing errors later
+    #[allow(clippy::cast_possible_wrap)]
+    ///`getdents_filter` is an iterator over fd,where each consequent index is a directory entry.
+    /// This function is a low-level syscall wrapper that reads directory entries.
+    /// It returns an iterator that yields `DirEntry` objects.
+    /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
+    ///this differs from `getdents` in that it allows you to filter the entries by a function.
+    /// so it avoids a lot of unnecessary allocations and copies :)
+    pub fn getdents_filter(
+        &self,
+        func: fn(&[u8], usize, u8) -> bool,
+    ) -> Result<impl Iterator<Item = Self>> {
+        let dir_path = self.as_bytes();
+        let fd = dir_path
+            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        //alternatively syntaxes I made.
+        //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+        //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+        // let fd=unsafe{open_asm(dir_path)};
+
+        if fd < 0 {
+            return Err(Error::last_os_error().into());
+        }
+
+        let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used(the pointer is mutated) to construct the full path of the entry, this is actually
+        //a uninitialised buffer, which is then initialised with the directory path
+        let mut path_len = dir_path.len();
+        init_path_buffer_syscall!(path_buffer, path_len, dir_path, self); // initialise the path buffer with the directory path
+
+        Ok(DirEntryIteratorFilter {
+            fd,
+            buffer: SyscallBuffer::new(),
+            path_buffer,
+            base_path_len: path_len as _,
+            parent_depth: self.depth,
+            offset: 0,
+            remaining_bytes: 0,
+            filter_func: func,
+        })
+    }
+
 }
 
 pub struct DirEntryIteratorFilter {

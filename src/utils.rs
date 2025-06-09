@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use crate::buffer::ValueType;
-use crate::{cstr,  DirEntryError, Result};
+use crate::{DirEntryError, Result, cstr};
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::asm;
@@ -90,34 +90,36 @@ where
 /// Opens a directory using an assembly implementation of open(to reduce libc overplay) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    let filename:*const u8 = cstr!(bytepath);
+    let filename: *const u8 = cstr!(bytepath);
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;
-    unsafe{asm!(
-        "syscall",
-        inout("rax") SYSCALL_NUM => fd,
-        in("rdi") filename,
-        in("rsi") FLAGS,
-        in("rdx") libc::O_RDONLY,
-        out("rcx") _, out("r11") _,
-        options(nostack, preserves_flags)
-    )};
+    unsafe {
+        asm!(
+            "syscall",
+            inout("rax") SYSCALL_NUM => fd,
+            in("rdi") filename,
+            in("rsi") FLAGS,
+            in("rdx") libc::O_RDONLY,
+            out("rcx") _, out("r11") _,
+            options(nostack, preserves_flags)
+        )
+    };
     fd
 }
-
 
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 pub unsafe fn close_asm(fd: i32) {
     let _: isize;
-    unsafe{asm!(
-        "syscall",
-        inout("rax") libc::SYS_close => _,
-        in("rdi") fd,
-        out("rcx") _, out("r11") _,
-        options(nostack, preserves_flags, nomem)
-    )};
+    unsafe {
+        asm!(
+            "syscall",
+            inout("rax") libc::SYS_close => _,
+            in("rdi") fd,
+            out("rcx") _, out("r11") _,
+            options(nostack, preserves_flags, nomem)
+        )
+    };
 }
-

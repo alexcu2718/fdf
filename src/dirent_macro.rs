@@ -224,8 +224,6 @@ macro_rules! construct_path {
     }};
 }
 
-
-
 #[macro_export]
 /// A macro to calculate the length of a directory entry name in (semi-constant) time.
 /// This macro can be used in two ways:
@@ -236,9 +234,9 @@ macro_rules! dirent_semi_const_strlen {
     // Single argument version (gets reclen from dirent)
     ($dirent:expr) => {{
         let reclen = *offset_ptr!($dirent, d_reclen) as usize ;
-        dirent_const_time_strlen!($dirent, reclen)
+        dirent_semi_const_strlen!($dirent, reclen)
     }};
-    
+
     // Two argument version (dirent + reclen)
     ($dirent:expr, $reclen:expr) => {{
         #[allow(clippy::integer_division_remainder_used)]
@@ -247,7 +245,7 @@ macro_rules! dirent_semi_const_strlen {
         #[allow(clippy::items_after_statements)]
         #[allow(clippy::little_endian_bytes)]
 
-        
+
             let reclen_in_u64s = $reclen / 8;
             // Cast dirent to u64 slice
              // Treat the dirent structure as a slice of u64 for word-wise processing
@@ -257,7 +255,7 @@ macro_rules! dirent_semi_const_strlen {
             debug_assert!($reclen % 8 == 0 && $reclen >= 24, "reclen={}", $reclen);
              // Calculate position of last word
         // Get the last u64 word in the structure
-            
+
             let last_word_index = reclen_in_u64s.checked_sub(1).unwrap_unchecked();
             let last_word_check = u64_slice[last_word_index];
 
@@ -269,7 +267,7 @@ macro_rules! dirent_semi_const_strlen {
             let last_word_final = if last_word_index == 2 {
                 last_word_check | 0x00FF_FFFF
             } else {
-                //what the fuck?     ---love u jc 
+                //what the fuck?     ---love u jc
                 last_word_check
             };
 
@@ -281,7 +279,7 @@ macro_rules! dirent_semi_const_strlen {
     // Calculate true string length:
     // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type)
     // 2. Subtract ignored bytes (after null terminator in last word)
-            
+
             const DIRENT_HEADER_SIZE: usize = std::mem::size_of::<u64>()
                 + std::mem::size_of::<i64>()
                 + std::mem::size_of::<u8>()
@@ -290,7 +288,6 @@ macro_rules! dirent_semi_const_strlen {
 
         //return true strlen
             $reclen - DIRENT_HEADER_SIZE - remainder_len
-        
+
     }};
 }
-

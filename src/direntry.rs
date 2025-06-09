@@ -23,11 +23,11 @@ use std::{
 #[allow(unused_imports)]
 use crate::{
     AsU8 as _, DirIter, OsBytes as _, PathBuffer, Result, SyscallBuffer, ToStat as _,
-    construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, error::DirEntryError,
-    filetype::FileType, init_path_buffer_syscall, offset_ptr, prefetch_next_buffer,
-    prefetch_next_entry, skip_dot_entries, traits_and_conversions::AsOsStr as _,
-    traits_and_conversions::BytesToCstrPointer, utils::close_asm, utils::get_baselen,
-    utils::open_asm, utils::unix_time_to_system_time,dirent_semi_const_strlen
+    construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, dirent_semi_const_strlen,
+    error::DirEntryError, filetype::FileType, init_path_buffer_syscall, offset_ptr,
+    prefetch_next_buffer, prefetch_next_entry, skip_dot_entries,
+    traits_and_conversions::AsOsStr as _, traits_and_conversions::BytesToCstrPointer,
+    utils::close_asm, utils::get_baselen, utils::open_asm, utils::unix_time_to_system_time,
 };
 
 #[derive(Clone)]
@@ -184,7 +184,7 @@ impl DirEntry {
             self.size().is_ok_and(|size| size == 0)
         } else if self.is_dir() {
             // for directories, check if they have no entries
-            self.readdir()
+            self.getdents()
                 .is_ok_and(|mut entries| entries.next().is_none())
         } else {
             // special files like devices, sockets, etc.
@@ -538,7 +538,8 @@ impl DirEntry {
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        let fd = dir_path
+            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
         //let fd=unsafe{open_asm(dir_path)};
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
@@ -564,8 +565,6 @@ impl DirEntry {
             remaining_bytes: 0,
         })
     }
-
-   
 }
 
 ///Iterator for directory entries using getdents syscall
@@ -620,15 +619,13 @@ impl Iterator for DirEntryIterator {
                 // skip entries that are not valid or are dot entries
                 skip_dot_entries!(d_type, name_ptr); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
 
-
-
-               // assert!(unsafe{libc::strlen(name_ptr.cast())==crate::dirent_const_time_strlen!(d)},"Invalid name length, this is a bug in the code, please report it to the author");
+                //assert!(unsafe{libc::strlen(name_ptr.cast())==crate::dirent_semi_const_strlen!(d)},"Invalid name length, this is a bug in the code, please report it to the author");
 
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
-             //   if full_path.starts_with(b"/home/alexc/Downloads/shellbench") {
-               //     eprintln!("Full path: {}", full_path.as_os_str().to_string_lossy());
+                //   if full_path.starts_with(b"/home/alexc/Downloads/shellbench") {
+                //     eprintln!("Full path: {}", full_path.as_os_str().to_string_lossy());
                 //}
 
                 let entry = DirEntry {
@@ -659,12 +656,9 @@ impl Iterator for DirEntryIterator {
     }
 }
 
-
-
-
 ///////////////////////////////////////////////////////////////////////////////////////
 /// // Iterator for directory entries using getdents syscall with a filter function
-impl DirEntry{
+impl DirEntry {
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]
@@ -706,7 +700,6 @@ impl DirEntry{
             filter_func: func,
         })
     }
-
 }
 
 pub struct DirEntryIteratorFilter {

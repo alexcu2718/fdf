@@ -155,7 +155,7 @@ impl Finder {
                     && rconfig.matches_path(rdir, rconfig.file_name)
                     && rfilter.is_none_or(|f| f(rdir))
                     && rconfig.extension_match.as_ref().is_none()
-                    && rdir.depth !=0
+                    && rdir.depth != 0
             };
 
         let lambda2 =
@@ -248,11 +248,10 @@ impl Finder {
                     matched_files.push(dir.clone()); //accepting the clone cost here to avoid contention on the channel
                 }
 
-                if !matched_files.is_empty(){
-                    let _=sender.send(matched_files);
-                //send files as a vector(to prevent contention on the channel)
+                if !matched_files.is_empty() {
+                    let _ = sender.send(matched_files);
+                    //send files as a vector(to prevent contention on the channel)
                 }
-       
             }
             Err(
                 DirEntryError::Success

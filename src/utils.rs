@@ -53,7 +53,7 @@ where
     //aka i8/u8
     unsafe {
         let len: usize;
-        core::arch::asm!(
+        asm!(
         "mov rdi, {ptr}", //move pointer to rdi
         "xor eax, eax",  // xor is smaller than xor al,al
         "mov rcx, -1",   // directly set to max instead of xor/not
@@ -90,53 +90,37 @@ where
 /// Opens a directory using an assembly implementation of open(to reduce libc overplay) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    let filename: *const u8 = cstr!(bytepath); //convert byte slice to C string pointer
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK; //construct flags
-    const OPEN_SYSCALL: i32 = libc::SYS_open as _; //syscall number for open
+    let filename:*const u8 = cstr!(bytepath);
+    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+    const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;
-    unsafe {
-        //typical syscall prelude
-        //push r11 and rcx to preserve them, then call syscall
-        //after syscall, pop r11 and rcx to restore them
-        //this is necessary because the syscall clobbers r11 and rcx, and we need to preserve them.
-        asm!("
-        push rcx  
-        push r11
-        syscall
-        push r11
-        popf
-        pop r11
-        pop rcx",
-            inout("rax") OPEN_SYSCALL => fd, //syscall number for open
-            in("rdi") filename, //load filename into rdi
-            in("rsi") FLAGS, //load flags
-            in("rdx") libc::O_RDONLY , //mode (0)
-            options(preserves_flags,readonly)
-        )
-    };
+    unsafe{asm!(
+        "syscall",
+        inout("rax") SYSCALL_NUM => fd,
+        in("rdi") filename,
+        in("rsi") FLAGS,
+        in("rdx") libc::O_RDONLY,
+        out("rcx") _, out("r11") _,
+        options(nostack, preserves_flags)
+    )};
     fd
 }
+
+
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
-#[allow(clippy::used_underscore_binding)] //its a procedure.
 pub unsafe fn close_asm(fd: i32) {
-    let _output: isize;
-    unsafe {
-        asm!("
-        push rcx
-        push r11
-        syscall
-        push r11
-        popf
-        pop r11
-        pop rcx",
-            inout("rax") libc::SYS_close => _output, //syscall number for close
-            in("rdi") fd, // push file descriptor into rdi
-            options(preserves_flags, nomem)
-        )
-    };
+    let _: isize;
+    unsafe{asm!(
+        "syscall",
+        inout("rax") libc::SYS_close => _,
+        in("rdi") fd,
+        out("rcx") _, out("r11") _,
+        options(nostack, preserves_flags, nomem)
+    )};
 }
+
 
 #[inline]
 #[allow(clippy::integer_division_remainder_used)]
@@ -146,7 +130,7 @@ pub unsafe fn close_asm(fd: i32) {
 #[allow(clippy::little_endian_bytes)]
 ///OK this technically isn't constant time but it's a much lower complexity than the naive approach of iterating over each byte
 /// This function calculates the length of the `d_name` field in a `dirent64` structure without iterating over each byte
-/// the maximum 
+/// the maximum iteration count is 8, which is the size of a u64.
 pub(crate) unsafe fn dirent_const_time_strlen_onearg(dirent: *const dirent64) -> usize {
     let reclen=unsafe{offset_ptr!(dirent, d_reclen) as usize}; //get reclen from dirent pointer
     let reclen_in_u64s = reclen / 8; //reclen is in bytes, we need to convert it to u64s
@@ -173,8 +157,7 @@ pub(crate) unsafe fn dirent_const_time_strlen_onearg(dirent: *const dirent64) ->
     };
 
     // Find null terminator position within the last word using our repne scasb(very efficient for len<8)
-    let ignore = unsafe { 7 - strlen_asm(last_word_final.to_le_bytes().as_ptr()) };
-    eprintln!("{ignore}");
+    let remainder_len = unsafe { 7 - strlen_asm(last_word_final.to_le_bytes().as_ptr()) };
 
     // Calculate true string length:
     // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type)
@@ -185,7 +168,7 @@ pub(crate) unsafe fn dirent_const_time_strlen_onearg(dirent: *const dirent64) ->
         + std::mem::size_of::<u16>()
         + 1; //start pos
     //return true strlen
-    reclen - DIRENT_HEADER_SIZE - ignore
+    reclen - DIRENT_HEADER_SIZE - remainder_len
 }
 
 #[allow(clippy::integer_division_remainder_used)]
@@ -219,7 +202,7 @@ pub(crate) unsafe fn dirent_const_time_strlen_twoargs(dirent: *const dirent64, r
     };
 
     // Find null terminator position within the last word using our repne scasb(very efficient for len<8)
-    let ignore = unsafe { 7 - strlen_asm(last_word_final.to_le_bytes().as_ptr()) };
+    let remainder_len = unsafe { 7 - strlen_asm(last_word_final.to_le_bytes().as_ptr()) };
 
     // Calculate true string length:
     // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type)
@@ -231,5 +214,5 @@ pub(crate) unsafe fn dirent_const_time_strlen_twoargs(dirent: *const dirent64, r
         + 1; //start pos
 
     //return true strlen
-    reclen - DIRENT_HEADER_SIZE - ignore
+    reclen - DIRENT_HEADER_SIZE - remainder_len
 }

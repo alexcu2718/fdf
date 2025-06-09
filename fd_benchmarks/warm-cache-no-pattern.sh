@@ -15,12 +15,14 @@ hyperfine --warmup "$WARMUP_COUNT" \
     --export-markdown results-warm-cache-no-pattern.md
 
 check_for_differences "true" "$COMMAND_FIND" "$COMMAND_FD"
-echo the count of files in the results.fd are $( cat /tmp/results.fd | wc -l)
-echo the count of files in the results.find are $( cat /tmp/results.find | wc -l)
-total_diff=$(diff /tmp/results.fd /tmp/results.find | wc -l)
+#ordering
+sort /tmp/results.fd > /tmp/results.fd_sorted
+sort /tmp/results.find > /tmp/results.find_sorted
+total_diff=$(diff /tmp/results.fd_sorted /tmp/results.find_sorted | wc -l)
 echo "The total difference is $(($total_diff / 2))"
-check_missing=$(diff /tmp/results.fd /tmp/results.find | awk '{print $2}' | tr -s ' ')
-echo "The missing files are: $check_missing"
-echo "however, when searching directly for $check_missing, we find that they are not missing."
+diff /tmp/results.fd_sorted /tmp/results.find_sorted | awk '{print $2}' | tr -s ' ' >  /tmp/missing_results.fdf
+echo 'missing results(if true are 0)'
+cat /tmp/missing_results.fdf
+echo "however, when searching directly, we find that they are not missing."
 echo "this is a bit broken currently, basically there's a weird off by 1 error i get sometimes, im not desperately trying to fix it because i believe its hyperfine related"
 

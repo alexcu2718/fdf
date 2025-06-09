@@ -23,7 +23,7 @@ use std::{
 #[allow(unused_imports)]
 use crate::{
     AsU8 as _, DirIter, OsBytes as _, PathBuffer, Result, SyscallBuffer, ToStat as _,
-    construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, dirent_semi_const_strlen,
+    construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, dirent_const_time_strlen,
     error::DirEntryError, filetype::FileType, init_path_buffer_syscall, offset_ptr,
     prefetch_next_buffer, prefetch_next_entry, skip_dot_entries,
     traits_and_conversions::AsOsStr as _, traits_and_conversions::BytesToCstrPointer,
@@ -619,7 +619,7 @@ impl Iterator for DirEntryIterator {
                 // skip entries that are not valid or are dot entries
                 skip_dot_entries!(d_type, name_ptr); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
 
-                //assert!(unsafe{libc::strlen(name_ptr.cast())==crate::dirent_semi_const_strlen!(d)},"Invalid name length, this is a bug in the code, please report it to the author");
+                // assert!(unsafe{libc::strlen(name_ptr.cast())==crate::dirent_const_time_strlen!(d)},"Invalid name length, this is a bug in the code, please report it to the author");
 
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry

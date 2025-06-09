@@ -230,11 +230,11 @@ macro_rules! construct_path {
 /// 1. With a single argument: `dirent_const_time_strlen!(dirent)`, where `dirent` is a pointer to a `libc::dirent64` struct.
 /// 2. With two arguments: `dirent_const_time_strlen!(dirent, reclen)`, where `reclen` is the record length of the directory entry.
 /// 3. The only point in two arguments is to avoid recalculation(altho trivial) and to allow a custom record length to be used.
-macro_rules! dirent_semi_const_strlen {
+macro_rules! dirent_const_time_strlen {
     // Single argument version (gets reclen from dirent)
     ($dirent:expr) => {{
         let reclen = *offset_ptr!($dirent, d_reclen) as usize ;
-        dirent_semi_const_strlen!($dirent, reclen)
+        dirent_const_time_strlen!($dirent, reclen)
     }};
 
     // Two argument version (dirent + reclen)
@@ -280,11 +280,10 @@ macro_rules! dirent_semi_const_strlen {
     // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type)
     // 2. Subtract ignored bytes (after null terminator in last word)
 
-            const DIRENT_HEADER_SIZE: usize = std::mem::size_of::<u64>()
-                + std::mem::size_of::<i64>()
-                + std::mem::size_of::<u8>()
-                + std::mem::size_of::<u16>()
-                + 1;
+            const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64,d_name)+1;
+
+            //const OFFSET:usize=std::mem::offset_of!(libc::dirent64,d_name)+1;
+            //assert!(OFFSET==DIRENT_HEADER_SIZE,"{OFFSET},{DIRENT_HEADER_SIZE}");
 
         //return true strlen
             $reclen - DIRENT_HEADER_SIZE - remainder_len

@@ -27,7 +27,7 @@ use crate::{
     filetype::FileType, init_path_buffer_syscall, offset_ptr, prefetch_next_buffer,
     prefetch_next_entry, skip_dot_entries, traits_and_conversions::AsOsStr as _,
     traits_and_conversions::BytesToCstrPointer, utils::close_asm, utils::get_baselen,
-    utils::open_asm, utils::unix_time_to_system_time,
+    utils::open_asm, utils::unix_time_to_system_time,dirent_const_time_strlen
 };
 
 #[derive(Clone)]
@@ -743,7 +743,6 @@ impl Iterator for DirEntryIteratorFilter {
 
                 // skip entries that are not valid or are dot entries
                 skip_dot_entries!(d_type, name_ptr); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
-
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.

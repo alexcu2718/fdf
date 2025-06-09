@@ -247,8 +247,11 @@ impl Finder {
                     matched_files.push(dir.clone()); //accepting the clone cost here to avoid contention on the channel
                 }
 
-                if matched_files.len()>0{let _ = sender.send(matched_files);};
+                if !matched_files.is_empty(){
+                    let _=sender.send(matched_files);
                 //send files as a vector(to prevent contention on the channel)
+                }
+       
             }
             Err(
                 DirEntryError::Success

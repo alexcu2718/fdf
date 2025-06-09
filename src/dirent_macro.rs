@@ -223,3 +223,26 @@ macro_rules! construct_path {
         full_path
     }};
 }
+
+
+
+#[macro_export]
+/// A macro to calculate the length of a directory entry name in (semi-constant) time.
+/// This macro can be used in two ways:
+/// 1. With a single argument: `dirent_const_time_strlen!(dirent)`, where `dirent` is a pointer to a `libc::dirent64` struct.
+/// 2. With two arguments: `dirent_const_time_strlen!(dirent, reclen)`, where `reclen` is the record length of the directory entry.
+/// 3. The only point in two arguments is to avoid recalculation(altho trivial) and to allow a custom record length to be used.
+macro_rules! dirent_const_time_strlen {
+    // match 1 arguments: call two-arg version (dirent:*const dirent64)->usize
+    // this is the most common use case, so we use the one-arg version to avoid unnecessary complexity
+    ($dirent:expr) => {
+        $crate::utils::dirent_const_time_strlen_onearg($dirent)
+    };
+    // match 2 arguments: call two-arg version (dirent:*const dirent64,reclen:usize)->usize
+    // this is used when the record length is known, to avoid recalculating it
+    // this is useful for performance-critical code where the record length is known in advance
+    ($dirent:expr, $reclen:expr) => {
+        $crate::utils::dirent_const_time_strlen_twoargs($dirent, $reclen)
+    };
+}
+

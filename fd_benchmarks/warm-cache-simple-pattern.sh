@@ -2,6 +2,8 @@
 
 source "prelude.sh"
 
+source "new_prelude.sh"
+
 COMMAND_FIND="fdf -HI '.*[0-9]\\.jpg$' '$SEARCH_ROOT'"
 COMMAND_FIND2="fdf  '.*[0-9]\\.jpg$' '$SEARCH_ROOT'"
 COMMAND_FD="fd -HI '.*[0-9]\\.jpg$' '$SEARCH_ROOT'"

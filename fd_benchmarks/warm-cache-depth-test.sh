@@ -1,8 +1,9 @@
 #!/bin/bash
 
+
 source "prelude.sh"
 echo I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE NO GIT IGNORE IN MINE YET.
-
+source "new_prelude.sh"
 
 COMMAND_FIND="fdf '.' '$SEARCH_ROOT' -HI -d 2"
 COMMAND_FD="fd '.' '$SEARCH_ROOT' -HI -d 2"

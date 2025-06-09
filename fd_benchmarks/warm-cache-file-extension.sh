@@ -2,9 +2,12 @@
 
 source "prelude.sh"
 
-echo I HAVE MODIFIED THIS TO REPRESENT MY FILE EXTENSION SEARCH
+source "new_prelude.sh"
 
-EXT="jpg"
+
+
+
+EXT="c"
 
 COMMAND_FIND="fdf -HI --extension '$EXT' '' '$SEARCH_ROOT'"
 COMMAND_FD="fd -HI --extension '$EXT' '' '$SEARCH_ROOT'"

@@ -1,4 +1,4 @@
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `fdf '.' '/home/alexc' -HI -d 2` | 3.4 ± 0.6 | 2.2 | 5.4 | 1.00 |
-| `fd '.' '/home/alexc' -HI -d 2` | 10.4 ± 1.6 | 7.4 | 16.9 | 3.04 ± 0.72 |
+| `fdf '.' '/tmp/llvm-project' -HI -d 2` | 2.8 ± 0.6 | 1.6 | 5.0 | 1.00 |
+| `fd '.' '/tmp/llvm-project' -HI -d 2` | 8.9 ± 1.1 | 6.6 | 12.5 | 3.13 ± 0.73 |

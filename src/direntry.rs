@@ -623,9 +623,9 @@ impl Iterator for DirEntryIterator {
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
-                if full_path.starts_with(b"/home/alexc/Downloads/shellbench") {
-                    eprintln!("Full path: {}", full_path.as_os_str().to_string_lossy());
-                }
+             //   if full_path.starts_with(b"/home/alexc/Downloads/shellbench") {
+               //     eprintln!("Full path: {}", full_path.as_os_str().to_string_lossy());
+                //}
 
                 let entry = DirEntry {
                     path: full_path.into(),

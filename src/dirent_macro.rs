@@ -232,17 +232,65 @@ macro_rules! construct_path {
 /// 1. With a single argument: `dirent_const_time_strlen!(dirent)`, where `dirent` is a pointer to a `libc::dirent64` struct.
 /// 2. With two arguments: `dirent_const_time_strlen!(dirent, reclen)`, where `reclen` is the record length of the directory entry.
 /// 3. The only point in two arguments is to avoid recalculation(altho trivial) and to allow a custom record length to be used.
-macro_rules! dirent_const_time_strlen {
-    // match 1 arguments: call two-arg version (dirent:*const dirent64)->usize
-    // this is the most common use case, so we use the one-arg version to avoid unnecessary complexity
-    ($dirent:expr) => {
-        $crate::utils::dirent_const_time_strlen_onearg($dirent)
-    };
-    // match 2 arguments: call two-arg version (dirent:*const dirent64,reclen:usize)->usize
-    // this is used when the record length is known, to avoid recalculating it
-    // this is useful for performance-critical code where the record length is known in advance
-    ($dirent:expr, $reclen:expr) => {
-        $crate::utils::dirent_const_time_strlen_twoargs($dirent, $reclen)
-    };
+macro_rules! dirent_semi_const_strlen {
+    // Single argument version (gets reclen from dirent)
+    ($dirent:expr) => {{
+        let reclen = *offset_ptr!($dirent, d_reclen) as usize ;
+        dirent_const_time_strlen!($dirent, reclen)
+    }};
+    
+    // Two argument version (dirent + reclen)
+    ($dirent:expr, $reclen:expr) => {{
+        #[allow(clippy::integer_division_remainder_used)]
+        #[allow(clippy::ptr_as_ptr)]
+        #[allow(clippy::integer_division)]
+        #[allow(clippy::items_after_statements)]
+        #[allow(clippy::little_endian_bytes)]
+
+        
+            let reclen_in_u64s = $reclen / 8;
+            // Cast dirent to u64 slice
+             // Treat the dirent structure as a slice of u64 for word-wise processing
+             //use `std::ptr::slice_from_raw_parts` to create a slice from the raw pointer and avoid ubcheck
+            let u64_slice = &*std::ptr::slice_from_raw_parts($dirent as *const u64, reclen_in_u64s);
+                //  verify alignment/size
+            debug_assert!($reclen % 8 == 0 && $reclen >= 24, "reclen={}", $reclen);
+             // Calculate position of last word
+        // Get the last u64 word in the structure
+            
+            let last_word_index = reclen_in_u64s.checked_sub(1).unwrap_unchecked();
+            let last_word_check = u64_slice[last_word_index];
+
+
+
+                // Special case: When processing the 3rd u64 word (index 2), we need to mask
+    // the non-name bytes (d_type and padding) to avoid false null detection.
+    // The 0x00FF_FFFF  mask preserves only the LSB 3 bytes where the name could start.
+            let last_word_final = if last_word_index == 2 {
+                last_word_check | 0x00FF_FFFF
+            } else {
+                //what the fuck?     ---love u jc 
+                last_word_check
+            };
+
+        // Find null terminator position within the last word using our repne scasb(very efficient for len<8)
+            let remainder_len = 7 - $crate::strlen_asm(last_word_final.to_le_bytes().as_ptr());
+
+
+
+    // Calculate true string length:
+    // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type)
+    // 2. Subtract ignored bytes (after null terminator in last word)
+            
+            const DIRENT_HEADER_SIZE: usize = std::mem::size_of::<u64>()
+                + std::mem::size_of::<i64>()
+                + std::mem::size_of::<u8>()
+                + std::mem::size_of::<u16>()
+                + 1;
+
+        //return true strlen
+            $reclen - DIRENT_HEADER_SIZE - remainder_len
+        
+    }};
 }
 

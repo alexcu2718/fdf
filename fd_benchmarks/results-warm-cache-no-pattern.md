@@ -1,4 +1,4 @@
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `fdf  '.' '/tmp/llvm-project' -HI` | 32.0 ± 1.4 | 28.5 | 35.2 | 1.00 |
-| `fd  '.' '/tmp/llvm-project' -HI` | 60.9 ± 1.6 | 58.4 | 65.0 | 1.90 ± 0.10 |
+| `fdf  '.' '/tmp/llvm-project' -HI` | 27.5 ± 1.3 | 23.7 | 32.1 | 1.00 |
+| `fd  '.' '/tmp/llvm-project' -HI` | 52.8 ± 1.6 | 48.8 | 55.6 | 1.92 ± 0.11 |

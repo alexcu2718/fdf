@@ -154,7 +154,6 @@ impl Finder {
                 rconfig.keep_dirs
                     && rconfig.matches_path(rdir, rconfig.file_name) 
                     && rfilter.is_none_or(|f| f(rdir))
-                    && rconfig.extension_match.as_ref().is_none()
                     && rdir.depth != 0
             };
 

@@ -152,7 +152,7 @@ impl Finder {
         let lambda1 =
             |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
                 rconfig.keep_dirs
-                    && rconfig.matches_path(rdir, rconfig.file_name,rdir.base_len() as _) 
+                    && rconfig.matches_path(rdir, rconfig.file_name) 
                     && rfilter.is_none_or(|f| f(rdir))
                     && rconfig.extension_match.as_ref().is_none()
                     && rdir.depth != 0
@@ -161,7 +161,7 @@ impl Finder {
         let lambda2 =
             |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
                 rfilter.is_none_or(|f| f(rdir))
-                    && rconfig.matches_path(rdir, rconfig.file_name,rdir.base_len() as _)
+                    && rconfig.matches_path(rdir, rconfig.file_name)
                     && rconfig
                         .extension_match
                         .as_ref()

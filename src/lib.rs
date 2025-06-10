@@ -111,8 +111,8 @@ pub struct Finder {
     root: OsString,
     search_config: SearchConfig,
     filter: Option<fn(&DirEntry) -> bool>,
-    dir_filter: FilterType,
-    non_dir_filter: FilterType,
+    custom_filter: FilterType,
+
 }
 ///The Finder struct is used to find files in a directory.
 impl Finder {
@@ -149,30 +149,23 @@ impl Finder {
             }
         };
         // The lambda functions are used to filter directories and non-directories based on the search configuration.
-        let lambda1 =
-            |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
-                rconfig.keep_dirs
-                    && rconfig.matches_path(rdir, rconfig.file_name) 
-                    && rfilter.is_none_or(|f| f(rdir))
-                    && rdir.depth != 0
+        let lambda :FilterType= |rconfig, rdir, rfilter|{
+             {      rfilter.is_none_or(|f| f(rdir)) &&
+                    rconfig.matches_path(rdir, rconfig.file_name) &&
+                     rconfig.extension_match.as_ref().is_none_or(|ext| rdir.matches_extension(ext))
+                  
+                  
+            }
             };
 
-        let lambda2 =
-            |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
-                rfilter.is_none_or(|f| f(rdir))
-                    && rconfig.matches_path(rdir, rconfig.file_name)
-                    && rconfig
-                        .extension_match
-                        .as_ref()
-                        .is_none_or(|ext| rdir.matches_extension(ext))
-            };
+    
 
         Self {
             root: root.as_ref().to_owned(),
             search_config,
             filter: None,
-            dir_filter: lambda1,
-            non_dir_filter: lambda2,
+            custom_filter: lambda,
+          
         }
     }
 
@@ -217,7 +210,7 @@ impl Finder {
     #[inline]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry, sender: &Sender<Vec<DirEntry>>) {
-        let should_send = (self.dir_filter)(&self.search_config, &dir, self.filter);
+        let should_send = self.search_config.keep_dirs && (self.custom_filter)(&self.search_config, &dir, self.filter) &&  dir.depth()!=0 ;
 
         if should_send && self.search_config.depth.is_some_and(|d| dir.depth() >= d) {
             let _ = sender.send(vec![dir]); //have to put into a vec, this doesnt matter because this only happens when we depth limit
@@ -241,7 +234,7 @@ impl Finder {
                     let matched_files: Vec<_> = files
                         .into_iter()
                         .filter(|entry| {
-                            (self.non_dir_filter)(&self.search_config, entry, self.filter)
+                            (self.custom_filter)(&self.search_config, entry, self.filter)
                         })
                         .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately 
                     

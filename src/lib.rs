@@ -152,7 +152,7 @@ impl Finder {
         let lambda1 =
             |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
                 rconfig.keep_dirs
-                    && rconfig.matches_path(rdir, rconfig.file_name)
+                    && rconfig.matches_path(rdir, rconfig.file_name,rdir.base_len() as _) 
                     && rfilter.is_none_or(|f| f(rdir))
                     && rconfig.extension_match.as_ref().is_none()
                     && rdir.depth != 0
@@ -161,7 +161,7 @@ impl Finder {
         let lambda2 =
             |rconfig: &SearchConfig, rdir: &DirEntry, rfilter: Option<fn(&DirEntry) -> bool>| {
                 rfilter.is_none_or(|f| f(rdir))
-                    && rconfig.matches_path(rdir, rconfig.file_name)
+                    && rconfig.matches_path(rdir, rconfig.file_name,rdir.base_len() as _)
                     && rconfig
                         .extension_match
                         .as_ref()
@@ -191,15 +191,15 @@ impl Finder {
     pub fn traverse(self) -> Result<Receiver<Vec<DirEntry>>> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
-        // let search_config = self.search_config.clone();
 
+
+        //we have to arbitrarily construct a direntry to start the search.
         let construct_dir = DirEntry::new(&self.root);
 
         if !construct_dir.as_ref().is_ok_and(DirEntry::is_dir) {
             return Err(DirEntryError::InvalidPath);
         }
 
-        //we have to arbitrarily construct a direntry to start the search.
 
         //spawn the search in a new thread.
         //this is safe because we've already checked that the directory exists.
@@ -208,8 +208,7 @@ impl Finder {
                 &self,
                 unsafe { construct_dir.unwrap_unchecked() },
                 &sender,
-                //   &search_config,
-                //filter,
+          
             );
         });
 
@@ -239,19 +238,19 @@ impl Finder {
                     Self::process_directory(self, dir, sender);
                 });
 
-                let mut matched_files: Vec<_> = files
-                    .into_iter()
-                    .filter(|entry| (self.non_dir_filter)(&self.search_config, entry, self.filter))
-                    .collect();
+                        // Process files without intermediate Vec
+                    let matched_files: Vec<_> = files
+                        .into_iter()
+                        .filter(|entry| {
+                            (self.non_dir_filter)(&self.search_config, entry, self.filter)
+                        })
+                        .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately 
+                    
+                        .collect(); //by doing it this way we reduce channel contention and avoid an intermediate vec, which is more efficient!
 
-                if should_send {
-                    matched_files.push(dir.clone()); //accepting the clone cost here to avoid contention on the channel
-                }
-
-                if !matched_files.is_empty() {
-                    let _ = sender.send(matched_files);
-                    //send files as a vector(to prevent contention on the channel)
-                }
+                    if !matched_files.is_empty() {
+                        let _ = sender.send(matched_files);
+                    }
             }
             Err(
                 DirEntryError::Success

@@ -206,6 +206,7 @@ macro_rules! prefetch_next_buffer {
 /// Constructs a path from the base path and the name pointer, returning a mutable slice of the full path
 macro_rules! construct_path {
     ($self:ident, $name_ptr:ident) => {{
+
         let name_len = $crate::strlen_asm($name_ptr);
         let name_bytes = &*std::ptr::slice_from_raw_parts($name_ptr, name_len);
         let total_len = $self.base_path_len as usize + name_len;
@@ -259,7 +260,9 @@ macro_rules! dirent_const_time_strlen {
         // Calculate position of last word
         // Get the last u64 word in the structure
 
-        let last_word_index = reclen_in_u64s -1;
+        let last_word_index = reclen_in_u64s -1; //subtract 1 to get the last index
+        // Get the last u64 word from the slice
+        // (fine we ensured reclen is a multiple of 8 and reclen_in_u64s is the number of u64 words)
         let last_word_check = u64_slice[last_word_index];
 
 
@@ -280,8 +283,9 @@ macro_rules! dirent_const_time_strlen {
 
 
          // Calculate true string length:
-        // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type)
-        // 2. Subtract ignored bytes (after null terminator in last word)
+        // 1. Skip dirent header (8B d_ino + 8B d_off + 2B reclen + 2B d_type) == offset_of!(libc::dirent64,d_name)
+        //2. add one to get to the correct index
+        //3. Subtract ignored bytes (after null terminator in last word)
 
         const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64,d_name)+1;
 

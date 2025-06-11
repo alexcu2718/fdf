@@ -70,9 +70,6 @@ mod iter;
 pub(crate) use iter::DirIter;
 
 mod test;
-
-mod metadata;
-
 mod buffer;
 pub(crate) use buffer::AlignedBuffer;
 

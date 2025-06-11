@@ -39,36 +39,33 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
-#[cfg(target_arch = "x86_64")]
-#[allow(clippy::inline_asm_x86_intel_syntax)]
+/// Uses SSE2 intrinsics to calculate the length of a null-terminated string.
+#[cfg(all(target_arch = "x86_64",target_feature = "sse2"))]
 #[inline]
-/// Uses inline assembly to calculate the length of a null-terminated string.
-/// this is specifically more efficient for small strings, which dirent `d_name`'s usually are.
-/// This function is only available on `x86_64` architectures.
-/// it's generic over the `ValueType`, which is i8 or u8.
-pub(crate) unsafe fn strlen_asm<T>(s: *const T) -> usize
-where
-    T: ValueType,
-{
-    //aka i8/u8
-    unsafe {
-        let len: usize;
-        asm!(
-        "mov rdi, {ptr}", //move pointer to rdi
-        "xor eax, eax",  // xor is smaller than xor al,al
-        "mov rcx, -1",   // directly set to max instead of xor/not
-        "repne scasb",
-        "not rcx", // invert rcx to get the length
-        "dec rcx", //subtract 1 to account for null
-        "mov {len}, rcx", //move length to len
-            ptr = in(reg) s,
-            len = out(reg) len,
-            out("rdi") _,  // mark rdi as clobbered
-            out("rcx") _,  // mark ^ as clobbered
-            out("al") _,   // mark ^ as clobbered
-        );
+pub(crate) unsafe fn strlen_asm<T>(ptr: *const T) -> usize
+where T: ValueType{ //aka i8/u8{
+    use std::arch::x86_64::*;
 
-        len
+
+    let mut offset = 0;
+    loop {
+        // Load 16 bytes (unaligned is safe on x86_64)
+        let chunk = unsafe{_mm_loadu_si128(ptr.add(offset) as *const __m128i)};
+
+        // Compare against zero byte
+        let zeros = unsafe{_mm_setzero_si128()};
+        let cmp = unsafe{_mm_cmpeq_epi8(chunk, zeros)};
+
+        // Create a bitmask of results
+        let mask = unsafe{ _mm_movemask_epi8(cmp)};
+
+        if mask != 0 {
+            // At least one null byte found
+            let tz = mask.trailing_zeros() as usize;
+            return offset + tz;
+        }
+
+        offset += 16;
     }
 }
 
@@ -91,7 +88,7 @@ where
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     let filename: *const u8 = cstr!(bytepath);
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+    const FLAGS: i32 = libc::O_PATH |  libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;

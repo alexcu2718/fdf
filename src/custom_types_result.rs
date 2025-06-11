@@ -147,5 +147,7 @@ pub type SlimOsBytes = OsBytes<SlimmerBox<[u8], u16>>;
 #[allow(dead_code)]
 pub type ArcOsBytes = OsBytes<std::sync::Arc<[u8]>>;
 
-///filter function type for directory entries
-pub type FilterType = fn(&SearchConfig, &DirEntry, Option<fn(&DirEntry) -> bool>) -> bool;
+///filter function type for directory entries, 
+pub type FilterType = fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>) -> bool;
+///generic filter function type for directory entries 
+pub type DirEntryFilter = fn(&DirEntry) -> bool;

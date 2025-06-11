@@ -1,4 +1,5 @@
 use fdf::DirEntry;
+use fdf::DirEntryFilter;
 use std::sync::OnceLock;
 
 static TYPE_FILTER_TYPES: OnceLock<Vec<String>> = OnceLock::new();
@@ -7,7 +8,7 @@ static TYPE_FILTER_TYPES: OnceLock<Vec<String>> = OnceLock::new();
 //negligible impact.
 //#[allow(clippy::needless_pass_by_value)]
 #[allow(clippy::expect_used)]
-pub fn build_type_filter(types: &[String]) -> fn(&DirEntry) -> bool {
+pub fn build_type_filter(types: &[String]) -> DirEntryFilter {
     TYPE_FILTER_TYPES.get_or_init(|| types.iter().map(|t| t.to_lowercase()).collect());
 
     // return a function pointer

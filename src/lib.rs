@@ -84,7 +84,7 @@ pub use error::DirEntryError;
 
 mod custom_types_result;
 pub use custom_types_result::{
-    AsU8, BUFFER_SIZE, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result, SyscallBuffer,
+    AsU8, BUFFER_SIZE, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result, SyscallBuffer,DirEntryFilter
 };
 
 mod traits_and_conversions;
@@ -110,7 +110,7 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub struct Finder {
     root: OsString,
     search_config: SearchConfig,
-    filter: Option<fn(&DirEntry) -> bool>,
+    filter: Option<DirEntryFilter>,
     custom_filter: FilterType,
 
 }
@@ -172,7 +172,7 @@ impl Finder {
     #[must_use]
     #[inline]
     /// Set a filter function to filter out entries.
-    pub fn with_type_filter(mut self, filter: fn(&DirEntry) -> bool) -> Self {
+    pub fn with_type_filter(mut self, filter: DirEntryFilter) -> Self {
         self.filter = Some(filter);
         self
     }

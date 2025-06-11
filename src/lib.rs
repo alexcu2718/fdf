@@ -84,7 +84,8 @@ pub use error::DirEntryError;
 
 mod custom_types_result;
 pub use custom_types_result::{
-    AsU8, BUFFER_SIZE, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result, SyscallBuffer,DirEntryFilter
+    AsU8, BUFFER_SIZE, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result,
+    SyscallBuffer,
 };
 
 mod traits_and_conversions;
@@ -112,7 +113,6 @@ pub struct Finder {
     search_config: SearchConfig,
     filter: Option<DirEntryFilter>,
     custom_filter: FilterType,
-
 }
 ///The Finder struct is used to find files in a directory.
 impl Finder {
@@ -149,23 +149,22 @@ impl Finder {
             }
         };
         // The lambda functions are used to filter directories and non-directories based on the search configuration.
-        let lambda :FilterType= |rconfig, rdir, rfilter|{
-             {      rfilter.is_none_or(|f| f(rdir)) &&
-                    rconfig.matches_path(rdir, rconfig.file_name) &&
-                     rconfig.extension_match.as_ref().is_none_or(|ext| rdir.matches_extension(ext))
-                  
-                  
+        let lambda: FilterType = |rconfig, rdir, rfilter| {
+            {
+                rfilter.is_none_or(|f| f(rdir))
+                    && rconfig.matches_path(rdir, rconfig.file_name)
+                    && rconfig
+                        .extension_match
+                        .as_ref()
+                        .is_none_or(|ext| rdir.matches_extension(ext))
             }
-            };
-
-    
+        };
 
         Self {
             root: root.as_ref().to_owned(),
             search_config,
             filter: None,
             custom_filter: lambda,
-          
         }
     }
 
@@ -183,8 +182,6 @@ impl Finder {
     pub fn traverse(self) -> Result<Receiver<Vec<DirEntry>>> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
-
-
         //we have to arbitrarily construct a direntry to start the search.
         let construct_dir = DirEntry::new(&self.root);
 
@@ -192,16 +189,10 @@ impl Finder {
             return Err(DirEntryError::InvalidPath);
         }
 
-
         //spawn the search in a new thread.
         //this is safe because we've already checked that the directory exists.
         rayon::spawn(move || {
-            Self::process_directory(
-                &self,
-                unsafe { construct_dir.unwrap_unchecked() },
-                &sender,
-          
-            );
+            Self::process_directory(&self, unsafe { construct_dir.unwrap_unchecked() }, &sender);
         });
 
         Ok(receiver)
@@ -210,7 +201,9 @@ impl Finder {
     #[inline]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry, sender: &Sender<Vec<DirEntry>>) {
-        let should_send = self.search_config.keep_dirs && (self.custom_filter)(&self.search_config, &dir, self.filter) &&  dir.depth()!=0 ;
+        let should_send = self.search_config.keep_dirs
+            && (self.custom_filter)(&self.search_config, &dir, self.filter)
+            && dir.depth() != 0;
 
         if should_send && self.search_config.depth.is_some_and(|d| dir.depth() >= d) {
             let _ = sender.send(vec![dir]); //have to put into a vec, this doesnt matter because this only happens when we depth limit
@@ -230,19 +223,16 @@ impl Finder {
                     Self::process_directory(self, dir, sender);
                 });
 
-                        // Process files without intermediate Vec
-                    let matched_files: Vec<_> = files
-                        .into_iter()
-                        .filter(|entry| {
-                            (self.custom_filter)(&self.search_config, entry, self.filter)
-                        })
-                        .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately 
-                    
-                        .collect(); //by doing it this way we reduce channel contention and avoid an intermediate vec, which is more efficient!
+                // Process files without intermediate Vec
+                let matched_files: Vec<_> = files
+                    .into_iter()
+                    .filter(|entry| (self.custom_filter)(&self.search_config, entry, self.filter))
+                    .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately
+                    .collect(); //by doing it this way we reduce channel contention and avoid an intermediate vec, which is more efficient!
 
-                    if !matched_files.is_empty() {
-                        let _ = sender.send(matched_files);
-                    }
+                if !matched_files.is_empty() {
+                    let _ = sender.send(matched_files);
+                }
             }
             Err(
                 DirEntryError::Success

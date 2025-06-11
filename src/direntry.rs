@@ -3,8 +3,8 @@
 #![allow(clippy::single_call_fn)]
 
 use libc::{
-    F_OK, O_CLOEXEC, O_DIRECTORY,O_PATH, O_NONBLOCK, O_RDONLY, R_OK, W_OK, X_OK, access, close, dirent64,
-    open, strlen,
+    F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_PATH, O_RDONLY, R_OK, W_OK, X_OK, access, close,
+    dirent64, open, strlen,
 };
 #[allow(unused_imports)]
 use std::{
@@ -538,8 +538,9 @@ impl DirEntry {
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path
-            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY,O_PATH, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        let fd = dir_path.as_cstr_ptr(|ptr| unsafe {
+            open(ptr, O_RDONLY, O_PATH, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)
+        });
         //let fd=unsafe{open_asm(dir_path)};
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
@@ -673,8 +674,9 @@ impl DirEntry {
         func: fn(&[u8], usize, u8) -> bool,
     ) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path
-            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY,O_PATH, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        let fd = dir_path.as_cstr_ptr(|ptr| unsafe {
+            open(ptr, O_RDONLY, O_PATH, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)
+        });
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };

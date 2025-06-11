@@ -40,24 +40,26 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 }
 
 /// Uses SSE2 intrinsics to calculate the length of a null-terminated string.
-#[cfg(all(target_arch = "x86_64",target_feature = "sse2"))]
+#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 pub(crate) unsafe fn strlen_asm<T>(ptr: *const T) -> usize
-where T: ValueType{ //aka i8/u8{
+where
+    T: ValueType,
+{
+    //aka i8/u8{
     use std::arch::x86_64::*;
-
 
     let mut offset = 0;
     loop {
         // Load 16 bytes (unaligned is safe on x86_64)
-        let chunk = unsafe{_mm_loadu_si128(ptr.add(offset) as *const __m128i)};
+        let chunk = unsafe { _mm_loadu_si128(ptr.add(offset) as *const __m128i) };
 
         // Compare against zero byte
-        let zeros = unsafe{_mm_setzero_si128()};
-        let cmp = unsafe{_mm_cmpeq_epi8(chunk, zeros)};
+        let zeros = unsafe { _mm_setzero_si128() };
+        let cmp = unsafe { _mm_cmpeq_epi8(chunk, zeros) };
 
         // Create a bitmask of results
-        let mask = unsafe{ _mm_movemask_epi8(cmp)};
+        let mask = unsafe { _mm_movemask_epi8(cmp) };
 
         if mask != 0 {
             // At least one null byte found
@@ -88,7 +90,7 @@ where
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     let filename: *const u8 = cstr!(bytepath);
-    const FLAGS: i32 = libc::O_PATH |  libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+    const FLAGS: i32 = libc::O_PATH | libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;

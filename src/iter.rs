@@ -2,7 +2,7 @@
 #[allow(unused_imports)]
 use crate::{
     BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
-    SyscallBuffer, copy_name_to_buffer, cstr, init_path_buffer_readdir, offset_ptr,
+    SyscallBuffer, copy_name_to_buffer, cstr, init_path_buffer_readdir, offset_ptr,get_dirent_vals,
     skip_dot_entries, strlen_asm,
 };
 use libc::{DIR, closedir, opendir, readdir64};
@@ -69,13 +69,8 @@ impl Iterator for DirIter {
                 return None;
             }
 
-            let (name_file, dir_info, inode): (*const u8, u8, u64) = unsafe {
-                (
-                    offset_ptr!(entry, d_name).cast(),
-                    *offset_ptr!(entry, d_type),
-                    *offset_ptr!(entry, d_ino),
-                )
-            };
+            let (name_file, dir_info, inode)=get_dirent_vals!(@minimal entry);
+            //*const u8 d8 u64, we dont need reclen, hence the @minimal tag */
 
             skip_dot_entries!(dir_info, name_file);
             let total_path_len = copy_name_to_buffer!(self, name_file);

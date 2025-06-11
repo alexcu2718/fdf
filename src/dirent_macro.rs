@@ -226,7 +226,7 @@ macro_rules! construct_path {
 }
 
 
-
+/* 
 
 #[macro_export]
 /// A macro to calculate the length of a directory entry name in constant time (SSE2 implementation is because it checks the entire 8 byte array in 1 op). 
@@ -299,7 +299,7 @@ macro_rules! dirent_const_time_strlen {
     }};
 }
 
-
+ 
 
 
 
@@ -333,5 +333,59 @@ macro_rules! construct_path_const_time {
 
         let full_path = $self.path_buffer.get_unchecked_mut(..total_len);
         full_path
+    }};
+}
+
+ */
+
+#[macro_export]
+/// A macro to extract values from a `libc::dirent64` struct.
+/// This macro returns a tuple containing:
+/// - A pointer to the name field (null-terminated string) 'd_name' *const u8
+/// - The file type 'd_type' as u8 (e.g., DT_REG, DT_DIR)
+/// - The inode number 'd_ino' as u64
+/// - The record length 'd_reclen' as usize
+///  Optionally, a minimal version can be used that excludes the record length.
+/// /// Usage:
+/// ``` 
+/// use libc::dirent64;
+/// use crate::get_dirent_vals;
+/// let dirent: *const libc::dirent64 = todo!(); // Assume this is a valid pointer to a dirent64 struct
+/// let (name_ptr, file_type, inode, reclen) = get_dirent_vals!(dirent);
+/// let (name_ptr, file_type, inode) = get_dirent_vals!(@minimal dirent); // Minimal version without reclen
+/// ```
+/// 
+macro_rules! get_dirent_vals {
+    ($d:expr) => {{
+        // Cast the dirent pointer to a byte pointer for offset calculations
+    
+        unsafe {
+            (
+                // d_name: pointer to the name field (null-terminated string)
+                $crate::offset_ptr!($d, d_name).cast::<u8>(),
+                // d_type: file type (DT_REG, DT_DIR, etc.)
+                *$crate::offset_ptr!($d, d_type).cast::<u8>(),
+                 // d_ino: inode number
+                *$crate::offset_ptr!($d, d_ino) as u64,
+                 // d_reclen: record length
+                *$crate::offset_ptr!($d, d_reclen) as usize,
+                // d_ino: inode number
+                
+            )
+        }
+    }};
+    (@minimal $d:expr) => {{
+        //minimal version, as we don't need reclen for readdir, well we can...if we use my fancy construct_path_const_time! 
+        // Cast the dirent pointer to a byte pointer for offset calculations
+        unsafe {
+            (
+                // d_name: pointer to the name field (null-terminated string)
+                $crate::offset_ptr!($d, d_name).cast::<u8>(),
+                // d_type: file type (DT_REG, DT_DIR, etc.)
+                *$crate::offset_ptr!($d, d_type).cast::<u8>(),
+                   // d_ino: inode number
+                 *$crate::offset_ptr!($d, d_ino) as u64,
+            )
+        }
     }};
 }

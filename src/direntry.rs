@@ -23,7 +23,7 @@ use std::{
 #[allow(unused_imports)]
 use crate::{
     AsU8 as _, DirIter, OsBytes as _, PathBuffer, Result, SyscallBuffer, ToStat as _,
-    construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, dirent_const_time_strlen,
+    construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, get_dirent_vals,
     error::DirEntryError, filetype::FileType, init_path_buffer_syscall, offset_ptr,
     prefetch_next_buffer, prefetch_next_entry, skip_dot_entries,
     traits_and_conversions::AsOsStr as _, traits_and_conversions::BytesToCstrPointer,
@@ -606,15 +606,8 @@ impl Iterator for DirEntryIterator {
 
                 // Extract the fields from the dirent structure
 
-                let (name_ptr, d_type, reclen, inode): (*const u8, u8, usize, u64) = unsafe {
-                    (
-                        offset_ptr!(d, d_name).cast(),
-                        *offset_ptr!(d, d_type),
-                        *offset_ptr!(d, d_reclen) as _,
-                        *offset_ptr!(d, d_ino),
-                    )
-                }; //ideally compiler optimises this to a single load, but it is not guaranteed, so we do it manually.
-
+                let (name_ptr, d_type, inode, reclen)= get_dirent_vals!( d); //a macro that extracts the values from the dirent structure, this is a niche optimisation, it allows us to avoid doing pointer checks
+                //*const u8, d8, u64,usize  */
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries

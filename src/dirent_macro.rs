@@ -259,7 +259,7 @@ macro_rules! dirent_const_time_strlen {
         // Calculate position of last word
         // Get the last u64 word in the structure
 
-        let last_word_index = reclen_in_u64s.checked_sub(1).unwrap_unchecked();
+        let last_word_index = reclen_in_u64s -1;
         let last_word_check = u64_slice[last_word_index];
 
 

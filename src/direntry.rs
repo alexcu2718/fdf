@@ -659,6 +659,7 @@ impl Iterator for DirEntryIterator {
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// // Iterator for directory entries using getdents syscall with a filter function
+#[allow(clippy::multiple_inherent_impl)] // this is a separate impl block to avoid confusion with the other iterator
 impl DirEntry {
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later

@@ -42,12 +42,13 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 /// Uses SSE2 intrinsics to calculate the length of a null-terminated string.
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
+#[allow(clippy::ptr_as_ptr)]//safe to do this as u8 is aligned to 16 bytes
 pub(crate) unsafe fn strlen_asm<T>(ptr: *const T) -> usize
 where
     T: ValueType,
 {
     //aka i8/u8{
-    use std::arch::x86_64::*;
+    use std::arch::x86_64::{__m128i, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_setzero_si128};
 
     let mut offset = 0;
     loop {

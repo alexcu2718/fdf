@@ -4,7 +4,7 @@ source "new_prelude.sh"
 FDF="fdf"
 FD="fd"
 DIR="."
-STRACE_OUT_DIR="strace_outputs"
+STRACE_OUT_DIR="$(dirname $(which fdf) )/strace_outputs"
 mkdir -p "$STRACE_OUT_DIR"
 
 declare -a PATTERNS=(

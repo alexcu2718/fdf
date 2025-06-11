@@ -538,10 +538,10 @@ impl DirEntry {
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path.as_cstr_ptr(|ptr| unsafe {
-            open(ptr, O_RDONLY, O_PATH, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)
-        });
-        //let fd=unsafe{open_asm(dir_path)};
+       // let fd = dir_path.as_cstr_ptr(|ptr| unsafe {
+     //       open(ptr, O_RDONLY, O_PATH, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)
+      //  });
+        let fd=unsafe{open_asm(dir_path)};
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
@@ -676,7 +676,7 @@ impl DirEntry {
     ) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
         let fd = dir_path.as_cstr_ptr(|ptr| unsafe {
-            open(ptr, O_RDONLY, O_PATH, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)
+            open(ptr, O_RDONLY,  O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)
         });
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };

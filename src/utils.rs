@@ -52,7 +52,7 @@ where
 
     let mut offset = 0;
     loop {
-        // Load 16 bytes (unaligned is safe on x86_64)
+        // Load 16 bytes (unaligned is safe on x86_64, we know this is fine because perfectly aligned
         let chunk = unsafe { _mm_loadu_si128(ptr.add(offset) as *const __m128i) };
 
         // Compare against zero byte
@@ -91,7 +91,7 @@ where
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     let filename: *const u8 = cstr!(bytepath);
-    const FLAGS: i32 = libc::O_PATH | libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+    const FLAGS: i32 =/*  libc::O_PATH| turns out dont use this kids!  */  libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;

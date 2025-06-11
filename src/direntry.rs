@@ -538,10 +538,10 @@ impl DirEntry {
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-       // let fd = dir_path.as_cstr_ptr(|ptr| unsafe {
-     //       open(ptr, O_RDONLY, O_PATH, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)
-      //  });
-        let fd=unsafe{open_asm(dir_path)};
+        let fd = dir_path.as_cstr_ptr(|ptr| unsafe {
+            open(ptr, O_RDONLY,  O_NONBLOCK, O_DIRECTORY, O_CLOEXEC)
+        });
+       // let fd=unsafe{open_asm(dir_path)};
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
@@ -623,6 +623,8 @@ impl Iterator for DirEntryIterator {
                 // assert!(unsafe{libc::strlen(name_ptr.cast())==crate::dirent_const_time_strlen!(d)},"Invalid name length, this is a bug in the code, please report it to the author");
 
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
+               // let full_path=unsafe{crate::construct_path_const_time!(self,d)};
+              // let full_path=unsafe{crate::construct_path_const_time!(self,d,reclen)};
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
                 //   if full_path.starts_with(b"/home/alexc/Downloads/shellbench") {

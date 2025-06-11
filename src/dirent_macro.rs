@@ -225,8 +225,11 @@ macro_rules! construct_path {
     }};
 }
 
+
+
+
 #[macro_export]
-/// A macro to calculate the length of a directory entry name in (semi-constant) time.
+/// A macro to calculate the length of a directory entry name in constant time (SSE2 implementation is because it checks the entire 8 byte array in 1 op). 
 /// This macro can be used in two ways:
 /// 1. With a single argument: `dirent_const_time_strlen!(dirent)`, where `dirent` is a pointer to a `libc::dirent64` struct.
 /// 2. With two arguments: `dirent_const_time_strlen!(dirent, reclen)`, where `reclen` is the record length of the directory entry.
@@ -251,6 +254,7 @@ macro_rules! dirent_const_time_strlen {
         // Ensure that the record length is a multiple of 8 so we can cast to u64
         //reclen is always a multiple of 8, so this is safe for the next step
         debug_assert!($reclen % 8 == 0, "reclen={} is not a multiple of 8", $reclen);
+        debug_assert!($reclen >= 16, "reclen={} is greater than 16", $reclen);
         // Treat the dirent structure as a slice of u64 for word-wise processing
         //use `std::ptr::slice_from_raw_parts` to create a slice from the raw pointer and avoid ubcheck
            // Cast dirent+reclen to u64 slice
@@ -273,7 +277,7 @@ macro_rules! dirent_const_time_strlen {
         let last_word_final = if last_word_index == 2 {
                 last_word_check | 0x00FF_FFFF
             } else {
-                //what the fuck?     ---love u jc
+                //what the fuck?     ---love u jc                                 //john carmack
                 last_word_check
             };
 
@@ -292,5 +296,42 @@ macro_rules! dirent_const_time_strlen {
 
         $reclen - DIRENT_HEADER_SIZE - remainder_len
 
+    }};
+}
+
+
+
+
+
+///Extremely specific niche use case that i can't be bothered writing up.
+/// Constructs a path from the base path and the name pointer in constant time.
+/// Variadic for `reclen` (can be passed explicitly or fetched from `dirent`)
+#[macro_export]
+macro_rules! construct_path_const_time {
+
+    // Single argument version (gets `reclen` from `dirent`)
+    ($self:ident, $dirent:expr) => {{
+        let reclen = *offset_ptr!($dirent, d_reclen) as usize;
+        $crate::construct_path_const_time!($self, $dirent, reclen)
+    }};
+
+    // Two argument version (explicit `reclen`)
+    ($self:ident, $dirent:expr,$reclen:expr) => {{
+        let name_ptr:*const u8 = offset_ptr!($dirent, d_name).cast();
+        let name_len = $crate::dirent_const_time_strlen!($dirent,$reclen);
+        let name_bytes = &*std::ptr::slice_from_raw_parts(name_ptr, name_len);
+        let total_len = $self.base_path_len as usize + name_len;
+
+        std::ptr::copy_nonoverlapping(
+            name_bytes.as_ptr(),
+            $self
+                .path_buffer
+                .as_mut_ptr()
+                .add($self.base_path_len as usize),
+            name_len,
+        );
+
+        let full_path = $self.path_buffer.get_unchecked_mut(..total_len);
+        full_path
     }};
 }

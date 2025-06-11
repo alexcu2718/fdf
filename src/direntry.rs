@@ -3,7 +3,7 @@
 #![allow(clippy::single_call_fn)]
 
 use libc::{
-    F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_PATH, O_RDONLY, R_OK, W_OK, X_OK, access, close,
+    F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK,  O_RDONLY, R_OK, W_OK, X_OK, access, close,
     dirent64, open, strlen,
 };
 #[allow(unused_imports)]

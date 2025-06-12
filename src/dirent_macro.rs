@@ -91,7 +91,7 @@ macro_rules! skip_dot_entries {
     ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
         #[allow(clippy::macro_metavars_in_unsafe)]
         unsafe {
-            let ddd = $reclen == 24 && ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN);
+            let ddd = ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) && $reclen == 24;
             if ddd && *$name_ptr.add(0) == 46 {  // 46 == '.' in ASCII
                 if *$name_ptr.add(1) == 0 ||     // Single dot case
                    (*$name_ptr.add(1) == 46 &&  // Double dot case

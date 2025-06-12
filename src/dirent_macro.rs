@@ -78,29 +78,48 @@ macro_rules! cstr_n {
 
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
-///a macro to skip . and .. entries when traversing, takes 2 mandatory args, `d_type`,
-/// which is if eg let dirnt:*const dirent64; then `d_type`=`(*dirnt).d_type`
-//so it's expecting a `u8` basically. then it optionally takes offset and reclen, these are now deprecated but they were in use in a previous build
-//ive kept them because naturally variadic macros will give no performance hit (Eg why this crate even exists)
+/// A macro to skip . and .. entries when traversing
+/// 
+/// Takes 2 mandatory args:
+/// - `d_type`: The directory entry type (e.g., `(*dirnt).d_type`)
+/// - `name_ptr`: Pointer to the entry name
+///
+/// And 1 optional arg:
+/// - `reclen`: If provided, also checks that reclen == 24 when testing directory entries
 macro_rules! skip_dot_entries {
-    ($d_type:expr, $name_ptr:expr $(, $offset:expr, $reclen:expr)?) => {
-        //ddd=indicator of whether the dent struct is dir/unknown, if it's unknown, we just need to check the pointer first index
-        // which will eliminate 50%
-       #[allow(clippy::macro_metavars_in_unsafe)]//stupid error let me use my hack macros.
+    // Version with reclen check
+    ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
+        #[allow(clippy::macro_metavars_in_unsafe)]
         unsafe {
-            let ddd = $d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN;
-            if ddd && *$name_ptr.add(0) == 46 {  // 46 == '.' in ASCII //access first element of pointer and dereference for value and check if its ascii . aka 46
-                // Check for "." or ".."
+            let ddd = $reclen == 24 && ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN);
+            if ddd && *$name_ptr.add(0) == 46 {  // 46 == '.' in ASCII
                 if *$name_ptr.add(1) == 0 ||     // Single dot case
-                   *$name_ptr.add(1) == 46 &&   // Double dot case
-                    *$name_ptr.add(2) == 0 {
-                    $($offset += $reclen;)? //optional args
+                   (*$name_ptr.add(1) == 46 &&  // Double dot case
+                    *$name_ptr.add(2) == 0) {
                     continue;
                 }
             }
         }
-    };
+    }};
+    
+    // Version without reclen check
+    ($d_type:expr, $name_ptr:expr) => {{
+        #[allow(clippy::macro_metavars_in_unsafe)]
+        unsafe {
+            if ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) &&
+               *$name_ptr.add(0) == 46 {
+                if *$name_ptr.add(1) == 0 ||     // Single dot case
+                   (*$name_ptr.add(1) == 46 &&  // Double dot case
+                    *$name_ptr.add(2) == 0) {
+                    continue;
+                }
+            }
+        }
+    }};
 }
+
+
+
 
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
@@ -227,7 +246,10 @@ macro_rules! construct_path {
 
 
 /* 
-
+//ive temporarily abandoned this this....
+//basically it works in debug but not in release????? I WILL SOLVE THIS MOTHERFUCKER,
+//I HAVE GOT A WORKING SOLUTION BUT IT BASICALLY MEANS I HAVE TO CHECK THE FIRST POINTER CONSTANTLY BECAUSE FOR SOME REASON MALFORMED
+//BYTES END UP NOT BEING DETECTED AS NULL TERMINATORS, SO I NEED TO FIND THE APPROPRIATE BITMASK, TODO!
 #[macro_export]
 /// A macro to calculate the length of a directory entry name in constant time (SSE2 implementation is because it checks the entire 8 byte array in 1 op). 
 /// This macro can be used in two ways:
@@ -347,13 +369,11 @@ macro_rules! construct_path_const_time {
 /// - The record length 'd_reclen' as usize
 ///  Optionally, a minimal version can be used that excludes the record length.
 /// /// Usage:
-/// ``` 
 /// use libc::dirent64;
 /// use crate::get_dirent_vals;
 /// let dirent: *const libc::dirent64 = todo!(); // Assume this is a valid pointer to a dirent64 struct
 /// let (name_ptr, file_type, inode, reclen) = get_dirent_vals!(dirent);
 /// let (name_ptr, file_type, inode) = get_dirent_vals!(@minimal dirent); // Minimal version without reclen
-/// ```
 /// 
 macro_rules! get_dirent_vals {
     ($d:expr) => {{
@@ -362,13 +382,13 @@ macro_rules! get_dirent_vals {
         unsafe {
             (
                 // d_name: pointer to the name field (null-terminated string)
-                $crate::offset_ptr!($d, d_name).cast::<u8>(),
+                $crate::offset_ptr!($d, d_name).cast::<_>(), //let user determine type
                 // d_type: file type (DT_REG, DT_DIR, etc.)
-                *$crate::offset_ptr!($d, d_type).cast::<u8>(),
+                *$crate::offset_ptr!($d, d_type).cast::<_>(),
                  // d_ino: inode number
-                *$crate::offset_ptr!($d, d_ino) as u64,
+                *$crate::offset_ptr!($d, d_ino) as _,
                  // d_reclen: record length
-                *$crate::offset_ptr!($d, d_reclen) as usize,
+                *$crate::offset_ptr!($d, d_reclen) as _,
                 // d_ino: inode number
                 
             )
@@ -380,11 +400,11 @@ macro_rules! get_dirent_vals {
         unsafe {
             (
                 // d_name: pointer to the name field (null-terminated string)
-                $crate::offset_ptr!($d, d_name).cast::<u8>(),
+                $crate::offset_ptr!($d, d_name).cast::<_>(),
                 // d_type: file type (DT_REG, DT_DIR, etc.)
-                *$crate::offset_ptr!($d, d_type).cast::<u8>(),
+                *$crate::offset_ptr!($d, d_type).cast::<_>(),
                    // d_ino: inode number
-                 *$crate::offset_ptr!($d, d_ino) as u64,
+                 *$crate::offset_ptr!($d, d_ino) as _,
             )
         }
     }};

@@ -42,6 +42,73 @@ where
         f(c_path_buf.cast::<_>())
     }
 }
+
+
+pub trait GetExtension{
+
+    fn extension(&self)->Option<&[u8]>;
+}
+
+
+impl<T> GetExtension for T
+where
+    T: Deref<Target = [u8]>,
+{
+    /// Returns the extension of the file as a byte slice, if it exists.
+    /// If the file has no extension, returns `None`.
+    #[inline]
+    fn extension(&self) -> Option<&[u8]> {
+        self.rsplit(|&b| b == b'.').next()
+       
+    }
+
+}
+
+
+
+pub trait MatchesExtension{
+    fn matches_extension(&self, ext: &[u8]) -> bool;
+
+}
+
+
+
+impl<T> MatchesExtension for T
+where
+    T: Deref<Target = [u8]>,
+{
+    /// Checks if the file matches the given extension.
+    /// Returns `true` if the file's extension matches, `false` otherwise.
+   
+    #[inline]
+    fn matches_extension(&self, ext: &[u8]) -> bool {
+        self.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext))
+    }
+}
+
+
+pub trait GetSize {
+    /// Returns the size of the file in bytes.
+    unsafe fn size(&self) -> crate::Result<u64>;
+}
+
+impl <T> GetSize for T
+where
+    T: Deref<Target = [u8]>,
+{
+    /// Returns the size of the file in bytes.
+    /// If the file size cannot be determined, returns 0.
+    #[inline]
+    unsafe fn size(&self) -> crate::Result<u64> {
+         self.get_stat().map(|s| s.st_size as u64)
+    }
+}
+
+
+
+
+
+
 #[allow(dead_code)]
 pub(crate) trait AsOsStr {
     fn as_os_str(&self) -> &OsStr;

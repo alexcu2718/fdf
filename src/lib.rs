@@ -86,7 +86,7 @@ pub use custom_types_result::{
 };
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{BytesToCstrPointer, PathAsBytes, ToStat};
+pub use traits_and_conversions::{BytesToCstrPointer, PathAsBytes, ToStat,GetExtension,MatchesExtension,GetSize};
 
 mod utils;
 
@@ -147,13 +147,14 @@ impl Finder {
         };
         // The lambda functions are used to filter directories and non-directories based on the search configuration.
         let lambda: FilterType = |rconfig, rdir, rfilter| {
-            {
+            {                     
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_path(rdir, rconfig.file_name)
                     && rconfig
                         .extension_match
-                        .as_ref()
-                        .is_none_or(|ext| rdir.matches_extension(ext))
+                        .as_ref()                        //get the filename THEN check extension, we dont want to pick up
+                        //stuff like .gitignore or .DS_Store
+                        .is_none_or(|ext| (&rdir.as_bytes()[rdir.base_len() as usize..]).matches_extension(&ext))
             }
         };
 

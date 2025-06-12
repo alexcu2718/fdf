@@ -105,19 +105,21 @@ where
     /// this is only to be called when using syscalls in the getdents interface
     #[inline]
     pub unsafe fn getdents64(&mut self, fd: i32) -> i64 {
-        unsafe { syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
+        unsafe { syscall(SYS_getdents64 as i64, fd, self.as_mut_ptr(), SIZE) }
     }
 
     /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
+    /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'. 
+    /// At the end of the day, the only way to bypass glibc's quirks is to use inline assembly.
     #[inline]
     #[allow(clippy::inline_asm_x86_intel_syntax)]
-    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
+    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i32 {
         let output;
         unsafe {
             asm!(
                 "syscall",
-                inout("rax") libc::SYS_getdents64 => output,
+                inout("rax") libc::SYS_getdents64 as i32 => output,
                 in("rdi") fd,
                 in("rsi") self.as_mut_ptr(),
                 in("rdx") SIZE,

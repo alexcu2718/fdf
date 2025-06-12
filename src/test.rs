@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
-    use crate::traits_and_conversions::AsOsStr;
+    use crate::traits_and_conversions::{AsOsStr,GetExtension};
     use crate::{DirEntry, DirIter, FileType, debug_print};
     use std::env::temp_dir;
     use std::fs;
@@ -126,8 +126,8 @@ mod tests {
         let file_path = temp_dir.as_path().join("testfilenew.txt");
         std::fs::write(&file_path, "test").unwrap();
 
-        let entry: u16 = DirEntry::new(file_path.as_os_str()).unwrap().base_len();
-        let std_entry: u16 = (std::path::Path::new(file_path.as_os_str())
+        let entry: usize = DirEntry::new(file_path.as_os_str()).unwrap().base_len();
+        let std_entry = (std::path::Path::new(file_path.as_os_str())
             .parent()
             .unwrap()
             .as_os_str()

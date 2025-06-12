@@ -22,7 +22,8 @@ use std::{
 
 #[allow(unused_imports)]
 use crate::{
-    AsU8 as _, DirIter, OsBytes as _, PathBuffer, Result, SyscallBuffer, ToStat as _,
+    AsU8 as _, DirIter, OsBytes as _, PathBuffer, Result, SyscallBuffer,
+     ToStat as _,traits_and_conversions::GetExtension as _,MatchesExtension as _,GetSize as _,
     construct_path, cstr, cstr_n, custom_types_result::SlimOsBytes, get_dirent_vals,
     error::DirEntryError, filetype::FileType, init_path_buffer_syscall, offset_ptr,
     prefetch_next_buffer, prefetch_next_entry, skip_dot_entries,
@@ -51,20 +52,21 @@ impl fmt::Display for DirEntry {
 
 impl std::ops::Deref for DirEntry {
     type Target = [u8];
-
+       #[inline]
     fn deref(&self) -> &Self::Target {
         self.as_bytes()
     }
 }
 
 impl From<DirEntry> for PathBuf {
+       #[inline]
     fn from(entry: DirEntry) -> Self {
         entry.into_path()
     }
 }
 impl TryFrom<&[u8]> for DirEntry {
     type Error = DirEntryError;
-
+       #[inline]
     fn try_from(path: &[u8]) -> Result<Self> {
         Self::new(OsStr::from_bytes(path))
     }
@@ -72,7 +74,7 @@ impl TryFrom<&[u8]> for DirEntry {
 
 impl TryFrom<&OsStr> for DirEntry {
     type Error = DirEntryError;
-
+       #[inline]
     fn try_from(path: &OsStr) -> Result<Self> {
         Self::new(path)
     }
@@ -110,7 +112,7 @@ impl DirEntry {
 
         unsafe {
             // x_ok checks for execute permission
-            self.as_bytes().as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
+            self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
         }
     }
 
@@ -181,7 +183,7 @@ impl DirEntry {
     pub fn is_empty(&self) -> bool {
         if self.is_regular_file() {
             // for files, check if size is zero without loading all metadata
-            self.size().is_ok_and(|size| size == 0)
+            unsafe{self.size().is_ok_and(|size| size == 0)}//safe because we know it wont overflow.
         } else if self.is_dir() {
             // for directories, check if they have no entries
             self.getdents()
@@ -203,8 +205,7 @@ impl DirEntry {
         }
         //cast byte slice into a *const c_char/i8 pointer with a null terminator THEN pass it to realpath along with a null mut pointer
         let ptr = unsafe {
-            self.as_bytes()
-                .as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
+            self .as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
         };
         if ptr.is_null() {
             //check for null
@@ -227,8 +228,7 @@ impl DirEntry {
         }
 
         let ptr = unsafe {
-            self.as_bytes()
-                .as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
+            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
         };
         //we use strlen here because path is likely to be too long to benefit from repne scasb
         unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast::<u8>(), strlen(ptr)) }
@@ -270,7 +270,7 @@ impl DirEntry {
     #[must_use]
     ///somewhatcostly check for readable files
     pub fn is_readable(&self) -> bool {
-        unsafe { self.as_bytes().as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
+        unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
     }
 
     #[inline]
@@ -279,7 +279,7 @@ impl DirEntry {
     pub fn is_writable(&self) -> bool {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
-        unsafe { self.as_bytes().as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
+        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
     }
 
     #[inline]
@@ -302,14 +302,14 @@ impl DirEntry {
     #[must_use]
     ///checks if the path is absolute,
     pub fn is_absolute(&self) -> bool {
-        self.as_bytes()[0] == b'/'
+        self[0] == b'/'
     }
 
     #[inline]
     // Returns an iterator over the components of the path.
     /// This splits the path by '/' and filters out empty components.
     pub fn components(&self) -> impl Iterator<Item = &[u8]> {
-        self.as_bytes()
+        self
             .split(|&b| b == b'/')
             .filter(|s| !s.is_empty())
     }
@@ -339,12 +339,7 @@ impl DirEntry {
             .map_err(|_| DirEntryError::MetadataError)
     }
 
-    #[inline]
-    #[must_use]
-    ///Returns the extension of the file if it has one
-    pub fn extension(&self) -> Option<&[u8]> {
-        self.file_name().rsplit(|&b| b == b'.').next()
-    }
+ 
 
     #[inline]
     #[must_use]
@@ -365,7 +360,7 @@ impl DirEntry {
     #[must_use]
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
-        unsafe { self.as_bytes().get_unchecked(self.base_len as usize..) }
+        unsafe { self.get_unchecked(self.base_len as usize..) }
     }
 
     #[inline]
@@ -386,8 +381,8 @@ impl DirEntry {
     #[inline]
     #[must_use]
     ///returns the length of the base path (eg /home/user/ is 6 '/home/')
-    pub const fn base_len(&self) -> u16 {
-        self.base_len
+    pub const fn base_len(&self) -> usize {
+        self.base_len as _
     }
 
     #[inline]
@@ -429,14 +424,6 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    ///checks extension case insensitively for extension
-    pub fn matches_extension(&self, ext: &[u8]) -> bool {
-        self.extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
-    }
-
-    #[inline]
-    #[must_use]
     ///converts the path (bytes) into an owned path
     pub fn into_path(&self) -> PathBuf {
         PathBuf::from(self.as_os_str())
@@ -446,21 +433,21 @@ impl DirEntry {
     #[must_use]
     ///checks if the file exists, this, makes a syscall
     pub fn exists(&self) -> bool {
-        unsafe { self.as_bytes().as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
+        unsafe { self.as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
     }
 
     #[inline]
     #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
-        unsafe { *self.as_bytes().get_unchecked(self.base_len as usize) == b'.' }
+        unsafe { *self.get_unchecked(self.base_len as usize) == b'.' }
     }
     #[inline]
     #[must_use]
     ///returns the directory name of the file (as bytes) or failing that (/ is problematic) will return the full path,
     pub fn dirname(&self) -> &[u8] {
         unsafe {
-            self.as_bytes() //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
+            self//this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
                 .get_unchecked(..self.base_len as usize - 1)
                 .rsplit(|&b| b == b'/')
                 .next()
@@ -473,7 +460,7 @@ impl DirEntry {
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
         unsafe {
-            self.as_bytes()
+            self
                 .get_unchecked(..std::cmp::max(self.base_len as usize - 1, 1))
         }
 
@@ -508,12 +495,6 @@ impl DirEntry {
         DirIter::new(self)
     }
 
-    /// Get file size in bytes
-    #[inline]
-    #[allow(clippy::missing_errors_doc)] //fixing errors later
-    pub fn size(&self) -> Result<u64> {
-        self.get_stat().map(|s| s.st_size as u64)
-    }
 
     /// Get last modification time, this will be more useful when I implement filters for it.
     #[inline]
@@ -606,24 +587,19 @@ impl Iterator for DirEntryIterator {
 
                 // Extract the fields from the dirent structure
 
-                let (name_ptr, d_type, inode, reclen)= get_dirent_vals!( d); //a macro that extracts the values from the dirent structure, this is a niche optimisation, it allows us to avoid doing pointer checks
+                let (name_ptr, d_type, inode, reclen):(*const u8,u8,u64,usize)= get_dirent_vals!( d); //a macro that extracts the values from the dirent structure, this is a niche optimisation, it allows us to avoid doing pointer checks
                 //*const u8, d8, u64,usize  */
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
-                skip_dot_entries!(d_type, name_ptr); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
+                skip_dot_entries!(d_type, name_ptr,reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
+                //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
+                //this is because 
 
-                // assert!(unsafe{libc::strlen(name_ptr.cast())==crate::dirent_const_time_strlen!(d)},"Invalid name length, this is a bug in the code, please report it to the author");
-
+            
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                // let full_path=unsafe{crate::construct_path_const_time!(self,d)};
-              // let full_path=unsafe{crate::construct_path_const_time!(self,d,reclen)};
-                //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
-                //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
-                //   if full_path.starts_with(b"/home/alexc/Downloads/shellbench") {
-                //     eprintln!("Full path: {}", full_path.as_os_str().to_string_lossy());
-                //}
-
+          
                 let entry = DirEntry {
                     path: full_path.into(),
                     file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee

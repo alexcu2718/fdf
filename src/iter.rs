@@ -69,10 +69,13 @@ impl Iterator for DirIter {
                 return None;
             }
 
-            let (name_file, dir_info, inode)=get_dirent_vals!(@minimal entry);
+            let (name_file, dir_info, inode):(*const u8,u8,u64)=get_dirent_vals!(@minimal entry);
+            // let (name_file, dir_info, inode,reclen):(*const u8,u8,u64,usize)=get_dirent_vals!(entry); //<-more efficient version to test.
             //*const u8 d8 u64, we dont need reclen, hence the @minimal tag */
-
+            //however, reclen can be used to skip dot entries, because filtering on reclen==24 and checking dtype then pointer check.
+            //we mustn't forget that this is an extremely hot loop, so avoiding as much calculation is ideal.
             skip_dot_entries!(dir_info, name_file);
+            //skip_dot_entries!(dir_info, name_file, reclen);< -this is the more efficient version, but it requires reclen to be passed in.
             let total_path_len = copy_name_to_buffer!(self, name_file);
             let full_path = unsafe { self.buffer.get_unchecked_mut(..total_path_len) };
             return Some(DirEntry {

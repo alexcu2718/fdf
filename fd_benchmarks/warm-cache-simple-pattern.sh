@@ -57,4 +57,4 @@ else
 fi
 
 echo -e "\nBenchmark results saved to $OUTPUT_DIR/results-warm-cache-simple-pattern.md"
-echo "Diff results saved to ./fd_diff_simple_pattern.md"
+echo "Diff results saved to $OUTPUT_DIR/fd_diff_simple_pattern.md"

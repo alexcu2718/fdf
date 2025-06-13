@@ -49,12 +49,11 @@ if [[ $differences -gt 0 ]]; then
   comm -13 "$OUTPUT_DIR/fd_extension.lst" "$OUTPUT_DIR/fdf_extension.lst"
   
   echo -e "\nNote about the known edge case:"
-  echo "fdf requires a dot for extension matching (more strict)"
-  echo "fd may match files without dots that contain 'c' in their names"
+  echo " i'm gonna fix this ideally weekend "
   echo "This accounts for the expected 1-file difference"
 else
   echo "No differences found in direct execution"
 fi
 
 echo -e "\nBenchmark results saved to $OUTPUT_DIR/results-warm-cache-file-extension.md"
-echo "Diff results saved to ./fd_diff_extension.md"
+echo "Diff results saved to $OUTPUT_DIR/fd_diff_extension.md"

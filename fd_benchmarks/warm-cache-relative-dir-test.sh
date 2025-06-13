@@ -67,4 +67,4 @@ fi
 echo -e "\nBenchmark summary:"
 echo "fdf was 1.58x faster than fd in relative directory search"
 echo "Complete results saved to $OUTPUT_DIR/results-warm-cache-relative-dir-test.md"
-echo "Diff details saved to ./fd_diff_relative.md"
+echo "Diff details saved to $OUTPUT_DIR/fd_diff_relative.md"

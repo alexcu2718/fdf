@@ -214,7 +214,7 @@ impl Finder {
         match dir.getdents() {
             Ok(entries) => {
                 // Store only directories for parallel recursive call
-                eprintln!("{LOCAL_PATH_MAX}");
+         
                 let (dirs, files): (Vec<_>, Vec<_>) = entries
                     .filter(|e| !self.search_config.hide_hidden || !e.is_hidden())
                     .partition(direntry::DirEntry::is_dir);

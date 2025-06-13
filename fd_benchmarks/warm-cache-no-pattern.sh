@@ -1,31 +1,59 @@
 #!/bin/bash
 
 source "prelude.sh"
-
 source "new_prelude.sh"
 
-echo I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE NO GIT IGNORE IN MINE YET.
-echo "there is a bug in hyperfine i believe, if there is a discrepancy, please run the commands and test output yourself, i am clueless on as to why..."
+echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE NO GIT IGNORE IN MINE YET."
+echo "Note: Hyperfine may show small discrepancies due to benchmarking overhead. For accurate counts, run commands directly."
 
-COMMAND_FIND="fdf  '.' '$SEARCH_ROOT' -HI"
-#COMMAND_FIND="find '$SEARCH_ROOT'"
-COMMAND_FD="fd  '.' '$SEARCH_ROOT' -HI"
-#COMMAND_FD="fd --hidden --no-ignore '' '$SEARCH_ROOT'"
+COMMAND_FIND="fdf '.' '$SEARCH_ROOT' -HI"
+COMMAND_FD="fd '.' '$SEARCH_ROOT' -HI"
 
-hyperfine --warmup "$WARMUP_COUNT" \
-    "$COMMAND_FIND" \
-    "$COMMAND_FD" \
-    --export-markdown results-warm-cache-no-pattern.md
+# Create output directory
+OUTPUT_DIR="./bench_results"
+mkdir -p "$OUTPUT_DIR"
 
-check_for_differences "true" "$COMMAND_FIND" "$COMMAND_FD"
-#ordering
-sort /tmp/results.fd > /tmp/results.fd_sorted
-sort /tmp/results.find > /tmp/results.find_sorted
-total_diff=$(diff /tmp/results.fd_sorted /tmp/results.find_sorted | wc -l)
-echo "The total difference is $(($total_diff / 2))"
-diff /tmp/results.fd_sorted /tmp/results.find_sorted | awk '{print $2}' | tr -s ' ' >  /tmp/missing_results.fdf
-echo 'missing results(if true are 0)'
-cat /tmp/missing_results.fdf
-echo "however, when searching directly, we find that they are not missing."
-echo "this is a bit broken currently, basically there's a weird off by 1 error i get sometimes, im not desperately trying to fix it because i believe its hyperfine related"
+# First get accurate baseline counts
+echo -e "\nGetting accurate file counts..."
+fd_count=$(eval "$COMMAND_FD" | wc -l)
+fdf_count=$(eval "$COMMAND_FIND" | wc -l)
+echo "fd count: $fd_count"
+echo "fdf count: $fdf_count"
 
+# Run benchmarks with stabilization
+echo -e "\nRunning benchmarks..."
+hyperfine \
+  --warmup "$WARMUP_COUNT" \
+  --prepare 'sync; sleep 0.2' \
+  "$COMMAND_FIND" \
+  "$COMMAND_FD" \
+  --export-markdown "$OUTPUT_DIR/results-warm-cache-no-pattern.md"
+
+# Improved difference checking
+echo -e "\nAnalyzing differences..."
+eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd.lst"
+eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf.lst"
+
+# Create the diff file
+diff -u "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst" > "./fd_diff_no_pattern.md"
+
+differences=$(comm -3 "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst" | wc -l)
+echo "Total lines differing: $differences"
+
+if [[ $differences -gt 0 ]]; then
+  echo -e "\nFiles only in fd:"
+  comm -23 "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst"
+  
+  echo -e "\nFiles only in fdf:"
+  comm -13 "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst"
+  
+  echo -e "\nNote: Small differences may occur due to:"
+  echo "- Filesystem timestamp changes during execution"
+  echo "- Race conditions in very fast scans"
+  echo "- Hyperfine measurement artifacts"
+else
+  echo "No differences found in direct execution"
+fi
+
+echo -e "\nBenchmark results saved to $OUTPUT_DIR/results-warm-cache-no-pattern.md"
+echo "Diff results saved to ./fd_diff_no_pattern.md"

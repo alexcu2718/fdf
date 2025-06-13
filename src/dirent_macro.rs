@@ -246,7 +246,7 @@ macro_rules! strlen_asm {
 
         #[cfg(not(all(target_arch = "x86_64", target_feature = "sse2")))]
         {
-         libc::strlen($ptr)
+         libc::strlen($ptr.cast::<_>())
         }
     }};
 }

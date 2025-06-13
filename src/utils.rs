@@ -90,12 +90,12 @@ where
 #[allow(clippy::items_after_statements)]
 #[allow(clippy::cast_possible_truncation)] //stupid
 #[allow(clippy::inline_asm_x86_intel_syntax)]
+#[cfg(target_arch = "x86_64")]
 /// Opens a directory using an assembly implementation of open(to reduce libc overplay) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     let filename: *const u8 = cstr!(bytepath);
-    const FLAGS: i32 = /*  libc::O_PATH| turns out dont use this kids!  */
-        libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;
@@ -115,6 +115,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn close_asm(fd: i32) {
     let _: isize;
     unsafe {

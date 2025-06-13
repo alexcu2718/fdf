@@ -114,6 +114,7 @@ where
     /// At the end of the day, the only way to bypass glibc's quirks is to use inline assembly.
     #[inline]
     #[allow(clippy::inline_asm_x86_intel_syntax)]
+    #[cfg(target_arch = "x86_64")]
     pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i32 {
         let output;
         unsafe {

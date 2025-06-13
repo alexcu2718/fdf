@@ -77,6 +77,7 @@ pub trait BytePath<T> {
     fn realpath(&self) -> crate::Result<&[u8]>
     where
         T: Deref<Target = [u8]>;
+    
 }
 
 impl<T> BytePath<T> for T
@@ -273,6 +274,8 @@ where
         Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) })
     }
 }
+
+
 
 pub trait PathAsBytes {
     fn as_bytes(&self) -> &[u8];

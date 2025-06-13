@@ -439,3 +439,39 @@ where
 }
 
 */
+
+
+/// Macro to create a const from an env var with compile-time parsing
+#[macro_export]
+macro_rules! const_from_env {
+    ($name:ident: $t:ty = $env:expr, $default:expr) => {
+        pub const $name: $t = {
+            // Manual parsing for primitive types
+            //we have to assume it's indexed basically in order to be const 
+            const fn parse_env<const N: usize>(s: &[u8]) -> $t {
+                let mut i = 0;
+                let mut n = 0;
+                
+                while i < s.len() {
+                    let b = s[i];
+                    match b {
+                        b'0'..=b'9' => {
+                            n = n * 10 + (b - b'0') as $t;
+                        },
+                        _ => panic!(concat!("Invalid ", stringify!($t), " value")),
+                    }
+                    i += 1;
+                }
+                n
+            }
+
+            // Handle the env var
+            const VAL: &str = match option_env!($env) {
+                Some(val) => val,
+                None => $default,
+            };
+            parse_env::<{VAL.len()}>(VAL.as_bytes())
+        };
+    };
+}
+

@@ -3,12 +3,13 @@ use libc::{PATH_MAX, dirent64};
 use slimmer_box::SlimmerBox;
 use std::mem::offset_of;
 use std::sync::Arc;
-
+use crate::const_from_env;
 use std::ops::Deref;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
+// This will be set at compile time from the environment variable
+const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "512");
 
-pub const LOCAL_PATH_MAX: usize = 512;
 //basically this is the should allow getdents to grab a lot of entries in one go
 pub const BUFFER_SIZE: usize = offset_of!(dirent64, d_name) + PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 

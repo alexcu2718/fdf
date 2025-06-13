@@ -17,18 +17,22 @@ use std::{
     time::SystemTime,
 };
 
+use crate::{custom_types_result::BytesStorage, OsBytes};
 #[allow(unused_imports)]
 use crate::{
-    AsU8 as _, BytePath, DirIter, PathBuffer, Result, SyscallBuffer, construct_path, cstr, cstr_n,
+    AsU8 as _, BytePath, DirIter, PathBuffer, Result, SyscallBuffer, cstr, cstr_n,
     custom_types_result::SlimOsBytes, error::DirEntryError, filetype::FileType, get_dirent_vals,
-    init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
+    init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,construct_path,
     skip_dot_entries, utils::close_asm, utils::get_baselen, utils::open_asm,
     utils::unix_time_to_system_time,
 };
 
 #[derive(Clone)]
-pub struct DirEntry {
-    pub(crate) path: SlimOsBytes, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
+pub struct DirEntry<S>  //S is a storage type, this is used to store the path of the entry, it can be a Box, Arc, Vec, etc.
+//ordered by size, so Box<[u8]> is 16 bytes, Arc<[u8]> is 24 bytes, Vec<u8> is 24 bytes, SlimerBox<[u8], u16> is 10 bytes
+//S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
+where S: BytesStorage {
+    pub(crate) path: OsBytes<S>, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
     pub(crate) file_type: FileType, //1 byte
     pub(crate) inode: u64,        //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
@@ -38,66 +42,9 @@ pub struct DirEntry {
                               //due to my pointer checks i could get this for free (bool) but dont really want massive structs
 }
 
-impl fmt::Display for DirEntry {
-    //i might need to change this to show other metadata.
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string_lossy())
-    }
-}
 
-impl std::ops::Deref for DirEntry {
-    type Target = [u8];
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.path.as_bytes()
-    }
-}
-
-impl From<DirEntry> for PathBuf {
-    #[inline]
-    fn from(entry: DirEntry) -> Self {
-        entry.to_path()
-    }
-}
-impl TryFrom<&[u8]> for DirEntry {
-    type Error = DirEntryError;
-    #[inline]
-    fn try_from(path: &[u8]) -> Result<Self> {
-        Self::new(OsStr::from_bytes(path))
-    }
-}
-
-impl TryFrom<&OsStr> for DirEntry {
-    type Error = DirEntryError;
-    #[inline]
-    fn try_from(path: &OsStr) -> Result<Self> {
-        Self::new(path)
-    }
-}
-
-impl AsRef<Path> for DirEntry {
-    #[inline]
-    fn as_ref(&self) -> &Path {
-        self.as_path()
-    }
-}
-
-impl fmt::Debug for DirEntry {
-    ///debug format for `DirEntry` (showing a vector of bytes is... not very useful)
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "DirEntry(Filename:{},FileType:{},Inode:{},Depth:{})",
-            self.to_string_lossy(),
-            self.file_type,
-            self.inode,
-            self.depth
-        )
-    }
-}
-
-impl DirEntry {
+impl<S> DirEntry<S> 
+where S: BytesStorage {
     #[inline]
     #[must_use]
     ///costly check for executables
@@ -153,21 +100,18 @@ impl DirEntry {
     pub const fn is_dir(&self) -> bool {
         matches!(self.file_type, FileType::Directory)
     }
-
     ///cost free check for unknown file types
     #[inline]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
         matches!(self.file_type, FileType::Unknown)
     }
-
     ///cost free check for symlinks
     #[inline]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
         matches!(self.file_type, FileType::Symlink)
     }
-
     #[inline]
     #[must_use]
     ///costly check for empty files
@@ -190,24 +134,6 @@ impl DirEntry {
         }
     }
 
-    /* probably deleting this, its too stupid
-    #[inline]
-    #[allow(clippy::missing_safety_doc)]
-    ///resolves the path to an absolute path
-    /// this is a costly operation, as it requires a syscall to resolve the path.
-    /// unless the path is already absolute, in which case its a trivial operation
-    /// do not use this unless you are sure the path is valid, as it is unsafe.
-    pub unsafe fn realpath_unchecked(&self) -> &[u8] {
-        if self.is_absolute() {
-            return self.as_bytes();
-        }
-
-        let ptr = unsafe {
-            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
-        };
-        //we use strlen here because path is likely to be too long to benefit from repne scasb
-        unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast::<u8>(), strlen(ptr)) }
-    }*/
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
@@ -217,7 +143,6 @@ impl DirEntry {
             //doesnt convert
             return Ok(self);
         }
-
         //safe because easily fits in capacity (which is absurdly big for our purposes)
         let full_path = self.realpath()?;
         let boxed = Self {
@@ -380,12 +305,14 @@ impl DirEntry {
             parent_depth: self.depth,
             offset: 0,
             remaining_bytes: 0,
+            _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
 }
 
 ///Iterator for directory entries using getdents syscall
-pub struct DirEntryIterator {
+pub struct DirEntryIterator<S> 
+where S: BytesStorage {
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.1k bytes~ish
     pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
@@ -393,9 +320,12 @@ pub struct DirEntryIterator {
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
+    _marker: PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
+    //this gets compiled away anyway as its as a zst 
 }
 
-impl Drop for DirEntryIterator {
+impl<S> Drop for DirEntryIterator<S>
+where S: BytesStorage {
     /// Drops the iterator, closing the file descriptor.
     /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
@@ -406,9 +336,12 @@ impl Drop for DirEntryIterator {
     }
 }
 
-impl Iterator for DirEntryIterator {
-    type Item = DirEntry;
+impl<S> Iterator for DirEntryIterator<S>
+where S: BytesStorage {
+    type Item = DirEntry<S>;
     #[inline]
+    
+    #[allow(clippy::ptr_as_ptr)]
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -455,7 +388,8 @@ impl Iterator for DirEntryIterator {
 ///////////////////////////////////////////////////////////////////////////////////////
 /// // Iterator for directory entries using getdents syscall with a filter function
 #[allow(clippy::multiple_inherent_impl)] // this is a separate impl block to avoid confusion with the other iterator
-impl DirEntry {
+impl<S> DirEntry<S> 
+where S: BytesStorage {
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]
@@ -495,11 +429,13 @@ impl DirEntry {
             offset: 0,
             remaining_bytes: 0,
             filter_func: func,
+            _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
 }
 
-pub struct DirEntryIteratorFilter {
+pub struct DirEntryIteratorFilter<S>
+where S: BytesStorage {
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.3k bytes~ish
     pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
@@ -508,10 +444,11 @@ pub struct DirEntryIteratorFilter {
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     pub(crate) filter_func: fn(&[u8], usize, u8) -> bool, // filter function, this is used to filter the entries based on the provided function
-                                                          //mainly the arguments would be full path,depth,filetype, this is a shoddy implementation but im testing waters.
+    _marker: PhantomData<S>                                                      //mainly the arguments would be full path,depth,filetype, this is a shoddy implementation but im testing waters.
 }
 
-impl Drop for DirEntryIteratorFilter {
+impl<S> Drop for DirEntryIteratorFilter<S>
+where S: BytesStorage {
     /// Drops the iterator, closing the file descriptor.
     /// same as above, we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     #[inline]
@@ -520,9 +457,13 @@ impl Drop for DirEntryIteratorFilter {
     }
 }
 
-impl Iterator for DirEntryIteratorFilter {
-    type Item = DirEntry;
+impl <S>Iterator for DirEntryIteratorFilter<S> 
+where S: BytesStorage {
+    type Item = DirEntry<S>
+    where S: BytesStorage;
     #[inline]
+    #[allow(clippy::cast_lossless)] //casting a u16 to u64 is lossless as i am doing but you can cast to your own type, enjoy;
+    #[allow(clippy::ptr_as_ptr)]//aligned pointers are what we're using.
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
         loop {

@@ -61,6 +61,8 @@ use std::{
 };
 
 mod dirent_macro;
+
+
 //
 //pub(crate) use dirent_macro::construct_path;
 //use crossbeam_channel::{Receiver, Sender, unbounded};
@@ -83,7 +85,7 @@ pub use error::DirEntryError;
 mod custom_types_result;
 pub use custom_types_result::{
     AsU8, BUFFER_SIZE, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result,
-    SyscallBuffer,
+    SyscallBuffer,BytesStorage,SlimmerBytes
 };
 
 mod traits_and_conversions;
@@ -106,14 +108,18 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Debug)]
 /// A struct to find files in a directory.
-pub struct Finder {
+pub struct Finder<S> 
+where
+    S: BytesStorage,{
     root: OsString,
     search_config: SearchConfig,
-    filter: Option<DirEntryFilter>,
-    custom_filter: FilterType,
+    filter: Option<DirEntryFilter<S>>,
+    custom_filter: FilterType<S>
 }
 ///The Finder struct is used to find files in a directory.
-impl Finder {
+impl <S>Finder<S>  //S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
+where
+    S: BytesStorage+'static+Clone+Send{
     #[must_use]
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::too_many_arguments)]
@@ -147,7 +153,7 @@ impl Finder {
             }
         };
         // The lambda functions are used to filter directories and non-directories based on the search configuration.
-        let lambda: FilterType = |rconfig, rdir, rfilter| {
+        let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
             {
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_path(rdir, rconfig.file_name)
@@ -172,7 +178,7 @@ impl Finder {
     #[must_use]
     #[inline]
     /// Set a filter function to filter out entries.
-    pub fn with_type_filter(mut self, filter: DirEntryFilter) -> Self {
+    pub fn with_type_filter(mut self, filter: DirEntryFilter<S>) -> Self {
         self.filter = Some(filter);
         self
     }
@@ -180,8 +186,8 @@ impl Finder {
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     /// Traverse the directory and return a receiver for the entries.
-    pub fn traverse(self) -> Result<Receiver<Vec<DirEntry>>> {
-        let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
+    pub fn traverse(self) -> Result<Receiver<Vec<DirEntry<S>>>> {
+        let (sender, receiver): (_, Receiver<Vec<DirEntry<S>>>) = unbounded();
 
         //we have to arbitrarily construct a direntry to start the search.
         let construct_dir = DirEntry::new(&self.root);
@@ -201,7 +207,7 @@ impl Finder {
 
     #[inline]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
-    fn process_directory(&self, dir: DirEntry, sender: &Sender<Vec<DirEntry>>) {
+    fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let should_send = self.search_config.keep_dirs
             && (self.custom_filter)(&self.search_config, &dir, self.filter)
             && dir.depth() != 0;

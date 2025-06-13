@@ -1,4 +1,5 @@
-#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::missing_safety_doc)] //adding these later
+#![allow(clippy::missing_errors_doc)]
 use crate::buffer::ValueType;
 use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
@@ -7,6 +8,13 @@ use std::mem::transmute;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use crate::BytesStorage;
+use crate::DirEntryError;
+use crate::Result;
+use crate::DirEntry;
+use std::fmt;
+use std::os::unix::ffi::OsStrExt;
+
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
 pub trait BytePath<T> {
     fn as_cstr_ptr<F, R, VT>(&self, f: F) -> R
@@ -127,6 +135,7 @@ where
     /// Returns the size of the file in bytes.
     /// If the file size cannot be determined, returns 0.
     #[inline]
+    #[allow(clippy::cast_sign_loss)]//it's safe to cast here because we're dealing with file sizes which are always positive
     unsafe fn size(&self) -> crate::Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
     }
@@ -146,6 +155,7 @@ where
     }
     /// Get last modification time, this will be more useful when I implement filters for it.
     #[inline]
+    #[allow(clippy::cast_possible_truncation)]//it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     fn modified_time(&self) -> crate::Result<SystemTime> {
         self.get_stat().and_then(|s| {
@@ -275,8 +285,6 @@ where
     }
 }
 
-
-
 pub trait PathAsBytes {
     fn as_bytes(&self) -> &[u8];
 }
@@ -287,5 +295,74 @@ impl PathAsBytes for Path {
     fn as_bytes(&self) -> &[u8] {
         //&[u8] <=> &OsStr <=> &Path on linux
         unsafe { transmute::<&Self, _>(self) }
+    }
+}
+
+
+
+impl<S> fmt::Display for DirEntry<S> 
+where S: BytesStorage {
+    //i might need to change this to show other metadata.
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_string_lossy())
+    }
+}
+
+impl <S> std::ops::Deref for DirEntry<S>
+where S: BytesStorage {
+    type Target = [u8];
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.path.as_bytes()
+    }
+}
+
+impl <S> From<DirEntry<S>> for PathBuf
+where S: BytesStorage {
+
+    #[inline]
+    fn from(entry: DirEntry<S>) -> Self {
+        entry.to_path()
+    }
+}
+impl <S>TryFrom<&[u8]> for DirEntry<S>
+where S: BytesStorage {
+    type Error = DirEntryError;
+    #[inline]
+    fn try_from(path: &[u8]) -> Result<Self> {
+        Self::new(OsStr::from_bytes(path))
+    }
+}
+
+impl <S>TryFrom<&OsStr> for DirEntry<S>
+where S: BytesStorage {
+    type Error = DirEntryError;
+    #[inline]
+    fn try_from(path: &OsStr) -> Result<Self> {
+        Self::new(path)
+    }
+}
+
+impl<S> AsRef<Path> for DirEntry<S>
+where S: BytesStorage  {
+    #[inline]
+    fn as_ref(&self) -> &Path {
+        self.as_path()
+    }
+}
+
+impl <S>fmt::Debug for DirEntry<S>
+where S: BytesStorage {
+    ///debug format for `DirEntry` (showing a vector of bytes is... not very useful)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "DirEntry(Filename:{},FileType:{},Inode:{},Depth:{})",
+            self.to_string_lossy(),
+            self.file_type,
+            self.inode,
+            self.depth
+        )
     }
 }

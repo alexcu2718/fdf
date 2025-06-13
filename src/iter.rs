@@ -3,21 +3,24 @@
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
     copy_name_to_buffer, cstr, get_dirent_vals, init_path_buffer_readdir, offset_ptr,
-    skip_dot_entries,
+    skip_dot_entries,custom_types_result::BytesStorage
 };
 use libc::{DIR, closedir, opendir, readdir64};
-
+use std::marker::PhantomData;
 #[derive(Debug)]
 /// An iterator over directory entries from readdir64 via libc
-pub struct DirIter {
+pub struct DirIter<S>
+where S: BytesStorage {
     dir: *mut DIR,
     buffer: PathBuffer,
     base_len: u16,
     depth: u8,
     error: Option<Error>,
+    _phantom: PhantomData<S>,
 }
 
-impl DirIter {
+impl<S> DirIter<S>
+where S: BytesStorage {
     #[inline]
     pub const fn as_mut_ptr(&mut self) -> *mut u8 {
         // This function is used to get a mutable pointer to the internal buffer.
@@ -28,7 +31,7 @@ impl DirIter {
     #[inline]
     #[allow(clippy::cast_lossless)]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn new(dir_path: &DirEntry) -> Result<Self> {
+    pub fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dirp = dir_path.as_bytes();
         let dir = dirp.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
         //let dir=unsafe{opendir(cstr!(dirp))};
@@ -51,13 +54,16 @@ impl DirIter {
             base_len,
             depth: dir_path.depth,
             error: None,
+            _phantom: PhantomData,
         })
     }
 }
 
-impl Iterator for DirIter {
-    type Item = DirEntry;
+impl<T> Iterator for DirIter<T> 
+where T: BytesStorage {
+    type Item = DirEntry<T>;
     #[inline]
+    #[allow(clippy::ptr_as_ptr)]//we're align so raw pointer as casts are fine.
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
             return None;
@@ -89,7 +95,8 @@ impl Iterator for DirIter {
         }
     }
 }
-impl Drop for DirIter {
+impl<T> Drop for DirIter<T>
+where T: BytesStorage {
     fn drop(&mut self) {
         if !self.dir.is_null() {
             unsafe { closedir(self.dir) };

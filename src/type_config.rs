@@ -1,5 +1,4 @@
-use fdf::DirEntry;
-use fdf::DirEntryFilter;
+use fdf::{DirEntry,DirEntryFilter,BytesStorage};
 use std::sync::OnceLock;
 
 static TYPE_FILTER_TYPES: OnceLock<Vec<String>> = OnceLock::new();
@@ -8,14 +7,16 @@ static TYPE_FILTER_TYPES: OnceLock<Vec<String>> = OnceLock::new();
 //negligible impact.
 //#[allow(clippy::needless_pass_by_value)]
 #[allow(clippy::expect_used)]
-pub fn build_type_filter(types: &[String]) -> DirEntryFilter {
+pub fn build_type_filter<S>(types: &[String]) -> DirEntryFilter<S> 
+where  S: BytesStorage + 'static + Clone{
     TYPE_FILTER_TYPES.get_or_init(|| types.iter().map(|t| t.to_lowercase()).collect());
 
     // return a function pointer
     filter_by_type
 }
 
-fn filter_by_type(entry: &DirEntry) -> bool {
+fn filter_by_type<S>(entry: &DirEntry<S>) -> bool
+where  S: BytesStorage + 'static + Clone {
     let types = unsafe { TYPE_FILTER_TYPES.get().unwrap_unchecked() }; // safe because we initialized it in build_type_filter
 
     for type_char in types.iter().flat_map(|s| s.chars()) {

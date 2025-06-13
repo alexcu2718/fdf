@@ -58,7 +58,7 @@
 
 use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
-use fdf::{DirEntryError, Finder, glob_to_regex};
+use fdf::{DirEntryError,SlimmerBytes, Finder, glob_to_regex};
 use std::ffi::OsString;
 use std::io::stdout;
 use std::str;
@@ -231,7 +231,7 @@ fn main() -> Result<(), DirEntryError> {
         process_glob_regex(&start_pattern, args.glob)
     };
 
-    let mut finder = Finder::new(
+    let mut finder:Finder<SlimmerBytes> = Finder::new(
         &path,
         &pattern,
         !args.hidden,

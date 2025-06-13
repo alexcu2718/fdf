@@ -1,3 +1,6 @@
+#![allow(clippy::doc_markdown)]
+
+
 #[allow(clippy::ptr_as_ptr)]
 #[allow(clippy::too_long_first_doc_paragraph)]
 #[macro_export]
@@ -118,7 +121,7 @@ macro_rules! skip_dot_entries {
     }};
 }
 
-#[macro_export]
+#[macro_export(local_inner_macros)]
 #[allow(clippy::too_long_first_doc_paragraph)]
 //this isnt meant to be public, i cant be  bothered with the boilerplate, dunno, enjoy some unsafe code!
 /// initialises a path buffer for syscall operations,
@@ -141,7 +144,7 @@ macro_rules! init_path_buffer_syscall {
     }};
 }
 
-#[macro_export]
+#[macro_export(local_inner_macros)]
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// initialises a path buffer for readdir operations-
 /// appending a slash if necessary and returning the base length of the path.
@@ -168,8 +171,8 @@ macro_rules! init_path_buffer_readdir {
     }};
 }
 
-#[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
+#[macro_export(local_inner_macros)]
 /// copies the name from the `name_file` pointer into the buffer of the `self` object, starting after the base length.
 macro_rules! copy_name_to_buffer {
     ($self:expr, $name_file:expr) => {{
@@ -216,8 +219,8 @@ macro_rules! prefetch_next_buffer {
         }
     };
 }
-
-#[macro_export]
+#[macro_export(local_inner_macros)]
+#[allow(clippy::ptr_as_ptr)]// this is safe because we know  the pointer is valid and aligned
 macro_rules! strlen_asm {
     ($ptr:expr) => {{
         #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
@@ -251,9 +254,10 @@ macro_rules! strlen_asm {
     }};
 }
 
-#[macro_export]
+
 ///not intended for public use, will be private when boilerplate is done
 /// Constructs a path from the base path and the name pointer, returning a mutable slice of the full path
+#[macro_export(local_inner_macros)]
 macro_rules! construct_path {
     ($self:ident, $name_ptr:ident) => {{
         let name_len = $crate::strlen_asm!($name_ptr);
@@ -387,7 +391,7 @@ macro_rules! get_dirent_vals {
         }
     }};
     (@minimal $d:expr) => {{
-        //minimal version, as we don't need reclen for readdir, well we can...if we use my fancy construct_path_const_time!
+        //minimal version, as we don't need reclen for readdir, 
         // Cast the dirent pointer to a byte pointer for offset calculations
         unsafe {
             (

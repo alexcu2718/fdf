@@ -2,10 +2,11 @@
 mod tests {
     #![allow(unused_imports)]
     use crate::traits_and_conversions::{BytePath, PathAsBytes};
-    use crate::{DirEntry, DirIter, FileType, debug_print};
+    use crate::{DirEntry, DirIter, FileType, debug_print,SlimmerBytes};
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
+    use std::sync::Arc;
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::symlink;
     use std::path::PathBuf;
@@ -18,7 +19,7 @@ mod tests {
 
         let _ = std::fs::File::create(&file_path);
 
-        let entry = DirEntry::new(file_path.as_os_str()).unwrap();
+        let entry:DirEntry<Arc<[u8]>> = DirEntry::new(file_path.as_os_str()).unwrap();
         let _ = std::fs::remove_file(&file_path);
         assert_eq!(entry.file_name(), file_name.as_bytes());
     }
@@ -36,7 +37,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(test_dir);
         std::fs::create_dir_all(test_dir).expect("Failed to create test directory");
         std::fs::write(&test_file_path, "test").expect("Failed to write test file");
-        let entry = DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
+        let entry:DirEntry<Box<[u8]>> = DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
         assert_eq!(entry.file_name(), b"child.txt");
         assert_eq!(entry.extension().unwrap(), b"txt");
         assert_eq!(entry.parent(), test_dir.as_os_str().as_bytes());
@@ -54,7 +55,7 @@ mod tests {
         std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
         let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
 
-        let dir_entry = DirEntry::new(dir_path.as_os_str()).unwrap();
+        let dir_entry:DirEntry<Vec<u8>> = DirEntry::new(dir_path.as_os_str()).unwrap();
         let entries = dir_entry.getdents().unwrap();
         let entries_clone: Vec<_> = dir_entry.getdents().unwrap().collect();
 
@@ -89,12 +90,12 @@ mod tests {
         let hidden_file = temp_dir.as_path().join(".hidden");
         std::fs::write(&hidden_file, "").unwrap();
 
-        let entry = DirEntry::new(hidden_file.as_os_str()).unwrap();
+        let entry:DirEntry<SlimmerBytes> = DirEntry::new(hidden_file.as_os_str()).unwrap();
         assert!(entry.is_hidden());
 
         let non_hidden = temp_dir.as_path().join("visible");
         std::fs::write(&non_hidden, "").unwrap();
-        let entry = DirEntry::new(non_hidden.as_os_str()).unwrap();
+        let entry = DirEntry::<SlimmerBytes>::new(non_hidden.as_os_str()).unwrap();
         assert!(!entry.is_hidden());
     }
 
@@ -113,7 +114,7 @@ mod tests {
         }
         let _ = std::fs::write(&file_path, "test");
 
-        let entry = DirEntry::new(file_path.as_os_str()).unwrap();
+        let entry = DirEntry::<SlimmerBytes>::new(file_path.as_os_str()).unwrap();
         assert_eq!(entry.file_name(), b"testfile.txt");
         let x = std::fs::remove_file(&file_path).is_ok(); //have to check the result to avoid no-op 
         assert!(x, "File should be removed successfully");
@@ -126,7 +127,7 @@ mod tests {
         let file_path = temp_dir.as_path().join("testfilenew.txt");
         std::fs::write(&file_path, "test").unwrap();
 
-        let entry: usize = DirEntry::new(file_path.as_os_str()).unwrap().base_len();
+        let entry: usize = DirEntry::<SlimmerBytes>::new(file_path.as_os_str()).unwrap().base_len();
         let std_entry = (std::path::Path::new(file_path.as_os_str())
             .parent()
             .unwrap()
@@ -146,7 +147,7 @@ mod tests {
         let _ = std::fs::create_dir_all(&temp_dir);
 
         let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
-        let file_path = DirEntry::new(".")?.as_full_path()?;
+        let file_path = DirEntry::<SlimmerBytes>::new(".")?.as_full_path()?;
         debug_print!(&file_path);
         let my_path: Box<[u8]> = file_path.as_bytes().into();
 
@@ -175,7 +176,7 @@ mod tests {
         let test_file_bytes = test_file_canon.as_os_str().as_bytes();
 
         // Test directory entry
-        let dir_entry = DirEntry::new(&temp_dir)?;
+        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?;
         let canonical_path = temp_dir.canonicalize()?;
 
         // Compare paths at byte level
@@ -238,7 +239,7 @@ mod tests {
         // lean up automatically
 
         // init a DirEntry for testing
-        let dir_entry = DirEntry::new(&dir_path)?;
+        let dir_entry = DirEntry::<SlimmerBytes>::new(&dir_path)?;
 
         // get iterator
         let iter = dir_entry.readdir()?;
@@ -284,7 +285,7 @@ mod tests {
         let _ = fs::remove_dir_all(&tdir); //delete it first etc, because thi
         let _ = fs::create_dir_all(&tdir);
 
-        let dir_entry = DirEntry::new(&tdir)?;
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&tdir)?;
 
         //PAY ATTENTION TO THE ! MARKS, HARD TO FUCKING SEE
         assert_eq!(
@@ -332,7 +333,7 @@ mod tests {
         assert!(file_path.is_file(), "Test path is not a file");
 
         // the actual functionality
-        let entry = DirEntry::new(file_path.as_os_str()).expect("Failed to create DirEntry");
+        let entry = DirEntry::<Arc<[u8]>>::new(file_path.as_os_str()).expect("Failed to create DirEntry");
         assert_eq!(entry.dirname(), b"parent", "Incorrect directory name");
 
         // verify removal
@@ -349,7 +350,7 @@ mod tests {
         let _ = File::create(dir_path.join("file1.txt"));
         let _ = fs::create_dir(dir_path.join("subdir"));
 
-        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
         let iter = DirIter::new(&dir_entry).unwrap();
         let entries: Vec<_> = iter.collect();
 
@@ -370,7 +371,7 @@ mod tests {
     fn test_entries() {
         let dir = temp_dir().join("test_dir");
         let _ = fs::create_dir_all(&dir);
-        let dir_entry = DirEntry::new(&dir).unwrap();
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
         let iter = DirIter::new(&dir_entry).unwrap();
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
@@ -392,7 +393,7 @@ mod tests {
 
         let _ = symlink("regular.txt", dir_path.join("symlink"));
 
-        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
 
         let mut type_counts = std::collections::HashMap::new();
@@ -416,7 +417,7 @@ mod tests {
         let dir = temp_dir().join("test_pathXXX");
         let _ = fs::create_dir_all(&dir);
 
-        let dir_entry = DirEntry::new(&dir).unwrap();
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
 
         let _ = File::create(dir.join("regular.txt"));
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
@@ -434,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_error_handling() {
-        let non_existent = DirEntry::new("/non/existent/path");
+        let non_existent = DirEntry::<Arc<[u8]>>::new("/non/existent/path");
         assert!(non_existent.is_err());
     }
 }

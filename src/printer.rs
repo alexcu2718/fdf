@@ -2,7 +2,7 @@ use fdf::{BytePath, DirEntry, Result};
 use std::collections::HashMap;
 use std::io::{BufWriter, IsTerminal, Write, stdout};
 use std::sync::OnceLock;
-
+use fdf::BytesStorage;
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
 const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
@@ -51,7 +51,8 @@ const DEFAULT_DIR_COLOR: &[u8] = b"\x1b[38;2;30;144;255m";
 
 #[allow(clippy::inline_always)]
 #[inline(always)]
-fn extension_colour(entry: &DirEntry) -> &[u8] {
+fn extension_colour<S>(entry: &DirEntry<S>) -> &[u8]
+where  S: BytesStorage + 'static + Clone{
     // check if it's a symlink and use  LS_COLORS symlink color
     if entry.is_symlink() {
         return SYMLINK_COLOR.get_or_init(|| parse_ls_colors("ln", DEFAULT_SYMLINK_COLOR));
@@ -107,9 +108,10 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 
 #[allow(clippy::inline_always)]
 #[inline(always)]
-pub fn write_paths_coloured<I>(paths: I, limit: Option<usize>) -> Result<()>
+pub fn write_paths_coloured<I,S>(paths: I, limit: Option<usize>) -> Result<()>
 where
-    I: Iterator<Item = Vec<DirEntry>>,
+    I: Iterator<Item = Vec<DirEntry<S>>>,
+    S: BytesStorage + 'static + Clone
 {
     let std_out = stdout();
     let use_colors = std_out.is_terminal();

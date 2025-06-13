@@ -43,7 +43,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 16 bytes
-///Deprecated in favour of a macro (strlen_asm!)
+///Deprecated in favour of a macro (s`trlen_asm!`)
 pub unsafe fn strlen_sse2<T>(ptr: *const T) -> usize
 where
     T: ValueType,

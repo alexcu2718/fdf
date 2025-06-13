@@ -102,6 +102,9 @@ pub struct OsBytes<S: BytesStorage> {
     pub(crate) bytes: S,
 }
 
+
+
+
 impl<S: BytesStorage> OsBytes<S> {
     #[inline]
     #[must_use]
@@ -139,6 +142,9 @@ impl<S: BytesStorage> OsBytes<S> {
     }
 }
 
+
+unsafe impl<S> Send for OsBytes<S> where S: Send+BytesStorage+'static {}
+
 impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
     #[inline]
     fn from(data: T) -> Self {
@@ -152,6 +158,9 @@ pub type SlimOsBytes = OsBytes<SlimmerBox<[u8], u16>>;
 pub type ArcOsBytes = OsBytes<std::sync::Arc<[u8]>>;
 
 ///filter function type for directory entries,
-pub type FilterType = fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>) -> bool;
+pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S>>) -> bool;
 ///generic filter function type for directory entries
-pub type DirEntryFilter = fn(&DirEntry) -> bool;
+pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
+#[allow(dead_code)]
+/// A type alias for a boxed slice of bytes with a maximum length of `u16`. Perfect for our use case.
+pub type SlimmerBytes = SlimmerBox<[u8], u16>;

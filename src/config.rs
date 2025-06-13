@@ -1,4 +1,4 @@
-use crate::{DirEntry, DirEntryError, Result};
+use crate::{custom_types_result::BytesStorage, DirEntry, DirEntryError, Result};
 use regex::bytes::{Regex, RegexBuilder};
 use std::sync::Arc;
 
@@ -57,7 +57,8 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
-    pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
+    pub fn matches_path<S>(&self, dir: &DirEntry<S>, full_path: bool) -> bool 
+    where S: BytesStorage {
         let path = if full_path {
             dir.as_bytes()
         } else {

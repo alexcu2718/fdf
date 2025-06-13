@@ -69,8 +69,8 @@ mod dirent_macro;
 mod iter;
 pub(crate) use iter::DirIter;
 
-mod test;
 mod buffer;
+mod test;
 pub(crate) use buffer::AlignedBuffer;
 
 mod direntry;
@@ -86,7 +86,7 @@ pub use custom_types_result::{
 };
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{BytePath, PathAsBytes,};
+pub use traits_and_conversions::{BytePath, PathAsBytes};
 
 mod utils;
 
@@ -147,14 +147,16 @@ impl Finder {
         };
         // The lambda functions are used to filter directories and non-directories based on the search configuration.
         let lambda: FilterType = |rconfig, rdir, rfilter| {
-            {                     
+            {
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_path(rdir, rconfig.file_name)
                     && rconfig
                         .extension_match
-                        .as_ref()                        //get the filename THEN check extension, we dont want to pick up
+                        .as_ref() //get the filename THEN check extension, we dont want to pick up
                         //stuff like .gitignore or .DS_Store
-                        .is_none_or(|ext| (&rdir.as_bytes()[rdir.base_len() as usize..]).matches_extension(&ext))
+                        .is_none_or(|ext| {
+                            (&rdir.as_bytes()[rdir.base_len() as usize..]).matches_extension(&ext)
+                        })
             }
         };
 
@@ -203,7 +205,7 @@ impl Finder {
             && (self.custom_filter)(&self.search_config, &dir, self.filter)
             && dir.depth() != 0;
 
-        if should_send && self.search_config.depth.is_some_and(|d| dir.depth() >= d) {
+        if should_send && self.search_config.depth.is_some_and(|d| dir.depth >= d) {
             let _ = sender.send(vec![dir]); //have to put into a vec, this doesnt matter because this only happens when we depth limit
 
             return; // stop processing this directory if depth limit is reached

@@ -110,7 +110,7 @@ where
 
     /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
-    /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'. 
+    /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'.
     /// At the end of the day, the only way to bypass glibc's quirks is to use inline assembly.
     #[inline]
     #[allow(clippy::inline_asm_x86_intel_syntax)]

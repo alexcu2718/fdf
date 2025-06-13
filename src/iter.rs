@@ -1,9 +1,9 @@
 #![allow(clippy::cast_possible_wrap)]
 #[allow(unused_imports)]
 use crate::{
-    BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
-    SyscallBuffer, copy_name_to_buffer, cstr, init_path_buffer_readdir, offset_ptr,get_dirent_vals,
-    skip_dot_entries, 
+    BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
+    copy_name_to_buffer, cstr, get_dirent_vals, init_path_buffer_readdir, offset_ptr,
+    skip_dot_entries,
 };
 use libc::{DIR, closedir, opendir, readdir64};
 
@@ -49,7 +49,7 @@ impl DirIter {
             dir,
             buffer,
             base_len,
-            depth: dir_path.depth(),
+            depth: dir_path.depth,
             error: None,
         })
     }
@@ -69,7 +69,8 @@ impl Iterator for DirIter {
                 return None;
             }
 
-            let (name_file, dir_info, inode):(*const u8,u8,u64)=get_dirent_vals!(@minimal entry);
+            let (name_file, dir_info, inode): (*const u8, u8, u64) =
+                get_dirent_vals!(@minimal entry);
             // let (name_file, dir_info, inode,reclen):(*const u8,u8,u64,usize)=get_dirent_vals!(entry); //<-more efficient version to test.
             //*const u8 d8 u64, we dont need reclen, hence the @minimal tag */
             //however, reclen can be used to skip dot entries, because filtering on reclen==24 and checking dtype then pointer check.

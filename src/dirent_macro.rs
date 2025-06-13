@@ -79,7 +79,7 @@ macro_rules! cstr_n {
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// A macro to skip . and .. entries when traversing
-/// 
+///
 /// Takes 2 mandatory args:
 /// - `d_type`: The directory entry type (e.g., `(*dirnt).d_type`)
 /// - `name_ptr`: Pointer to the entry name
@@ -101,7 +101,7 @@ macro_rules! skip_dot_entries {
             }
         }
     }};
-    
+
     // Version without reclen check
     ($d_type:expr, $name_ptr:expr) => {{
         #[allow(clippy::macro_metavars_in_unsafe)]
@@ -117,9 +117,6 @@ macro_rules! skip_dot_entries {
         }
     }};
 }
-
-
-
 
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
@@ -220,27 +217,22 @@ macro_rules! prefetch_next_buffer {
     };
 }
 
-
-
-
-
-
 #[macro_export]
 macro_rules! strlen_asm {
     ($ptr:expr) => {{
         #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
         {
             use std::arch::x86_64::{__m128i, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_setzero_si128};
-            
+
             let mut offset = 0;
-            
+
             // I converted this from a function but we can't use returns in macros(well, even if you're me, that's still bad!)
             let result = 'outer: loop {
                 // Safety: Valid pointer assumed, alignment handled by loadu
                 // Load 16 bytes, alignment is fine because from i8/u8
                 let chunk = _mm_loadu_si128($ptr.add(offset) as *const __m128i) ;
                 let zeros = _mm_setzero_si128() ; //set zero byte
-                let cmp =  _mm_cmpeq_epi8(chunk, zeros) ; //compare zero byte 
+                let cmp =  _mm_cmpeq_epi8(chunk, zeros) ; //compare zero byte
                 let mask =  _mm_movemask_epi8(cmp)  as i32; //create a bitmask of results
                 // If mask is not zero, at least one null byte was found
 
@@ -251,7 +243,7 @@ macro_rules! strlen_asm {
             };
             result
         }
-        
+
         #[cfg(not(all(target_arch = "x86_64", target_feature = "sse2")))]
         {
          libc::strlen($ptr)
@@ -259,14 +251,11 @@ macro_rules! strlen_asm {
     }};
 }
 
-
-
 #[macro_export]
 ///not intended for public use, will be private when boilerplate is done
 /// Constructs a path from the base path and the name pointer, returning a mutable slice of the full path
 macro_rules! construct_path {
     ($self:ident, $name_ptr:ident) => {{
-
         let name_len = $crate::strlen_asm!($name_ptr);
         let name_bytes = &*std::ptr::slice_from_raw_parts($name_ptr, name_len);
         let total_len = $self.base_path_len as usize + name_len;
@@ -285,14 +274,13 @@ macro_rules! construct_path {
     }};
 }
 
-
-/* 
+/*
 //ive temporarily abandoned this this....
 //basically it works in debug but not in release????? I WILL SOLVE THIS MOTHERFUCKER,
 //I HAVE GOT A WORKING SOLUTION BUT IT BASICALLY MEANS I HAVE TO CHECK THE FIRST POINTER CONSTANTLY BECAUSE FOR SOME REASON MALFORMED
 //BYTES END UP NOT BEING DETECTED AS NULL TERMINATORS, SO I NEED TO FIND THE APPROPRIATE BITMASK, TODO!
 #[macro_export]
-/// A macro to calculate the length of a directory entry name in constant time (SSE2 implementation is because it checks the entire 8 byte array in 1 op). 
+/// A macro to calculate the length of a directory entry name in constant time (SSE2 implementation is because it checks the entire 8 byte array in 1 op).
 /// This macro can be used in two ways:
 /// 1. With a single argument: `dirent_const_time_strlen!(dirent)`, where `dirent` is a pointer to a `libc::dirent64` struct.
 /// 2. With two arguments: `dirent_const_time_strlen!(dirent, reclen)`, where `reclen` is the record length of the directory entry.
@@ -323,7 +311,7 @@ macro_rules! dirent_const_time_strlen {
            // Cast dirent+reclen to u64 slice
         let u64_slice = &*std::ptr::slice_from_raw_parts($dirent as *const u64, reclen_in_u64s);
         //  verify alignment/size
-   
+
         // Calculate position of last word
         // Get the last u64 word in the structure
 
@@ -379,11 +367,11 @@ macro_rules! dirent_const_time_strlen {
 /// let dirent: *const libc::dirent64 = todo!(); // Assume this is a valid pointer to a dirent64 struct
 /// let (name_ptr, file_type, inode, reclen) = get_dirent_vals!(dirent);
 /// let (name_ptr, file_type, inode) = get_dirent_vals!(@minimal dirent); // Minimal version without reclen
-/// 
+///
 macro_rules! get_dirent_vals {
     ($d:expr) => {{
         // Cast the dirent pointer to a byte pointer for offset calculations
-    
+
         unsafe {
             (
                 // d_name: pointer to the name field (null-terminated string)
@@ -395,12 +383,12 @@ macro_rules! get_dirent_vals {
                  // d_reclen: record length
                 *$crate::offset_ptr!($d, d_reclen) as _,
                 // d_ino: inode number
-                
+
             )
         }
     }};
     (@minimal $d:expr) => {{
-        //minimal version, as we don't need reclen for readdir, well we can...if we use my fancy construct_path_const_time! 
+        //minimal version, as we don't need reclen for readdir, well we can...if we use my fancy construct_path_const_time!
         // Cast the dirent pointer to a byte pointer for offset calculations
         unsafe {
             (
@@ -414,14 +402,6 @@ macro_rules! get_dirent_vals {
         }
     }};
 }
-
-
-
-
-
-
-
-
 
 /*
 

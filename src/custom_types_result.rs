@@ -1,10 +1,10 @@
+use crate::const_from_env;
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 use libc::{PATH_MAX, dirent64};
 use slimmer_box::SlimmerBox;
 use std::mem::offset_of;
-use std::sync::Arc;
-use crate::const_from_env;
 use std::ops::Deref;
+use std::sync::Arc;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at compile time from the environment variable

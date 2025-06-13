@@ -57,7 +57,7 @@ impl std::ops::Deref for DirEntry {
 impl From<DirEntry> for PathBuf {
     #[inline]
     fn from(entry: DirEntry) -> Self {
-        entry.into_path()
+        entry.to_path()
     }
 }
 impl TryFrom<&[u8]> for DirEntry {
@@ -182,7 +182,7 @@ impl DirEntry {
             unsafe { self.size().is_ok_and(|size| size == 0) } //safe because we know it wont overflow.
         } else if self.is_dir() {
             // for directories, check if they have no entries
-            self.getdents()
+            self.readdir()
                 .is_ok_and(|mut entries| entries.next().is_none())
         } else {
             // special files like devices, sockets, etc.
@@ -241,7 +241,7 @@ impl DirEntry {
     #[must_use]
     ///Cost free conversion to bytes (because it is already is bytes)
     pub fn as_bytes(&self) -> &[u8] {
-        &*self
+        self
     }
 
     #[inline]
@@ -342,9 +342,6 @@ impl DirEntry {
     pub fn readdir(&self) -> Result<impl Iterator<Item = Self> + '_> {
         DirIter::new(self)
     }
-
-    /// Get last modification time, this will be more useful when I implement filters for it.
-
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]

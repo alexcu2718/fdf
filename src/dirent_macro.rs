@@ -367,7 +367,6 @@ macro_rules! dirent_const_time_strlen {
 /// let dirent: *const libc::dirent64 = todo!(); // Assume this is a valid pointer to a dirent64 struct
 /// let (name_ptr, file_type, inode, reclen) = get_dirent_vals!(dirent);
 /// let (name_ptr, file_type, inode) = get_dirent_vals!(@minimal dirent); // Minimal version without reclen
-///
 macro_rules! get_dirent_vals {
     ($d:expr) => {{
         // Cast the dirent pointer to a byte pointer for offset calculations
@@ -403,61 +402,23 @@ macro_rules! get_dirent_vals {
     }};
 }
 
-/*
-
-/// Uses SSE2 intrinsics to calculate the length of a null-terminated string.
-#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
-#[inline]
-#[allow(clippy::ptr_as_ptr)]//safe to do this as u8 is aligned to 16 bytes
-pub(crate) unsafe fn strlen_asm<T>(ptr: *const T) -> usize
-where
-    T: ValueType,
-{
-    //aka i8/u8{
-    use std::arch::x86_64::{__m128i, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_setzero_si128};
-
-    let mut offset = 0;
-    loop {
-        // Load 16 bytes (unaligned is safe on x86_64, we know this is fine because perfectly aligned
-        let chunk = unsafe { _mm_loadu_si128(ptr.add(offset) as *const __m128i) };
-
-        // Compare against zero byte
-        let zeros = unsafe { _mm_setzero_si128() };
-        let cmp = unsafe { _mm_cmpeq_epi8(chunk, zeros) };
-
-        // Create a bitmask of results
-        let mask = unsafe { _mm_movemask_epi8(cmp) };
-
-        if mask != 0 {
-            // At least one null byte found
-            let tz = mask.trailing_zeros() as usize;
-            return offset + tz;
-        }
-
-        offset += 16;
-    }
-}
-
-*/
-
-
 /// Macro to create a const from an env var with compile-time parsing
 #[macro_export]
 macro_rules! const_from_env {
     ($name:ident: $t:ty = $env:expr, $default:expr) => {
         pub const $name: $t = {
             // Manual parsing for primitive types
-            //we have to assume it's indexed basically in order to be const 
+            //we have to assume it's indexed basically in order to be const
             const fn parse_env<const N: usize>(s: &[u8]) -> $t {
                 let mut i = 0;
                 let mut n = 0;
-                
+
                 while i < s.len() {
                     let b = s[i];
                     match b {
                         b'0'..=b'9' => {
                             n = n * 10 + (b - b'0') as $t;
-                        },
+                        }
                         _ => panic!(concat!("Invalid ", stringify!($t), " value")),
                     }
                     i += 1;
@@ -470,8 +431,7 @@ macro_rules! const_from_env {
                 Some(val) => val,
                 None => $default,
             };
-            parse_env::<{VAL.len()}>(VAL.as_bytes())
+            parse_env::<{ VAL.len() }>(VAL.as_bytes())
         };
     };
 }
-

@@ -1,3 +1,4 @@
+#![allow(clippy::missing_safety_doc)]
 use crate::buffer::ValueType;
 use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
@@ -67,11 +68,11 @@ pub trait BytePath<T> {
     fn is_relative(&self) -> bool
     where
         T: Deref<Target = [u8]>;
-    fn into_path(&self) -> PathBuf
+    fn to_path(&self) -> PathBuf
     where
         T: Deref<Target = [u8]>,
     {
-        PathBuf::from(self.as_path())
+        self.as_path().to_owned()
     }
     fn realpath(&self) -> crate::Result<&[u8]>
     where
@@ -116,7 +117,6 @@ where
 
     /// Checks if the file matches the given extension.
     /// Returns `true` if the file's extension matches, `false` otherwise.
-
     #[inline]
     fn matches_extension(&self, ext: &[u8]) -> bool {
         self.extension()

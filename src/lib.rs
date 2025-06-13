@@ -6,6 +6,7 @@
 #![allow(clippy::shadow_unrelated)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
+#![allow(clippy::doc_lazy_continuation)]
 #![allow(clippy::as_underscore)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::min_ident_chars)]
@@ -155,7 +156,7 @@ impl Finder {
                         .as_ref() //get the filename THEN check extension, we dont want to pick up
                         //stuff like .gitignore or .DS_Store
                         .is_none_or(|ext| {
-                            (&rdir.as_bytes()[rdir.base_len() as usize..]).matches_extension(&ext)
+                            (&rdir.as_bytes()[rdir.base_len()..]).matches_extension(ext)
                         })
             }
         };
@@ -214,7 +215,7 @@ impl Finder {
         match dir.getdents() {
             Ok(entries) => {
                 // Store only directories for parallel recursive call
-         
+
                 let (dirs, files): (Vec<_>, Vec<_>) = entries
                     .filter(|e| !self.search_config.hide_hidden || !e.is_hidden())
                     .partition(direntry::DirEntry::is_dir);

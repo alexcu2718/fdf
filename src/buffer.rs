@@ -105,7 +105,7 @@ where
     /// this is only to be called when using syscalls in the getdents interface
     #[inline]
     pub unsafe fn getdents64(&mut self, fd: i32) -> i64 {
-        unsafe { syscall(SYS_getdents64 as i64, fd, self.as_mut_ptr(), SIZE) }
+        unsafe { syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
     }
 
     /// # Safety

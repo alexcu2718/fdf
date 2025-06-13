@@ -43,7 +43,8 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[allow(clippy::ptr_as_ptr)]//safe to do this as u8 is aligned to 16 bytes
-pub(crate) unsafe fn strlen_asm<T>(ptr: *const T) -> usize
+///Deprecated in favour of a macro (strlen_asm!)
+pub unsafe fn strlen_sse2<T>(ptr: *const T) -> usize
 where
     T: ValueType,
 {
@@ -52,7 +53,7 @@ where
 
     let mut offset = 0;
     loop {
-        // Load 16 bytes (unaligned is safe on x86_64, we know this is fine because perfectly aligned
+        // Load 16 bytes, alignment is fine because from i8/u8
         let chunk = unsafe { _mm_loadu_si128(ptr.add(offset) as *const __m128i) };
 
         // Compare against zero byte
@@ -63,7 +64,7 @@ where
         let mask = unsafe { _mm_movemask_epi8(cmp) };
 
         if mask != 0 {
-            // At least one null byte found
+            // we'll get at least one null byte found
             let tz = mask.trailing_zeros() as usize;
             return offset + tz;
         }

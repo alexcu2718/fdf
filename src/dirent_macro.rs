@@ -177,7 +177,7 @@ macro_rules! init_path_buffer_readdir {
 macro_rules! copy_name_to_buffer {
     ($self:expr, $name_file:expr) => {{
         let base_len = $self.base_len as usize;
-        let name_len = unsafe { $crate::strlen_asm($name_file) };//we use specified repne scasb because its likely<=8bytes
+        let name_len = unsafe { $crate::strlen_asm!($name_file) };//we use specified repne scasb because its likely<=8bytes
         let name_bytes: &[u8] = unsafe { &*std::ptr::slice_from_raw_parts($name_file, name_len) };//no ub check suck it
         let total_path_len = base_len + name_len;
 
@@ -220,13 +220,54 @@ macro_rules! prefetch_next_buffer {
     };
 }
 
+
+
+
+
+
+#[macro_export]
+macro_rules! strlen_asm {
+    ($ptr:expr) => {{
+        #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+        {
+            use std::arch::x86_64::{__m128i, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_setzero_si128};
+            
+            let mut offset = 0;
+            
+            // I converted this from a function but we can't use returns in macros(well, even if you're me, that's still bad!)
+            let result = 'outer: loop {
+                // Safety: Valid pointer assumed, alignment handled by loadu
+                // Load 16 bytes, alignment is fine because from i8/u8
+                let chunk = _mm_loadu_si128($ptr.add(offset) as *const __m128i) ;
+                let zeros = _mm_setzero_si128() ; //set zero byte
+                let cmp =  _mm_cmpeq_epi8(chunk, zeros) ; //compare zero byte 
+                let mask =  _mm_movemask_epi8(cmp)  as i32; //create a bitmask of results
+                // If mask is not zero, at least one null byte was found
+
+                if mask != 0 {
+                    break 'outer offset + mask.trailing_zeros() as usize; // At least one null byte found
+                }
+                offset += 16; //increment to check the next 16 bytes
+            };
+            result
+        }
+        
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "sse2")))]
+        {
+         libc::strlen($ptr)
+        }
+    }};
+}
+
+
+
 #[macro_export]
 ///not intended for public use, will be private when boilerplate is done
 /// Constructs a path from the base path and the name pointer, returning a mutable slice of the full path
 macro_rules! construct_path {
     ($self:ident, $name_ptr:ident) => {{
 
-        let name_len = $crate::strlen_asm($name_ptr);
+        let name_len = $crate::strlen_asm!($name_ptr);
         let name_bytes = &*std::ptr::slice_from_raw_parts($name_ptr, name_len);
         let total_len = $self.base_path_len as usize + name_len;
 
@@ -321,42 +362,6 @@ macro_rules! dirent_const_time_strlen {
     }};
 }
 
- 
-
-
-
-///Extremely specific niche use case that i can't be bothered writing up.
-/// Constructs a path from the base path and the name pointer in constant time.
-/// Variadic for `reclen` (can be passed explicitly or fetched from `dirent`)
-#[macro_export]
-macro_rules! construct_path_const_time {
-
-    // Single argument version (gets `reclen` from `dirent`)
-    ($self:ident, $dirent:expr) => {{
-        let reclen = *offset_ptr!($dirent, d_reclen) as usize;
-        $crate::construct_path_const_time!($self, $dirent, reclen)
-    }};
-
-    // Two argument version (explicit `reclen`)
-    ($self:ident, $dirent:expr,$reclen:expr) => {{
-        let name_ptr:*const u8 = offset_ptr!($dirent, d_name).cast();
-        let name_len = $crate::dirent_const_time_strlen!($dirent,$reclen);
-        let name_bytes = &*std::ptr::slice_from_raw_parts(name_ptr, name_len);
-        let total_len = $self.base_path_len as usize + name_len;
-
-        std::ptr::copy_nonoverlapping(
-            name_bytes.as_ptr(),
-            $self
-                .path_buffer
-                .as_mut_ptr()
-                .add($self.base_path_len as usize),
-            name_len,
-        );
-
-        let full_path = $self.path_buffer.get_unchecked_mut(..total_len);
-        full_path
-    }};
-}
 
  */
 
@@ -409,3 +414,48 @@ macro_rules! get_dirent_vals {
         }
     }};
 }
+
+
+
+
+
+
+
+
+
+/*
+
+/// Uses SSE2 intrinsics to calculate the length of a null-terminated string.
+#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+#[inline]
+#[allow(clippy::ptr_as_ptr)]//safe to do this as u8 is aligned to 16 bytes
+pub(crate) unsafe fn strlen_asm<T>(ptr: *const T) -> usize
+where
+    T: ValueType,
+{
+    //aka i8/u8{
+    use std::arch::x86_64::{__m128i, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_setzero_si128};
+
+    let mut offset = 0;
+    loop {
+        // Load 16 bytes (unaligned is safe on x86_64, we know this is fine because perfectly aligned
+        let chunk = unsafe { _mm_loadu_si128(ptr.add(offset) as *const __m128i) };
+
+        // Compare against zero byte
+        let zeros = unsafe { _mm_setzero_si128() };
+        let cmp = unsafe { _mm_cmpeq_epi8(chunk, zeros) };
+
+        // Create a bitmask of results
+        let mask = unsafe { _mm_movemask_epi8(cmp) };
+
+        if mask != 0 {
+            // At least one null byte found
+            let tz = mask.trailing_zeros() as usize;
+            return offset + tz;
+        }
+
+        offset += 16;
+    }
+}
+
+*/

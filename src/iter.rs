@@ -3,7 +3,7 @@
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
     SyscallBuffer, copy_name_to_buffer, cstr, init_path_buffer_readdir, offset_ptr,get_dirent_vals,
-    skip_dot_entries, strlen_asm,
+    skip_dot_entries, 
 };
 use libc::{DIR, closedir, opendir, readdir64};
 

@@ -86,7 +86,7 @@ pub use custom_types_result::{
 };
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{BytesToCstrPointer, PathAsBytes, ToStat,GetExtension,MatchesExtension,GetSize};
+pub use traits_and_conversions::{BytePath, PathAsBytes,};
 
 mod utils;
 

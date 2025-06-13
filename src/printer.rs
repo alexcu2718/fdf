@@ -1,4 +1,4 @@
-use fdf::{DirEntry, Result,GetExtension};
+use fdf::{DirEntry, Result,BytePath};
 use std::collections::HashMap;
 use std::io::{BufWriter, IsTerminal, Write, stdout};
 use std::sync::OnceLock;

@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
-use crate::traits_and_conversions::AsOsStr as _;
-use crate::traits_and_conversions::ToStat as _;
+use crate::BytePath;
+
 use libc::{
     DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO,
     S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t,

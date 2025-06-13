@@ -1,7 +1,7 @@
 #![allow(clippy::cast_possible_wrap)]
 #[allow(unused_imports)]
 use crate::{
-    BytesToCstrPointer, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
+    BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
     SyscallBuffer, copy_name_to_buffer, cstr, init_path_buffer_readdir, offset_ptr,get_dirent_vals,
     skip_dot_entries, strlen_asm,
 };

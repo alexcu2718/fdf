@@ -71,36 +71,12 @@ mod tests {
         entry.d_name[2] = b'c';
         entry.d_name[3] = 0;
         //god i hacked this sorry
-        let len = crate::utils::dirent_const_time_strlen_optimal(unsafe {
+        let len = crate::utils::dirent_const_time_strlen(unsafe {
             std::mem::transmute::<*const Dirent64, *const libc::dirent64>(&entry)
         });
         assert_eq!(len, 3);
     }
-
-    #[test]
-    fn test_dirent_const_time_strlen_abc() {
-        let mut entry = Dirent64 {
-            d_ino: 0,
-            d_off: 0,
-            d_reclen: 24, // Must be multiple of 8, this is 3 * u64
-            d_type: 0,
-            d_name: [0; 256],
-        };
-
-        entry.d_name[0] = b'a';
-        entry.d_name[1] = b'b';
-        entry.d_name[2] = b'c';
-        entry.d_name[3] = 0;
-        //god i hacked this sorry
-        let len = unsafe {
-            crate::utils::dirent_const_time_strlen(std::mem::transmute::<
-                *const Dirent64,
-                *const libc::dirent64,
-            >(&entry))
-        };
-        assert_eq!(len, 3);
-    }
-
+   
     #[test]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();

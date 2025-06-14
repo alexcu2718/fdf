@@ -13,6 +13,15 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    #[repr(C)]
+    pub struct Dirent64 {
+        d_ino: u64,
+        d_off: u64,
+        d_reclen: u16,
+        d_type: u8,
+        d_name: [u8; 256], // typical max length
+    }
+
     #[test]
     fn check_filenames() {
         let temp_dir = std::env::temp_dir();
@@ -45,6 +54,51 @@ mod tests {
         assert_eq!(entry.extension().unwrap(), b"txt");
         assert_eq!(entry.parent(), test_dir.as_os_str().as_bytes());
         let _ = std::fs::remove_dir_all(test_dir);
+    }
+
+    #[test]
+    fn test_dirent_const_time_strlen_optimal_abc() {
+        let mut entry = Dirent64 {
+            d_ino: 0,
+            d_off: 0,
+            d_reclen: 24, // Must be multiple of 8, this is 3 * u64
+            d_type: 0,
+            d_name: [0; 256],
+        };
+
+        entry.d_name[0] = b'a';
+        entry.d_name[1] = b'b';
+        entry.d_name[2] = b'c';
+        entry.d_name[3] = 0;
+        //god i hacked this sorry
+        let len = crate::utils::dirent_const_time_strlen_optimal(unsafe {
+            std::mem::transmute::<*const Dirent64, *const libc::dirent64>(&entry)
+        });
+        assert_eq!(len, 3);
+    }
+
+    #[test]
+    fn test_dirent_const_time_strlen_abc() {
+        let mut entry = Dirent64 {
+            d_ino: 0,
+            d_off: 0,
+            d_reclen: 24, // Must be multiple of 8, this is 3 * u64
+            d_type: 0,
+            d_name: [0; 256],
+        };
+
+        entry.d_name[0] = b'a';
+        entry.d_name[1] = b'b';
+        entry.d_name[2] = b'c';
+        entry.d_name[3] = 0;
+        //god i hacked this sorry
+        let len = unsafe {
+            crate::utils::dirent_const_time_strlen(std::mem::transmute::<
+                *const Dirent64,
+                *const libc::dirent64,
+            >(&entry))
+        };
+        assert_eq!(len, 3);
     }
 
     #[test]

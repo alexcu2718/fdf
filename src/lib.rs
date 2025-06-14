@@ -157,7 +157,8 @@ where
         };
         // The lambda functions are used to filter directories and non-directories based on the search configuration.
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
-            { //  eprintln!("{}",rdir.to_string_lossy());
+            {
+                //  eprintln!("{}",rdir.to_string_lossy());
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_path(rdir, rconfig.file_name)
                     && rconfig

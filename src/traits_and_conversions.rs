@@ -16,13 +16,15 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
-pub trait BytePath<T> 
+pub trait BytePath<T>
 where
-        T: Deref<Target = [u8]>{
+    T: Deref<Target = [u8]>,
+{
     fn as_cstr_ptr<F, R, VT>(&self, f: F) -> R
-    where F: FnOnce(*const VT) -> R,VT: ValueType; // VT==ValueType is u8/i8
+    where
+        F: FnOnce(*const VT) -> R,
+        VT: ValueType; // VT==ValueType is u8/i8
 
-    
     fn extension(&self) -> Option<&[u8]>;
     fn matches_extension(&self, ext: &[u8]) -> bool;
     unsafe fn size(&self) -> crate::Result<u64>;
@@ -43,7 +45,6 @@ where
     fn is_relative(&self) -> bool;
     fn to_path(&self) -> PathBuf;
     fn realpath(&self) -> crate::Result<&[u8]>;
-    
 }
 
 impl<T> BytePath<T> for T
@@ -80,9 +81,9 @@ where
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
         if !self.contains(&b'.') {
-           return None;
+            return None;
         }
-        self.rsplit(|&b| b==b'.').next()
+        self.rsplit(|&b| b == b'.').next()
     }
 
     fn to_path(&self) -> PathBuf {

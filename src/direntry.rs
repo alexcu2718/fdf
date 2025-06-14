@@ -65,6 +65,7 @@ where
         unsafe {
             // x_ok checks for execute permission
             self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
+           
         }
     }
 
@@ -376,7 +377,7 @@ where
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
                 //
                 let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
-                // let full_path = unsafe {construct_path_fixed!(self, d) }; here we have a construct_path_fixed  version, which uses a very specific trick, i need to benchmark it!
+             //   let full_path = unsafe {crate::construct_path_fixed!(self, d) }; //here we have a construct_path_fixed  version, which uses a very specific trick, i need to benchmark it!
 
                 let entry = DirEntry {
                     path: full_path.into(),

@@ -136,3 +136,45 @@ pub(crate) const fn const_min(a: usize, b: usize) -> usize {
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     if a < b { b } else { a }
 }
+
+
+
+/// Constant-time strlen for dirent's `d_name` field using bit tricks.
+/// 
+/// Reference: <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>
+/// This function is designed to be used in a constant-time context, I just thought it was cool!
+/// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
+/// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
+/// # Safety
+/// This function is unsafe because it dereferences a raw pointer and assumes that the pointer is valid and points to a `libc::dirent64` structure.
+#[inline]
+#[allow(clippy::integer_division)] //INTEGER DIVISION IN CONST IS FINE ESPECIALLY.
+#[allow(clippy::integer_division_remainder_used)]//^
+pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
+    const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name);
+    const MAX_NAME_BYTES: usize = crate::utils::const_min(crate::LOCAL_PATH_MAX, 255 + 1); // NAME_MAX + 1
+    const NUM_WORDS: usize = MAX_NAME_BYTES / 8;
+
+    // Cast `d_name` to a pointer to u64 chunks
+    let name_ptr = unsafe{dirent.cast::<u8>().add(DIRENT_HEADER_SIZE).cast::<u64>()};
+    let mut len = MAX_NAME_BYTES;
+    let mut i = 0;
+
+    while i < NUM_WORDS {//need to use a while loop, cant iterate
+        let word = unsafe { *name_ptr.add(i) };
+        
+        // Branchless null-byte detection using HASZERO trick
+        let has_zero = ((word.wrapping_sub(0x0101_0101_0101_0101)) & !word & 0x8080_8080_8080_8080) != 0;
+        
+        if has_zero {
+            let mask = (word.wrapping_sub(0x0101_0101_0101_0101)) & !word & 0x8080_8080_8080_8080;
+            let byte_index = mask.trailing_zeros() as usize / 8;
+            len = i * 8 + byte_index;
+            break;
+        }
+        
+        i += 1;
+    }
+
+    len
+}

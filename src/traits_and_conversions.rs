@@ -61,7 +61,7 @@ where
         VT: ValueType, // VT==ValueType is u8/i8
     {
         debug_assert!(
-            self.len() < crate::LOCAL_PATH_MAX,
+            self.len() < crate::LOCAL_PATH_MAX,//delcared at compile time via env_var or default to 512
             "Input too large for buffer"
         );
 
@@ -77,7 +77,7 @@ where
     }
 
     /// Returns the extension of the file as a byte slice, if it exists.
-    /// If the file has no extension, returns `None`.
+    /// If the file has contains no returns `None`.
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
         if !self.contains(&b'.') {
@@ -98,6 +98,9 @@ where
         self.extension()
             .is_some_and(|e| e.eq_ignore_ascii_case(ext))
     }
+
+
+   
 
     /// Returns the size of the file in bytes.
     /// If the file size cannot be determined, returns 0.
@@ -345,3 +348,8 @@ where
         )
     }
 }
+
+
+
+
+

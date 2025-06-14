@@ -45,8 +45,7 @@ macro_rules! cstr {
 
         // Create a  and make into a pointer
         let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
-        #[allow(unused_unsafe)] //macro collision i cant be bothered to fix rn
-        // Copy bytes and null-terminate
+     
         unsafe {
             std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
             c_path_buf.add($bytes.len()).write(0);
@@ -67,8 +66,7 @@ macro_rules! cstr_n {
 
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
-        // #[allow(unused_unsafe)] //macro collision i cant be bothered to fix rn
-        // Copy bytes and null-terminate
+     
         unsafe {
             std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
             c_path_buf.add($bytes.len()).write(0);
@@ -252,6 +250,9 @@ macro_rules! construct_path {
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
 /// A macro to calculate the length of a null-terminated string in constant time using SSE2 intrinsics.
 /// This macro is for all to use,
+/// Accepts a pointer to a null-terminated string and returns its length in bytes.
+/// Optionally accepts a flag `@8byte` to use a specialized 8-byte version(which is faster on x86_64 with SSE2).
+/// This macro is designed to be used in a way that it will use SIMD instructions to check 16 bytes at a time
 /// if you're on x86_64 with SSE2 enabled, it will use SIMD instructions to check 16 bytes at a time
 /// if you're not, you'll rely on glibc's strlen(which honestly speaking might be better than mine, I'm going to do a benchmark suite soon, I just wanted to learn!)
 macro_rules! strlen_asm {

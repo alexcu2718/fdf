@@ -379,7 +379,7 @@ macro_rules! dirent_fixed_time_strlen {
         let mask = 0x00FF_FFFFu64 * is_third_word; // Multiply by 0 or 1
         let last_word_final = last_word_check | mask;
        let word_ptr = &raw const last_word_final as *const u64 as *const u8; // Cast to u8 pointer and use specialised @8byte
-       //word_ptr is length 8 so it's done in 1 operation by SSE2(if deteched, or strlen, which might do it too, who knows what goes on in glibc)
+       //word_ptr is length 8 so it's done in 1 operation by SSE2(if detected, or strlen, which might do it too, who knows what goes on in glibc)
        let remainder_len = 7 - $crate::strlen_asm!(word_ptr,@8byte);
         // Calculate true string length:
         // 1. Skip dirent header (offset_of!(libc::dirent64, d_name))

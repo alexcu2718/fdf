@@ -8,10 +8,6 @@ pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
 const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "512");
 
-
-
-
-
 //4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 const_from_env!(BUFFER_SIZE:usize="BUFFER_SIZE","4115");
 //basically this is the should allow getdents to grab a lot of entries in one go
@@ -102,9 +98,6 @@ pub struct OsBytes<S: BytesStorage> {
     pub(crate) bytes: S,
 }
 
-
-
-
 impl<S: BytesStorage> OsBytes<S> {
     #[inline]
     #[must_use]
@@ -142,8 +135,7 @@ impl<S: BytesStorage> OsBytes<S> {
     }
 }
 
-
-unsafe impl<S> Send for OsBytes<S> where S: Send+BytesStorage+'static {}
+unsafe impl<S> Send for OsBytes<S> where S: Send + BytesStorage + 'static {}
 
 impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
     #[inline]

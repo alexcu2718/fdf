@@ -2,14 +2,14 @@
 mod tests {
     #![allow(unused_imports)]
     use crate::traits_and_conversions::{BytePath, PathAsBytes};
-    use crate::{DirEntry, DirIter, FileType, debug_print,SlimmerBytes};
+    use crate::{DirEntry, DirIter, FileType, SlimmerBytes, debug_print};
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
-    use std::sync::Arc;
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::symlink;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     #[test]
     fn check_filenames() {
@@ -19,7 +19,7 @@ mod tests {
 
         let _ = std::fs::File::create(&file_path);
 
-        let entry:DirEntry<Arc<[u8]>> = DirEntry::new(file_path.as_os_str()).unwrap();
+        let entry: DirEntry<Arc<[u8]>> = DirEntry::new(file_path.as_os_str()).unwrap();
         let _ = std::fs::remove_file(&file_path);
         assert_eq!(entry.file_name(), file_name.as_bytes());
     }
@@ -37,7 +37,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(test_dir);
         std::fs::create_dir_all(test_dir).expect("Failed to create test directory");
         std::fs::write(&test_file_path, "test").expect("Failed to write test file");
-        let entry:DirEntry<Box<[u8]>> = DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
+        let entry: DirEntry<Box<[u8]>> =
+            DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
         assert_eq!(entry.file_name(), b"child.txt");
         assert_eq!(entry.extension().unwrap(), b"txt");
         assert_eq!(entry.parent(), test_dir.as_os_str().as_bytes());
@@ -55,7 +56,7 @@ mod tests {
         std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
         let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
 
-        let dir_entry:DirEntry<Vec<u8>> = DirEntry::new(dir_path.as_os_str()).unwrap();
+        let dir_entry: DirEntry<Vec<u8>> = DirEntry::new(dir_path.as_os_str()).unwrap();
         let entries = dir_entry.getdents().unwrap();
         let entries_clone: Vec<_> = dir_entry.getdents().unwrap().collect();
 
@@ -90,7 +91,7 @@ mod tests {
         let hidden_file = temp_dir.as_path().join(".hidden");
         std::fs::write(&hidden_file, "").unwrap();
 
-        let entry:DirEntry<SlimmerBytes> = DirEntry::new(hidden_file.as_os_str()).unwrap();
+        let entry: DirEntry<SlimmerBytes> = DirEntry::new(hidden_file.as_os_str()).unwrap();
         assert!(entry.is_hidden());
 
         let non_hidden = temp_dir.as_path().join("visible");
@@ -127,7 +128,9 @@ mod tests {
         let file_path = temp_dir.as_path().join("testfilenew.txt");
         std::fs::write(&file_path, "test").unwrap();
 
-        let entry: usize = DirEntry::<SlimmerBytes>::new(file_path.as_os_str()).unwrap().base_len();
+        let entry: usize = DirEntry::<SlimmerBytes>::new(file_path.as_os_str())
+            .unwrap()
+            .base_len();
         let std_entry = (std::path::Path::new(file_path.as_os_str())
             .parent()
             .unwrap()
@@ -333,7 +336,8 @@ mod tests {
         assert!(file_path.is_file(), "Test path is not a file");
 
         // the actual functionality
-        let entry = DirEntry::<Arc<[u8]>>::new(file_path.as_os_str()).expect("Failed to create DirEntry");
+        let entry =
+            DirEntry::<Arc<[u8]>>::new(file_path.as_os_str()).expect("Failed to create DirEntry");
         assert_eq!(entry.dirname(), b"parent", "Incorrect directory name");
 
         // verify removal

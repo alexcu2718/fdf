@@ -2,15 +2,17 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
-    copy_name_to_buffer, cstr, get_dirent_vals, init_path_buffer_readdir, offset_ptr,
-    skip_dot_entries,custom_types_result::BytesStorage
+    copy_name_to_buffer, cstr, custom_types_result::BytesStorage, get_dirent_vals,
+    init_path_buffer_readdir, offset_ptr, skip_dot_entries,
 };
 use libc::{DIR, closedir, opendir, readdir64};
 use std::marker::PhantomData;
 #[derive(Debug)]
 /// An iterator over directory entries from readdir64 via libc
 pub struct DirIter<S>
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     dir: *mut DIR,
     buffer: PathBuffer,
     base_len: u16,
@@ -20,7 +22,9 @@ where S: BytesStorage {
 }
 
 impl<S> DirIter<S>
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     #[inline]
     pub const fn as_mut_ptr(&mut self) -> *mut u8 {
         // This function is used to get a mutable pointer to the internal buffer.
@@ -59,11 +63,13 @@ where S: BytesStorage {
     }
 }
 
-impl<T> Iterator for DirIter<T> 
-where T: BytesStorage {
+impl<T> Iterator for DirIter<T>
+where
+    T: BytesStorage,
+{
     type Item = DirEntry<T>;
     #[inline]
-    #[allow(clippy::ptr_as_ptr)]//we're align so raw pointer as casts are fine.
+    #[allow(clippy::ptr_as_ptr)] //we're align so raw pointer as casts are fine.
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
             return None;
@@ -96,7 +102,9 @@ where T: BytesStorage {
     }
 }
 impl<T> Drop for DirIter<T>
-where T: BytesStorage {
+where
+    T: BytesStorage,
+{
     fn drop(&mut self) {
         if !self.dir.is_null() {
             unsafe { closedir(self.dir) };

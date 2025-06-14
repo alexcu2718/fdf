@@ -1,19 +1,19 @@
 #![allow(clippy::missing_safety_doc)] //adding these later
 #![allow(clippy::missing_errors_doc)]
+use crate::BytesStorage;
+use crate::DirEntry;
+use crate::DirEntryError;
+use crate::Result;
 use crate::buffer::ValueType;
 use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
+use std::fmt;
 use std::mem::MaybeUninit;
 use std::mem::transmute;
 use std::ops::Deref;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use crate::BytesStorage;
-use crate::DirEntryError;
-use crate::Result;
-use crate::DirEntry;
-use std::fmt;
-use std::os::unix::ffi::OsStrExt;
 
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
 pub trait BytePath<T> {
@@ -85,7 +85,6 @@ pub trait BytePath<T> {
     fn realpath(&self) -> crate::Result<&[u8]>
     where
         T: Deref<Target = [u8]>;
-    
 }
 
 impl<T> BytePath<T> for T
@@ -135,7 +134,7 @@ where
     /// Returns the size of the file in bytes.
     /// If the file size cannot be determined, returns 0.
     #[inline]
-    #[allow(clippy::cast_sign_loss)]//it's safe to cast here because we're dealing with file sizes which are always positive
+    #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
     unsafe fn size(&self) -> crate::Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
     }
@@ -155,7 +154,7 @@ where
     }
     /// Get last modification time, this will be more useful when I implement filters for it.
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]//it's fine here because i32 is  plenty
+    #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     fn modified_time(&self) -> crate::Result<SystemTime> {
         self.get_stat().and_then(|s| {
@@ -279,9 +278,10 @@ where
             //check for null
             return Err(std::io::Error::last_os_error().into());
         }
-        //better to use strlen here because path is likely to be too long to benefit from repne scasb
-        //we also use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
-        Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) })
+    
+        //we  use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
+        //rely on sse2/glibc strlen to get length
+        Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen_asm!(ptr)) })
     }
 }
 
@@ -298,10 +298,10 @@ impl PathAsBytes for Path {
     }
 }
 
-
-
-impl<S> fmt::Display for DirEntry<S> 
-where S: BytesStorage {
+impl<S> fmt::Display for DirEntry<S>
+where
+    S: BytesStorage,
+{
     //i might need to change this to show other metadata.
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -309,8 +309,10 @@ where S: BytesStorage {
     }
 }
 
-impl <S> std::ops::Deref for DirEntry<S>
-where S: BytesStorage {
+impl<S> std::ops::Deref for DirEntry<S>
+where
+    S: BytesStorage,
+{
     type Target = [u8];
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -318,16 +320,19 @@ where S: BytesStorage {
     }
 }
 
-impl <S> From<DirEntry<S>> for PathBuf
-where S: BytesStorage {
-
+impl<S> From<DirEntry<S>> for PathBuf
+where
+    S: BytesStorage,
+{
     #[inline]
     fn from(entry: DirEntry<S>) -> Self {
         entry.to_path()
     }
 }
-impl <S>TryFrom<&[u8]> for DirEntry<S>
-where S: BytesStorage {
+impl<S> TryFrom<&[u8]> for DirEntry<S>
+where
+    S: BytesStorage,
+{
     type Error = DirEntryError;
     #[inline]
     fn try_from(path: &[u8]) -> Result<Self> {
@@ -335,8 +340,10 @@ where S: BytesStorage {
     }
 }
 
-impl <S>TryFrom<&OsStr> for DirEntry<S>
-where S: BytesStorage {
+impl<S> TryFrom<&OsStr> for DirEntry<S>
+where
+    S: BytesStorage,
+{
     type Error = DirEntryError;
     #[inline]
     fn try_from(path: &OsStr) -> Result<Self> {
@@ -345,15 +352,19 @@ where S: BytesStorage {
 }
 
 impl<S> AsRef<Path> for DirEntry<S>
-where S: BytesStorage  {
+where
+    S: BytesStorage,
+{
     #[inline]
     fn as_ref(&self) -> &Path {
         self.as_path()
     }
 }
 
-impl <S>fmt::Debug for DirEntry<S>
-where S: BytesStorage {
+impl<S> fmt::Debug for DirEntry<S>
+where
+    S: BytesStorage,
+{
     ///debug format for `DirEntry` (showing a vector of bytes is... not very useful)
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

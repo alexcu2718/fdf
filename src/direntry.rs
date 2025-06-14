@@ -1,6 +1,11 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::single_call_fn)]
+#![allow(clippy::integer_division_remainder_used)]
+#![allow(clippy::ptr_as_ptr)] //i know what i'm doing.
+#![allow(clippy::integer_division)] //i know my division is safe.
+#![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
+#![allow(clippy::little_endian_bytes)] //i dont even know why this is a lint(because i cant be bothered to read it, i NEED IT though)
 
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
 #[allow(unused_imports)]
@@ -17,24 +22,27 @@ use std::{
     time::SystemTime,
 };
 
-use crate::{custom_types_result::BytesStorage, OsBytes};
 #[allow(unused_imports)]
 use crate::{
-    AsU8 as _, BytePath, DirIter, PathBuffer, Result, SyscallBuffer, cstr, cstr_n,
-    custom_types_result::SlimOsBytes, error::DirEntryError, filetype::FileType, get_dirent_vals,
-    init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,construct_path,
-    skip_dot_entries, utils::close_asm, utils::get_baselen, utils::open_asm,
-    utils::unix_time_to_system_time,
+    AsU8 as _, BytePath, DirIter, PathBuffer, Result, SyscallBuffer, construct_path,
+    cstr, cstr_n, custom_types_result::SlimOsBytes, error::DirEntryError,
+    filetype::FileType, get_dirent_vals, init_path_buffer_syscall, offset_ptr,
+    prefetch_next_buffer, prefetch_next_entry, skip_dot_entries, utils::close_asm,
+    utils::get_baselen, utils::open_asm, utils::unix_time_to_system_time,
 };
+use crate::{OsBytes, custom_types_result::BytesStorage};
 
 #[derive(Clone)]
-pub struct DirEntry<S>  //S is a storage type, this is used to store the path of the entry, it can be a Box, Arc, Vec, etc.
+pub struct DirEntry<S>
+//S is a storage type, this is used to store the path of the entry, it can be a Box, Arc, Vec, etc.
 //ordered by size, so Box<[u8]> is 16 bytes, Arc<[u8]> is 24 bytes, Vec<u8> is 24 bytes, SlimerBox<[u8], u16> is 10 bytes
 //S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     pub(crate) path: OsBytes<S>, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
     pub(crate) file_type: FileType, //1 byte
-    pub(crate) inode: u64,        //8 bytes, i may drop this in the future, it's not very useful.
+    pub(crate) inode: u64,       //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
     pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
@@ -42,9 +50,10 @@ where S: BytesStorage {
                               //due to my pointer checks i could get this for free (bool) but dont really want massive structs
 }
 
-
-impl<S> DirEntry<S> 
-where S: BytesStorage {
+impl<S> DirEntry<S>
+where
+    S: BytesStorage,
+{
     #[inline]
     #[must_use]
     ///costly check for executables
@@ -134,7 +143,6 @@ where S: BytesStorage {
         }
     }
 
-
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Converts a path to a proper path, if it is not already
@@ -150,7 +158,7 @@ where S: BytesStorage {
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
-            base_len: (full_path.len() - self.file_name().len()) as u16,
+            base_len: (full_path.len() - self.file_name().len()) as _,
         }; //we need the length up to the filename INCLUDING
         //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
         //so we subtract the filename length from the total length, probably could've been done more elegantly.
@@ -187,7 +195,7 @@ where S: BytesStorage {
     #[must_use]
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
-        unsafe { self.get_unchecked(self.base_len as usize..) }
+        unsafe { self.get_unchecked(self.base_len()..) }
     }
 
     #[inline]
@@ -216,7 +224,7 @@ where S: BytesStorage {
     #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
-        unsafe { *self.get_unchecked(self.base_len as usize) == b'.' }
+        unsafe { *self.get_unchecked(self.base_len()) == b'.' }
     }
     #[inline]
     #[must_use]
@@ -224,7 +232,7 @@ where S: BytesStorage {
     pub fn dirname(&self) -> &[u8] {
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
-                .get_unchecked(..self.base_len as usize - 1)
+                .get_unchecked(..self.base_len() - 1)
                 .rsplit(|&b| b == b'/')
                 .next()
                 .unwrap_or(self.as_bytes())
@@ -311,8 +319,10 @@ where S: BytesStorage {
 }
 
 ///Iterator for directory entries using getdents syscall
-pub struct DirEntryIterator<S> 
-where S: BytesStorage {
+pub struct DirEntryIterator<S>
+where
+    S: BytesStorage,
+{
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.1k bytes~ish
     pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
@@ -321,11 +331,13 @@ where S: BytesStorage {
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     _marker: PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
-    //this gets compiled away anyway as its as a zst 
+                             //this gets compiled away anyway as its as a zst
 }
 
 impl<S> Drop for DirEntryIterator<S>
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     /// Drops the iterator, closing the file descriptor.
     /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
@@ -337,11 +349,11 @@ where S: BytesStorage {
 }
 
 impl<S> Iterator for DirEntryIterator<S>
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     type Item = DirEntry<S>;
     #[inline]
-    
-    #[allow(clippy::ptr_as_ptr)]
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -352,15 +364,20 @@ where S: BytesStorage {
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self);
                 // Extract the fields from the dirent structure
-                let (name_ptr, d_type, inode, reclen): (*const u8, u8, u64, usize) =
+                let (name_ptr, d_type, inode, reclen): (*const u8, u8, u64, usize) = //we have to tell our macro what types 
                     get_dirent_vals!(d);
+
                 //a macro that extracts the values from the dirent structure, this is a niche optimisation,
                 // it allows us to avoid doing pointer checks
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
+
                 // skip entries that are not valid or are dot entries
                 skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
-                let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
+                //
+                let full_path = unsafe { construct_path!(self, name_ptr) };  //a macro that constructs it, the full details are a bit lengthy
+                // let full_path = unsafe {construct_path_fixed!(self, d) }; here we have a construct_path_fixed  version, which uses a very specific trick, i need to benchmark it!
+     
                 let entry = DirEntry {
                     path: full_path.into(),
                     file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
@@ -388,8 +405,10 @@ where S: BytesStorage {
 ///////////////////////////////////////////////////////////////////////////////////////
 /// // Iterator for directory entries using getdents syscall with a filter function
 #[allow(clippy::multiple_inherent_impl)] // this is a separate impl block to avoid confusion with the other iterator
-impl<S> DirEntry<S> 
-where S: BytesStorage {
+impl<S> DirEntry<S>
+where
+    S: BytesStorage,
+{
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]
@@ -435,7 +454,9 @@ where S: BytesStorage {
 }
 
 pub struct DirEntryIteratorFilter<S>
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.3k bytes~ish
     pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
@@ -444,11 +465,13 @@ where S: BytesStorage {
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     pub(crate) filter_func: fn(&[u8], usize, u8) -> bool, // filter function, this is used to filter the entries based on the provided function
-    _marker: PhantomData<S>                                                      //mainly the arguments would be full path,depth,filetype, this is a shoddy implementation but im testing waters.
+    _marker: PhantomData<S>, //mainly the arguments would be full path,depth,filetype, this is a shoddy implementation but im testing waters.
 }
 
 impl<S> Drop for DirEntryIteratorFilter<S>
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     /// Drops the iterator, closing the file descriptor.
     /// same as above, we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     #[inline]
@@ -457,13 +480,17 @@ where S: BytesStorage {
     }
 }
 
-impl <S>Iterator for DirEntryIteratorFilter<S> 
-where S: BytesStorage {
-    type Item = DirEntry<S>
-    where S: BytesStorage;
+impl<S> Iterator for DirEntryIteratorFilter<S>
+where
+    S: BytesStorage,
+{
+    type Item
+        = DirEntry<S>
+    where
+        S: BytesStorage;
     #[inline]
     #[allow(clippy::cast_lossless)] //casting a u16 to u64 is lossless as i am doing but you can cast to your own type, enjoy;
-    #[allow(clippy::ptr_as_ptr)]//aligned pointers are what we're using.
+    #[allow(clippy::ptr_as_ptr)] //aligned pointers are what we're using.
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
         loop {

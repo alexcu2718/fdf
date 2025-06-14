@@ -62,7 +62,6 @@ use std::{
 
 mod dirent_macro;
 
-
 //
 //pub(crate) use dirent_macro::construct_path;
 //use crossbeam_channel::{Receiver, Sender, unbounded};
@@ -84,8 +83,8 @@ pub use error::DirEntryError;
 
 mod custom_types_result;
 pub use custom_types_result::{
-    AsU8, BUFFER_SIZE, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer, Result,
-    SyscallBuffer,BytesStorage,SlimmerBytes
+    AsU8, BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes,
+    PathBuffer, Result, SlimmerBytes, SyscallBuffer,
 };
 
 mod traits_and_conversions;
@@ -95,6 +94,7 @@ mod utils;
 
 //pub(crate) use utils::strlen_asm;
 pub use utils::unix_time_to_system_time;
+
 mod glob;
 pub use glob::glob_to_regex;
 mod config;
@@ -108,18 +108,21 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Debug)]
 /// A struct to find files in a directory.
-pub struct Finder<S> 
+pub struct Finder<S>
 where
-    S: BytesStorage,{
+    S: BytesStorage,
+{
     root: OsString,
     search_config: SearchConfig,
     filter: Option<DirEntryFilter<S>>,
-    custom_filter: FilterType<S>
+    custom_filter: FilterType<S>,
 }
 ///The Finder struct is used to find files in a directory.
-impl <S>Finder<S>  //S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
+impl<S> Finder<S>
+//S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
 where
-    S: BytesStorage+'static+Clone+Send{
+    S: BytesStorage + 'static + Clone + Send,
+{
     #[must_use]
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::too_many_arguments)]

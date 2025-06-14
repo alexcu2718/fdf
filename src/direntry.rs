@@ -24,11 +24,11 @@ use std::{
 
 #[allow(unused_imports)]
 use crate::{
-    AsU8 as _, BytePath, DirIter, PathBuffer, Result, SyscallBuffer, construct_path,
-    cstr, cstr_n, custom_types_result::SlimOsBytes, error::DirEntryError,
-    filetype::FileType, get_dirent_vals, init_path_buffer_syscall, offset_ptr,
-    prefetch_next_buffer, prefetch_next_entry, skip_dot_entries, utils::close_asm,
-    utils::get_baselen, utils::open_asm, utils::unix_time_to_system_time,
+    AsU8 as _, BytePath, DirIter, PathBuffer, Result, SyscallBuffer, construct_path, cstr, cstr_n,
+    custom_types_result::SlimOsBytes, error::DirEntryError, filetype::FileType, get_dirent_vals,
+    init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
+    skip_dot_entries, utils::close_asm, utils::get_baselen, utils::open_asm,
+    utils::unix_time_to_system_time,
 };
 use crate::{OsBytes, custom_types_result::BytesStorage};
 
@@ -135,7 +135,8 @@ where
             unsafe { self.size().is_ok_and(|size| size == 0) } //safe because we know it wont overflow.
         } else if self.is_dir() {
             // for directories, check if they have no entries
-            self.readdir()
+            self.readdir() //we use readdir here because we want to check `quickly`
+                //, getdents is more efficient but for listing directories, finding the first entry is a different case.
                 .is_ok_and(|mut entries| entries.next().is_none())
         } else {
             // special files like devices, sockets, etc.
@@ -375,9 +376,9 @@ where
                 skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
                 //
-                let full_path = unsafe { construct_path!(self, name_ptr) };  //a macro that constructs it, the full details are a bit lengthy
+                let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 // let full_path = unsafe {construct_path_fixed!(self, d) }; here we have a construct_path_fixed  version, which uses a very specific trick, i need to benchmark it!
-     
+
                 let entry = DirEntry {
                     path: full_path.into(),
                     file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee

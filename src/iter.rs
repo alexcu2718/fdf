@@ -10,6 +10,8 @@ use std::marker::PhantomData;
 #[derive(Debug)]
 /// An iterator over directory entries from readdir64 via libc
 pub struct DirIter<S>
+//S is a type that implements BytesStorage, which is used to store the path bytes.
+//which can take forms  Vec<u8>,Box<[u8]>,Arc<[u8]> or ideally SlimmerBytes (an alias in this crate for a smaller box type)
 where
     S: BytesStorage,
 {
@@ -18,7 +20,7 @@ where
     base_len: u16,
     depth: u8,
     error: Option<Error>,
-    _phantom: PhantomData<S>,
+    _phantom: PhantomData<S>, //this justholds the type information for later, this compiles away due to being zero sized.
 }
 
 impl<S> DirIter<S>

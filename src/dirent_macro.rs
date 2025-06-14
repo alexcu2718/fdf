@@ -120,23 +120,21 @@ macro_rules! skip_dot_entries {
     }};
 }
 
-
-
 #[macro_export]
 /// initialises a path buffer for syscall operations,
 // appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument).
 macro_rules! init_path_buffer_syscall {
     ($path_buffer:expr, $path_len:ident, $dir_path:expr, $self:expr) => {{
         let buffer_ptr = $path_buffer.as_mut_ptr();
-        
+
         // Branchless needs_slash calculation (returns 0 or 1)
         #[allow(clippy::cast_lossless)] //shutup
         let needs_slash = (($self.depth != 0) as u8) | (($dir_path != b"/") as u8);
-        
+
         unsafe {
             // Copy directory path
             std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, $path_len);
-            
+
             // Branchless slash writing and length adjustment, write a null terminator if no slash.
             *buffer_ptr.add($path_len) = (b'/') * needs_slash;
             $path_len += needs_slash as usize;
@@ -145,7 +143,6 @@ macro_rules! init_path_buffer_syscall {
         buffer_ptr
     }};
 }
-
 
 #[macro_export(local_inner_macros)]
 #[allow(clippy::too_long_first_doc_paragraph)]
@@ -157,18 +154,18 @@ macro_rules! init_path_buffer_readdir {
     ($dir_path:expr, $buffer:expr) => {{
         let dirp = $dir_path.as_bytes();
         let dirp_len = dirp.len();
-        
+
         // branchless needs_slash calculation (easier boolean shortcircuit on LHS)
-        #[allow(clippy::cast_lossless)]//shutup
+        #[allow(clippy::cast_lossless)] //shutup
         let needs_slash = ($dir_path.depth != 0) as u8 | ((dirp != b"/") as u8);
         let base_len = dirp_len + needs_slash as usize;
 
         unsafe {
             let buffer_ptr = $buffer.as_mut_ptr();
-            
+
             // Copy directory path
             std::ptr::copy_nonoverlapping(dirp.as_ptr(), buffer_ptr, dirp_len);
-            
+
             // branchless slash writing(we either write a slash or null terminator)
             *buffer_ptr.add(dirp_len) = (b'/') * needs_slash;
         }
@@ -177,13 +174,9 @@ macro_rules! init_path_buffer_readdir {
     }};
 }
 
-
-
-
-
 #[macro_export]
 /// Copies a null-terminated string into a buffer after a base offset
-/// 
+///
 /// # Safety
 /// - `name_file` must point to a valid null-terminated string
 /// - `self` must have sufficient capacity for base_len + string length
@@ -198,11 +191,7 @@ macro_rules! copy_name_to_buffer {
         // SAFETY:
         // We've calculated the position of the null terminator.
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                $name_file,
-                $self.as_mut_ptr().add(base_len),
-                name_len
-            );
+            std::ptr::copy_nonoverlapping($name_file, $self.as_mut_ptr().add(base_len), name_len);
         }
 
         base_len + name_len
@@ -258,28 +247,21 @@ macro_rules! construct_path {
     }};
 }
 
-
-
-
-
-
-
-
 #[macro_export]
 #[allow(clippy::ptr_as_ptr)]
-#[allow(clippy::too_long_first_doc_paragraph)]//i like monologues, ok?
+#[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
 /// A macro to calculate the length of a null-terminated string in constant time using SSE2 intrinsics.
 /// This macro is for all to use,
 /// if you're on x86_64 with SSE2 enabled, it will use SIMD instructions to check 16 bytes at a time
 /// if you're not, you'll rely on glibc's strlen(which honestly speaking might be better than mine, I'm going to do a benchmark suite soon, I just wanted to learn!)
 macro_rules! strlen_asm {
     // 8-byte version with @8byte flag
-    
+
     ($ptr:expr, @8byte) => {{
         #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
         {
               use std::arch::x86_64::{
-                __m128i, 
+                __m128i,
                 _mm_cmpeq_epi8,  // Compare bytes for equality
                 _mm_loadl_epi64,  // load 8 bytes into low half of XMM
                 _mm_movemask_epi8,// make bitmask of comparison results
@@ -305,9 +287,9 @@ macro_rules! strlen_asm {
     ($ptr:expr) => {{
         #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
         {
-            
+
               use std::arch::x86_64::{
-                __m128i, 
+                __m128i,
                 _mm_cmpeq_epi8,  // Compare bytes for equality
                 _mm_loadu_si128,  // load 16 bytes unaligned                   NOTE---THIS IS UNALIGNED LOAD.
                 _mm_movemask_epi8,// make bitmask of comparison results
@@ -324,7 +306,7 @@ macro_rules! strlen_asm {
                 let cmp =  _mm_cmpeq_epi8(chunk, zeros) ; //compare zero byte
                 let mask =  _mm_movemask_epi8(cmp)  as i32; //create a bitmask of results
                 // If mask is not zero, at least one null byte was found
-                
+
 
                 if mask != 0 {
                     break 'outer offset + mask.trailing_zeros() as usize; // At least one null byte found
@@ -341,13 +323,11 @@ macro_rules! strlen_asm {
     }};
 }
 
-
-
 ///not intended for public use, will be private when boilerplate is done
 /// a version of `construct_path!` that uses a (i believe fixed/const....i didnt study compuyter science)
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
 #[macro_export(local_inner_macros)]
-#[allow(clippy::too_long_first_doc_paragraph)]//i like monologues, ok?
+#[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
 macro_rules! construct_path_fixed {
     ($self:ident, $dent:ident) => {{
         let name_ptr = $crate::offset_ptr!($dent, d_name).cast::<u8>();
@@ -368,10 +348,9 @@ macro_rules! construct_path_fixed {
     }};
 }
 
-
 #[macro_export]
-#[allow(clippy::too_long_first_doc_paragraph)]//i like monologues, ok?
-/// The crown jewel of cursed macros. 
+#[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
+/// The crown jewel of cursed macros.
 /// A macro to calculate the length of a directory entry name in constant/fixed time. (IDK!I STUDIED TOPOLOGY/CALCULUS INSTEAD)
 /// We have to used a modified version of SSE2 strlen because it needs to be be a minimum of 16 bytes, so we have to use a different(hack) method to calculate the length.
 /// This macro can be used in in one way, when using readdir/getdents, to calculate the length of the d_name field in a `libc::dirent64` struct.

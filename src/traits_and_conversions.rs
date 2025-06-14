@@ -278,7 +278,7 @@ where
             //check for null
             return Err(std::io::Error::last_os_error().into());
         }
-    
+
         //we  use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
         //rely on sse2/glibc strlen to get length
         Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen_asm!(ptr)) })

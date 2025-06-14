@@ -45,7 +45,7 @@ macro_rules! cstr {
 
         // Create a  and make into a pointer
         let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
-     
+
         unsafe {
             std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
             c_path_buf.add($bytes.len()).write(0);
@@ -66,7 +66,7 @@ macro_rules! cstr_n {
 
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
-     
+
         unsafe {
             std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
             c_path_buf.add($bytes.len()).write(0);

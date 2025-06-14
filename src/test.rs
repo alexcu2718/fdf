@@ -2,7 +2,9 @@
 mod tests {
     #![allow(unused_imports)]
     use crate::traits_and_conversions::{BytePath, PathAsBytes};
-    use crate::{DirEntry, DirIter, FileType, SlimmerBytes, debug_print,utils::dirent_const_time_strlen};
+    use crate::{
+        DirEntry, DirIter, FileType, SlimmerBytes, debug_print, utils::dirent_const_time_strlen,
+    };
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
@@ -44,9 +46,6 @@ mod tests {
         assert_eq!(entry.parent(), test_dir.as_os_str().as_bytes());
         let _ = std::fs::remove_dir_all(test_dir);
     }
-
-    
-
 
     #[test]
     fn test_read_dir() {

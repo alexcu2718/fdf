@@ -93,7 +93,7 @@ pub use traits_and_conversions::{BytePath, PathAsBytes};
 mod utils;
 
 //pub(crate) use utils::strlen_asm;
-pub use utils::{unix_time_to_system_time,dirent_const_time_strlen};
+pub use utils::{dirent_const_time_strlen, unix_time_to_system_time};
 
 mod glob;
 pub use glob::glob_to_regex;

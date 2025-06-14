@@ -61,7 +61,7 @@ where
         VT: ValueType, // VT==ValueType is u8/i8
     {
         debug_assert!(
-            self.len() < crate::LOCAL_PATH_MAX,//delcared at compile time via env_var or default to 512
+            self.len() < crate::LOCAL_PATH_MAX, //delcared at compile time via env_var or default to 512
             "Input too large for buffer"
         );
 
@@ -98,9 +98,6 @@ where
         self.extension()
             .is_some_and(|e| e.eq_ignore_ascii_case(ext))
     }
-
-
-   
 
     /// Returns the size of the file in bytes.
     /// If the file size cannot be determined, returns 0.
@@ -348,8 +345,3 @@ where
         )
     }
 }
-
-
-
-
-

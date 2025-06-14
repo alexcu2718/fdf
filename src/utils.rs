@@ -139,7 +139,6 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 #[inline]
 /// Constant-time strlen for dirent's `d_name` field using bit tricks.
 ///
-/// Reference: <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>
 /// This function is designed to be used in a constant-time context, I just thought it was cool!
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
 /// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.

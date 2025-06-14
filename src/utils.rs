@@ -137,7 +137,7 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     if a < b { b } else { a }
 }
 #[inline]
-/// Constant-time strlen for dirent's `d_name` field using bit tricks.
+/// Const-fn strlen for dirent's `d_name` field using bit tricks.
 ///
 /// This function is designed to be used in a constant-time context, I just thought it was cool!
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.

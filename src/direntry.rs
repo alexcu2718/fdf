@@ -368,11 +368,11 @@ where
                 let (name_ptr, d_type, inode, reclen): (*const u8, u8, u64, usize) = //we have to tell our macro what types 
                     get_dirent_vals!(d);
 
-                //a macro that extracts the values from the dirent structure, this is a niche optimisation,
-                // it allows us to avoid doing pointer checks
+        
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
+                //a macro that extracts the values from the dirent structure, this is a niche optimisation,
                 skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
                 //

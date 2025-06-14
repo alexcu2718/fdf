@@ -16,75 +16,34 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
-pub trait BytePath<T> {
+pub trait BytePath<T> 
+where
+        T: Deref<Target = [u8]>{
     fn as_cstr_ptr<F, R, VT>(&self, f: F) -> R
-    where
-        F: FnOnce(*const VT) -> R,
-        VT: ValueType; // VT==ValueType is u8/i8
+    where F: FnOnce(*const VT) -> R,VT: ValueType; // VT==ValueType is u8/i8
 
-    fn extension(&self) -> Option<&[u8]>
-    where
-        T: Deref<Target = [u8]>;
-    fn matches_extension(&self, ext: &[u8]) -> bool
-    where
-        T: Deref<Target = [u8]>;
-    unsafe fn size(&self) -> crate::Result<u64>
-    where
-        T: Deref<Target = [u8]>;
-    fn get_stat(&self) -> crate::Result<stat>
-    where
-        T: Deref<Target = [u8]>;
-    fn modified_time(&self) -> crate::Result<SystemTime>
-    where
-        T: Deref<Target = [u8]>;
-    fn as_path(&self) -> &Path
-    where
-        T: Deref<Target = [u8]>;
-    fn as_os_str(&self) -> &OsStr
-    where
-        T: Deref<Target = [u8]>;
-    fn exists(&self) -> bool
-    where
-        T: Deref<Target = [u8]>;
-    fn is_readable(&self) -> bool
-    where
-        T: Deref<Target = [u8]>;
-    fn is_writable(&self) -> bool
-    where
-        T: Deref<Target = [u8]>;
-    fn metadata(&self) -> crate::Result<std::fs::Metadata>
-    where
-        T: Deref<Target = [u8]>;
-    fn components(&self) -> impl Iterator<Item = &[u8]>
-    where
-        T: Deref<Target = [u8]>;
-    fn to_std_file_type(&self) -> crate::Result<std::fs::FileType>
-    where
-        T: Deref<Target = [u8]>;
-    fn as_str(&self) -> crate::Result<&str>
-    where
-        T: Deref<Target = [u8]>;
-    unsafe fn as_str_unchecked(&self) -> &str
-    where
-        T: Deref<Target = [u8]>;
-    fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>
-    where
-        T: Deref<Target = [u8]>;
-    fn is_absolute(&self) -> bool
-    where
-        T: Deref<Target = [u8]>;
-    fn is_relative(&self) -> bool
-    where
-        T: Deref<Target = [u8]>;
-    fn to_path(&self) -> PathBuf
-    where
-        T: Deref<Target = [u8]>,
-    {
-        self.as_path().to_owned()
-    }
-    fn realpath(&self) -> crate::Result<&[u8]>
-    where
-        T: Deref<Target = [u8]>;
+    
+    fn extension(&self) -> Option<&[u8]>;
+    fn matches_extension(&self, ext: &[u8]) -> bool;
+    unsafe fn size(&self) -> crate::Result<u64>;
+    fn get_stat(&self) -> crate::Result<stat>;
+    fn modified_time(&self) -> crate::Result<SystemTime>;
+    fn as_path(&self) -> &Path;
+    fn as_os_str(&self) -> &OsStr;
+    fn exists(&self) -> bool;
+    fn is_readable(&self) -> bool;
+    fn is_writable(&self) -> bool;
+    fn metadata(&self) -> crate::Result<std::fs::Metadata>;
+    fn components(&self) -> impl Iterator<Item = &[u8]>;
+    fn to_std_file_type(&self) -> crate::Result<std::fs::FileType>;
+    fn as_str(&self) -> crate::Result<&str>;
+    unsafe fn as_str_unchecked(&self) -> &str;
+    fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>;
+    fn is_absolute(&self) -> bool;
+    fn is_relative(&self) -> bool;
+    fn to_path(&self) -> PathBuf;
+    fn realpath(&self) -> crate::Result<&[u8]>;
+    
 }
 
 impl<T> BytePath<T> for T
@@ -124,6 +83,11 @@ where
            return None;
         }
         self.rsplit(|&b| b==b'.').next()
+    }
+
+    fn to_path(&self) -> PathBuf {
+        // Convert the byte slice to a PathBuf
+        PathBuf::from(self.as_os_str())
     }
 
     /// Checks if the file matches the given extension.

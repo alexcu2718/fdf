@@ -357,6 +357,7 @@ macro_rules! construct_path_fixed {
 /// It returns the length of the name in bytes, excluding the null terminator.
 macro_rules! dirent_fixed_time_strlen {
     ($dirent:expr) => {{
+        const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
         let reclen = (*$dirent).d_reclen as usize; // we MUST cast this way, as it is not guaranteed to be aligned, so we can't use offset_ptr!() here
         // Calculate the number of u64 words in the record length
         let reclen_in_u64s = reclen / 8;
@@ -384,7 +385,6 @@ macro_rules! dirent_fixed_time_strlen {
         // 1. Skip dirent header (offset_of!(libc::dirent64, d_name))
         // 2. Add one to get to the correct index
         // 3. Subtract ignored bytes (after null terminator in last word)
-        const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
         reclen - DIRENT_HEADER_SIZE - remainder_len as usize
     }};
 }

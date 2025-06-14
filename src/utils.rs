@@ -43,7 +43,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 16 bytes
-///Deprecated in favour of a macro (s`trlen_asm!`)
+///Deprecated in favour of a macro (`strlen_asm!`)
 pub unsafe fn strlen_sse2<T>(ptr: *const T) -> usize
 where
     T: ValueType,
@@ -136,56 +136,17 @@ pub(crate) const fn const_min(a: usize, b: usize) -> usize {
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     if a < b { b } else { a }
 }
-
+#[inline]
 /// Constant-time strlen for dirent's `d_name` field using bit tricks.
 ///
 /// Reference: <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>
 /// This function is designed to be used in a constant-time context, I just thought it was cool!
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
 /// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
-/// # Safety
-/// This function is unsafe because it dereferences a raw pointer and assumes that the pointer is valid and points to a `libc::dirent64` structure.
-#[inline]
-#[allow(clippy::integer_division)] //INTEGER DIVISION IN CONST IS FINE ESPECIALLY.
-#[allow(clippy::integer_division_remainder_used)] //^
-pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name);
-    const MAX_NAME_BYTES: usize = crate::utils::const_min(crate::LOCAL_PATH_MAX, 255 + 1); // NAME_MAX + 1
-    const NUM_WORDS: usize = MAX_NAME_BYTES / 8;
-
-    // Cast `d_name` to a pointer to u64 chunks
-    let name_ptr = unsafe { dirent.cast::<u8>().add(DIRENT_HEADER_SIZE).cast::<u64>() };
-    let mut len = MAX_NAME_BYTES;
-    let mut i = 0;
-
-    while i < NUM_WORDS {
-        //need to use a while loop, cant iterate
-        let word = unsafe { *name_ptr.add(i) };
-
-        // Branchless null-byte detection using HASZERO trick
-        let has_zero =
-            ((word.wrapping_sub(0x0101_0101_0101_0101)) & !word & 0x8080_8080_8080_8080) != 0;
-
-        if has_zero {
-            let mask = (word.wrapping_sub(0x0101_0101_0101_0101)) & !word & 0x8080_8080_8080_8080;
-            let byte_index = mask.trailing_zeros() as usize / 8;
-            len = i * 8 + byte_index;
-            break;
-        }
-
-        i += 1;
-    }
-
-    len
-}
-
-#[inline]
-///Constant-time strlen for dirent's `d_name` field using bit tricks.
-/// This is something I was exploring on compiler explorer, it's based off one of my macros,
 /// but i modified to make it a const function. I need to benchmark this
 /// more comments can be seen in the macro version.
 #[allow(clippy::integer_division)] //INTEGER DIVISION IN CONST IS FINE ESPECIALLY.
-pub const fn dirent_const_time_strlen_optimal(dirent: *const libc::dirent64) -> usize {
+pub const fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     //calculate the header+1 beccause we need to get to the start of d_name
     //and then we need to calculate the length of the d_name field
     const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;

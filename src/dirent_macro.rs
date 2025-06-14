@@ -332,7 +332,8 @@ macro_rules! strlen_asm {
 macro_rules! construct_path_fixed {
     ($self:ident, $dent:ident) => {{
         let name_ptr = $crate::offset_ptr!($dent, d_name).cast::<u8>();
-        let name_len = $crate::dirent_fixed_time_strlen!($dent);
+       //let name_len = $crate::dirent_fixed_time_strlen!($dent);
+              let name_len = $crate::utils::dirent_const_time_strlen($dent);
         let total_len = $self.base_path_len as usize + name_len;
 
         std::ptr::copy_nonoverlapping(

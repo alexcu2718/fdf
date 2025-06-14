@@ -120,7 +120,10 @@ where
     /// If the file has no extension, returns `None`.
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        self.rsplit(|&b| b == b'.').next()
+        if !self.contains(&b'.') {
+           return None;
+        }
+        self.rsplit(|&b| b==b'.').next()
     }
 
     /// Checks if the file matches the given extension.

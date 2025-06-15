@@ -1,3 +1,5 @@
+
+
 #![allow(clippy::doc_markdown)]
 #[macro_export]
 ///A modified macro from the standard library to access fields of a `libc::dirent64` struct by offset.
@@ -9,7 +11,6 @@
 /// /// # Safety
 /// - The caller must ensure that the pointer is valid and points to a `libc::dirent64` struct.
 /// - The field name must be a valid field of the `libc::dirent64` struct.
-/// THIS 
 macro_rules! offset_ptr {
     ($entry_ptr:expr, $field:ident) => {{
         const OFFSET: isize = std::mem::offset_of!(libc::dirent64, $field) as isize;
@@ -22,7 +23,7 @@ macro_rules! offset_ptr {
             } else {
                 // Normal field access via offset
                 // SAFETY: Caller must ensure pointer is valid
-                $entry_ptr.byte_offset(OFFSET).cast::<_>()
+                $entry_ptr.byte_offset(OFFSET) as _
                 
             }
         } else {
@@ -47,6 +48,8 @@ macro_rules! debug_print {
 
 #[macro_export]
 /// A macro to create a C-style string pointer from a byte slice
+/// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
+/// This macro takes a byte slice and returns a pointer to a null-terminated C-style string.
 macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
@@ -93,7 +96,7 @@ macro_rules! cstr_n {
 /// - `name_ptr`: Pointer to the entry name
 ///
 /// And 1 optional arg:
-/// - `reclen`: If provided, also checks that reclen == 24 when testing directory entries
+/// - `reclen`: If provided, also checks that reclen == 24 when testing directory entries, this helps to reduce any checking pointers
 macro_rules! skip_dot_entries {
     // Version with reclen check
     ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
@@ -260,7 +263,7 @@ macro_rules! construct_path {
 /// - **Uses unaligned loads** (`_mm_loadu_si128`/`_mm256_loadu_si256`), so alignment is not required.
 ///
 /// # Performance
-/// - **Constant-time per 16/32-byte block(arch independent)** (no branching per byte).
+/// - **Constant-time per 16/32-byte block(arch dependent)** (no branching per byte under this amount).
 macro_rules! strlen_asm {
     ($ptr:expr) => {{
         #[cfg(all(
@@ -338,8 +341,7 @@ macro_rules! strlen_asm {
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
 macro_rules! construct_path_optimised {
     ($self:ident, $dent:ident) => {{
-        let name_ptr = $crate::offset_ptr!($dent, d_name).cast::<u8>();
-        //let name_len = $crate::dirent_fixed_time_strlen!($dent);
+        let name_ptr = $crate::offset_ptr!($dent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let name_len = $crate::dirent_const_time_strlen!($dent);
         let total_len = $self.base_path_len as usize + name_len;
 
@@ -422,7 +424,8 @@ macro_rules! get_dirent_vals {
 }
 
 /// Macro to create a const from an env var with compile-time parsing
-/// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "512");
+/// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "512");, where "512" is the default value if the env var is not set. Obviously
+/// I realise people could have massive filesystems, i should probably write a rebuild script on value change.TODO!
 #[macro_export]
 macro_rules! const_from_env {
     ($name:ident: $t:ty = $env:expr, $default:expr) => {

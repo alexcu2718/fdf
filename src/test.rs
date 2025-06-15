@@ -143,14 +143,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&new_dir);
         let _ = std::fs::create_dir_all(&new_dir);
         let file_path = new_dir.join("testfile.txt");
-
-        let throwaway = std::fs::remove_file(&file_path);
-        if throwaway.is_err() {
-            eprintln!("DAMN!")
-            //stupid noops
-        }
+        let _ = std::fs::remove_file(&file_path);
         let _ = std::fs::write(&file_path, "test");
-
         let entry = DirEntry::<SlimmerBytes>::new(file_path.as_os_str()).unwrap();
         assert_eq!(entry.file_name(), b"testfile.txt");
         let x = std::fs::remove_file(&file_path).is_ok(); //have to check the result to avoid no-op 

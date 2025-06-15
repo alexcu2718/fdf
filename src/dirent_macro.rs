@@ -358,33 +358,17 @@ macro_rules! construct_path_optimised {
 }
 
 #[macro_export]
-#[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
+#[allow(clippy::cast_lossless)] //shutup
 /// The crown jewel of cursed macros(this is const, see the function equivalent for proof).
-///
-/// A macro to calculate the length of a directory entry name in constant/fixed time. (IDK!I STUDIED TOPOLOGY/CALCULUS INSTEAD)
-/// We use bithacks to find the first null byte in the last u64 word of the `libc::dirent64` struct.
-/// This macro can be used in in one way, when using readdir/getdents, to calculate the length of the d_name field in a `libc::dirent64` struct.
-/// It returns the length of the name in bytes, excluding the null terminator.
-/// Reference https://github.com/lattera/glibc/blob/master/string/strlen.c#L1
-/// Reference https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte
-/// Reference https://github.com/Soveu/find/blob/master/src/dirent.rs  (combining all these tricks, i made this beautiful thing)
+//comments to be seen in function version form.
 macro_rules! dirent_const_time_strlen {
     ($dirent:expr) => {{
         const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-        let reclen = (*$dirent).d_reclen as usize; // we MUST cast this way, as it is not guaranteed to be aligned, so we can't use offset_ptr!() here
-        // Calculate the number of u64 words in the record length
-        // Ensure that the record length is a multiple of 8 so we can cast to u64
-        // Calculate last word(by indexing into the last 8 bytes of the dirent)
-          let last_word = *(($dirent as *const u8).add(reclen - 8) as *const u64);
-        // Special case: When processing the 3rd u64 word (index 2), we need to mask
-        // the non-name bytes (d_type and padding) to avoid false null detection.
-        // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
-        // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
-          #[allow(clippy::cast_lossless)] //shutup
-        // Branchless 3rd-word mask (0x00FF_FFFF if index==2 else 0)
-        let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);// (multiply by 0 or 1)
+        let reclen = (*$dirent).d_reclen as usize; // we MUST cast this way, ONLY REMINDER
+        let last_word = *(($dirent as *const u8).add(reclen - 8) as *const u64);
+        let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);
         let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)
-            & !(last_word | mask)
+        & !(last_word | mask)
             & 0x8080_8080_8080_8080;
 
         reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)

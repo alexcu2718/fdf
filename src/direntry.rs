@@ -27,8 +27,7 @@ use crate::{
     AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
     cstr_n, custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
     init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
-    skip_dot_entries, utils::close_asm,  utils::open_asm,
-    utils::unix_time_to_system_time,
+    skip_dot_entries, utils::close_asm, utils::open_asm, utils::unix_time_to_system_time,
 };
 
 #[derive(Clone)]
@@ -267,7 +266,7 @@ where
             file_type: FileType::from_mode(get_stat.st_mode),
             inode: get_stat.st_ino,
             depth: 0,
-            base_len: path_ref.get_baselen()
+            base_len: path_ref.get_baselen(),
         })
     }
 

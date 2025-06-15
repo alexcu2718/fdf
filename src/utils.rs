@@ -5,7 +5,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 
-
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 #[allow(clippy::missing_errors_doc)] //fixing errors later
 #[allow(clippy::cast_possible_truncation)]

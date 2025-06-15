@@ -62,7 +62,6 @@ use std::{
 
 mod dirent_macro;
 
-
 //crate imports
 mod iter;
 pub(crate) use iter::DirIter;
@@ -157,7 +156,6 @@ where
         // The lambda functions are used to filter directories and non-directories based on the search configuration.
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
             {
-              
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_path(rdir, rconfig.file_name)
                     && rconfig

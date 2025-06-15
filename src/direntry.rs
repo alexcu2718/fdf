@@ -35,7 +35,7 @@ use crate::{
 pub struct DirEntry<S>
 //S is a storage type, this is used to store the path of the entry, it can be a Box, Arc, Vec, etc.
 //ordered by size, so Box<[u8]> is 16 bytes, Arc<[u8]> is 24 bytes, Vec<u8> is 24 bytes, SlimerBox<[u8], u16> is 10 bytes
-//S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
+//S is a generic type that implements BytesStorage trait aka  vec/arc/box/SlimmerBytes(SlimmerBox<[u8], u16>).
 where
     S: BytesStorage,
 {
@@ -386,7 +386,6 @@ where
                 };
 
 
-                unsafe{debug_assert!(entry.file_name().len()==crate::strlen_asm!(name_ptr))} //easy debug statements
                 unsafe{debug_assert!(entry.file_name().len()==crate::dirent_const_time_strlen!(d))}
                 unsafe{debug_assert!(entry.file_name().len()==crate::dirent_const_time_strlen(d))}
 

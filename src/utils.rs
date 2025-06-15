@@ -1,11 +1,7 @@
 #![allow(dead_code)]
 use crate::buffer::ValueType;
 use crate::{DirEntryError, Result, cstr};
-
-#[cfg(target_arch = "x86_64")]
-use std::arch::asm;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 
@@ -39,8 +35,9 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
-/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, libc::strlen.
+/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`.
 #[inline]
+#[allow(clippy::unnecessary_safety_comment)] //ill fix this later.
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 16 bytes
 ///Deprecated in favour of a macro (`strlen_asm!`)
 // SAFETY: the caller must guarantee that `ptr` points to a valid null-terminated string of type `T` and does not start with a null byte.
@@ -62,6 +59,7 @@ where
 /// Opens a directory using an assembly implementation of open(to reduce libc overplay) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
+    use std::arch::asm;
     let filename: *const u8 =unsafe{cstr!(bytepath)};
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
@@ -103,6 +101,7 @@ pub unsafe fn close_asm(fd: i32) {
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(target_arch = "x86_64")]
 pub unsafe fn close_asm(fd: i32) {
+     use std::arch::asm;
     let _: isize;
     unsafe {
         asm!(
@@ -159,7 +158,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
         // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
         // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
           #[allow(clippy::cast_lossless)] //shutup
-        // Branchless 3rd-word mask (0x00FF_FFFF if index==2 else 0)
         let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);// (multiply by 0 or 1)
         //we're bit manipulating the last word (a byte/u64) to find the first null byte
         //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick

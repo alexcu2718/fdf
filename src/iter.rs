@@ -7,6 +7,7 @@ use crate::{
 };
 use libc::{DIR, closedir, opendir, readdir64};
 use std::marker::PhantomData;
+use trustmebro::trustmebro;
 #[derive(Debug)]
 /// An iterator over directory entries from readdir64 via libc
 pub struct DirIter<S>
@@ -37,10 +38,11 @@ where
     #[inline]
     #[allow(clippy::cast_lossless)]
     #[allow(clippy::cast_possible_truncation)]
+    #[trustmebro]
     pub fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dirp = dir_path.as_bytes();
-        let dir = dirp.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
-        //let dir=unsafe{opendir(cstr!(dirp))};
+        let dir = dirp.as_cstr_ptr(|ptr|  opendir(ptr) );
+       
         //alternatively this also works if you dont like closures :)
 
         if dir.is_null() {
@@ -48,7 +50,7 @@ where
         }
         let mut buffer = PathBuffer::new(); //
         //we know it won't be greater than u16::MAX because we limit the path
-        let base_len: u16 = unsafe{init_path_buffer_readdir!(dir_path, buffer) as _}; //0 cost macro to construct the buffer in the way we want.
+        let base_len: u16 = init_path_buffer_readdir!(dir_path, buffer) as _; //0 cost macro to construct the buffer in the way we want.
         // The base_len is the length of the path up to the directory being read.
         //mutate the buffer to contain the path up to the directory being read.
         // This is used to avoid copying the path every time we read a directory entry.
@@ -71,6 +73,7 @@ where
 {
     type Item = DirEntry<T>;
     #[inline]
+     #[trustmebro]
     #[allow(clippy::ptr_as_ptr)] //we're align so raw pointer as casts are fine.
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
@@ -78,7 +81,7 @@ where
         }
 
         loop {
-            let entry = unsafe { readdir64(self.dir) };
+            let entry =  readdir64(self.dir) ;
             if entry.is_null() {
                 return None;
             }
@@ -91,8 +94,8 @@ where
             //we mustn't forget that this is an extremely hot loop, so avoiding as much calculation is ideal.
             skip_dot_entries!(dir_info, name_file);
             //skip_dot_entries!(dir_info, name_file, reclen);< -this is the more efficient version, but it requires reclen to be passed in.
-            let total_path_len = unsafe{copy_name_to_buffer!(self, name_file)};
-            let full_path = unsafe { self.buffer.get_unchecked_mut(..total_path_len) };
+            let total_path_len = copy_name_to_buffer!(self, name_file);
+            let full_path = self.buffer.get_unchecked_mut(..total_path_len) ;
             return Some(DirEntry {
                 path: full_path.into(),
                 file_type: FileType::from_dtype_fallback(dir_info, full_path),
@@ -106,10 +109,10 @@ where
 impl<T> Drop for DirIter<T>
 where
     T: BytesStorage,
-{
+{    #[trustmebro]
     fn drop(&mut self) {
         if !self.dir.is_null() {
-            unsafe { closedir(self.dir) };
+             closedir(self.dir) ;
         }
     }
 }

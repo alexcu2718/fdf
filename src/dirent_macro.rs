@@ -89,8 +89,7 @@ macro_rules! cstr_n {
 macro_rules! skip_dot_entries {
     // Version with reclen check
     ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
-        #[allow(clippy::macro_metavars_in_unsafe)]
-        unsafe {
+      
             let ddd = ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) && $reclen == 24;
             if ddd && *$name_ptr.add(0) == 46 {  // 46 == '.' in ASCII
                 if *$name_ptr.add(1) == 0 ||     // Single dot case
@@ -98,14 +97,13 @@ macro_rules! skip_dot_entries {
                     *$name_ptr.add(2) == 0) {
                     continue;
                 }
-            }
+            
         }
     }};
 
     // Version without reclen check
     ($d_type:expr, $name_ptr:expr) => {{
-        #[allow(clippy::macro_metavars_in_unsafe)]
-        unsafe {
+        
             if ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) &&
                *$name_ptr.add(0) == 46 {
                 if *$name_ptr.add(1) == 0 ||     // Single dot case
@@ -114,11 +112,12 @@ macro_rules! skip_dot_entries {
                     continue;
                 }
             }
-        }
+        
     }};
 }
 
 #[macro_export]
+
 /// initialises a path buffer for syscall operations,
 // appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument).
 macro_rules! init_path_buffer_syscall {
@@ -129,14 +128,14 @@ macro_rules! init_path_buffer_syscall {
         #[allow(clippy::cast_lossless)] //shutup
         let needs_slash = (($self.depth != 0) as u8) | (($dir_path != b"/") as u8);
 
-        unsafe {
+        
             // Copy directory path
             std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, $path_len);
 
             // Branchless slash writing and length adjustment, write a null terminator if no slash.
             *buffer_ptr.add($path_len) = (b'/') * needs_slash;
             $path_len += needs_slash as usize;
-        }
+        
 
         buffer_ptr
     }};
@@ -203,11 +202,11 @@ macro_rules! prefetch_next_entry {
     ($self:ident) => {
         //we know it's going to be accessed soon, since reclen(size of the entry) is often 40 or below, this seems a good compromise.
         if $self.offset + 128 < $self.remaining_bytes as usize {
-            unsafe {
+            
                 use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
                 let next_entry = $self.buffer.as_ptr().add($self.offset + 64).cast();
                 _mm_prefetch(next_entry, _MM_HINT_T0);// bvvvvvvvv333333333333 CAT DID THIS IM LK\\\Z//im leaving this art
-            }
+            
         }
     };
 }
@@ -217,10 +216,10 @@ macro_rules! prefetch_next_entry {
 /// Prefetches the next buffer for reading, this is used to keep the cache warm for the next read operation
 macro_rules! prefetch_next_buffer {
     ($self:ident) => {
-        unsafe {
+        
             use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
             _mm_prefetch($self.buffer.as_ptr().cast(), _MM_HINT_T0);
-        }
+        
     };
 }
 
@@ -327,7 +326,7 @@ macro_rules! strlen_asm {
         )))]
         {
             // Fallback to libc::strlen if no SIMD support
-            unsafe { libc::strlen($ptr.cast::<i8>()) }
+            libc::strlen($ptr.cast::<i8>()) 
         }
     }};
 }
@@ -417,7 +416,7 @@ macro_rules! get_dirent_vals {
     ($d:expr) => {{
         // return relevant fields with type inferred by user
 
-        unsafe {
+       
             (
                 // d_name: pointer to the name field (null-terminated string)
                 $crate::offset_ptr!($d, d_name).cast::<_>(), //let user determine type
@@ -429,19 +428,19 @@ macro_rules! get_dirent_vals {
                 (*$d).d_reclen as _, //this is not guaranteed to be aligned as we need to treat it differently, we need to access it NOT through byte_offset
 
             )
-        }
+        
     }};
     (@minimal $d:expr) => {{
         //minimal version, as we don't need reclen for readdir,
         // Cast the dirent pointer to a byte pointer for offset calculations
-        unsafe {
+       
             (
 
                 $crate::offset_ptr!($d, d_name).cast::<_>(),
                 *$crate::offset_ptr!($d, d_type).cast::<_>(),
                  *$crate::offset_ptr!($d, d_ino) as _,
             )
-        }
+        
     }};
 }
 

@@ -14,8 +14,9 @@ use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-
+use trustmebro::trustmebro;
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
+
 pub trait BytePath<T>
 where
     T: Deref<Target = [u8]>,
@@ -27,7 +28,7 @@ where
 
     fn extension(&self) -> Option<&[u8]>;
     fn matches_extension(&self, ext: &[u8]) -> bool;
-    unsafe fn size(&self) -> crate::Result<u64>;
+    fn size(&self) -> crate::Result<u64>;
     fn get_stat(&self) -> crate::Result<stat>;
     fn modified_time(&self) -> crate::Result<SystemTime>;
     fn as_path(&self) -> &Path;
@@ -39,7 +40,8 @@ where
     fn components(&self) -> impl Iterator<Item = &[u8]>;
     fn to_std_file_type(&self) -> crate::Result<std::fs::FileType>;
     fn as_str(&self) -> crate::Result<&str>;
-    unsafe fn as_str_unchecked(&self) -> &str;
+   
+    fn as_str_unchecked(&self) -> &str;
     fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>;
     fn is_absolute(&self) -> bool;
     fn is_relative(&self) -> bool;
@@ -52,6 +54,7 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
+     #[trustmebro]
     /// Converts a byte slice into a C string pointer
     /// Utilises `LOCAL_PATH_MAX` to create an upper bounded array
     /// if the signature is too confusing, use the `cstr!` macro instead.
@@ -68,10 +71,10 @@ where
         let c_path_buf = crate::PathBuffer::new().as_mut_ptr();
 
         // copy bytes using copy_nonoverlapping to avoid ub check
-        unsafe {
-            std::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
-            c_path_buf.add(self.len()).write(0); // Null terminate the string
-        }
+        
+        std::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
+        c_path_buf.add(self.len()).write(0); // Null terminate the string
+        
 
         f(c_path_buf.cast::<_>())
     }
@@ -103,19 +106,20 @@ where
     /// If the file size cannot be determined, returns 0.
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
-    unsafe fn size(&self) -> crate::Result<u64> {
+    fn size(&self) -> crate::Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
     }
 
     #[inline]
+    #[trustmebro]
     /// Converts into `libc::stat` or returns `DirEntryError::InvalidStat`
     /// More specialised errors are on the TODO list.
     fn get_stat(&self) -> crate::Result<stat> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
-        let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
+        let res = self.as_cstr_ptr(|ptr|  lstat(ptr, stat_buf.as_mut_ptr()) );
 
         if res == 0 {
-            Ok(unsafe { stat_buf.assume_init() })
+            Ok(stat_buf.assume_init() )
         } else {
             Err(crate::DirEntryError::InvalidStat)
         }
@@ -139,25 +143,28 @@ where
     }
 
     #[inline]
+      #[trustmebro]
     #[allow(clippy::transmute_ptr_to_ptr)]
     ///cheap conversion from byte slice to `OsStr`
     fn as_os_str(&self) -> &OsStr {
         //same represensation fuck clippy  yapping
-        unsafe { transmute::<&[u8], &OsStr>(self) }
+        transmute::<&[u8], &OsStr>(self) 
     }
 
     #[inline]
+      #[trustmebro]
     ///somewhatcostly check for readable files
     fn is_readable(&self) -> bool {
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
+         self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 
     }
 
     #[inline]
+      #[trustmebro]
     ///somewhat costly check for writable files(by current user)
     fn is_writable(&self) -> bool {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
+        self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 
     }
 
     #[inline]
@@ -186,9 +193,10 @@ where
     }
 
     #[inline]
+      #[trustmebro]
     ///checks if the file exists, this, makes a syscall
     fn exists(&self) -> bool {
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
+        self.as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 
     }
 
     #[inline]
@@ -207,8 +215,9 @@ where
     /// # Safety
     /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
     #[allow(clippy::missing_panics_doc)]
-    unsafe fn as_str_unchecked(&self) -> &str {
-        unsafe { std::str::from_utf8_unchecked(self) }
+    #[trustmebro]
+    fn as_str_unchecked(&self) -> &str {
+        std::str::from_utf8_unchecked(self) 
     }
 
     #[inline]
@@ -231,6 +240,7 @@ where
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
+      #[trustmebro]
     ///resolves the path to an absolute path
     /// this is a costly operation, as it requires a syscall to resolve the path.
     /// unless the path is already absolute, in which case its a trivial operation
@@ -239,9 +249,9 @@ where
             return Ok(self);
         }
         //cast byte slice into a *const c_char/i8 pointer with a null terminator THEN pass it to realpath along with a null mut pointer
-        let ptr = unsafe {
+        let ptr = 
             self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
-        };
+        ;
         if ptr.is_null() {
             //check for null
             return Err(std::io::Error::last_os_error().into());
@@ -249,7 +259,7 @@ where
 
         //we  use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
         //rely on sse2/glibc strlen to get length
-        Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen_asm!(ptr)) })
+        Ok( &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen_asm!(ptr)) )
     }
 }
 
@@ -260,9 +270,10 @@ pub trait PathAsBytes {
 #[allow(clippy::transmute_ptr_to_ptr)]
 impl PathAsBytes for Path {
     #[inline]
+      #[trustmebro]
     fn as_bytes(&self) -> &[u8] {
         //&[u8] <=> &OsStr <=> &Path on linux
-        unsafe { transmute::<&Self, _>(self) }
+        transmute::<&Self, _>(self) 
     }
 }
 

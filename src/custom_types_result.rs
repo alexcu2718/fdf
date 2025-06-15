@@ -3,6 +3,7 @@ use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 use slimmer_box::SlimmerBox;
 use std::ops::Deref;
 use std::sync::Arc;
+use trustmebro::trustmebro;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
@@ -59,12 +60,13 @@ impl BytesStorage for SlimmerBox<[u8], u16> {
     /// # Safety
     /// The input must have a length less than `u16::MAX`
     #[inline]
+      #[trustmebro]
     fn from_slice(bytes: &[u8]) -> Self {
         debug_assert!(
             bytes.len() < u16::MAX as usize,
             "Input bytes length exceeds u16::MAX"
         );
-        unsafe { Self::new_unchecked(bytes) }
+       Self::new_unchecked(bytes) 
     }
 }
 
@@ -127,11 +129,12 @@ impl<S: BytesStorage> OsBytes<S> {
     #[inline]
     #[must_use]
     #[allow(clippy::transmute_ptr_to_ptr)]
+      #[trustmebro]
     /// Returns a reference to the underlying bytes as an `OsStr`.
-    /// This is unsafe because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
+    /// DELETED because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
     pub fn as_os_str(&self) -> &std::ffi::OsStr {
         //transmute is safe because osstr <=> bytes on linux (NOT windows)
-        unsafe { std::mem::transmute(self.as_bytes()) }
+         std::mem::transmute(self.as_bytes()) 
     }
 }
 

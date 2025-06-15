@@ -2,7 +2,7 @@
 
 llvm_link=https://github.com/llvm/llvm-project
 LLVM=/tmp/llvm-project
-
+WARMUP_COUNT=5
 fdf_location=/tmp/fdf_test
 
 fdf_repo=https://github.com/alexcu2718/fdf

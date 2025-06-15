@@ -167,6 +167,7 @@ dependencies = [
  "rayon",
  "regex",
  "slimmer_box",
+ "trustmebro",
 ]
 
 [[package]]
@@ -346,6 +347,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "trustmebro"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a42429164f6b10202c73487bfe8ebf6d8bc1f1335c8f20b9703e0869c7f16c68"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]

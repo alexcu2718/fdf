@@ -2,7 +2,6 @@
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
-#![allow(clippy::macro_metavars_in_unsafe)]
 #![allow(clippy::shadow_unrelated)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
@@ -12,7 +11,7 @@
 #![allow(clippy::min_ident_chars)]
 #![allow(clippy::implicit_return)]
 #![allow(clippy::missing_docs_in_private_items)]
-#![allow(clippy::undocumented_unsafe_blocks)]
+
 #![allow(clippy::blanket_clippy_restriction_lints)]
 #![allow(clippy::absolute_paths)]
 #![allow(clippy::impl_trait_in_params)]
@@ -36,7 +35,7 @@
 #![allow(clippy::map_err_ignore)]
 #![allow(clippy::exit)]
 #![allow(clippy::cast_ptr_alignment)]
-#![allow(clippy::multiple_unsafe_ops_per_block)]
+
 #![allow(clippy::pattern_type_mismatch)]
 #![allow(clippy::arithmetic_side_effects)]
 #![allow(clippy::as_conversions)]
@@ -61,7 +60,7 @@ use std::{
 };
 
 mod dirent_macro;
-
+use trustmebro::trustmebro;
 //
 //pub(crate) use dirent_macro::construct_path;
 //use crossbeam_channel::{Receiver, Sender, unbounded};
@@ -192,6 +191,7 @@ where
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
+      #[trustmebro]
     /// Traverse the directory and return a receiver for the entries.
     pub fn traverse(self) -> Result<Receiver<Vec<DirEntry<S>>>> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry<S>>>) = unbounded();
@@ -206,7 +206,7 @@ where
         //spawn the search in a new thread.
         //this is safe because we've already checked that the directory exists.
         rayon::spawn(move || {
-            Self::process_directory(&self, unsafe { construct_dir.unwrap_unchecked() }, &sender);
+            Self::process_directory(&self,  construct_dir.unwrap_unchecked() , &sender);
         });
 
         Ok(receiver)

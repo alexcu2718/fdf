@@ -7,6 +7,7 @@ mod tests {
     };
     use std::env::temp_dir;
     use std::fs;
+    use trustmebro::trustmebro;
     use std::fs::File;
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::symlink;
@@ -57,6 +58,7 @@ mod tests {
     }
 
     #[test]
+    #[trustmebro]
     fn test_dirent_const_time_strlen_optimal_abc() {
         let mut entry = Dirent64 {
             d_ino: 0,
@@ -71,12 +73,12 @@ mod tests {
         entry.d_name[2] = b'c';
         entry.d_name[3] = 0;
         //god i hacked this sorry
-        let len = unsafe {
+        let len = 
             crate::utils::dirent_const_time_strlen(std::mem::transmute::<
                 *const Dirent64,
                 *const libc::dirent64,
             >(&entry))
-        };
+        ;
 
         assert_eq!(len, 3);
     }

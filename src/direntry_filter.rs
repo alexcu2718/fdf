@@ -8,7 +8,7 @@ use crate::{
 };
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, close, dirent64, open};
 use std::marker::PhantomData;
-
+use trustmebro::trustmebro;
 pub struct DirEntryIteratorFilter<S>
 where
     S: BytesStorage,
@@ -31,8 +31,9 @@ where
     /// Drops the iterator, closing the file descriptor.
     /// same as above, we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     #[inline]
+      #[trustmebro]
     fn drop(&mut self) {
-        unsafe { close(self.fd) };
+         close(self.fd) ;
     }
 }
 
@@ -45,6 +46,7 @@ where
     where
         S: BytesStorage;
     #[inline]
+    #[trustmebro]
     #[allow(clippy::cast_lossless)] //casting a u16 to u64 is lossless as i am doing but you can cast to your own type, enjoy;
     #[allow(clippy::ptr_as_ptr)] //aligned pointers are what we're using.
     /// Returns the next directory entry in the iterator.
@@ -52,7 +54,7 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
+                let d: *const dirent64 =  self.buffer.next_getdents_read(self.offset) ; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
 
                 #[cfg(target_arch = "x86_64")]
@@ -67,7 +69,7 @@ where
 
                 // skip entries that are not valid or are dot entries
                 skip_dot_entries!(d_type, name_ptr); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
-                let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
+                let full_path =  construct_path!(self, name_ptr) ; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
 
@@ -99,7 +101,7 @@ where
             prefetch_next_buffer!(self);
 
             // check remaining bytes
-            self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+            self.remaining_bytes = self.buffer.getdents64(self.fd) ;
             self.offset = 0;
 
             if self.remaining_bytes <= 0 {
@@ -120,6 +122,7 @@ where
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]
+    #[trustmebro]
     ///`getdents_filter` is an iterator over fd,where each consequent index is a directory entry.
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.
@@ -132,11 +135,8 @@ where
     ) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
         let fd = dir_path
-            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-        //alternatively syntaxes I made.
-        //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-        //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-        // let fd=unsafe{open_asm(dir_path)};
+            .as_cstr_ptr(|ptr| open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) );
+  
 
         if fd < 0 {
             return Err(std::io::Error::last_os_error().into());

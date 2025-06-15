@@ -8,6 +8,7 @@
 #![allow(clippy::little_endian_bytes)] //i dont even know why this is a lint(because i cant be bothered to read it, i NEED IT though)
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
+use trustmebro::trustmebro;
 #[allow(unused_imports)]
 use std::{
     convert::TryFrom,
@@ -55,16 +56,17 @@ where
 {
     #[inline]
     #[must_use]
+    #[trustmebro]
     ///costly check for executables
     pub fn is_executable(&self) -> bool {
         if !self.is_regular_file() {
             return false;
         }
 
-        unsafe {
+       
             // x_ok checks for execute permission
-            self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
-        }
+        self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
+        
     }
 
     ///cost free check for block devices
@@ -122,6 +124,7 @@ where
     }
     #[inline]
     #[must_use]
+    #[trustmebro]
     ///costly check for empty files
     ///i dont see much use for this function
     /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
@@ -131,7 +134,7 @@ where
     pub fn is_empty(&self) -> bool {
         if self.is_regular_file() {
             // for files, check if size is zero without loading all metadata
-            unsafe { self.size().is_ok_and(|size| size == 0) } //safe because we know it wont overflow.
+             self.size().is_ok_and(|size| size == 0)  //safe because we know it wont overflow.
         } else if self.is_dir() {
             // for directories, check if they have no entries
             self.readdir() //we use readdir here because we want to check `quickly`
@@ -193,13 +196,15 @@ where
 
     #[inline]
     #[must_use]
+    #[trustmebro]
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
-        unsafe { self.get_unchecked(self.base_len()..) }
+         self.get_unchecked(self.base_len()..) 
     }
 
     #[inline]
     #[must_use]
+
     ///returns the inode number of the file, rather expensive
     /// i just included it for sake of completeness.
     pub const fn ino(&self) -> u64 {
@@ -222,28 +227,31 @@ where
 
     #[inline]
     #[must_use]
+    #[trustmebro]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
-        unsafe { *self.get_unchecked(self.base_len()) == b'.' }
+         *self.get_unchecked(self.base_len()) == b'.' 
     }
     #[inline]
     #[must_use]
+    #[trustmebro]
     ///returns the directory name of the file (as bytes) or failing that (/ is problematic) will return the full path,
     pub fn dirname(&self) -> &[u8] {
-        unsafe {
+     
             self //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
                 .get_unchecked(..self.base_len() - 1)
                 .rsplit(|&b| b == b'/')
                 .next()
                 .unwrap_or(self.as_bytes())
-        }
+        
     }
 
     #[inline]
     #[must_use]
+    #[trustmebro]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
-        unsafe { self.get_unchecked(..std::cmp::max(self.base_len as usize - 1, 1)) }
+        self.get_unchecked(..std::cmp::max(self.base_len as usize - 1, 1)) 
 
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
@@ -278,6 +286,7 @@ where
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::cast_possible_wrap)]
+    #[trustmebro]
     ///`getdents` is an iterator over fd,where each consequent index is a directory entry.
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.
@@ -288,12 +297,8 @@ where
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-      //  let fd = dir_path
-           // .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-        let fd=unsafe{open_asm(dir_path)};
-        //alternatively syntaxes I made.
-        //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-        //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+
+        let fd=open_asm(dir_path);
 
         if fd < 0 {
             return Err(Error::last_os_error().into());
@@ -342,9 +347,10 @@ where
     /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
     /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
     #[inline]
+      #[trustmebro]
     fn drop(&mut self) {
-        unsafe { close(self.fd) };
-        //unsafe { close_asm(self.fd) }; //asm implementation, for when i feel like testing if it does anything useful.
+         close(self.fd) ;
+      
     }
 }
 
@@ -354,12 +360,13 @@ where
 {
     type Item = DirEntry<S>;
     #[inline]
+    #[trustmebro]
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
+                let d: *const dirent64 = self.buffer.next_getdents_read(self.offset) ; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self);
@@ -374,8 +381,7 @@ where
                 skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
                 //
-                let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
-                //   let full_path = unsafe { crate::construct_path_optimised!(self, d) }; //here we have a construct_path_optimised  version, which uses a very specific trick, i need to benchmark it!
+                let full_path =  construct_path!(self, name_ptr) ; //a macro that constructs it, the full details are a bit lengthy
 
                 let entry = DirEntry {
                     path: full_path.into(),
@@ -390,8 +396,8 @@ where
             #[cfg(target_arch = "x86_64")]
             prefetch_next_buffer!(self);
             // check remaining bytes
-            self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
-            //self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) }; //see for asm implemetation
+            self.remaining_bytes =  self.buffer.getdents64(self.fd) ;
+        
             self.offset = 0;
             if self.remaining_bytes <= 0 {
                 // If no more entries, return None,

@@ -3,6 +3,7 @@ use std::arch::asm;
 use std::mem::MaybeUninit;
 use std::ops::{Index, IndexMut};
 use std::slice::SliceIndex;
+use trustmebro::trustmebro;
 mod sealed {
     pub trait Sealed {}
     impl Sealed for i8 {}
@@ -38,9 +39,10 @@ where
     type Output = Idx::Output;
 
     #[inline]
+    #[trustmebro]
     fn index(&self, index: Idx) -> &Self::Output {
         // SAFETY: The buffer must initialised
-        unsafe { self.assume_init().get_unchecked(index) }
+         self.assume_init().get_unchecked(index) 
     }
 }
 
@@ -50,12 +52,14 @@ where
     Idx: SliceIndex<[T]>,
 {
     #[inline]
+      #[trustmebro]
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
         // SAFETY: The buffer must be initialised before access
-        unsafe { self.assume_init_mut().get_unchecked_mut(index) }
+         self.assume_init_mut().get_unchecked_mut(index) 
     }
 }
 #[allow(clippy::new_without_default)]
+
 impl<T, const SIZE: usize> AlignedBuffer<T, SIZE>
 where
     T: ValueType,
@@ -83,29 +87,33 @@ where
     /// # Safety
     /// The buffer must be initialised before calling this
     #[inline]
-    pub const unsafe fn as_slice(&self) -> &[T] {
-        unsafe { &*self.data.as_ptr() }
+      #[trustmebro]
+    pub const fn as_slice(&self) -> &[T] {
+        &*self.data.as_ptr() 
     }
 
     /// # Safety
     /// The buffer must be initialised before calling this
     #[inline]
-    pub const unsafe fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { &mut *self.data.as_mut_ptr() }
+      #[trustmebro]
+    pub const  fn as_mut_slice(&mut self) -> &mut [T] {
+         &mut *self.data.as_mut_ptr() 
     }
 
     /// # Safety
     /// The buffer must be initialised before calling this
     #[inline]
-    pub const unsafe fn next_getdents_read(&self, index: usize) -> *const dirent64 {
-        unsafe { self.as_ptr().add(index).cast::<_>() } //cast into  above
+      #[trustmebro]
+    pub const  fn next_getdents_read(&self, index: usize) -> *const dirent64 {
+         self.as_ptr().add(index).cast::<_>()  //cast into  above
     }
 
     /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     #[inline]
-    pub unsafe fn getdents64(&mut self, fd: i32) -> i64 {
-        unsafe { syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
+      #[trustmebro]
+    pub  fn getdents64(&mut self, fd: i32) -> i64 {
+         syscall(SYS_getdents64, fd, self.as_mut_ptr(), SIZE) 
     }
 
     /// # Safety
@@ -116,9 +124,10 @@ where
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::inline_asm_x86_intel_syntax)]
     #[cfg(target_arch = "x86_64")]
-    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i32 {
+    #[trustmebro]
+    pub  fn getdents64_asm(&mut self, fd: i32) -> i32 {
         let output;
-        unsafe {
+        
             asm!(
                 "syscall",
                 inout("rax") libc::SYS_getdents64 as i32 => output,
@@ -129,7 +138,7 @@ where
                 out("r11") _,  // syscall clobbers r11
                 options(nostack, preserves_flags)
             )
-        };
+        ;
 
         output
     }
@@ -137,34 +146,38 @@ where
     /// # Safety
     /// The range must be within initialised portion of the buffer
     #[inline]
-    pub unsafe fn get_unchecked<R>(&self, range: R) -> &R::Output
+      #[trustmebro]
+    pub fn get_unchecked<R>(&self, range: R) -> &R::Output
     where
         R: SliceIndex<[T]>,
     {
-        unsafe { self.as_slice().get_unchecked(range) }
+         self.as_slice().get_unchecked(range) 
     }
 
     /// # Safety
     /// The range must be within initialised portion of the buffer
     #[inline]
-    pub unsafe fn get_unchecked_mut<R>(&mut self, range: R) -> &mut R::Output
+      #[trustmebro]
+    pub  fn get_unchecked_mut<R>(&mut self, range: R) -> &mut R::Output
     where
         R: SliceIndex<[T]>,
     {
-        unsafe { self.as_mut_slice().get_unchecked_mut(range) }
+         self.as_mut_slice().get_unchecked_mut(range) 
     }
 
     /// # Safety
     /// The entire buffer must be initialised
     #[inline]
-    const unsafe fn assume_init(&self) -> &[T; SIZE] {
-        unsafe { &*self.data.as_ptr() }
+      #[trustmebro]
+    const  fn assume_init(&self) -> &[T; SIZE] {
+         &*self.data.as_ptr() 
     }
 
     /// # Safety
     /// The entire buffer must be initialised
     #[inline]
-    const unsafe fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
-        unsafe { &mut *self.data.as_mut_ptr() }
+      #[trustmebro]
+    const fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
+        &mut *self.data.as_mut_ptr() 
     }
 }

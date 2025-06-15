@@ -4,20 +4,6 @@
 #![allow(clippy::absolute_paths)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
-//#![allow(clippy::print_stdin)]
-#![allow(clippy::single_call_fn)]
-#![allow(clippy::let_underscore_must_use)]
-#![allow(clippy::let_underscore_untyped)]
-#![allow(clippy::macro_metavars_in_unsafe)]
-#![allow(clippy::shadow_unrelated)]
-#![allow(clippy::print_stderr)]
-#![allow(clippy::implicit_return)]
-#![allow(clippy::as_underscore)]
-#![allow(clippy::print_stderr)]
-#![allow(clippy::min_ident_chars)]
-#![allow(clippy::implicit_return)]
-#![allow(clippy::missing_docs_in_private_items)]
-#![allow(clippy::undocumented_unsafe_blocks)]
 #![allow(clippy::blanket_clippy_restriction_lints)]
 #![allow(clippy::absolute_paths)]
 #![allow(clippy::impl_trait_in_params)]
@@ -41,7 +27,7 @@
 #![allow(clippy::map_err_ignore)]
 #![allow(clippy::exit)]
 #![allow(clippy::cast_ptr_alignment)]
-#![allow(clippy::multiple_unsafe_ops_per_block)]
+
 #![allow(clippy::pattern_type_mismatch)]
 #![allow(clippy::arithmetic_side_effects)]
 #![allow(clippy::as_conversions)]
@@ -720,67 +706,3 @@ pub fn glob_to_regex(pattern: &str) -> Result<String, Error> {
     Ok(result.join(""))
 }
 
-//the below commented out code is some interesting attempt to use a rust function from C, so we can use globs->regex  in C code. HAHAHAHAHAHAHA
-/*
-////////////////EXTRA   for FFI
-
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
-use std::ptr;
-
-#[repr(C)]
-pub struct FFIError {
-    code: i32,
-    message: *mut c_char,
-}
-
-/// FFI-safe version of `glob_to_regex` in C via stdlib yay
-//#[no_mangle]
-#[unsafe(no_mangle)]
-#[allow(clippy::unwrap_used)]
-pub unsafe extern "C" fn glob_to_regex_ffi(
-    pattern: *const c_char,
-    out_regex: *mut *mut c_char,
-    out_error: *mut FFIError,
-) -> i32 {
-    // null check
-    if pattern.is_null() || out_regex.is_null() || out_error.is_null() {
-        return 1;
-    }
-
-    // convert C string to  &str
-    let c_str = unsafe { CStr::from_ptr(pattern) };
-    let pattern_str = match c_str.to_str() {
-        Ok(s) => s,
-        Err(e) => {
-            let msg = CString::new(format!("Invalid UTF-8 in input: {e}")).unwrap();
-            unsafe {
-                (*out_error).code = 2;
-                (*out_error).message = msg.into_raw();
-            }
-            return 2;
-        }
-    };
-
-    // call rust logic
-    match glob_to_regex(pattern_str) {
-        Ok(regex) => {
-            let c_string = CString::new(regex).unwrap();
-            unsafe {
-                *out_regex = c_string.into_raw();
-                (*out_error).code = 0;
-                (*out_error).message = ptr::null_mut();
-            }
-            0 // success
-        }
-        Err(e) => {
-            let msg = CString::new(format!("{e}")).unwrap();
-            unsafe {
-                (*out_error).code = 3;
-                (*out_error).message = msg.into_raw();
-            }
-            3 // error
-        }
-    }
-}
-*/

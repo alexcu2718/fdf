@@ -131,7 +131,6 @@ where
             for small_path in path {
                 writer.write_all(extension_colour(&small_path))?;
                 writer.write_all(small_path.as_bytes())?;
-
                 // add a trailing slash+newline for directories
                 if small_path.is_dir() {
                     writer.write_all(NEWLINE_CRLF_RESET)?;

@@ -9,8 +9,66 @@ and parallelism—while challenging myself to match or exceed the speed of estab
 (*For reference fd: https://github.com/sharkdp/fd (it has 19000* more stars than this repo!))
 
 There's a lot of extremely niche optimisations hidden within this crate, also things I have never seen elsewhere!
-I'm quite proud of my cstr! macro, it takes a &[u8] and returns a *const i8 (c_char) so it's perfect for FFI.
-There's a lot of other things but sometimes simplicity is it's own beauty!
+
+My Crown jewel however is my constant(conditionally) time calculation for strlen with bo branches/simd required, all via bittricks+pointer manipulation :)
+
+The caveat is you have to have contextual information froma dirent64, so it only works for file system operations, a cool trick nonetheless!
+
+If you run cargo bench, it is constant(nearly) and MUCH faster than glibc strlen!
+
+## SHORTTSTRINGS(~8)
+
+strlen_comparison/dirent_const_time_single/case_1
+                        time:   [1.0157 ns 1.0208 ns 1.0260 ns]
+                        thrpt:  [8.7716 Gelem/s 8.8162 Gelem/s 8.8611 Gelem/s]
+                 change:
+                        time:   [−24.104% −23.281% −22.455%] (p = 0.00 < 0.05)
+                        thrpt:  [+28.957% +30.346% +31.759%]
+                        Performance has improved.
+Found 12 outliers among 500 measurements (2.40%)
+  10 (2.00%) high mild
+  2 (0.40%) high severe
+strlen_comparison/libc_strlen_single/case_1
+                        time:   [2.2868 ns 2.3168 ns 2.3488 ns]
+                        thrpt:  [3.8318 Gelem/s 3.8846 Gelem/s 3.9356 Gelem/s]
+                 change:
+                        time:   [+2.6941% +3.4345% +4.2209%] (p = 0.00 < 0.05)
+                        thrpt:  [−4.0499% −3.3205% −2.6234%]
+                        Performance has regressed.
+
+## LONGESTSTRINGS(240~)
+
+strlen_comparison/dirent_const_time_single/case_8
+                        time:   [1.0524 ns 1.0571 ns 1.0618 ns]
+                        thrpt:  [8.4765 Gelem/s 8.5142 Gelem/s 8.5523 Gelem/s]
+                 change:
+                        time:   [−47.073% −46.039% −45.017%] (p = 0.00 < 0.05)
+                        thrpt:  [+81.875% +85.319% +88.938%]
+                        Performance has improved.
+Found 2 outliers among 500 measurements (0.40%)
+  1 (0.20%) high mild
+  1 (0.20%) high severe
+strlen_comparison/libc_strlen_single/case_8
+                        time:   [4.1926 ns 4.2135 ns 4.2376 ns]
+                        thrpt:  [2.1238 Gelem/s 2.1360 Gelem/s 2.1466 Gelem/s]
+                 change:
+                        time:   [−33.151% −32.598% −32.052%] (p = 0.00 < 0.05)
+                        thrpt:  [+47.170% +48.363% +49.592%]
+
+```Rust
+//The code is explained better in comments, it's 
+pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
+    const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+    let reclen = unsafe { (*dirent).d_reclen as usize }; 
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
+    let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64); 
+    let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)// 
+        & !(last_word | mask) 
+        & 0x8080_8080_8080_8080; 
+  
+    reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+}
+```
 
 instant build guide script for testing/the impatient:
 (If you're on EXT4/BTRFS with a somewhat modern kernel, it'll work)

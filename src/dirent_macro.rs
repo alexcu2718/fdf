@@ -2,7 +2,7 @@
 
 #![allow(clippy::doc_markdown)]
 #[macro_export]
-///A modified macro from the standard library to access fields of a `libc::dirent64` struct by offset.
+///A modified helper macro from the standard library to safely access(as per my opinion i guess...) fields of a `libc::dirent64` struct by offset.
 /// It has been modified to handle the `d_reclen` field differently due to its alignment issues, handling the issue subtly for the user.
 /// This macro is used to access fields of a `libc::dirent64` struct by offset, allowing for more flexible and efficient access.
 /// It takes a pointer to a `libc::dirent64` struct and a field name, and returns a pointer to the field.
@@ -12,26 +12,24 @@
 /// - The caller must ensure that the pointer is valid and points to a `libc::dirent64` struct.
 /// - The field name must be a valid field of the `libc::dirent64` struct.
 macro_rules! offset_ptr {
+    // Special case for d_reclen
+    ($entry_ptr:expr, d_reclen) => {{
+        // SAFETY: Caller must ensure pointer is valid
+        (*$entry_ptr).d_reclen //access field directly as it is not aligned like the others
+    }};
+    
+    // General case for all other fields
     ($entry_ptr:expr, $field:ident) => {{
         const OFFSET: isize = std::mem::offset_of!(libc::dirent64, $field) as isize;
         
         if true {
-            // Special handling for d_reclen, this is because it's not aligned in the same way as other fields
-            if stringify!($field) == "d_reclen" {
-                // SAFETY: Caller must ensure pointer is valid
-                (*$entry_ptr).d_reclen as  _ // Cast to callers whim
-            } else {
-                // Normal field access via offset
-                // SAFETY: Caller must ensure pointer is valid
-                $entry_ptr.byte_offset(OFFSET) as _
-                
-            }
+            // Normal field access via offset
+            // SAFETY: Caller must ensure pointer is valid
+            $entry_ptr.byte_offset(OFFSET) as _
         } else {
             // Type inference branch (never executed)
             #[allow(deref_nullptr, unused_unsafe)]
-           
-            unsafe{    std::ptr::addr_of!((*std::ptr::null::<libc::dirent64>()).$field)}
-            
+            unsafe { std::ptr::addr_of!((*std::ptr::null::<libc::dirent64>()).$field) }
         }
     }};
 }
@@ -404,7 +402,7 @@ macro_rules! get_dirent_vals {
                  // d_ino: inode number (represents file unique id)
                 *$crate::offset_ptr!($d, d_ino) as _,
                  // d_reclen: record length
-                (*$d).d_reclen as _, //this is not guaranteed to be aligned as we need to treat it differently, we need to access it NOT through byte_offset
+                $crate::offset_ptr!($d,d_reclen) as _//this is not guaranteed to be aligned, my macro fixes this!
 
             )
         }

@@ -1,15 +1,13 @@
-
-
-use crate::direntry::{DirEntry};
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
+use crate::direntry::DirEntry;
 use crate::{
-    BytesStorage, PathBuffer, SyscallBuffer, get_dirent_vals,
-    skip_dot_entries, construct_path,prefetch_next_buffer, prefetch_next_entry,init_path_buffer_syscall,
-    FileType,Result,BytePath,
-    
+    BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer, construct_path,
+    get_dirent_vals, init_path_buffer_syscall, prefetch_next_buffer, prefetch_next_entry,
+    skip_dot_entries,
 };
-use libc::{close, dirent64,open, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC};
+use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, close, dirent64, open};
 use std::marker::PhantomData;
-
 
 pub struct DirEntryIteratorFilter<S>
 where
@@ -111,8 +109,6 @@ where
         }
     }
 }
-
-
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// // Iterator for directory entries using getdents syscall with a filter function

@@ -24,11 +24,11 @@ use std::{
 
 #[allow(unused_imports)]
 use crate::{
-    AsU8 as _, BytePath, DirIter, PathBuffer, Result, SyscallBuffer, construct_path, cstr, cstr_n,
-     filetype::FileType, get_dirent_vals,
+    AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
+    cstr_n, custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
     init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
     skip_dot_entries, utils::close_asm, utils::get_baselen, utils::open_asm,
-    utils::unix_time_to_system_time,OsBytes, custom_types_result::BytesStorage
+    utils::unix_time_to_system_time,
 };
 
 #[derive(Clone)]
@@ -374,8 +374,8 @@ where
                 skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
                 //
-             let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
-                 //   let full_path = unsafe { crate::construct_path_optimised!(self, d) }; //here we have a construct_path_optimised  version, which uses a very specific trick, i need to benchmark it!
+                let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
+                //   let full_path = unsafe { crate::construct_path_optimised!(self, d) }; //here we have a construct_path_optimised  version, which uses a very specific trick, i need to benchmark it!
 
                 let entry = DirEntry {
                     path: full_path.into(),
@@ -400,4 +400,3 @@ where
         }
     }
 }
-

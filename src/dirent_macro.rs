@@ -323,14 +323,10 @@ macro_rules! construct_path_optimised {
     }};
 }
 
-
-
-
-
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
 /// The crown jewel of cursed macros(this is const, see the function equivalent for proof).
-/// 
+///
 /// A macro to calculate the length of a directory entry name in constant/fixed time. (IDK!I STUDIED TOPOLOGY/CALCULUS INSTEAD)
 /// We use bithacks to find the first null byte in the last u64 word of the `libc::dirent64` struct.
 /// This macro can be used in in one way, when using readdir/getdents, to calculate the length of the d_name field in a `libc::dirent64` struct.
@@ -356,11 +352,10 @@ macro_rules! dirent_const_time_strlen {
         let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)
             & !(last_word | mask)
             & 0x8080_8080_8080_8080;
-        
+
         reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
         }};
 }
-
 
 #[macro_export]
 /// A macro to extract values from a `libc::dirent64` struct.

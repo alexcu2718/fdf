@@ -71,9 +71,13 @@ mod tests {
         entry.d_name[2] = b'c';
         entry.d_name[3] = 0;
         //god i hacked this sorry
-        let len = crate::utils::dirent_const_time_strlen(unsafe {
-            std::mem::transmute::<*const Dirent64, *const libc::dirent64>(&entry)
-        });
+        let len = unsafe {
+            crate::utils::dirent_const_time_strlen(std::mem::transmute::<
+                *const Dirent64,
+                *const libc::dirent64,
+            >(&entry))
+        };
+
         assert_eq!(len, 3);
     }
 

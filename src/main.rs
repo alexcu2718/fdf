@@ -98,7 +98,7 @@ pub struct Args {
     #[arg(
         short = 'E',
         long = "extension",
-        help = format!("filters based on extension, options are {CHARS:?} \n"),
+        help = format!("filters based on extension, eg -E .txt or -E txt"),
     )]
     extension: Option<String>,
 
@@ -170,7 +170,7 @@ pub struct Args {
         short = 't',
         long = "type",
         required = false,
-        help = "Select type of files (can use multiple times)",
+        help = format!("Select type of files (can use multiple times), available options are {CHARS:?}"),
         value_delimiter = ',',
         num_args = 1..,
     )]

@@ -208,7 +208,15 @@ pub struct Args {
 }
 
 fn main() -> Result<(), DirEntryError> {
+    
     let args = Args::parse();
+
+
+
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(args.thread_num)
+        .build_global()
+        .map_err(DirEntryError::RayonError)?;
     let path = resolve_directory(args.current_directory, args.directory, args.absolute_path);
 
     if let Some(generator) = args.generate {
@@ -222,11 +230,6 @@ fn main() -> Result<(), DirEntryError> {
         );
         return Ok(());
     }
-
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(args.thread_num)
-        .build_global()
-        .map_err(DirEntryError::RayonError)?;
 
     let start_pattern = args.pattern.as_ref().map_or_else(
         || {

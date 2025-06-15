@@ -248,43 +248,15 @@ macro_rules! construct_path {
 #[macro_export]
 #[allow(clippy::ptr_as_ptr)]
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
-/// A macro to calculate the length of a null-terminated string in constant time using SSE2 intrinsics.
+/// A macro to calculate the length of a null-terminated string in constant time using SSE2 intrinsics. (might do avx2 later)
 /// This macro is for all to use,
+/// IMPORTANT NOTE: THIS CANNOT DETECT IF THE NULL TERMINATOR STARTS AT 0, Please use it with care. defaulting to libc::strlen if issues/etc.
+/// Mostly designed to avoid relying on  glibc's `strlen` function, which has more branching/complexity than this
 /// Accepts a pointer to a null-terminated string and returns its length in bytes.
-/// Optionally accepts a flag `@8byte` to use a specialized 8-byte version(which is faster on x86_64 with SSE2).
 /// This macro is designed to be used in a way that it will use SIMD instructions to check 16 bytes at a time
 /// if you're on x86_64 with SSE2 enabled, it will use SIMD instructions to check 16 bytes at a time
 /// if you're not, you'll rely on glibc's strlen(which honestly speaking might be better than mine, I'm going to do a benchmark suite soon, I just wanted to learn!)
 macro_rules! strlen_asm {
-    // 8-byte version with @8byte flag
-
-    ($ptr:expr, @8byte) => {{
-        #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
-        {
-              use std::arch::x86_64::{
-                __m128i,
-                _mm_cmpeq_epi8,  // Compare bytes for equality
-                _mm_loadl_epi64,  // load 8 bytes into low half of XMM
-                _mm_movemask_epi8,// make bitmask of comparison results
-                _mm_setzero_si128 // 0 vector for comparison
-            };
-            //load exactly 8 bytes exactly(SPECIALISED FOR THIS) (zero-extended to 16 bytes in XMM register)
-            let chunk = _mm_loadl_epi64($ptr as *const __m128i);
-              // Compare each byte against zero
-            let zeros = _mm_setzero_si128();
-            let cmp = _mm_cmpeq_epi8(chunk, zeros);
-              // Convert comparison results to bitmask (bits 0-7 contain results)
-            let mask = _mm_movemask_epi8(cmp) as u16;
-            //get position of first null byte (returns 8 if none found)
-            mask.trailing_zeros() as usize
-        }
-
-
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "sse2")))]
-        {
-            libc::strlen($ptr.cast::<_>())
-        }
-    }};
     ($ptr:expr) => {{
         #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
         {
@@ -325,15 +297,16 @@ macro_rules! strlen_asm {
 }
 
 ///not intended for public use, will be private when boilerplate is done
-/// a version of `construct_path!` that uses a (i believe fixed/const....i didnt study compuyter science)
+/// a version of `construct_path!` that uses a constant time strlen macro to calculate the length of the name pointer
+/// this is really only an intellectual thing+exercise in reducing branching+complexity. THEY NEED TO BE BENCHMARKED.
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
 #[macro_export(local_inner_macros)]
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
-macro_rules! construct_path_fixed {
+macro_rules! construct_path_optimised {
     ($self:ident, $dent:ident) => {{
         let name_ptr = $crate::offset_ptr!($dent, d_name).cast::<u8>();
-       //let name_len = $crate::dirent_fixed_time_strlen!($dent);
-              let name_len = $crate::utils::dirent_const_time_strlen($dent);
+        //let name_len = $crate::dirent_fixed_time_strlen!($dent);
+        let name_len = $crate::dirent_const_time_strlen!($dent);
         let total_len = $self.base_path_len as usize + name_len;
 
         std::ptr::copy_nonoverlapping(
@@ -350,46 +323,44 @@ macro_rules! construct_path_fixed {
     }};
 }
 
+
+
+
+
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
-/// The crown jewel of cursed macros.
+/// The crown jewel of cursed macros(this is const, see the function equivalent for proof).
+/// 
 /// A macro to calculate the length of a directory entry name in constant/fixed time. (IDK!I STUDIED TOPOLOGY/CALCULUS INSTEAD)
-/// We have to used a modified version of SSE2 strlen because it needs to be be a minimum of 16 bytes, so we have to use a different(hack) method to calculate the length.
+/// We use bithacks to find the first null byte in the last u64 word of the `libc::dirent64` struct.
 /// This macro can be used in in one way, when using readdir/getdents, to calculate the length of the d_name field in a `libc::dirent64` struct.
 /// It returns the length of the name in bytes, excluding the null terminator.
-macro_rules! dirent_fixed_time_strlen {
+/// Reference https://github.com/lattera/glibc/blob/master/string/strlen.c#L1
+/// Reference https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte
+/// Reference https://github.com/Soveu/find/blob/master/src/dirent.rs  (combining all these tricks, i made this beautiful thing)
+macro_rules! dirent_const_time_strlen {
     ($dirent:expr) => {{
         const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
         let reclen = (*$dirent).d_reclen as usize; // we MUST cast this way, as it is not guaranteed to be aligned, so we can't use offset_ptr!() here
         // Calculate the number of u64 words in the record length
-        let reclen_in_u64s = reclen / 8;
         // Ensure that the record length is a multiple of 8 so we can cast to u64
-        debug_assert!(reclen % 8 == 0, "reclen={} is not a multiple of 8", reclen);
-        debug_assert!(reclen >= 16, "reclen={} is less than minimum valid size", reclen);
-        // Calculate position of last word
-        let last_word_index = reclen_in_u64s - 1;
-        // Access the last word directly using pointer arithmetic
-        let last_word_check =
-            *((($dirent as *const u8).add(last_word_index * 8)) as *const u64)
-        ;//getting the last u64 word of the dirent
+        // Calculate last word(by indexing into the last 8 bytes of the dirent)
+          let last_word = *(($dirent as *const u8).add(reclen - 8) as *const u64);
         // Special case: When processing the 3rd u64 word (index 2), we need to mask
         // the non-name bytes (d_type and padding) to avoid false null detection.
         // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
         // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
           #[allow(clippy::cast_lossless)] //shutup
-        let is_third_word = (last_word_index == 2) as u64;
-        let mask = 0x00FF_FFFFu64 * is_third_word; // Multiply by 0 or 1
-        let last_word_final = last_word_check | mask;
-       let word_ptr = &raw const last_word_final as *const u64 as *const u8; // Cast to u8 pointer and use specialised @8byte
-       //word_ptr is length 8 so it's done in 1 operation by SSE2(if detected, or strlen, which might do it too, who knows what goes on in glibc)
-       let remainder_len = 7 - $crate::strlen_asm!(word_ptr,@8byte);
-        // Calculate true string length:
-        // 1. Skip dirent header (offset_of!(libc::dirent64, d_name))
-        // 2. Add one to get to the correct index
-        // 3. Subtract ignored bytes (after null terminator in last word)
-        reclen - DIRENT_HEADER_SIZE - remainder_len as usize
-    }};
+        // Branchless 3rd-word mask (0x00FF_FFFF if index==2 else 0)
+        let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);// (multiply by 0 or 1)
+        let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)
+            & !(last_word | mask)
+            & 0x8080_8080_8080_8080;
+        
+        reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+        }};
 }
+
 
 #[macro_export]
 /// A macro to extract values from a `libc::dirent64` struct.

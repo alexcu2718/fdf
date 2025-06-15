@@ -136,38 +136,40 @@ pub(crate) const fn const_min(a: usize, b: usize) -> usize {
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     if a < b { b } else { a }
 }
+
 #[inline]
+#[allow(clippy::integer_division)] //i know reclen is always a multiple of 8, so this is fine
+#[allow(clippy::cast_possible_truncation)] //^
 /// Const-fn strlen for dirent's `d_name` field using bit tricks.
 ///
 /// This function is designed to be used in a constant-time context, I just thought it was cool!
+/// It's probably the most efficient way to calculate the length
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
 /// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
-/// but i modified to make it a const function. I need to benchmark this
-/// more comments can be seen in the macro version.
-#[allow(clippy::integer_division)] //INTEGER DIVISION IN CONST IS FINE ESPECIALLY.
+/// This is my own implementation of a constant-time strlen for dirents, which is useful for performance/learning.
+/// Reference https://github.com/lattera/glibc/blob/master/string/strlen.c#L1
+/// Reference https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte
+/// Reference https://github.com/Soveu/find/blob/master/src/dirent.rs  (combining all these tricks, i made this beautiful thing)
+/// more comments can be seen in the macro version..
 pub const fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    //calculate the header+1 beccause we need to get to the start of d_name
-    //and then we need to calculate the length of the d_name field
     const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-    let reclen = unsafe { (*dirent).d_reclen as usize };
+    let reclen = unsafe { (*dirent).d_reclen as usize }; //must be accessed by value, not pointer!
     let reclen_in_u64s = reclen / 8;
     let last_word_index = reclen_in_u64s - 1;
+
     let last_word_check =
         unsafe { *(((dirent as *const u8).add(last_word_index * 8)) as *const u64) };
+
     let is_third_word = (last_word_index == 2) as u64;
     let mask = 0x00FF_FFFFu64 * is_third_word;
     let last_word_final = last_word_check | mask;
-    let word_ptr = &last_word_final as *const u64 as *const u8;
-    let remainder_len = 7 - {
-        let mut i = 0;
-        while i < 8 {
-            if unsafe { *word_ptr.add(i) } == 0 {
-                break;
-            }
-            i += 1;
-        }
-        i
-    };
 
+    // Pure bit-hack to find first null byte (checking onlyside 8 bytes only, hence why specific mask)
+    let zero_mask = last_word_final.wrapping_sub(0x0101_0101_0101_0101) //HASZERO
+        & !last_word_final
+        & 0x8080_8080_8080_8080;
+    let remainder_len = 7 - ((zero_mask.trailing_zeros() >> 3) as usize);
+    //return the true length of the d_name field
     reclen - DIRENT_HEADER_SIZE - remainder_len
 }
+

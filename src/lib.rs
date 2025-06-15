@@ -71,6 +71,9 @@ mod dirent_macro;
 mod iter;
 pub(crate) use iter::DirIter;
 
+mod direntry_filter;
+pub use direntry_filter::DirEntryIteratorFilter;
+
 mod buffer;
 mod test;
 pub(crate) use buffer::AlignedBuffer;

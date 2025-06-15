@@ -76,7 +76,7 @@ mod tests {
         });
         assert_eq!(len, 3);
     }
-   
+
     #[test]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();

@@ -396,9 +396,9 @@ macro_rules! get_dirent_vals {
         unsafe {
             (
                 // d_name: pointer to the name field (null-terminated string)
-                $crate::offset_ptr!($d, d_name).cast::<_>(), //let user determine type
+                $crate::offset_ptr!($d, d_name) as _, //let user determine type
                 // d_type: file type (DT_REG, DT_DIR, etc.) this will be 0 if unknown/Filesystem doesnt give dtype, we have to call lstat then alas.
-                *$crate::offset_ptr!($d, d_type).cast::<_>(),
+                *$crate::offset_ptr!($d, d_type) as _,
                  // d_ino: inode number (represents file unique id)
                 *$crate::offset_ptr!($d, d_ino) as _,
                  // d_reclen: record length
@@ -413,8 +413,8 @@ macro_rules! get_dirent_vals {
         unsafe {
             (
 
-                $crate::offset_ptr!($d, d_name).cast::<_>(),
-                *$crate::offset_ptr!($d, d_type).cast::<_>(),
+                $crate::offset_ptr!($d, d_name) as _,
+                *$crate::offset_ptr!($d, d_type) as _,
                  *$crate::offset_ptr!($d, d_ino) as _,
             )
         }

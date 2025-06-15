@@ -230,6 +230,7 @@ macro_rules! prefetch_next_buffer {
 macro_rules! construct_path {
     ($self:ident, $name_ptr:ident) => {{
         let name_len = $crate::strlen_asm!($name_ptr);
+        
         let total_len = $self.base_path_len as usize + name_len;
         std::ptr::copy_nonoverlapping(
             $name_ptr,

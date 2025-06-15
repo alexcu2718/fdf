@@ -161,9 +161,15 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
           #[allow(clippy::cast_lossless)] //shutup
         // Branchless 3rd-word mask (0x00FF_FFFF if index==2 else 0)
         let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);// (multiply by 0 or 1)
+        //we're bit manipulating the last word (a byte/u64) to find the first null byte
+        //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
+        // The mask is applied to the last word to isolate the relevant bytes.
+        // The last word is masked to isolate the relevant bytes, and then we find the first zero byte.
+        // the kernel guarantees that the d_name field is null-terminated, so we can safely use this trick.
         let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)
-            & !(last_word | mask)
+           & !(last_word | mask)
             & 0x8080_8080_8080_8080;
+
 
         reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
         

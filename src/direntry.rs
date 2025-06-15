@@ -374,9 +374,9 @@ where
                 skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
                 //
-                let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
-                //   let full_path = unsafe { crate::construct_path_optimised!(self, d) }; //here we have a construct_path_optimised  version, which uses a very specific trick, i need to benchmark it!
-
+               // let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
+                let full_path = unsafe { crate::construct_path_optimised!(self, d) }; //here we have a construct_path_optimised  version, which uses a very specific trick, i need to benchmark it!
+                
                 let entry = DirEntry {
                     path: full_path.into(),
                     file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
@@ -384,6 +384,14 @@ where
                     depth: self.parent_depth + 1, // increment depth for child entries
                     base_len: self.base_path_len,
                 };
+
+
+                unsafe{debug_assert!(entry.file_name().len()==crate::strlen_asm!(name_ptr))} //easy debug statements
+                unsafe{debug_assert!(entry.file_name().len()==crate::dirent_const_time_strlen!(d))}
+                unsafe{debug_assert!(entry.file_name().len()==crate::dirent_const_time_strlen(d))}
+
+
+
                 return Some(entry);
             }
             // prefetch the next buffer content before reading

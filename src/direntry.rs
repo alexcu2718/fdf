@@ -6,7 +6,7 @@
 #![allow(clippy::integer_division)] //i know my division is safe.
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::little_endian_bytes)] //i dont even know why this is a lint(because i cant be bothered to read it, i NEED IT though)
-
+#[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
 #[allow(unused_imports)]
 use std::{
@@ -288,9 +288,9 @@ where
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-        let fd = dir_path
-            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-        // let fd=unsafe{open_asm(dir_path)};
+      //  let fd = dir_path
+           // .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        let fd=unsafe{open_asm(dir_path)};
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };

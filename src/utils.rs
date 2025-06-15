@@ -39,52 +39,20 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
-/// Uses SSE2 intrinsics to calculate the length of a null-terminated string.
-#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, libc::strlen.
 #[inline]
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 16 bytes
 ///Deprecated in favour of a macro (`strlen_asm!`)
-pub unsafe fn strlen_sse2<T>(ptr: *const T) -> usize
+// SAFETY: the caller must guarantee that `ptr` points to a valid null-terminated string of type `T` and does not start with a null byte.
+pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
 {
-    //aka i8/u8{
-    use std::arch::x86_64::{
-        __m128i, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_setzero_si128,
-    };
-
-    let mut offset = 0;
-    loop {
-        // Load 16 bytes, alignment is fine because from i8/u8
-        let chunk = unsafe { _mm_loadu_si128(ptr.add(offset) as *const __m128i) };
-
-        // Compare against zero byte
-        let zeros = unsafe { _mm_setzero_si128() };
-        let cmp = unsafe { _mm_cmpeq_epi8(chunk, zeros) };
-
-        // Create a bitmask of results
-        let mask = unsafe { _mm_movemask_epi8(cmp) };
-
-        if mask != 0 {
-            // we'll get at least one null byte found
-            let tz = mask.trailing_zeros() as usize;
-            return offset + tz;
-        }
-
-        offset += 16;
-    }
+    unsafe{crate::strlen_asm!(ptr)}
+    
 }
 
-#[cfg(not(target_arch = "x86_64"))]
-#[inline]
-///Uses libc's strlen function to calculate the length of a null-terminated string.
-/// it's generic over the `ValueType`, which is i8 or u8.
-pub(crate) unsafe fn strlen_asm<T>(s: *const T) -> usize
-where
-    T: ValueType, //aka i8/u8
-{
-    unsafe { libc::strlen(s.cast::<i8>()) }
-}
+
 
 #[inline]
 #[allow(clippy::items_after_statements)]
@@ -94,7 +62,7 @@ where
 /// Opens a directory using an assembly implementation of open(to reduce libc overplay) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    let filename: *const u8 = cstr!(bytepath);
+    let filename: *const u8 =unsafe{cstr!(bytepath)};
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
@@ -112,6 +80,24 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     };
     fd
 }
+
+#[inline]
+#[cfg(not(target_arch="x86_64"))]
+/// Opens a directory using libc's open function. Backup function for non-x86_64 architectures.
+/// Returns -1 on error.
+pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
+
+    unsafe {libc::open(cstr!(bytepath), libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY) }
+}
+
+
+#[inline]
+#[cfg(not(target_arch="x86_64"))]
+pub unsafe fn close_asm(fd: i32) {
+    unsafe { libc::close(fd) };
+}
+
+
 
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
@@ -148,32 +134,37 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 /// It's probably the most efficient way to calculate the length
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
 /// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
+/// 
 /// This is my own implementation of a constant-time strlen for dirents, which is useful for performance/learning.
-/// Reference <https://github.com/lattera/glibc/blob/master/string/strlen.c#L1>
-/// Reference <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>
-/// Reference <https://github.com/Soveu/find/blob/master/src/dirent.rs>
+/// 
+/// Reference <https://github.com/lattera/glibc/blob/master/string/strlen.c#L1>    
+///                                   
+/// Reference <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>    
+///                        
+/// Reference <https://github.com/Soveu/find/blob/master/src/dirent.rs>           
+///                    
 /// Combining all these tricks, i made this beautiful thing!
 /// # SAFETY
 /// This function is `unsafe` because it performs raw pointer dereferencing and unchecked pointer arithmetic.
 /// The caller must uphold the following invariants:
+/// - The `dirent` pointer must point to a valid `libc::dirent64` structure
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-    let reclen = unsafe { (*dirent).d_reclen as usize }; //must be accessed by value, not pointer!
-    let reclen_in_u64s = reclen / 8;
-    let last_word_index = reclen_in_u64s - 1;
+        const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+        let reclen = unsafe{(*dirent).d_reclen as usize}; // we MUST cast this way, as it is not guaranteed to be aligned, so we can't use offset_ptr!() here
+        // Calculate the number of u64 words in the record length
+        // Calculate find the  start of the d_name field
+          let last_word = unsafe{*((dirent as *const u8).add(reclen - 8) as *const u64)};
+        // Special case: When processing the 3rd u64 word (index 2), we need to mask
+        // the non-name bytes (d_type and padding) to avoid false null detection.
+        // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
+        // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
+          #[allow(clippy::cast_lossless)] //shutup
+        // Branchless 3rd-word mask (0x00FF_FFFF if index==2 else 0)
+        let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);// (multiply by 0 or 1)
+        let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)
+            & !(last_word | mask)
+            & 0x8080_8080_8080_8080;
 
-    let last_word_check =
-        unsafe { *(((dirent as *const u8).add(last_word_index * 8)) as *const u64) };
-
-    let is_third_word = (last_word_index == 2) as u64;
-    let mask = 0x00FF_FFFFu64 * is_third_word;
-    let last_word_final = last_word_check | mask;
-
-    // Pure bit-hack to find first null byte (checking onlyside 8 bytes only, hence why specific mask)
-    let zero_mask = last_word_final.wrapping_sub(0x0101_0101_0101_0101) //HASZERO
-        & !last_word_final
-        & 0x8080_8080_8080_8080;
-    let remainder_len = 7 - ((zero_mask.trailing_zeros() >> 3) as usize);
-    //return the true length of the d_name field
-    reclen - DIRENT_HEADER_SIZE - remainder_len
+        reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+        
 }

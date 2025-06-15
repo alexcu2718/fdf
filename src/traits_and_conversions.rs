@@ -31,6 +31,7 @@ where
     fn get_stat(&self) -> crate::Result<stat>;
     fn modified_time(&self) -> crate::Result<SystemTime>;
     fn as_path(&self) -> &Path;
+    fn get_baselen(&self)->u16;
     fn as_os_str(&self) -> &OsStr;
     fn exists(&self) -> bool;
     fn is_readable(&self) -> bool;
@@ -228,6 +229,17 @@ where
     fn is_relative(&self) -> bool {
         !self.is_absolute()
     }
+
+
+    /// Get the length of the basename of a path (up to and including the last '/')
+    #[inline]
+    #[allow(clippy::cast_possible_truncation)]
+    fn get_baselen(&self) -> u16 {
+        self.rsplitn(2, |&c| c == b'/')
+            .nth(1)
+            .map_or(1, |parent| parent.len() + 1) as _ // +1 to include trailing slash etc
+    }
+
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]

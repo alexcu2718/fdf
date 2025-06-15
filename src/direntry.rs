@@ -27,7 +27,7 @@ use crate::{
     AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
     cstr_n, custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
     init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
-    skip_dot_entries, utils::close_asm, utils::get_baselen, utils::open_asm,
+    skip_dot_entries, utils::close_asm,  utils::open_asm,
     utils::unix_time_to_system_time,
 };
 
@@ -224,7 +224,9 @@ where
     #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
-        unsafe { *self.get_unchecked(self.base_len()) == b'.' }
+        unsafe { *self.get_unchecked(self.base_len()) == b'.' } //we yse the base_len as a way to index to filename immediately, this means
+        //we can store a full path and still get the filename without copying.
+        //this is safe because we know that the base_len is always less than the length of the path
     }
     #[inline]
     #[must_use]
@@ -265,7 +267,7 @@ where
             file_type: FileType::from_mode(get_stat.st_mode),
             inode: get_stat.st_ino,
             depth: 0,
-            base_len: get_baselen(path_ref),
+            base_len: path_ref.get_baselen()
         })
     }
 
@@ -288,9 +290,9 @@ where
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-      //  let fd = dir_path
-           // .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-        let fd=unsafe{open_asm(dir_path)};
+        //  let fd = dir_path
+        // .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        let fd = unsafe { open_asm(dir_path) };
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
@@ -374,9 +376,9 @@ where
                 skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
                 //
-               // let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
+                // let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 let full_path = unsafe { crate::construct_path_optimised!(self, d) }; //here we have a construct_path_optimised  version, which uses a very specific trick, i need to benchmark it!
-                
+
                 let entry = DirEntry {
                     path: full_path.into(),
                     file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
@@ -385,11 +387,12 @@ where
                     base_len: self.base_path_len,
                 };
 
-
-                unsafe{debug_assert!(entry.file_name().len()==crate::dirent_const_time_strlen!(d))}
-                unsafe{debug_assert!(entry.file_name().len()==crate::dirent_const_time_strlen(d))}
-
-
+                unsafe {
+                    debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen!(d))
+                }
+                unsafe {
+                    debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen(d))
+                }
 
                 return Some(entry);
             }

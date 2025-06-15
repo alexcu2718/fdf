@@ -46,10 +46,8 @@ macro_rules! cstr {
         // Create a  and make into a pointer
         let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
 
-       
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         c_path_buf.add($bytes.len()).write(0);
-        
 
         c_path_buf.cast::<_>()
     }};
@@ -67,10 +65,8 @@ macro_rules! cstr_n {
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
 
-      
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         c_path_buf.add($bytes.len()).write(0);
-        
 
         c_path_buf.cast::<_>()
     }};
@@ -158,15 +154,13 @@ macro_rules! init_path_buffer_readdir {
         let needs_slash = ($dir_path.depth != 0) as u8 | ((dirp != b"/") as u8);
         let base_len = dirp_len + needs_slash as usize;
 
-      
         let buffer_ptr = $buffer.as_mut_ptr();
 
         // Copy directory path
         std::ptr::copy_nonoverlapping(dirp.as_ptr(), buffer_ptr, dirp_len);
 
-            // branchless slash writing(we either write a slash or null terminator)
+        // branchless slash writing(we either write a slash or null terminator)
         *buffer_ptr.add(dirp_len) = (b'/') * needs_slash;
-        
 
         base_len
     }};
@@ -183,14 +177,13 @@ macro_rules! copy_name_to_buffer {
         // Calculate available space after base_len
         let base_len = $self.base_len as usize;
         // Get string length using optimized SSE2 version
-        let name_len =  $crate::strlen_asm!($name_file) ;
+        let name_len = $crate::strlen_asm!($name_file);
         //we avx2/sse2 ideally here, perfect for the likely size of it. I have considered
         //implemented a lot of these as macros to avoid function calls
         // SAFETY:
         // We've calculated the position of the null terminator.
-    
-         std::ptr::copy_nonoverlapping($name_file, $self.as_mut_ptr().add(base_len), name_len);
-        
+
+        std::ptr::copy_nonoverlapping($name_file, $self.as_mut_ptr().add(base_len), name_len);
 
         base_len + name_len
     }};
@@ -230,7 +223,7 @@ macro_rules! prefetch_next_buffer {
 macro_rules! construct_path {
     ($self:ident, $name_ptr:ident) => {{
         let name_len = $crate::strlen_asm!($name_ptr);
-        
+
         let total_len = $self.base_path_len as usize + name_len;
         std::ptr::copy_nonoverlapping(
             $name_ptr,
@@ -245,9 +238,6 @@ macro_rules! construct_path {
         full_path
     }};
 }
-
-
-
 
 #[macro_export]
 #[allow(clippy::ptr_as_ptr)]
@@ -270,56 +260,54 @@ macro_rules! strlen_asm {
         ))]
         {
             // SAFETY: Caller must ensure `ptr` is valid and null-terminated.
-           
-                #[cfg(target_feature = "avx2")]
-                {
-                    use std::arch::x86_64::{
-                        __m256i,
-                        _mm256_cmpeq_epi8,  // Compare 32 bytes at once
-                        _mm256_loadu_si256, // Unaligned 32-byte load
-                        _mm256_movemask_epi8, // Bitmask of null matches
-                        _mm256_setzero_si256, // Zero vector
-                    };
-                 
 
-                    let mut offset = 0;
-                    loop {
-                        let chunk = _mm256_loadu_si256($ptr.add(offset) as *const __m256i);
-                        let zeros = _mm256_setzero_si256();
-                        let cmp = _mm256_cmpeq_epi8(chunk, zeros);
-                        let mask = _mm256_movemask_epi8(cmp) as i32;
+            #[cfg(target_feature = "avx2")]
+            {
+                use std::arch::x86_64::{
+                    __m256i,
+                    _mm256_cmpeq_epi8,    // Compare 32 bytes at once
+                    _mm256_loadu_si256,   // Unaligned 32-byte load
+                    _mm256_movemask_epi8, // Bitmask of null matches
+                    _mm256_setzero_si256, // Zero vector
+                };
 
-                        if mask != 0 {
-                            break offset + mask.trailing_zeros() as usize;
-                        }
-                        offset += 32; // Process next 32-byte chunk
+                let mut offset = 0;
+                loop {
+                    let chunk = _mm256_loadu_si256($ptr.add(offset) as *const __m256i);
+                    let zeros = _mm256_setzero_si256();
+                    let cmp = _mm256_cmpeq_epi8(chunk, zeros);
+                    let mask = _mm256_movemask_epi8(cmp) as i32;
+
+                    if mask != 0 {
+                        break offset + mask.trailing_zeros() as usize;
                     }
+                    offset += 32; // Process next 32-byte chunk
                 }
+            }
 
-                #[cfg(not(target_feature = "avx2"))]
-                {
-                    use std::arch::x86_64::{
-                        __m128i,
-                        _mm_cmpeq_epi8,  // Compare 16 bytes
-                        _mm_loadu_si128,   // Unaligned 16-byte load
-                        _mm_movemask_epi8, // Bitmask of null matches
-                        _mm_setzero_si128, // Zero vector
-                    };
+            #[cfg(not(target_feature = "avx2"))]
+            {
+                use std::arch::x86_64::{
+                    __m128i,
+                    _mm_cmpeq_epi8,    // Compare 16 bytes
+                    _mm_loadu_si128,   // Unaligned 16-byte load
+                    _mm_movemask_epi8, // Bitmask of null matches
+                    _mm_setzero_si128, // Zero vector
+                };
 
-                    let mut offset = 0;
-                    loop {
-                        let chunk = _mm_loadu_si128($ptr.add(offset) as *const __m128i);
-                        let zeros = _mm_setzero_si128();
-                        let cmp = _mm_cmpeq_epi8(chunk, zeros);
-                        let mask = _mm_movemask_epi8(cmp) as i32;
+                let mut offset = 0;
+                loop {
+                    let chunk = _mm_loadu_si128($ptr.add(offset) as *const __m128i);
+                    let zeros = _mm_setzero_si128();
+                    let cmp = _mm_cmpeq_epi8(chunk, zeros);
+                    let mask = _mm_movemask_epi8(cmp) as i32;
 
-                        if mask != 0 {
-                            break offset + mask.trailing_zeros() as usize;
-                        }
-                        offset += 16; // Process next 16-byte chunk
+                    if mask != 0 {
+                        break offset + mask.trailing_zeros() as usize;
                     }
+                    offset += 16; // Process next 16-byte chunk
                 }
-            
+            }
         }
 
         #[cfg(not(all(
@@ -332,12 +320,6 @@ macro_rules! strlen_asm {
         }
     }};
 }
-
-
-
-
-
-
 
 ///not intended for public use, will be private when boilerplate is done
 /// a version of `construct_path!` that uses a constant time strlen macro to calculate the length of the name pointer
@@ -445,6 +427,8 @@ macro_rules! get_dirent_vals {
         }
     }};
 }
+
+
 
 /// Macro to create a const from an env var with compile-time parsing
 /// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "512");

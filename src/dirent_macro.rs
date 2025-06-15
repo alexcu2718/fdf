@@ -152,7 +152,7 @@ macro_rules! init_path_buffer_readdir {
         // branchless needs_slash calculation (easier boolean shortcircuit on LHS)
         #[allow(clippy::cast_lossless)] //shutup
         let needs_slash = ($dir_path.depth != 0) as u8 | ((dirp != b"/") as u8);
-        let base_len = dirp_len + needs_slash as usize;
+       
 
         let buffer_ptr = $buffer.as_mut_ptr();
 
@@ -162,9 +162,11 @@ macro_rules! init_path_buffer_readdir {
         // branchless slash writing(we either write a slash or null terminator)
         *buffer_ptr.add(dirp_len) = (b'/') * needs_slash;
 
-        base_len
+       
     }};
 }
+
+
 
 #[macro_export]
 /// Copies a null-terminated string into a buffer after a base offset
@@ -185,7 +187,7 @@ macro_rules! copy_name_to_buffer {
 
         std::ptr::copy_nonoverlapping($name_file, $self.as_mut_ptr().add(base_len), name_len);
 
-        base_len + name_len
+        $self.buffer.get_unchecked_mut(..base_len + name_len) 
     }};
 }
 

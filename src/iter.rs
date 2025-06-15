@@ -2,7 +2,7 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
-    copy_name_to_buffer, cstr, custom_types_result::BytesStorage, get_dirent_vals,
+    copy_name_to_buffer,cstr, custom_types_result::BytesStorage, get_dirent_vals,
     init_path_buffer_readdir, offset_ptr, skip_dot_entries,
 };
 use libc::{DIR, closedir, opendir, readdir64};
@@ -48,7 +48,7 @@ where
         }
         let mut buffer = PathBuffer::new(); //
         //we know it won't be greater than u16::MAX because we limit the path
-        let base_len: u16 = unsafe { init_path_buffer_readdir!(dir_path, buffer) as _ }; //0 cost macro to construct the buffer in the way we want.
+        unsafe { init_path_buffer_readdir!(dir_path, buffer) }; //0 cost macro to construct the buffer in the way we want.
         // The base_len is the length of the path up to the directory being read.
         //mutate the buffer to contain the path up to the directory being read.
         // This is used to avoid copying the path every time we read a directory entry.
@@ -57,7 +57,7 @@ where
         Ok(Self {
             dir,
             buffer,
-            base_len,
+            base_len:dir_path.base_len,
             depth: dir_path.depth,
             error: None,
             _phantom: PhantomData, //holds storage type
@@ -91,8 +91,8 @@ where
             //we mustn't forget that this is an extremely hot loop, so avoiding as much calculation is ideal.
             skip_dot_entries!(dir_info, name_file);
             //skip_dot_entries!(dir_info, name_file, reclen);< -this is the more efficient version, but it requires reclen to be passed in.
-            let total_path_len = unsafe { copy_name_to_buffer!(self, name_file) };
-            let full_path = unsafe { self.buffer.get_unchecked_mut(..total_path_len) };
+            
+            let full_path = unsafe {copy_name_to_buffer!(self, name_file)  };
             return Some(DirEntry {
                 path: full_path.into(),
                 file_type: FileType::from_dtype_fallback(dir_info, full_path),

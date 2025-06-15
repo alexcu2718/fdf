@@ -1,27 +1,39 @@
 #![allow(clippy::doc_markdown)]
-
-#[allow(clippy::ptr_as_ptr)]
-#[allow(clippy::too_long_first_doc_paragraph)]
 #[macro_export]
-///copied this macro from the standard library
-///using it to access offsets in a more strict way, basically it's assumed the `libc::dirent64` struct is the same as the one in the standard library
-/// this is used to get a pointer to a field in the `libc::dirent64` struct and avoid intermediate references
+///A modified macro from the standard library to access fields of a `libc::dirent64` struct by offset.
+/// It has been modified to handle the `d_reclen` field differently due to its alignment issues, handling the issue subtly for the user.
+/// This macro is used to access fields of a `libc::dirent64` struct by offset, allowing for more flexible and efficient access.
+/// It takes a pointer to a `libc::dirent64` struct and a field name, and returns a pointer to the field.
+/// The field name must be a valid field of the `libc::dirent64` struct.
+/// The macro uses `std::mem::offset_of!` to calculate the offset of the field in the struct.
+/// /// # Safety
+/// - The caller must ensure that the pointer is valid and points to a `libc::dirent64` struct.
+/// - The field name must be a valid field of the `libc::dirent64` struct.
+/// THIS 
 macro_rules! offset_ptr {
     ($entry_ptr:expr, $field:ident) => {{
         const OFFSET: isize = std::mem::offset_of!(libc::dirent64, $field) as isize;
+        
         if true {
-            // Cast to the same type determined by the else branch.
-
-            $entry_ptr.byte_offset(OFFSET).cast::<_>()
-        } else {
-            #[allow(deref_nullptr)]
-            {
-                &raw const (*std::ptr::null::<libc::dirent64>()).$field
+            // Special handling for d_reclen, this is because it's not aligned in the same way as other fields
+            if stringify!($field) == "d_reclen" {
+                // SAFETY: Caller must ensure pointer is valid
+                (*$entry_ptr).d_reclen as  _ // Cast to callers whim
+            } else {
+                // Normal field access via offset
+                // SAFETY: Caller must ensure pointer is valid
+                $entry_ptr.byte_offset(OFFSET).cast::<_>()
+                
             }
+        } else {
+            // Type inference branch (never executed)
+            #[allow(deref_nullptr, unused_unsafe)]
+           
+            unsafe{    std::ptr::addr_of!((*std::ptr::null::<libc::dirent64>()).$field)}
+            
         }
     }};
 }
-
 //a cheap debug print macro, only prints if debug_assertions is enabled
 #[macro_export]
 macro_rules! debug_print {

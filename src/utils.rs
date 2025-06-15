@@ -115,9 +115,11 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 #[allow(clippy::cast_possible_truncation)] //^
 #[allow(clippy::integer_division_remainder_used)] //division is fine.
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 8 bytes
+#[allow(clippy::cast_lossless)] //shutup
 /// Const-fn strlen for dirent's `d_name` field using bit tricks.
-///
-/// This function is designed to be used in a constant-time context, I just thought it was cool!
+/// O(1) complexity, no branching, and no loops.
+/// 
+/// This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
 /// It's probably the most efficient way to calculate the length
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
 /// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
@@ -145,16 +147,19 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // the non-name bytes (d_type and padding) to avoid false null detection.
     // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
     // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
-    #[allow(clippy::cast_lossless)] //shutup
     let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64); // (multiply by 0 or 1)
     //we're bit manipulating the last word (a byte/u64) to find the first null byte
     //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes, and then we find the first zero byte.
     // the kernel guarantees that the d_name field is null-terminated, so we can safely use this trick.
-    let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)
-        & !(last_word | mask)
-        & 0x8080_8080_8080_8080;
+    let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is
+        & !(last_word | mask) //ensures only bytes that were zero retain the underflowed high bit.
+        & 0x8080_8080_8080_8080; //  0x8080_8080_8080_8080 -->This masks out the high bit of each byte, so we can find the first zero byte
+    // The trailing zeros of the zero_bit gives us the position of the first zero byte.
+    // We divide by 8 to convert the bit position to a byte position.
+    // The trailing zeros of the zero_bit gives us the position of the first zero byte.
+    // We subtract 7 to get the correct offset in the d_name field.
 
     reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }

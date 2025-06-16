@@ -13,7 +13,6 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 [dependencies]
 clap = { version = "4.5.31", features = ["derive"] }
 clap_complete = "4.5.46"
-criterion = { version = "0.6.0", features = ["cargo_bench_support", "real_blackbox"] }
 libc = "0.2.170"
 mimalloc = "0.1.43"
 rayon = "1.10.0"
@@ -22,8 +21,7 @@ slimmer_box = "0.6.5"
 
 
 [dev-dependencies]
-criterion = { version = "0.6.0", features = ["html_reports"] }
-
+criterion = { version = "0.6.0", features = ["cargo_bench_support", "real_blackbox"] }
 [profile.release]
 opt-level = 3
 debug = false

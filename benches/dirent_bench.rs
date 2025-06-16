@@ -132,7 +132,7 @@ fn bench_strlen(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default()
-        .sample_size(500)  // More samples for stable results
+        .sample_size(1000)  
         .warm_up_time(std::time::Duration::from_millis(500))
         .measurement_time(std::time::Duration::from_secs(3));
     targets = bench_strlen

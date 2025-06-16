@@ -109,6 +109,9 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     if a < b { b } else { a }
 }
 
+
+/// Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.  
+/// (c) [Alexander Curtis/<https://github.com/alexcu2718/fdf>] – MIT License. 
 #[inline]
 #[allow(clippy::integer_division)] //i know reclen is always a multiple of 8, so this is fine
 #[allow(clippy::cast_possible_truncation)] //^
@@ -123,7 +126,7 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
 /// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
 ///
-/// This is my own implementation of a constant-time strlen for dirents, which is useful for performance/learning.  
+/// This is my own implementation of a constant-time strlen for dirents, which is an extremely common operation(probably one of THE hottest functions) 
 ///                                   
 /// Reference <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>    
 ///                        

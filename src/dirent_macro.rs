@@ -56,12 +56,13 @@ macro_rules! cstr {
             "Input too large for buffer"
         );
 
-        // Create a  and make into a pointer
+        // Create a buffer and make into a pointer
         let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
-
+        // Copy the bytes into the buffer and append a null terminator
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
+        // Write a null terminator at the end of the buffer
         c_path_buf.add($bytes.len()).write(0);
-
+        //let caller choose cast
         c_path_buf.cast::<_>()
     }};
 }
@@ -124,51 +125,37 @@ macro_rules! skip_dot_entries {
 }
 
 
+//SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
+
 #[macro_export]
 /// initialises a path buffer for syscall operations,
-// appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument).
+// appending a slash/null terminator (if it's a directory etc)
+/// returns a tuple containing the length of the path and the `PathBuffer` itself.
 macro_rules! init_path_buffer_syscall {
-    ( $dir_path:expr, $depth:expr) => {{
-        let mut start_buffer=$crate::PathBuffer::new();
-        let buffer_ptr = start_buffer.as_mut_ptr();
-        let mut path_len=$dir_path.len();
-        // Branchless needs_slash calculation (returns 0 or 1)
-        let needs_slash = (($depth != 0) as u8) | (($dir_path != b"/") as u8);
-        // Copy directory path
-        std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, path_len);
-
-        // Branchless slash writing and length adjustment, write a null terminator if no slash.
-        *buffer_ptr.add(path_len) = (b'/') * needs_slash;
-        path_len += needs_slash as usize;
-        
-
-        (path_len,start_buffer)
+    ( $dir_path:expr) => {{
+        let mut start_buffer=$crate::PathBuffer::new(); //create a new path buffer, this is a zeroed buffer of size `LOCAL_PATH_MAX
+        let buffer_ptr = start_buffer.as_mut_ptr(); //get the mutable pointer to the buffer
+        let mut base_len=$dir_path.len(); //get the length of the directory path, this is the length of the directory path
+        let needs_slash = (($dir_path.depth() != 0) as u8) | (($dir_path.as_bytes() != b"/") as u8); //check if we need to append a slash(bitmasking it to 0 or 1)
+        std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, base_len);
+        *buffer_ptr.add(base_len) = (b'/') * needs_slash; //add slash or null terminator appropriately (completely deterministic)
+        base_len += needs_slash as usize; //increment the base_len length by 1 if we added a slash, otherwise it stays the same
+        (base_len,start_buffer)
     }};
 }
 
 #[macro_export(local_inner_macros)]
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// initialises a path buffer for readdir operations.
-/// the macro appends a slash if necessary and returning the base length of the path.
-/// Returns the base length of the path, which is the length of the directory
-///  path plus one if a slash is needed(but also mutates the buffer invisibly, not ideal, i will change this.)
+/// the macro appends a slash/null terminator if necessary and returns  `PathBuffer` with the base path+filename
 macro_rules! init_path_buffer_readdir {
     ($dir_path:expr) => {{
-
-        let mut buffer=$crate::PathBuffer::new();
+        let mut buffer=$crate::PathBuffer::new(); //see above comments.
         let dirp = $dir_path.as_bytes();
         let dirp_len = dirp.len();
-
-        // branchless needs_slash calculation (easier boolean shortcircuit on LHS)
-        #[allow(clippy::cast_lossless)] //shutup
         let needs_slash = ($dir_path.depth != 0) as u8 | ((dirp != b"/") as u8);
-
         let buffer_ptr = buffer.as_mut_ptr();
-
-        // Copy directory path
         std::ptr::copy_nonoverlapping(dirp.as_ptr(), buffer_ptr, dirp_len);
-
-        // branchless slash writing(we either write a slash or null terminator)
         *buffer_ptr.add(dirp_len) = (b'/') * needs_slash;
         buffer
     }};
@@ -233,9 +220,6 @@ macro_rules! prefetch_next_buffer {
 /// - **`ptr` must be a valid, non-null pointer to a null-terminated string.**
 /// - **Does not check if the string starts with a null terminator** (unlike `libc::strlen`).
 /// - **Uses unaligned loads** (`_mm_loadu_si128`/`_mm256_loadu_si256`), so alignment is not required.
-///
-/// # Performance
-/// - **Constant-time per 16/32-byte block(arch dependent)** (no branching per byte under this amount).
 macro_rules! strlen_asm {
     ($ptr:expr) => {{
         #[cfg(all(

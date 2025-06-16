@@ -143,7 +143,7 @@ where
         }
  
       
-        let (path_len,path_buffer)=unsafe{init_path_buffer_syscall!( dir_path, self.depth())}; // (we provide the depth for some quick checks)
+        let (path_len,path_buffer)=unsafe{init_path_buffer_syscall!( self)}; // (we provide the depth for some quick checks)
 
         Ok(DirEntryIteratorFilter {
             fd,

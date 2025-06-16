@@ -183,17 +183,18 @@ macro_rules! init_path_buffer_readdir {
 /// - `name_file` must point to a valid null-terminated string
 /// - `self` must have sufficient capacity for base_len + string length
 macro_rules! copy_name_to_buffer {
-    ($self:expr, $name_file:expr) => {{
+    ($self:expr, $dirent:expr) => {{
+        let d_name=$crate::offset_ptr!($dirent, d_name) as *const u8; //get the pointer to the name field
         // Calculate available space after base_len
         let base_len = $self.base_len as usize;
         // Get string length using optimized SSE2 version
-        let name_len = $crate::strlen_asm!($name_file);
+        let name_len = $crate::dirent_const_time_strlen!($dirent);
         //we avx2/sse2 ideally here, perfect for the likely size of it. I have considered
         //implemented a lot of these as macros to avoid function calls
         // SAFETY:
         // We've calculated the position of the null terminator.
 
-        std::ptr::copy_nonoverlapping($name_file, $self.as_mut_ptr().add(base_len), name_len);
+        std::ptr::copy_nonoverlapping(d_name, $self.as_mut_ptr().add(base_len), name_len);
 
         $self.buffer.get_unchecked_mut(..base_len + name_len)
     }};
@@ -227,6 +228,7 @@ macro_rules! prefetch_next_buffer {
     };
 }
 
+/* 
 ///not intended for public use, will be private when boilerplate is done
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
 #[macro_export(local_inner_macros)]
@@ -248,7 +250,7 @@ macro_rules! construct_path {
         full_path
     }};
 }
-
+*/
 #[macro_export]
 #[allow(clippy::ptr_as_ptr)]
 /// A high-performance, SIMD-accelerated `strlen` for null-terminated strings.
@@ -337,7 +339,7 @@ macro_rules! strlen_asm {
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
 #[macro_export(local_inner_macros)]
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
-macro_rules! construct_path_optimised {
+macro_rules! construct_path {
     ($self:ident, $dent:ident) => {{
         let name_ptr = $crate::offset_ptr!($dent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let name_len = $crate::dirent_const_time_strlen!($dent);

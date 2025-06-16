@@ -1,0 +1,165 @@
+
+running 17 tests
+test test::tests::base_len_test ... ignored
+test test::tests::check_filenames ... ignored
+test test::tests::filename_test ... ignored
+test test::tests::test_basic_iteration ... ignored
+test test::tests::test_dirent_const_time_strlen_optimal_abc ... ignored
+test test::tests::test_dirname ... ignored
+test test::tests::test_entries ... ignored
+test test::tests::test_error_handling ... ignored
+test test::tests::test_file_types ... ignored
+test test::tests::test_from_bytes ... ignored
+test test::tests::test_full_path ... ignored
+test test::tests::test_handles_various_tests ... ignored
+test test::tests::test_hidden_files ... ignored
+test test::tests::test_iterator ... ignored
+test test::tests::test_path_construction ... ignored
+test test::tests::test_path_methods ... ignored
+test test::tests::test_read_dir ... ignored
+
+test result: ok. 0 passed; 0 failed; 17 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+strlen_by_length/const_time_swar/empty
+                        time:   [994.53 ps 997.11 ps 999.71 ps]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+                 change:
+                        time:   [−13.992% −12.712% −11.435%] (p = 0.00 < 0.05)
+                        thrpt:  [+12.912% +14.563% +16.268%]
+                        Performance has improved.
+Found 10 outliers among 1000 measurements (1.00%)
+  3 (0.30%) high mild
+  7 (0.70%) high severe
+strlen_by_length/libc_strlen/empty
+                        time:   [1.6360 ns 1.6408 ns 1.6455 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+                 change:
+                        time:   [−17.100% −16.369% −15.640%] (p = 0.00 < 0.05)
+                        thrpt:  [+18.540% +19.573% +20.627%]
+                        Performance has improved.
+Found 16 outliers among 1000 measurements (1.60%)
+  9 (0.90%) high mild
+  7 (0.70%) high severe
+strlen_by_length/const_time_swar/tiny (1-4)
+                        time:   [1.0151 ns 1.0203 ns 1.0258 ns]
+                        thrpt:  [929.67 MiB/s 934.74 MiB/s 939.51 MiB/s]
+                 change:
+                        time:   [+6.1063% +7.9645% +9.7770%] (p = 0.00 < 0.05)
+                        thrpt:  [−8.9062% −7.3770% −5.7549%]
+                        Performance has regressed.
+Found 179 outliers among 1000 measurements (17.90%)
+  52 (5.20%) high mild
+  127 (12.70%) high severe
+strlen_by_length/libc_strlen/tiny (1-4)
+                        time:   [1.6217 ns 1.6292 ns 1.6382 ns]
+                        thrpt:  [582.15 MiB/s 585.38 MiB/s 588.08 MiB/s]
+                 change:
+                        time:   [−3.2188% −2.8913% −2.5498%] (p = 0.00 < 0.05)
+                        thrpt:  [+2.6165% +2.9774% +3.3258%]
+                        Performance has improved.
+Found 54 outliers among 1000 measurements (5.40%)
+  51 (5.10%) high mild
+  3 (0.30%) high severe
+strlen_by_length/const_time_swar/small (5-16)
+                        time:   [1.0636 ns 1.0675 ns 1.0715 ns]
+                        thrpt:  [6.9535 GiB/s 6.9795 GiB/s 7.0053 GiB/s]
+                 change:
+                        time:   [−1.6233% −1.1274% −0.6812%] (p = 0.00 < 0.05)
+                        thrpt:  [+0.6859% +1.1402% +1.6501%]
+                        Change within noise threshold.
+Found 10 outliers among 1000 measurements (1.00%)
+  9 (0.90%) high mild
+  1 (0.10%) high severe
+strlen_by_length/libc_strlen/small (5-16)
+                        time:   [1.6048 ns 1.6088 ns 1.6129 ns]
+                        thrpt:  [4.6193 GiB/s 4.6311 GiB/s 4.6426 GiB/s]
+                 change:
+                        time:   [−1.0915% −0.7740% −0.4668%] (p = 0.00 < 0.05)
+                        thrpt:  [+0.4690% +0.7800% +1.1036%]
+                        Change within noise threshold.
+Found 13 outliers among 1000 measurements (1.30%)
+  13 (1.30%) high mild
+strlen_by_length/const_time_swar/medium (17-64)
+                        time:   [2.0432 ns 2.0910 ns 2.1388 ns]
+                        thrpt:  [14.805 GiB/s 15.143 GiB/s 15.497 GiB/s]
+                 change:
+                        time:   [+52.060% +55.943% +59.843%] (p = 0.00 < 0.05)
+                        thrpt:  [−37.439% −35.874% −34.236%]
+                        Performance has regressed.
+Found 5 outliers among 1000 measurements (0.50%)
+  5 (0.50%) high mild
+strlen_by_length/libc_strlen/medium (17-64)
+                        time:   [2.8744 ns 2.9462 ns 3.0230 ns]
+                        thrpt:  [10.475 GiB/s 10.748 GiB/s 11.016 GiB/s]
+                 change:
+                        time:   [+29.163% +30.733% +32.464%] (p = 0.00 < 0.05)
+                        thrpt:  [−24.508% −23.508% −22.578%]
+                        Performance has regressed.
+Found 24 outliers among 1000 measurements (2.40%)
+  15 (1.50%) high mild
+  9 (0.90%) high severe
+strlen_by_length/const_time_swar/large (65-128)
+                        time:   [1.0921 ns 1.0971 ns 1.1023 ns]
+                        thrpt:  [58.298 GiB/s 58.575 GiB/s 58.844 GiB/s]
+                 change:
+                        time:   [+2.2288% +2.7203% +3.2017%] (p = 0.00 < 0.05)
+                        thrpt:  [−3.1024% −2.6483% −2.1802%]
+                        Performance has regressed.
+Found 43 outliers among 1000 measurements (4.30%)
+  28 (2.80%) high mild
+  15 (1.50%) high severe
+strlen_by_length/libc_strlen/large (65-128)
+                        time:   [2.3134 ns 2.3304 ns 2.3485 ns]
+                        thrpt:  [27.362 GiB/s 27.575 GiB/s 27.777 GiB/s]
+                 change:
+                        time:   [+5.5034% +6.1844% +6.8290%] (p = 0.00 < 0.05)
+                        thrpt:  [−6.3925% −5.8242% −5.2163%]
+                        Performance has regressed.
+Found 90 outliers among 1000 measurements (9.00%)
+  1 (0.10%) low mild
+  47 (4.70%) high mild
+  42 (4.20%) high severe
+strlen_by_length/const_time_swar/xlarge (129-255)
+                        time:   [1.0687 ns 1.0719 ns 1.0750 ns]
+                        thrpt:  [173.27 GiB/s 173.78 GiB/s 174.29 GiB/s]
+                 change:
+                        time:   [−0.6977% −0.1707% +0.3024%] (p = 0.50 > 0.05)
+                        thrpt:  [−0.3015% +0.1709% +0.7026%]
+                        No change in performance detected.
+Found 12 outliers among 1000 measurements (1.20%)
+  5 (0.50%) high mild
+  7 (0.70%) high severe
+strlen_by_length/libc_strlen/xlarge (129-255)
+                        time:   [4.2938 ns 4.3054 ns 4.3171 ns]
+                        thrpt:  [43.146 GiB/s 43.263 GiB/s 43.380 GiB/s]
+                 change:
+                        time:   [+31.595% +32.064% +32.518%] (p = 0.00 < 0.05)
+                        thrpt:  [−24.538% −24.279% −24.009%]
+                        Performance has regressed.
+Found 1 outliers among 1000 measurements (0.10%)
+  1 (0.10%) high mild
+
+strlen_batch_comparison/const_time_swar_batch
+                        time:   [7.3796 ns 7.4034 ns 7.4272 ns]
+                        thrpt:  [807.84 Melem/s 810.44 Melem/s 813.05 Melem/s]
+                 change:
+                        time:   [+1.4268% +1.9390% +2.4435%] (p = 0.00 < 0.05)
+                        thrpt:  [−2.3852% −1.9022% −1.4067%]
+                        Performance has regressed.
+Found 5 outliers among 1000 measurements (0.50%)
+  5 (0.50%) high severe
+strlen_batch_comparison/libc_strlen_batch
+                        time:   [13.634 ns 13.685 ns 13.736 ns]
+                        thrpt:  [436.80 Melem/s 438.44 Melem/s 440.09 Melem/s]
+                 change:
+                        time:   [−1.1167% −0.6381% −0.1194%] (p = 0.01 < 0.05)
+                        thrpt:  [+0.1195% +0.6421% +1.1293%]
+                        Change within noise threshold.
+Found 5 outliers among 1000 measurements (0.50%)
+  5 (0.50%) high mild
+

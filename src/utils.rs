@@ -25,7 +25,8 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
-/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`. This doesn't even matter because we don't use it.
+/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`. 
+/// This doesn't even matter because we don't use it to calculate strlen anymore, that's an O(1) problem now :)))))))))))))))))))))
 #[inline]
 #[allow(clippy::unnecessary_safety_comment)] //ill fix this later.
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 16 bytes
@@ -43,7 +44,7 @@ where
 #[allow(clippy::cast_possible_truncation)] //stupid
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(target_arch = "x86_64")]
-/// Opens a directory using an assembly implementation of open(to reduce libc overplay) and returns the file descriptor.
+/// Opens a directory using an assembly implementation of open(i'm probably going to learn some bindgen and have some experiments) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
@@ -119,7 +120,7 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 #[allow(clippy::integer_division_remainder_used)] //division is fine.
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 8 bytes
 #[allow(clippy::cast_lossless)] //shutup
-/// Const-fn strlen for dirent's `d_name` field using bit tricks.
+/// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD, no overreads!!!
 /// O(1) complexity, no branching, and no loops.
 ///
 /// This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
@@ -148,11 +149,10 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
 ///  `SWAR` (SIMD Within A Register) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we need to add 1 to the offset to account for the null terminator
-    // let reclen = unsafe { (*dirent).d_reclen as usize }; // we MUST cast this way, as it is not guaranteed to be aligned, so
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { offset_ptr!(dirent, d_reclen) as usize }; //THIS MACRO IS MODIFIED FROM THE STANDARD LIBRARY INTERNAL IMPLEMENTATION
     //an internal macro, alternatively written as (my macro just makes it easy to access without worrying about alignment)
-    // let reclen = unsafe { (*dirent).d_reclen as usize }; (do not access it directly!)
+    // let reclen = unsafe { (*dirent).d_reclen as usize }; (do not access it via byte_offset!)
     // Calculate find the  start of the d_name field
     // THIS WILL ONLY WORK ON LITTLE-ENDIAN ARCHITECTURES, I CANT BE BOTHERED TO FIGURE THAT OUT, qemu isnt fun
     // Calculate find the  start of the d_name field
@@ -166,7 +166,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes, and then we find the first zero byte.
+    // The resulting value (`candidate_pos`) has:
     let candidate_pos = last_word | mask;
+    // The resulting value (`candidate_pos`) has:
+    // - Original name bytes preserved
+    // - Non-name bytes forced to 0xFF (guaranteed non-zero)
+    // - Maintains the exact position of any null bytes in the name
     let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is zero
         & !candidate_pos//ensures only bytes that were zero retain the underflowed high bit.
         & 0x8080_8080_8080_8080; //  0x8080_8080_8080_8080 -->This masks out the high bit of each byte, so we can find the first zero byte
@@ -174,5 +179,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // We divide by 8 to convert the bit position to a byte position..
     // We subtract 7 to get the correct offset in the d_name field.
     //>> 3 converts from bit position to byte index (divides by 8)
+
     reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }

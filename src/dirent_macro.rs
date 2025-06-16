@@ -11,6 +11,7 @@
 /// - The field name must be a valid field of the `libc::dirent64` struct.
 macro_rules! offset_ptr {
     // Special case for d_reclen
+    // I recommend casting to usize.
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_reclen //access field directly as it is not aligned like the others

@@ -123,10 +123,12 @@ where
 
     let limit_opt: usize = limit.unwrap_or(usize::MAX);
 
-    let check_std_colours =
+    let check_std_colours = /*arbitrary feature request  */
         std::env::var("FDF_NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
 
     //TODO! fix broken pipe errors.
+    //i realise i've broken this currently because i switched to iterating over vectors, it's probably because im going to rewrite all this anyway.
+    //
     if use_colors && !check_std_colours {
         for path in paths.take(limit_opt) {
             for small_path in path {
@@ -143,7 +145,6 @@ where
             }
         }
     } else
-    // let pipe_writer = PipeWriter::new(std_out.lock());
     {
         for path in paths.take(limit_opt) {
             for small_path in path {

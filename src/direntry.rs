@@ -360,7 +360,7 @@ where
                 let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 #[cfg(target_arch = "x86_64")]
-                prefetch_next_entry!(self);
+                prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
                 // Extract the fields from the dirent structure
                 let (name_ptr, d_type, inode, reclen): (*const u8, u8, u64, usize) = //we have to tell our macro what types 
                     get_dirent_vals!(d);
@@ -371,8 +371,6 @@ where
                 //a macro that extracts the values from the dirent structure, this is a niche optimisation,
                 skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
-                //
-                // let full_path = unsafe { construct_path!(self, name_ptr) }; //a macro that constructs it, the full details are a bit lengthy
                 let full_path = unsafe { construct_path!(self, d) }; //here we have a construct_path_optimised  version, which uses a very specific trick, i need to benchmark it!
 
                 let entry = DirEntry {
@@ -384,10 +382,9 @@ where
                 };
 
                 unsafe {
-                    debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen!(d))
-                }
-                unsafe {
-                    debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen(d))
+                    debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen!(d));
+               
+                    debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen(d));
                 }
 
                 return Some(entry);

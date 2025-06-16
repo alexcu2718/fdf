@@ -244,7 +244,7 @@ where
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
-        unsafe { self.get_unchecked(..std::cmp::max(self.base_len as usize - 1, 1)) }
+        unsafe { self.get_unchecked(..std::cmp::max(self.base_len()- 1, 1)) }
 
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.

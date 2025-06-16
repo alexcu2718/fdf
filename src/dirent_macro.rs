@@ -89,14 +89,17 @@ macro_rules! cstr_n {
 
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
+///NOT INTENDED FO FOR PUBLIC USE, WILL BE PRIVATE SOON.
 /// A macro to skip . and .. entries when traversing
 ///
 /// Takes 2 mandatory args:
 /// - `d_type`: The directory entry type (e.g., `(*dirnt).d_type`)
 /// - `name_ptr`: Pointer to the entry name
 ///
-/// And 1 optional arg:
-/// - `reclen`: If provided, also checks that reclen == 24 when testing directory entries, this helps to reduce any checking pointers
+/// And 1 optional arg: (the reclen)
+/// 
+/// - `reclen`: If provided, also checks that reclen == 24
+///  when testing directory entries, this helps to reduce any checking pointers
 macro_rules! skip_dot_entries {
     // Version with reclen check
     ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{

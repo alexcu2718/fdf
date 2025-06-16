@@ -293,8 +293,8 @@ where
         // .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
         let fd = unsafe { open_asm(dir_path) };
         //alternatively syntaxes I made.
-        //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-        //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+       // let fd= unsafe{ open(crate::cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+        //let fd= unsafe{ open(crate::cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
 
         if fd < 0 {
             return Err(Error::last_os_error().into());
@@ -303,14 +303,14 @@ where
         let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used(the pointer is mutated) to construct the full path of the entry, this is actually
         //a uninitialised buffer, which is then initialised with the directory path
         let mut path_len = dir_path.len();
-        init_path_buffer_syscall!(path_buffer, path_len, dir_path, self); // initialise the path buffer with the directory path
+        unsafe{init_path_buffer_syscall!(path_buffer, path_len, dir_path, self)}; // initialise the path buffer with the directory path
         //using macros is ideal here and i need generics
 
         Ok(DirEntryIterator {
             fd,
             buffer: SyscallBuffer::new(),
             path_buffer,
-            base_path_len: path_len as _,
+            base_len: path_len as _,
             parent_depth: self.depth,
             offset: 0,
             remaining_bytes: 0,
@@ -327,7 +327,7 @@ where
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.1k bytes~ish
     pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
-    pub(crate) base_path_len: u16, // base path length, this is the length of the path up to and including the last slash
+    pub(crate) base_len: u16, // base path length, this is the length of the path up to and including the last slash
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
@@ -383,7 +383,7 @@ where
                     file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
                     inode,
                     depth: self.parent_depth + 1, // increment depth for child entries
-                    base_len: self.base_path_len,
+                    base_len: self.base_len,
                 };
 
                 unsafe {

@@ -122,49 +122,8 @@ macro_rules! skip_dot_entries {
         }
     }};
 }
-/* 
-#[macro_export]
-#[allow(clippy::too_long_first_doc_paragraph)]
-/// A macro to skip . and .. entries when traversing
-///
-/// Takes 2 mandatory args:
-/// - `d_type`: The directory entry type (e.g., `(*dirnt).d_type`)
-/// - `name_ptr`: Pointer to the entry name
-///
-/// And 1 optional arg:
-/// - `reclen`: If provided, also checks that reclen == 24 when testing directory entries, this helps to reduce any checking pointers
-macro_rules! skip_dot_entries {
-    // Version with reclen check
-    ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
-        #[allow(clippy::macro_metavars_in_unsafe)]
-        unsafe {
-            let ddd = ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) && $reclen == 24;
-            if ddd && *$name_ptr.add(0) == 46 {  // 46 == '.' in ASCII
-                if *$name_ptr.add(1) == 0 ||     // Single dot case
-                   (*$name_ptr.add(1) == 46 &&  // Double dot case
-                    *$name_ptr.add(2) == 0) {
-                    continue;
-                }
-            }
-        }
-    }};
 
-    // Version without reclen check
-    ($d_type:expr, $name_ptr:expr) => {{
-        #[allow(clippy::macro_metavars_in_unsafe)]
-        unsafe {
-            if ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) &&
-               *$name_ptr.add(0) == 46 {
-                if *$name_ptr.add(1) == 0 ||     // Single dot case
-                   (*$name_ptr.add(1) == 46 &&  // Double dot case
-                    *$name_ptr.add(2) == 0) {
-                    continue;
-                }
-            }
-        }
-    }};
-}
-*/
+
 #[macro_export]
 /// initialises a path buffer for syscall operations,
 // appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument).
@@ -176,14 +135,14 @@ macro_rules! init_path_buffer_syscall {
         #[allow(clippy::cast_lossless)] //shutup
         let needs_slash = (($self.depth != 0) as u8) | (($dir_path != b"/") as u8);
 
-        unsafe {
-            // Copy directory path
-            std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, $path_len);
+        
+        // Copy directory path
+        std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, $path_len);
 
-            // Branchless slash writing and length adjustment, write a null terminator if no slash.
-            *buffer_ptr.add($path_len) = (b'/') * needs_slash;
-            $path_len += needs_slash as usize;
-        }
+        // Branchless slash writing and length adjustment, write a null terminator if no slash.
+        *buffer_ptr.add($path_len) = (b'/') * needs_slash;
+        $path_len += needs_slash as usize;
+        
 
         buffer_ptr
     }};
@@ -214,29 +173,26 @@ macro_rules! init_path_buffer_readdir {
     }};
 }
 
-#[macro_export]
-/// Copies a null-terminated string into a buffer after a base offset
-///
-/// # Safety
-/// - `name_file` must point to a valid null-terminated string
-/// - `self` must have sufficient capacity for base_len + string length
-macro_rules! copy_name_to_buffer {
-    ($self:expr, $dirent:expr) => {{
-        let d_name=$crate::offset_ptr!($dirent, d_name) as *const u8; //get the pointer to the name field
-        // Calculate available space after base_len
-        let base_len = $self.base_len as usize;
-        // Get string length using optimized SSE2 version
+
+///not intended for public use, will be private when boilerplate is done
+/// a version of `construct_path!` that uses a constant time strlen macro to calculate the length of the name pointer
+/// this is really only an intellectual thing+exercise in reducing branching+complexity. THEY NEED TO BE BENCHMARKED.
+/// Constructs a path from the base path and the name pointer, returning a  slice of the full path
+#[macro_export(local_inner_macros)]
+#[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
+macro_rules! construct_path {
+    ($self:ident, $dirent:ident) => {{
+        let d_name = $crate::offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
+        let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
         let name_len = $crate::dirent_const_time_strlen!($dirent);
-        //we avx2/sse2 ideally here, perfect for the likely size of it. I have considered
-        //implemented a lot of these as macros to avoid function calls
-        // SAFETY:
-        // We've calculated the position of the null terminator.
+        std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,
+        );
 
-        std::ptr::copy_nonoverlapping(d_name, $self.as_mut_ptr().add(base_len), name_len);
-
-        $self.buffer.get_unchecked_mut(..base_len + name_len)
+       $self.path_buffer.get_unchecked(..base_len+name_len)
+        
     }};
 }
+
 
 #[cfg(target_arch = "x86_64")]
 #[macro_export(local_inner_macros)]
@@ -348,31 +304,6 @@ macro_rules! strlen_asm {
     }};
 }
 
-///not intended for public use, will be private when boilerplate is done
-/// a version of `construct_path!` that uses a constant time strlen macro to calculate the length of the name pointer
-/// this is really only an intellectual thing+exercise in reducing branching+complexity. THEY NEED TO BE BENCHMARKED.
-/// Constructs a path from the base path and the name pointer, returning a  slice of the full path
-#[macro_export(local_inner_macros)]
-#[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
-macro_rules! construct_path {
-    ($self:ident, $dent:ident) => {{
-        let name_ptr = $crate::offset_ptr!($dent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
-        let name_len = $crate::dirent_const_time_strlen!($dent);
-        let total_len = $self.base_path_len as usize + name_len;
-
-        std::ptr::copy_nonoverlapping(
-            name_ptr,
-            $self
-                .path_buffer
-                .as_mut_ptr()
-                .add($self.base_path_len as usize),
-            name_len,
-        );
-
-        let full_path = $self.path_buffer.get_unchecked(..total_len);
-        full_path
-    }};
-}
 
 #[macro_export]
 /// The crown jewel of cursed macros(this is const, see the function equivalent for proof).

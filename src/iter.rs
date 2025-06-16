@@ -2,7 +2,7 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
-    copy_name_to_buffer, cstr, custom_types_result::BytesStorage, get_dirent_vals,
+    construct_path, cstr, custom_types_result::BytesStorage, get_dirent_vals,
     init_path_buffer_readdir, offset_ptr, skip_dot_entries,
 };
 use libc::{DIR, closedir, opendir, readdir64};
@@ -16,7 +16,7 @@ where
     S: BytesStorage,
 {
     dir: *mut DIR,
-    buffer: PathBuffer,
+    path_buffer: PathBuffer,
     base_len: u16,
     depth: u8,
     error: Option<Error>,
@@ -28,10 +28,11 @@ where
     S: BytesStorage,
 {
     #[inline]
+    #[allow(dead_code)]//annoying
     pub const fn as_mut_ptr(&mut self) -> *mut u8 {
         // This function is used to get a mutable pointer to the internal buffer.
         // It is useful for operations that require direct access to the buffer.
-        self.buffer.as_mut_ptr()
+        self.path_buffer.as_mut_ptr()
     }
 
     #[inline]
@@ -46,12 +47,12 @@ where
         if dir.is_null() {
             return Err(std::io::Error::last_os_error().into());
         }
-        let mut buffer = PathBuffer::new(); //
-        unsafe { init_path_buffer_readdir!(dir_path, buffer) }; //0 cost macro to construct the buffer in the way we want.
+        let mut path_buffer = PathBuffer::new(); //
+        unsafe { init_path_buffer_readdir!(dir_path, path_buffer) }; //0 cost macro to construct the buffer in the way we want.
 
         Ok(Self {
             dir,
-            buffer,
+            path_buffer,
             base_len: dir_path.base_len,
             depth: dir_path.depth,
             error: None,
@@ -87,7 +88,7 @@ where
             skip_dot_entries!(dir_info, name_file);
             //skip_dot_entries!(dir_info, name_file, reclen);< -this is the more efficient version, but it requires reclen to be passed in.
 
-            let full_path = unsafe { copy_name_to_buffer!(self, entry) };
+            let full_path = unsafe { construct_path!(self, entry) };
             return Some(DirEntry {
                 path: full_path.into(),
                 file_type: FileType::from_dtype_fallback(dir_info, full_path),

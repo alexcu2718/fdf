@@ -123,13 +123,18 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
 /// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
 ///
-/// This is my own implementation of a constant-time strlen for dirents, which is useful for performance/learning.
-///
-/// Reference <https://github.com/lattera/glibc/blob/master/string/strlen.c#L1>    
+/// This is my own implementation of a constant-time strlen for dirents, which is useful for performance/learning.  
 ///                                   
 /// Reference <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>    
 ///                        
-/// Reference <https://github.com/Soveu/find/blob/master/src/dirent.rs>           
+/// Reference <https://github.com/Soveu/find/blob/master/src/dirent.rs>          
+/// 
+/// 
+/// Main idea:
+/// - We read the last 8 bytes of the `d_name` field, which is guaranteed to be null-terminated by the kernel.
+/// This is based on the observation that d_name is always null-terminated by the kernel,
+///  so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks, 
+/// we can locate the null terminator with a single 64-bit read and mask, assuming alignment and endianness.
 ///                    
 /// Combining all these tricks, i made this beautiful thing!
 /// # SAFETY

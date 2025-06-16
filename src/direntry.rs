@@ -25,7 +25,7 @@ use std::{
 #[allow(unused_imports)]
 use crate::{
     AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
-    cstr_n, custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
+    custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
     init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
     skip_dot_entries, utils::close_asm, utils::open_asm, utils::unix_time_to_system_time,
 };

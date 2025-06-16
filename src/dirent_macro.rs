@@ -100,6 +100,44 @@ macro_rules! skip_dot_entries {
     ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
         #[allow(clippy::macro_metavars_in_unsafe)]
         unsafe {
+            if ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) && $reclen == 24 {
+                match (*$name_ptr.add(0), *$name_ptr.add(1), *$name_ptr.add(2)) {
+                    (b'.', 0, _) | (b'.', b'.', 0) => continue,
+                    _ => (),
+                }
+            }
+        }
+    }};
+
+    // Version without reclen check
+    ($d_type:expr, $name_ptr:expr) => {{
+        #[allow(clippy::macro_metavars_in_unsafe)]
+        unsafe {
+            if $d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN {
+                match (*$name_ptr.add(0), *$name_ptr.add(1), *$name_ptr.add(2)) {
+                    (b'.', 0, _) | (b'.', b'.', 0) => continue,
+                    _ => (),
+                }
+            }
+        }
+    }};
+}
+/* 
+#[macro_export]
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// A macro to skip . and .. entries when traversing
+///
+/// Takes 2 mandatory args:
+/// - `d_type`: The directory entry type (e.g., `(*dirnt).d_type`)
+/// - `name_ptr`: Pointer to the entry name
+///
+/// And 1 optional arg:
+/// - `reclen`: If provided, also checks that reclen == 24 when testing directory entries, this helps to reduce any checking pointers
+macro_rules! skip_dot_entries {
+    // Version with reclen check
+    ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
+        #[allow(clippy::macro_metavars_in_unsafe)]
+        unsafe {
             let ddd = ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) && $reclen == 24;
             if ddd && *$name_ptr.add(0) == 46 {  // 46 == '.' in ASCII
                 if *$name_ptr.add(1) == 0 ||     // Single dot case
@@ -126,7 +164,7 @@ macro_rules! skip_dot_entries {
         }
     }};
 }
-
+*/
 #[macro_export]
 /// initialises a path buffer for syscall operations,
 // appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument).
@@ -228,29 +266,6 @@ macro_rules! prefetch_next_buffer {
     };
 }
 
-/* 
-///not intended for public use, will be private when boilerplate is done
-/// Constructs a path from the base path and the name pointer, returning a  slice of the full path
-#[macro_export(local_inner_macros)]
-macro_rules! construct_path {
-    ($self:ident, $name_ptr:ident) => {{
-        let name_len = $crate::strlen_asm!($name_ptr);
-
-        let total_len = $self.base_path_len as usize + name_len;
-        std::ptr::copy_nonoverlapping(
-            $name_ptr,
-            $self
-                .path_buffer
-                .as_mut_ptr()
-                .add($self.base_path_len as usize),
-            name_len,
-        );
-
-        let full_path = $self.path_buffer.get_unchecked(..total_len);
-        full_path
-    }};
-}
-*/
 #[macro_export]
 #[allow(clippy::ptr_as_ptr)]
 /// A high-performance, SIMD-accelerated `strlen` for null-terminated strings.
@@ -360,22 +375,23 @@ macro_rules! construct_path {
 }
 
 #[macro_export]
-#[allow(clippy::cast_lossless)] //shutup
 /// The crown jewel of cursed macros(this is const, see the function equivalent for proof).
 //comments to be seen in function version form.
 macro_rules! dirent_const_time_strlen {
     ($dirent:expr) => {{
-        const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+        const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
         let reclen = (*$dirent).d_reclen as usize; // we MUST cast this way, ONLY REMINDER
         let last_word = *(($dirent as *const u8).add(reclen - 8) as *const u64);
         let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);
-        let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)
-            & !(last_word | mask)
+        let candidate_pos = last_word | mask;
+        let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
+            & !candidate_pos
             & 0x8080_8080_8080_8080;
 
-        reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+        reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
     }};
 }
+
 
 #[macro_export]
 /// A macro to extract values from a `libc::dirent64` struct.

@@ -111,7 +111,7 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 
 
 /// Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.  
-/// (c) [Alexander Curtis/<https://github.com/alexcu2718/fdf>] – MIT License. 
+/// (c) [Alexander Curtis/<https://github.com/alexcu2718/fdf>] – MIT License.
 #[inline]
 #[allow(clippy::integer_division)] //i know reclen is always a multiple of 8, so this is fine
 #[allow(clippy::cast_possible_truncation)] //^
@@ -126,17 +126,18 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
 /// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
 ///
-/// This is my own implementation of a constant-time strlen for dirents, which is an extremely common operation(probably one of THE hottest functions) 
+/// This is my own implementation of a constant-time strlen for dirents, which is an extremely common operation(probably one of THE hottest functions in this library
+/// and ignore/fd etc. So this is a big win!)
 ///                                   
 /// Reference <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>    
 ///                        
 /// Reference <https://github.com/Soveu/find/blob/master/src/dirent.rs>          
-/// 
-/// 
+///
+///
 /// Main idea:
 /// - We read the last 8 bytes of the `d_name` field, which is guaranteed to be null-terminated by the kernel.
 /// This is based on the observation that d_name is always null-terminated by the kernel,
-///  so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks, 
+///  so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks,
 /// we can locate the null terminator with a single 64-bit read and mask, assuming alignment and endianness.
 ///                    
 /// Combining all these tricks, i made this beautiful thing!
@@ -146,15 +147,14 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
 ///  `SWAR` (SIMD Within A Register) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
     // let reclen = unsafe { (*dirent).d_reclen as usize }; // we MUST cast this way, as it is not guaranteed to be aligned, so
     let reclen = unsafe { offset_ptr!(dirent, d_reclen) as usize }; //THIS MACRO IS MODIFIED FROM THE STANDARD LIBRARY INTERNAL IMPLEMENTATION
-    //an internal macro, alternatively written as
+    //an internal macro, alternatively written as (my macro just makes it easy to access without worrying about alignment)
     // let reclen = unsafe { (*dirent).d_reclen as usize }; (do not access it directly!)
-
-    // Calculate the number of u64 words in the record length
     // Calculate find the  start of the d_name field
     // THIS WILL ONLY WORK ON LITTLE-ENDIAN ARCHITECTURES, I CANT BE BOTHERED TO FIGURE THAT OUT, qemu isnt fun
+    // Calculate find the  start of the d_name field
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
@@ -165,14 +165,13 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes, and then we find the first zero byte.
-    // the kernel guarantees that the d_name field is null-terminated, so we can safely use this trick.
-    let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is
-        & !(last_word | mask) //ensures only bytes that were zero retain the underflowed high bit.
+    let candidate_pos = last_word | mask;
+    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is zero
+        & !candidate_pos//ensures only bytes that were zero retain the underflowed high bit.
         & 0x8080_8080_8080_8080; //  0x8080_8080_8080_8080 -->This masks out the high bit of each byte, so we can find the first zero byte
     // The trailing zeros of the zero_bit gives us the position of the first zero byte.
-    // We divide by 8 to convert the bit position to a byte position.
-    // The trailing zeros of the zero_bit gives us the position of the first zero byte.
+    // We divide by 8 to convert the bit position to a byte position..
     // We subtract 7 to get the correct offset in the d_name field.
     //>> 3 converts from bit position to byte index (divides by 8)
-    reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+    reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }

@@ -208,10 +208,7 @@ pub struct Args {
 }
 
 fn main() -> Result<(), DirEntryError> {
-    
     let args = Args::parse();
-
-
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(args.thread_num)

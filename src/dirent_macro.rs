@@ -1,5 +1,3 @@
-
-
 #![allow(clippy::doc_markdown)]
 #[macro_export]
 ///A modified helper macro from the standard library to safely access(as per my opinion i guess...) fields of a `libc::dirent64` struct by offset.
@@ -17,11 +15,11 @@ macro_rules! offset_ptr {
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_reclen //access field directly as it is not aligned like the others
     }};
-    
+
     // General case for all other fields
     ($entry_ptr:expr, $field:ident) => {{
         const OFFSET: isize = std::mem::offset_of!(libc::dirent64, $field) as isize;
-        
+
         if true {
             // Normal field access via offset
             // SAFETY: Caller must ensure pointer is valid
@@ -29,7 +27,9 @@ macro_rules! offset_ptr {
         } else {
             // Type inference branch (never executed)
             #[allow(deref_nullptr, unused_unsafe)]
-            unsafe { std::ptr::addr_of!((*std::ptr::null::<libc::dirent64>()).$field) }
+            unsafe {
+                std::ptr::addr_of!((*std::ptr::null::<libc::dirent64>()).$field)
+            }
         }
     }};
 }
@@ -368,11 +368,11 @@ macro_rules! dirent_const_time_strlen {
         let last_word = *(($dirent as *const u8).add(reclen - 8) as *const u64);
         let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);
         let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)
-        & !(last_word | mask)
+            & !(last_word | mask)
             & 0x8080_8080_8080_8080;
 
         reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
-        }};
+    }};
 }
 
 #[macro_export]

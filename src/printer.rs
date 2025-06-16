@@ -1,5 +1,5 @@
 use fdf::BytesStorage;
-use fdf::{BytePath, DirEntry, Result};
+use fdf::{BytePath, DirEntry, FileType, Result};
 use std::collections::HashMap;
 use std::io::{BufWriter, IsTerminal, Write, stdout};
 use std::sync::OnceLock;
@@ -56,56 +56,57 @@ where
     S: BytesStorage + 'static + Clone,
 {
     // check if it's a symlink and use  LS_COLORS symlink color
-    if entry.is_symlink() {
-        return SYMLINK_COLOR.get_or_init(|| parse_ls_colors("ln", DEFAULT_SYMLINK_COLOR));
-    }
+    match entry.file_type() {
+        // Handle symlinks first (they override directory status)
+        FileType::Symlink => {
+            SYMLINK_COLOR.get_or_init(|| parse_ls_colors("ln", DEFAULT_SYMLINK_COLOR))
+        }
 
-    // check if it's a directory and use  LS_COLORS directory color
-    if entry.is_dir() {
-        return DIR_COLOR.get_or_init(|| parse_ls_colors("di", DEFAULT_DIR_COLOR));
-    }
+        // Then handle directories
+        FileType::Directory => DIR_COLOR.get_or_init(|| parse_ls_colors("di", DEFAULT_DIR_COLOR)),
 
-    // for all other  files, color by extension
-    entry.extension().map_or(RESET, |pos| match pos {
-        b"rs" => COLOUR_RS,
-        b"py" => COLOUR_PY,
-        b"cpp" => COLOUR_CPP,
-        b"h" => COLOUR_H,
-        b"c" => COLOUR_C,
-        b"lua" => COLOUR_LUA,
-        b"html" => COLOUR_HTML,
-        b"css" => COLOUR_CSS,
-        b"js" => COLOUR_JS,
-        b"json" => COLOUR_JSON,
-        b"toml" => COLOUR_TOML,
-        b"txt" => COLOUR_TXT,
-        b"md" => COLOUR_MD,
-        b"ini" => COLOUR_INI,
-        b"cfg" => COLOUR_CFG,
-        b"xml" => COLOUR_XML,
-        b"yml" => COLOUR_YML,
-        b"ts" => COLOUR_TS,
-        b"sh" => COLOUR_SH,
-        b"bat" => COLOUR_BAT,
-        b"ps1" => COLOUR_PS1,
-        b"rb" => COLOUR_RB,
-        b"php" => COLOUR_PHP,
-        b"pl" => COLOUR_PL,
-        b"r" => COLOUR_R,
-        b"cs" => COLOUR_CS,
-        b"java" => COLOUR_JAVA,
-        b"go" => COLOUR_GO,
-        b"swift" => COLOUR_SWIFT,
-        b"kt" => COLOUR_KT,
-        b"scss" => COLOUR_SCSS,
-        b"less" => COLOUR_LESS,
-        b"csv" => COLOUR_CSV,
-        b"tsv" => COLOUR_TSV,
-        b"xls" => COLOUR_XLS,
-        b"xlsx" => COLOUR_XLSX,
-        b"sql" => COLOUR_SQL,
-        _ => RESET,
-    })
+        // for all other  files, color by extension
+        _ => entry.extension().map_or(RESET, |pos| match pos {
+            b"rs" => COLOUR_RS,
+            b"py" => COLOUR_PY,
+            b"cpp" => COLOUR_CPP,
+            b"h" => COLOUR_H,
+            b"c" => COLOUR_C,
+            b"lua" => COLOUR_LUA,
+            b"html" => COLOUR_HTML,
+            b"css" => COLOUR_CSS,
+            b"js" => COLOUR_JS,
+            b"json" => COLOUR_JSON,
+            b"toml" => COLOUR_TOML,
+            b"txt" => COLOUR_TXT,
+            b"md" => COLOUR_MD,
+            b"ini" => COLOUR_INI,
+            b"cfg" => COLOUR_CFG,
+            b"xml" => COLOUR_XML,
+            b"yml" => COLOUR_YML,
+            b"ts" => COLOUR_TS,
+            b"sh" => COLOUR_SH,
+            b"bat" => COLOUR_BAT,
+            b"ps1" => COLOUR_PS1,
+            b"rb" => COLOUR_RB,
+            b"php" => COLOUR_PHP,
+            b"pl" => COLOUR_PL,
+            b"r" => COLOUR_R,
+            b"cs" => COLOUR_CS,
+            b"java" => COLOUR_JAVA,
+            b"go" => COLOUR_GO,
+            b"swift" => COLOUR_SWIFT,
+            b"kt" => COLOUR_KT,
+            b"scss" => COLOUR_SCSS,
+            b"less" => COLOUR_LESS,
+            b"csv" => COLOUR_CSV,
+            b"tsv" => COLOUR_TSV,
+            b"xls" => COLOUR_XLS,
+            b"xlsx" => COLOUR_XLSX,
+            b"sql" => COLOUR_SQL,
+            _ => RESET,
+        }),
+    }
 }
 
 #[allow(clippy::inline_always)]

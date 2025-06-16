@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::{DirEntryError, Result, cstr,buffer::ValueType,offset_ptr};
+use crate::{DirEntryError, Result, buffer::ValueType, cstr, offset_ptr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
@@ -117,7 +117,7 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 #[allow(clippy::cast_lossless)] //shutup
 /// Const-fn strlen for dirent's `d_name` field using bit tricks.
 /// O(1) complexity, no branching, and no loops.
-/// 
+///
 /// This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
 /// It's probably the most efficient way to calculate the length
 /// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
@@ -139,14 +139,14 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 ///  `SWAR` (SIMD Within A Register) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-   // let reclen = unsafe { (*dirent).d_reclen as usize }; // we MUST cast this way, as it is not guaranteed to be aligned, so 
-     let reclen =unsafe{ offset_ptr!(dirent,d_reclen) as usize};//THIS MACRO IS MODIFIED FROM THE STANDARD LIBRARY INTERNAL IMPLEMENTATION
+    // let reclen = unsafe { (*dirent).d_reclen as usize }; // we MUST cast this way, as it is not guaranteed to be aligned, so
+    let reclen = unsafe { offset_ptr!(dirent, d_reclen) as usize }; //THIS MACRO IS MODIFIED FROM THE STANDARD LIBRARY INTERNAL IMPLEMENTATION
     //an internal macro, alternatively written as
-   // let reclen = unsafe { (*dirent).d_reclen as usize }; (do not access it directly!)
+    // let reclen = unsafe { (*dirent).d_reclen as usize }; (do not access it directly!)
 
     // Calculate the number of u64 words in the record length
     // Calculate find the  start of the d_name field
-     // THIS WILL ONLY WORK ON LITTLE-ENDIAN ARCHITECTURES, I CANT BE BOTHERED TO FIGURE THAT OUT, qemu isnt fun
+    // THIS WILL ONLY WORK ON LITTLE-ENDIAN ARCHITECTURES, I CANT BE BOTHERED TO FIGURE THAT OUT, qemu isnt fun
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
@@ -165,6 +165,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // We divide by 8 to convert the bit position to a byte position.
     // The trailing zeros of the zero_bit gives us the position of the first zero byte.
     // We subtract 7 to get the correct offset in the d_name field.
-                                        //>> 3 converts from bit position to byte index (divides by 8)
+    //>> 3 converts from bit position to byte index (divides by 8)
     reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }

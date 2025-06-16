@@ -128,23 +128,21 @@ macro_rules! skip_dot_entries {
 /// initialises a path buffer for syscall operations,
 // appending a slash if necessary and returning a pointer to the buffer (the mutable ptr of the first argument).
 macro_rules! init_path_buffer_syscall {
-    ($path_buffer:expr, $path_len:ident, $dir_path:expr, $self:expr) => {{
-        let buffer_ptr = $path_buffer.as_mut_ptr();
-
+    ( $dir_path:expr, $depth:expr) => {{
+        let mut start_buffer=$crate::PathBuffer::new();
+        let buffer_ptr = start_buffer.as_mut_ptr();
+        let mut path_len=$dir_path.len();
         // Branchless needs_slash calculation (returns 0 or 1)
-        #[allow(clippy::cast_lossless)] //shutup
-        let needs_slash = (($self.depth != 0) as u8) | (($dir_path != b"/") as u8);
-
-        
+        let needs_slash = (($depth != 0) as u8) | (($dir_path != b"/") as u8);
         // Copy directory path
-        std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, $path_len);
+        std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, path_len);
 
         // Branchless slash writing and length adjustment, write a null terminator if no slash.
-        *buffer_ptr.add($path_len) = (b'/') * needs_slash;
-        $path_len += needs_slash as usize;
+        *buffer_ptr.add(path_len) = (b'/') * needs_slash;
+        path_len += needs_slash as usize;
         
 
-        buffer_ptr
+        (path_len,start_buffer)
     }};
 }
 
@@ -155,7 +153,9 @@ macro_rules! init_path_buffer_syscall {
 /// Returns the base length of the path, which is the length of the directory
 ///  path plus one if a slash is needed(but also mutates the buffer invisibly, not ideal, i will change this.)
 macro_rules! init_path_buffer_readdir {
-    ($dir_path:expr, $buffer:expr) => {{
+    ($dir_path:expr) => {{
+
+        let mut buffer=$crate::PathBuffer::new();
         let dirp = $dir_path.as_bytes();
         let dirp_len = dirp.len();
 
@@ -163,13 +163,14 @@ macro_rules! init_path_buffer_readdir {
         #[allow(clippy::cast_lossless)] //shutup
         let needs_slash = ($dir_path.depth != 0) as u8 | ((dirp != b"/") as u8);
 
-        let buffer_ptr = $buffer.as_mut_ptr();
+        let buffer_ptr = buffer.as_mut_ptr();
 
         // Copy directory path
         std::ptr::copy_nonoverlapping(dirp.as_ptr(), buffer_ptr, dirp_len);
 
         // branchless slash writing(we either write a slash or null terminator)
         *buffer_ptr.add(dirp_len) = (b'/') * needs_slash;
+        buffer
     }};
 }
 

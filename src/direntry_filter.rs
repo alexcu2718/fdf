@@ -141,11 +141,9 @@ where
         if fd < 0 {
             return Err(std::io::Error::last_os_error().into());
         }
-
-        let mut path_buffer = PathBuffer::new(); // buffer for the path, this is used(the pointer is mutated) to construct the full path of the entry, this is actually
-        //a uninitialised buffer, which is then initialised with the directory path
-        let mut path_len = dir_path.len();
-        unsafe{init_path_buffer_syscall!(path_buffer, path_len, dir_path, self)}; // initialise the path buffer with the directory path
+ 
+      
+        let (path_len,path_buffer)=unsafe{init_path_buffer_syscall!( dir_path, self.depth())}; // (we provide the depth for some quick checks)
 
         Ok(DirEntryIteratorFilter {
             fd,

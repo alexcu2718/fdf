@@ -47,8 +47,8 @@ where
         if dir.is_null() {
             return Err(std::io::Error::last_os_error().into());
         }
-        let mut path_buffer = PathBuffer::new(); //
-        unsafe { init_path_buffer_readdir!(dir_path, path_buffer) }; //0 cost macro to construct the buffer in the way we want.
+   
+        let path_buffer=unsafe { init_path_buffer_readdir!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
 
         Ok(Self {
             dir,

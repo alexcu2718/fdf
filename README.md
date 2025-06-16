@@ -58,17 +58,18 @@ strlen_comparison/libc_strlen_single/case_8
 ```
 
 ```Rust
-//The code is explained better in comments, it's 
+//The code is explained better in the true function definition (this is crate agnostic)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_SIZE: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-    let reclen = unsafe { (*dirent).d_reclen as usize }; 
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; 
+    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset!)
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
     let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64); 
-    let zero_bit = (last_word | mask).wrapping_sub(0x0101_0101_0101_0101)// 
-        & !(last_word | mask) 
+    let candidate_pos = last_word | mask;
+    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
+        & !candidate_pos
         & 0x8080_8080_8080_8080; 
-  
-    reclen - DIRENT_HEADER_SIZE - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+
+    reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }
 ```
 

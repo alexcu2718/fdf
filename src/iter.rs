@@ -28,7 +28,7 @@ where
     S: BytesStorage,
 {
     #[inline]
-    #[allow(dead_code)]//annoying
+    #[allow(dead_code)] //annoying
     pub const fn as_mut_ptr(&mut self) -> *mut u8 {
         // This function is used to get a mutable pointer to the internal buffer.
         // It is useful for operations that require direct access to the buffer.
@@ -47,8 +47,8 @@ where
         if dir.is_null() {
             return Err(std::io::Error::last_os_error().into());
         }
-       
-        let path_buffer=unsafe { init_path_buffer_readdir!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
+
+        let path_buffer = unsafe { init_path_buffer_readdir!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
 
         Ok(Self {
             dir,

@@ -289,18 +289,18 @@ where
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let dir_path = self.as_bytes();
-          let fd = dir_path
-         .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-       // let fd = unsafe { open_asm(dir_path) };
+        let fd = dir_path
+            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        // let fd = unsafe { open_asm(dir_path) };
         //alternatively syntaxes I made.
-       // let fd= unsafe{ open(crate::cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+        // let fd= unsafe{ open(crate::cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
         //let fd= unsafe{ open(crate::cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
 
         if fd < 0 {
             return Err(Error::last_os_error().into());
         }
 
-        let (path_len,path_buffer)=unsafe{init_path_buffer_syscall!( self)}; 
+        let (path_len, path_buffer) = unsafe { init_path_buffer_syscall!(self) };
         //using macros is ideal here
 
         Ok(DirEntryIterator {

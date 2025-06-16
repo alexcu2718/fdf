@@ -5,6 +5,7 @@ const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
+/// Not in use currently, later.
 #[allow(clippy::missing_errors_doc)] //fixing errors later
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
@@ -24,12 +25,12 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
-/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`.
+/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`. This doesn't even matter because we don't use it.
 #[inline]
 #[allow(clippy::unnecessary_safety_comment)] //ill fix this later.
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 16 bytes
 ///Deprecated in favour of a macro (`strlen_asm!`)
-// SAFETY: the caller must guarantee that `ptr` points to a valid null-terminated string of type `T` and does not start with a null byte.
+// SAFETY: the caller must guarantee that `ptr` points to a valid null-terminated string of type `T`(i8/u8) and does not start with a null byte.
 pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
@@ -109,9 +110,9 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     if a < b { b } else { a }
 }
 
-
 /// Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.  
 /// (c) [Alexander Curtis/<https://github.com/alexcu2718/fdf>] – MIT License.
+/// My Cat Diavolo is cute.
 #[inline]
 #[allow(clippy::integer_division)] //i know reclen is always a multiple of 8, so this is fine
 #[allow(clippy::cast_possible_truncation)] //^
@@ -147,7 +148,7 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
 ///  `SWAR` (SIMD Within A Register) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we need to add 1 to the offset to account for the null terminator
     // let reclen = unsafe { (*dirent).d_reclen as usize }; // we MUST cast this way, as it is not guaranteed to be aligned, so
     let reclen = unsafe { offset_ptr!(dirent, d_reclen) as usize }; //THIS MACRO IS MODIFIED FROM THE STANDARD LIBRARY INTERNAL IMPLEMENTATION
     //an internal macro, alternatively written as (my macro just makes it easy to access without worrying about alignment)

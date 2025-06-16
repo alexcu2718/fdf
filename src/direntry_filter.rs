@@ -141,9 +141,8 @@ where
         if fd < 0 {
             return Err(std::io::Error::last_os_error().into());
         }
- 
-      
-        let (path_len,path_buffer)=unsafe{init_path_buffer_syscall!( self)}; // (we provide the depth for some quick checks)
+
+        let (path_len, path_buffer) = unsafe { init_path_buffer_syscall!(self) }; // (we provide the depth for some quick checks)
 
         Ok(DirEntryIteratorFilter {
             fd,

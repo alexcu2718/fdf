@@ -78,7 +78,7 @@ macro_rules! cstr_n {
 
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
-
+        // Copy the bytes into the buffer and append a null terminator
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         c_path_buf.add($bytes.len()).write(0);
 
@@ -101,9 +101,10 @@ macro_rules! skip_dot_entries {
     ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
         #[allow(clippy::macro_metavars_in_unsafe)]
         unsafe {
+            //check dtyype first, only 10% of files are directories, then unknown, etc
             if ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) && $reclen == 24 {
                 match (*$name_ptr.add(0), *$name_ptr.add(1), *$name_ptr.add(2)) {
-                    (b'.', 0, _) | (b'.', b'.', 0) => continue,
+                    (b'.', 0, _) | (b'.', b'.', 0) => continue, //if it is . or .., skip it
                     _ => (),
                 }
             }
@@ -115,6 +116,7 @@ macro_rules! skip_dot_entries {
         #[allow(clippy::macro_metavars_in_unsafe)]
         unsafe {
             if $d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN {
+                //no reclen check based on user preference
                 match (*$name_ptr.add(0), *$name_ptr.add(1), *$name_ptr.add(2)) {
                     (b'.', 0, _) | (b'.', b'.', 0) => continue,
                     _ => (),
@@ -123,7 +125,6 @@ macro_rules! skip_dot_entries {
         }
     }};
 }
-
 
 //SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
 
@@ -150,7 +151,7 @@ macro_rules! init_path_buffer_syscall {
 /// the macro appends a slash/null terminator if necessary and returns  `PathBuffer` with the base path+filename
 macro_rules! init_path_buffer_readdir {
     ($dir_path:expr) => {{
-        let mut buffer=$crate::PathBuffer::new(); //see above comments.
+        let mut buffer = $crate::PathBuffer::new(); //see above comments.
         let dirp = $dir_path.as_bytes();
         let dirp_len = dirp.len();
         let needs_slash = ($dir_path.depth != 0) as u8 | ((dirp != b"/") as u8);
@@ -160,7 +161,6 @@ macro_rules! init_path_buffer_readdir {
         buffer
     }};
 }
-
 
 ///not intended for public use, will be private when boilerplate is done
 /// a version of `construct_path!` that uses a constant time strlen macro to calculate the length of the name pointer
@@ -177,10 +177,9 @@ macro_rules! construct_path {
         );
 
        $self.path_buffer.get_unchecked(..base_len+name_len)
-        
+
     }};
 }
-
 
 #[cfg(target_arch = "x86_64")]
 #[macro_export(local_inner_macros)]
@@ -289,7 +288,6 @@ macro_rules! strlen_asm {
     }};
 }
 
-
 #[macro_export]
 /// The crown jewel of cursed macros(this is const, see the function equivalent for proof).
 //comments to be seen in function version form.
@@ -307,7 +305,6 @@ macro_rules! dirent_const_time_strlen {
         reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
     }};
 }
-
 
 #[macro_export]
 /// A macro to extract values from a `libc::dirent64` struct.

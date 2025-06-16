@@ -161,7 +161,7 @@ mod tests {
         let entry: usize = DirEntry::<SlimmerBytes>::new(file_path.as_os_str())
             .unwrap()
             .base_len();
-        let std_entry:usize = (std::path::Path::new(file_path.as_os_str())
+        let std_entry: usize = (std::path::Path::new(file_path.as_os_str())
             .parent()
             .unwrap()
             .as_os_str()

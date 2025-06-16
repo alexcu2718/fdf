@@ -17,8 +17,9 @@ The caveat is you have to have contextual information froma dirent64, so it only
 If you run cargo bench, it is constant(nearly) and MUCH faster than glibc strlen!
 
 ## SHORTTSTRINGS(~8)
-
+```bash
 strlen_comparison/dirent_const_time_single/case_1
+
                         time:   [1.0157 ns 1.0208 ns 1.0260 ns]
                         thrpt:  [8.7716 Gelem/s 8.8162 Gelem/s 8.8611 Gelem/s]
                  change:
@@ -54,6 +55,7 @@ strlen_comparison/libc_strlen_single/case_8
                  change:
                         time:   [−33.151% −32.598% −32.052%] (p = 0.00 < 0.05)
                         thrpt:  [+47.170% +48.363% +49.592%]
+```
 
 ```Rust
 //The code is explained better in comments, it's 

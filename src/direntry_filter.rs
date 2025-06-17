@@ -1,3 +1,7 @@
+
+// THIS IS PRETTY MUCH A CARBON COPY OF `direntry.rs`
+// THE ONLY DIFFERENCE IS THAT IT ALLOWS YOU TO FILTER THE ENTRIES BY A FUNCTION.
+// THIS IS USEFUL IF YOU WANT TO AVOID UNNECESSARY ALLOCATIONS AND
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
@@ -21,7 +25,7 @@ where
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     pub(crate) filter_func: fn(&[u8], usize, u8) -> bool, // filter function, this is used to filter the entries based on the provided function
-    _marker: PhantomData<S>, //mainly the arguments would be full path,depth,filetype, this is a shoddy implementation but im testing waters.
+    _marker: PhantomData<S>, //placeholder for the storage type, this is used to ensure that the iterator can be used with any storage type
 }
 
 impl<S> Drop for DirEntryIteratorFilter<S>

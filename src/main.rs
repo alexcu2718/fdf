@@ -70,16 +70,16 @@ use type_config::build_type_filter;
 
 //mirroring option in fd but adding unknown as well.
 const CHARS: [&str; 10] = [
-    "d:Directory",
-    "u:Unknown",
-    "l:Symlink",
-    "f:Regular File",
-    "p:Pipe",
-    "c:Char Device",
-    "b:Block Device",
-    "s:Socket",
-    "e:Empty",
-    "x:Executable",
+    "d:Directory\n",
+    "u:Unknown\n",
+    "l:Symlink\n",
+    "f:Regular File\n",
+    "p:Pipe\n",
+    "c:Char Device\n",
+    "b:Block Device\n",
+    "s:Socket\n",
+    "e:Empty\n",
+    "x:Executable\n",
 ];
 
 #[derive(Parser)]

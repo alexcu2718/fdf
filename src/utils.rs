@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::{DirEntryError, Result, buffer::ValueType, cstr, offset_ptr};
+use crate::{DirEntryError, Result, buffer::ValueType, cstr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
@@ -191,32 +191,33 @@ BIT TRICK OPERATION:
 ///  `SWAR` (SIMD Within A Register) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
-    let reclen = unsafe { offset_ptr!(dirent, d_reclen) as usize}; //THIS MACRO IS MODIFIED FROM THE STANDARD LIBRARY INTERNAL IMPLEMENTATION
-    //an internal macro, alternatively written as (my macro just makes it easy to access without worrying about alignment)
-    // let reclen = unsafe { (*dirent).d_reclen as u16 }; (do not access it via byte_offset!)
+     let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset!)
     // Calculate find the  start of the d_name field
     // THIS WILL ONLY WORK ON LITTLE-ENDIAN ARCHITECTURES, I CANT BE BOTHERED TO FIGURE THAT OUT, qemu isnt fun
-    // Calculate find the  start of the d_name field
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
+    //  Access the last 8 bytes(word) of the dirent structure as a u64 word
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };//DO NOT USE BYTE OFFSET.
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
     // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
-    unsafe{std::hint::assert_unchecked(reclen % 8 ==0 && reclen >=24 )}; //tell the compiler is a multiple of 8 and within bounds
-    //this is safe because the kernel guarantees the above.
-    //............................//simpler divison here(lower register)
+    // Special handling for 24-byte records (common case):
+    // Mask out non-name bytes (d_type and padding) that could cause false null detection
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); // (multiply by 0 or 1)
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes,
     //we're bit manipulating the last word (a byte/u64) to find the first null byte
     //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
-    // The mask is applied to the last word to isolate the relevant bytes.
-    // The last word is masked to isolate the relevant bytes, and then we find the first zero byte.
+      // Combine the word with our mask to ensure:
+    // - Original name bytes remain unchanged
+    // - Non-name bytes are set to 0xFF (guaranteed non-zero)
     let candidate_pos = last_word | mask;
     // The resulting value (`candidate_pos`) has:
     // - Original name bytes preserved
     // - Non-name bytes forced to 0xFF (guaranteed non-zero)
     // - Maintains the exact position of any null bytes in the name
+    //  Subtract 0x0101... from each byte (underflows if byte was 0)
+    //  AND with inverse to isolate underflowed bits
+    //  Mask high bits to find first zero byte
     let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is zero
         & !candidate_pos//ensures only bytes that were zero retain the underflowed high bit.
         & 0x8080_8080_8080_8080; //  0x8080_8080_8080_8080 -->This masks out the high bit of each byte, so we can find the first zero byte

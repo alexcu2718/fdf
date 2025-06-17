@@ -60,7 +60,7 @@ use std::{
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 
-mod dirent_macro;
+mod cursed_macros;
 
 //crate imports
 mod iter;

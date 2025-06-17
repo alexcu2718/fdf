@@ -191,15 +191,13 @@ BIT TRICK OPERATION:
 ///  `SWAR` (SIMD Within A Register) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
-    let reclen = unsafe { offset_ptr!(dirent, d_reclen) as u16}; //THIS MACRO IS MODIFIED FROM THE STANDARD LIBRARY INTERNAL IMPLEMENTATION
-    //we cast to u16 as a micro-optimisation(it's also a u16 in definition, but not idiomatic)
-    //by using u16 we get simpler/quicker assemly.
+    let reclen = unsafe { offset_ptr!(dirent, d_reclen) as usize}; //THIS MACRO IS MODIFIED FROM THE STANDARD LIBRARY INTERNAL IMPLEMENTATION
     //an internal macro, alternatively written as (my macro just makes it easy to access without worrying about alignment)
     // let reclen = unsafe { (*dirent).d_reclen as u16 }; (do not access it via byte_offset!)
     // Calculate find the  start of the d_name field
     // THIS WILL ONLY WORK ON LITTLE-ENDIAN ARCHITECTURES, I CANT BE BOTHERED TO FIGURE THAT OUT, qemu isnt fun
     // Calculate find the  start of the d_name field
-    let last_word = unsafe { *((dirent as *const u8).add(reclen as usize - 8) as *const u64) };
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
@@ -207,7 +205,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     unsafe{std::hint::assert_unchecked(reclen % 8 ==0 && reclen >=24 )}; //tell the compiler is a multiple of 8 and within bounds
     //this is safe because the kernel guarantees the above.
     //............................//simpler divison here(lower register)
-    let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64); // (multiply by 0 or 1)
+    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); // (multiply by 0 or 1)
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes,
     //we're bit manipulating the last word (a byte/u64) to find the first null byte
@@ -226,6 +224,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // We divide by 8 to convert the bit position to a byte position..
     // We subtract 7 to get the correct offset in the d_name field.
     //>> 3 converts from bit position to byte index (divides by 8)
+    
 
-    (reclen as usize) - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+    reclen  - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }

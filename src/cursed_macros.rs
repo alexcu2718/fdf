@@ -298,9 +298,9 @@ macro_rules! strlen_asm {
 macro_rules! dirent_const_time_strlen {
     ($dirent:expr) => {{
         const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-        let reclen = (*$dirent).d_reclen as usize; // we MUST cast this way, ONLY REMINDER
+        let reclen = (*$dirent).d_reclen as usize; 
         let last_word = *(($dirent as *const u8).add(reclen - 8) as *const u64);
-        let mask = 0x00FF_FFFFu64 * ((reclen / 8 == 3) as u64);
+        let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64);
         let candidate_pos = last_word | mask;
         let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
             & !candidate_pos

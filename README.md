@@ -33,9 +33,11 @@ SEE BENCHMARKS IN const_str_benchmark.txt for better details and ideally read my
 ```bash
 
  strlen_by_length/const_time_swar/empty
-                        time:   [994.53 ps 997.11 ps 999.71 ps]
+                        time:   [877.68 ps 879.00 ps 880.32 ps]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
 strlen_by_length/libc_strlen/empty
-                          time:   [1.6360 ns 1.6408 ns 1.6455 ns]
+                        time:   [1.4977 ns 1.4994 ns 1.5012 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s
 ```
 
 ## LONGSTRINGS(~240)
@@ -43,8 +45,9 @@ strlen_by_length/libc_strlen/empty
 ```bash
  strlen_by_length/const_time_swar/xlarge (129-255)
                        time:   [1.0687 ns 1.0719 ns 1.0750 ns]
- strlen_by_length/libc_strlen/xlarge (129-255)
-                       time:   [4.2938 ns 4.3054 ns 4.3171 ns]
+strlen_by_length/libc_strlen/xlarge (129-255)
+                        time:   [3.1976 ns 3.2114 ns 3.2255 ns]
+                        thrpt:  [57.747 GiB/s 58.000 GiB/s 58.252 GiB/s]
 ```
 
 ```Rust

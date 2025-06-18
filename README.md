@@ -1,29 +1,38 @@
+# fdf---Name to be changed, I just entered this randomly on my keyboard, it sounds like fd-faster which is funny but thats not my intent,hence name change
 
-# fdf - Fast Directory Finder(LINUX ONLY)
+Probably the fastest finder you'll find on Linux for regex/glob matching files (see benchmark proof versus fd*)
 
-This project began as a way to deepen my understanding of Rust, particularly
-its low-level capabilities and performance optimisations.
-By building a filesystem traversal tool from scratch, I aimed to explore syscalls, memory safety,
-and parallelism—while challenging myself to match or exceed the speed of established tools like fd(the fastest directory traversal tool with regex/glob others parameters)
+*For reference <https://github.com/sharkdp/fd>
 
-Compatibility Notes:
-    This is only tested in x86-64 systems, I'm 99% certain this wouldn't work on big-endian systems without some adaptations(mostly for u64 to u8 casts)
-    Tested on: EXT4/BTRFS (Debian/Ubuntu/Arch) — no issues.
-    BSD/macOS: 99% Chance of not working, in theory because this is mostly POSIX(d_dtype shortcut I use won't work, will need lstat)
-    Side note: Are OpenBSD and FreeBSD meaningfully distinct here? (Someone enlighten me!)
+Honestly this is still a hobby project that still needs much work.
+It's functional, etc.
 
-(*For reference fd: <https://github.com/sharkdp/fd> (it has 19000* more stars than this repo and it's extremely fast!))
+NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
 
-There's a lot of extremely niche optimisations hidden within this crate, things I have never seen elsewhere!
+The CLI is basically an afterthought because I'm focusing on lower levels and going up in functionality, like ascending Plato's cave (increasing abstraction)
 
-My Crown jewel however is my O(1)  calculation for strlen with bo branches/simd required, all via bit tricks+pointer manipulation :)
+It has better performance than `fd` on equivalent featuresets but 'fd'
+has an immense set, of which I'm not going to replicate
+Rather that I'm just working on this project for myself because I really wanted to know what happens when you optimally write hardware specific code( and how to write it!)
 
-The caveat is you have to have contextual information froma dirent64, so it only works for file system operations, a cool trick nonetheless!
+I'd probably just keep the CLI stuff simple and add some additional stuff like metadata/etc filtering.
 
-If you run cargo bench, it is constant(practically so, crytography nerds can look into it) and MUCH faster than glibc strlen!
-(The reason this is such a good optimisation is it's one of the most called functions in this and both fd/find/etc, this is a unique advantage I could take by avoiding abstractions)
+Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)...and
+exceedingly efficient.
 
-Note to anyone reading: I'm purposely not advertising this because It's not really in a state for contributors. Needs despaghettification at points. Also API is highly experimental(no nighly reliance yet, although I am tempted by some fancy stuff...)
+The caveat is you have to have contextual information from a dirent64, so it only works for file system operations, a cool trick nonetheless!
+
+Cool bits:
+
+Speed! In every benchmark so far tested, it's ranging from 1.1-2x as fast for regex/glob feature sets, check the benchmarkj!
+
+cstr! macro: use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
+
+dirent_const_strlen const fn, get strlen from a dirent64 in constant time with no branches (benchmarks below)
+
+BytePath: Cool deref trait for working with &[u8]
+
+Speed! In every benchmark so far tested, it's ranging from 1.1-2x as fast for regex/glob feature sets, check the benchmarkj!
 
 ## SHORTTSTRINGS(~8)
 
@@ -52,14 +61,15 @@ strlen_by_length/libc_strlen/xlarge (129-255)
 
 ```Rust
 //The code is explained better in the true function definition (this is crate agnostic)
+//This is the little-endian implementation, see crate for modified version for big-endian
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; 
     let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset!)
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
-    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); 
-    let candidate_pos = last_word | mask;
+    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
+    let candidate_pos = last_word | mask;//^
     let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
-        & !candidate_pos
+        & !candidate_pos //no branch, see comments for hack
         & 0x8080_8080_8080_8080; 
 
     reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
@@ -68,8 +78,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 
 instant build guide script for testing/the impatient:
 (If you're on EXT4/BTRFS with a somewhat modern kernel, it'll work)
-
-
 
 ```bash
 
@@ -83,36 +91,16 @@ export PATH="$PATH:$dest_dir/target/release"
 echo "$(which fdf)"
 ```
 
-And to my pleasure, I did succeed! Although, my featureset is dramatically lessened, somethings are a pain to implement,
-It's also a hobby project I do when I'm bored, so I do things when I feel like them, why yes, how did you know I worked on Half-L....
-There's also lots of performance benefits still to be gained.
-
-Feature set found at bottom of post.
-
-Please check the fd_benchmarks for more(run them yourself, please!)
-
-As for some fairly arbitrary, first look benchmarks.
-
 ```bash
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 | `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 |
 | `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
 
 
-
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 | `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 | 
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
 ```
-
-Motivation
-
-I began using Linux around mid-2024, and from the outset, I wanted to avoid cookie-cutter projects like yet another TODO app. Instead, I aimed to dive into something challenging, I'm also great at losing stuff, how can I find it faster? Well this stupid 40k star library wont do, its time to get raw silicon out.
-Joking aside, mostly, it's actually the thought I could make a tool that's generally useful.
-
-Philosophical aspect:
-One might question whether this effort was justified. Absolutely. Nearly every component here will be reused in some form or another. The goal here 
-is primary that of my own learning! if I write an arena allocator here,do you think that knowledge gets deleted when I'm not on this project?
 
 TODO LIST MAYBE:
 --Arena allocator potentially,  written from scratch (see microsoft's edit for a nice one) //github.com/microsoft/edit/tree/main/src/arena
@@ -121,13 +109,13 @@ TODO LIST MAYBE:
 
 --String Interning: Trivial for ASCII, but efficient Unicode handling is another beast entirely.
 
---Threading Without Rayon: My attempts have come close but aren’t quite there yet. I can get within 10% speed wise but........thats not acceptable.
+--Threading without rayon: My attempts have come close but aren’t quite there yet. I'll rely on rayon for now until I can think of a smart way to implement an appropriate work distributing algorithm, TODO!
 
 --Some sort of iterator adaptor+filter, which would allow one to avoid a lot more allocations on non-directories.
 
 --I think there's ultimately a hard limit in syscalls, I've played around with an experimental zig iouring getdents implementation but it's out of my comfort zone, A LOT, I'll probably do it still(if possible)
 
-****THIS IS NOT FINISHED, Probably a long term project for for semi-comparable/full (or totally new one) featureset with fd.
+****THIS IS NOT FINISHED, I have no idea what the plans are, i'm just making stuff go fast and learning ok.
 
 ---
 

@@ -176,7 +176,7 @@ macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
         let d_name = $crate::offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
-        let name_len = $crate::dirent_const_time_strlen!($dirent);
+        let name_len = $crate::dirent_const_time_strlen($dirent);
         std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,
         );
 
@@ -292,23 +292,7 @@ macro_rules! strlen_asm {
     }};
 }
 
-#[macro_export]
-/// The crown jewel of cursed macros(this is const, see the function equivalent for proof).
-//comments to be seen in function version form.
-macro_rules! dirent_const_time_strlen {
-    ($dirent:expr) => {{
-        const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-        let reclen = (*$dirent).d_reclen as usize; 
-        let last_word = *(($dirent as *const u8).add(reclen - 8) as *const u64);
-        let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64);
-        let candidate_pos = last_word | mask;
-        let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
-            & !candidate_pos
-            & 0x8080_8080_8080_8080;
 
-        reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
-    }};
-}
 
 #[macro_export]
 /// A macro to extract values from a `libc::dirent64` struct.

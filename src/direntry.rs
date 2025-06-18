@@ -383,8 +383,7 @@ where
                 };
 
                 unsafe {
-                    debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen!(d));
-               
+        
                     debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen(d));
                 }
 

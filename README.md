@@ -17,23 +17,30 @@ It has better performance than `fd` on equivalent featuresets but 'fd'
 has an immense set, of which I'm not going to replicate
 Rather that I'm just working on this project for myself because I really wanted to know what happens when you optimally write hardware specific code( and how to write it!)
 
-I'd probably just keep the CLI stuff simple and add some additional stuff like metadata/etc filtering.
+## Future plans?
 
-Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)...and
-exceedingly efficient.
+I'd probably just keep the CLI stuff simple and add some additional stuff like being able to filter for metadata etc
 
-The caveat is you have to have contextual information from a dirent64, so it only works for file system operations, a cool trick nonetheless!
+Add some extra metadata filters
 
-Cool bits:
+Add POSIX compatibility in general (not too bad)
 
-Speed! In every benchmark so far tested, it's ranging from 1.1-2x as fast for regex/glob feature sets, check the benchmark!
+Add Windows...(maybe?) .
 
-cstr! macro: use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
+Too many internal changes.
+
+Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)
+..and exceedingly efficient.
+
+## Cool bits
+
+Speed! In every benchmark so far tested, it's ranging from a minimum of 1.3x and a maximum of 3.3x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
 
 dirent_const_strlen const fn, get strlen from a dirent64 in constant time with no branches (benchmarks below)
 
-BytePath: Cool deref trait for working with &[u8]
+cstr! macro: use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
 
+BytePath: Cool deref trait for working with &[u8]
 
 ## SHORTTSTRINGS(~8)
 
@@ -78,7 +85,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 ```
 
 instant build guide script for testing/the impatient:
-(If you're on EXT4/BTRFS with a somewhat modern kernel, it'll work)
+(If you're on EXT4/BTRFS `with a somewhat modern kernel, it'll work)
 
 ```bash
 
@@ -88,7 +95,7 @@ mkdir -p $dest_dir
 git clone https://github.com/alexcu2718/fdf $dest_dir
 cd $dest_dir
 cargo b -r -q 
-export PATH="$PATH:$dest_dir/target/release"
+export PATH="$dest_dir/target/release:$PATH"
 echo "$(which fdf)"
 ```
 

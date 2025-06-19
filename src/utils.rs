@@ -241,3 +241,9 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // position.
     reclen - DIRENT_HEADER_START - byte_pos
 }
+
+
+
+
+
+

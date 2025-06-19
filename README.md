@@ -24,7 +24,7 @@ The caveat is you have to have contextual information from a dirent64, so it onl
 
 Cool bits:
 
-Speed! In every benchmark so far tested, it's ranging from 1.1-2x as fast for regex/glob feature sets, check the benchmarkj!
+Speed! In every benchmark so far tested, it's ranging from 1.1-2x as fast for regex/glob feature sets, check the benchmark!
 
 cstr! macro: use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
 
@@ -32,7 +32,6 @@ dirent_const_strlen const fn, get strlen from a dirent64 in constant time with n
 
 BytePath: Cool deref trait for working with &[u8]
 
-Speed! In every benchmark so far tested, it's ranging from 1.1-2x as fast for regex/glob feature sets, check the benchmarkj!
 
 ## SHORTTSTRINGS(~8)
 

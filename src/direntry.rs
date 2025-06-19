@@ -1,11 +1,10 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::single_call_fn)]
-#![allow(clippy::integer_division_remainder_used)]
 #![allow(clippy::ptr_as_ptr)] //i know what i'm doing.
 #![allow(clippy::integer_division)] //i know my division is safe.
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
-#![allow(clippy::little_endian_bytes)] //i dont even know why this is a lint(because i cant be bothered to read it, i NEED IT though)
+#![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
 #[allow(unused_imports)]
@@ -244,7 +243,7 @@ where
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
-        unsafe { self.get_unchecked(..std::cmp::max(self.base_len()- 1, 1)) }
+        unsafe { self.get_unchecked(..std::cmp::max(self.base_len() - 1, 1)) }
 
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
@@ -383,7 +382,6 @@ where
                 };
 
                 unsafe {
-        
                     debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen(d));
                 }
 

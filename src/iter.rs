@@ -86,19 +86,19 @@ where
                 return None;
             }
 
-            let (name_file, dir_info, inode,reclen): (*const u8, u8, u64,usize) =
+            let (name_file, dir_info, inode, reclen): (*const u8, u8, u64, usize) =
                 get_dirent_vals!(entry); //get the pointers/values from the struct using macro 
-        
-            skip_dot_entries!(dir_info, name_file,reclen);
+
+            skip_dot_entries!(dir_info, name_file, reclen);
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
             let full_path = unsafe { construct_path!(self, entry) };
             return Some(DirEntry {
                 path: full_path.into(),
-                file_type: FileType::from_dtype_fallback(dir_info, full_path),//most of the time we get filetype from the value but not always, uses lstat if needed
+                file_type: FileType::from_dtype_fallback(dir_info, full_path), //most of the time we get filetype from the value but not always, uses lstat if needed
                 inode,
-                depth: self.depth + 1, //increment depth for each entry
-                base_len: self.base_len,//inherit base_len from the parent directory
+                depth: self.depth + 1,   //increment depth for each entry
+                base_len: self.base_len, //inherit base_len from the parent directory
             });
         }
     }
@@ -106,7 +106,8 @@ where
 impl<T> Drop for DirIter<T>
 where
     T: BytesStorage,
-{   #[inline]
+{
+    #[inline]
     fn drop(&mut self) {
         if !self.dir.is_null() {
             unsafe { closedir(self.dir) };

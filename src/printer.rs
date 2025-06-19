@@ -144,8 +144,7 @@ where
                 }
             }
         }
-    } else
-    {
+    } else {
         for path in paths.take(limit_opt) {
             for small_path in path {
                 writer.write_all(small_path.as_bytes())?;

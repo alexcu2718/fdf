@@ -51,6 +51,7 @@
 #![allow(clippy::semicolon_outside_block)]
 #![allow(clippy::return_and_then)]
 #![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_lossless)]
 //#![allow(clippy::non_ex)]
 use rayon::prelude::*;
 use std::{

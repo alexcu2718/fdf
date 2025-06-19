@@ -1,6 +1,8 @@
 #![allow(clippy::doc_markdown)]
 #[macro_export]
-///A modified helper macro from the standard library to safely access(as per my opinion i guess...) fields of a `libc::dirent64` struct by offset.
+///A modified helper macro from the standard library to safely access(as per my opinion i guess...)
+/// fields of a `libc::dirent64` struct by offset.
+///
 /// It has been modified to handle the `d_reclen` field differently due to its alignment issues, handling the issue subtly for the user.
 /// This macro is used to access fields of a `libc::dirent64` struct by offset, allowing for more flexible and efficient access.
 /// It takes a pointer to a `libc::dirent64` struct and a field name, and returns a pointer to the field.
@@ -97,7 +99,7 @@ macro_rules! cstr_n {
 /// - `name_ptr`: Pointer to the entry name
 ///
 /// And 1 optional arg: (the reclen)
-/// 
+///
 /// - `reclen`: If provided, also checks that reclen == 24
 ///  when testing directory entries, this helps to reduce any checking pointers
 macro_rules! skip_dot_entries {
@@ -292,8 +294,6 @@ macro_rules! strlen_asm {
     }};
 }
 
-
-
 #[macro_export]
 /// A macro to extract values from a `libc::dirent64` struct.
 /// This macro returns a tuple containing:
@@ -341,7 +341,8 @@ macro_rules! get_dirent_vals {
 }
 
 /// Macro to create a const from an env var with compile-time parsing
-/// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "512");, where "512" is the default value if the env var is not set. Obviously
+/// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "X");, where X(usize) is the default value if the env var is not set
+///
 /// I realise people could have massive filesystems, i should probably write a rebuild script on value change.TODO!
 #[macro_export]
 macro_rules! const_from_env {

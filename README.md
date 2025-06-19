@@ -1,4 +1,6 @@
-# fdf---Name to be changed, I just entered this randomly on my keyboard, it sounds like fd-faster which is funny but thats not my intent,hence name change
+# fdf
+
+**Name to be changed, I just entered this randomly on my keyboard, it sounds like fd-faster which is funny but thats not my intent,hence name change
 
 Probably the fastest finder you'll find on Linux for regex/glob matching files (see benchmark proof versus fd*)
 

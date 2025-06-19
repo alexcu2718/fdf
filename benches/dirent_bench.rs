@@ -1,12 +1,11 @@
-
-
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
-use std::hint::black_box;
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use fdf::dirent_const_time_strlen;
-use libc::{dirent64, c_char};
+use libc::{c_char, dirent64};
+use std::hint::black_box;
 
 #[repr(C, align(8))]
-pub struct LibcDirent64 { // Fake a structure similar to libc::dirent64 which we transmute later
+pub struct LibcDirent64 {
+    // Fake a structure similar to libc::dirent64 which we transmute later
     pub d_ino: u64,
     pub d_off: u64,
     pub d_reclen: u16,
@@ -24,7 +23,7 @@ const fn calculate_min_reclen(name_len: usize) -> u16 {
 fn make_dirent(name: &str) -> dirent64 {
     let bytes = name.as_bytes();
     assert!(bytes.len() < 256, "Name too long for dirent structure");
-    
+
     let min_reclen = calculate_min_reclen(bytes.len());
     let mut entry = LibcDirent64 {
         d_ino: 0,
@@ -36,7 +35,7 @@ fn make_dirent(name: &str) -> dirent64 {
 
     entry.d_name[..bytes.len()].copy_from_slice(bytes);
     entry.d_name[bytes.len()] = 0;
-    
+
     unsafe { std::mem::transmute(entry) }
 }
 
@@ -47,42 +46,46 @@ fn bench_strlen(c: &mut Criterion) {
         ("tiny (1-4)", "a"),
         ("small (5-16)", "file.txt"),
         ("medium (17-64)", "config_files/settings/default.json"),
-        ("large (65-128)", "very_long_directory_name/with_subfolders/and_a_very_long_filename.txt"),
+        (
+            "large (65-128)",
+            "very_long_directory_name/with_subfolders/and_a_very_long_filename.txt",
+        ),
         ("xlarge (129-255)", &"a".repeat(200)),
     ];
-    
-    let all_entries: Vec<_> = length_groups.iter()
+
+    let all_entries: Vec<_> = length_groups
+        .iter()
         .map(|(_, name)| make_dirent(name))
         .collect();
 
     //  make separate benchmark groups one at a time
     {
         let mut group = c.benchmark_group("strlen_by_length");
-        
+
         for (size_name, name) in length_groups {
             let entry = make_dirent(name);
             let byte_len = name.len();
-            
+
             group.throughput(Throughput::Bytes(byte_len as u64));
-            
+
             group.bench_with_input(
-                BenchmarkId::new("const_time_swar", size_name), 
+                BenchmarkId::new("const_time_swar", size_name),
                 &entry,
-                |b, e| b.iter(|| unsafe {
-                    black_box(dirent_const_time_strlen(black_box(e)))
-                })
+                |b, e| b.iter(|| unsafe { black_box(dirent_const_time_strlen(black_box(e))) }),
             );
-            
+
             group.bench_with_input(
                 BenchmarkId::new("libc_strlen", size_name),
                 &entry,
-                |b, e| b.iter(|| unsafe {
-                    black_box(libc::strlen(black_box(e.d_name.as_ptr() as *const c_char)))
-                })
+                |b, e| {
+                    b.iter(|| unsafe {
+                        black_box(libc::strlen(black_box(e.d_name.as_ptr() as *const c_char)))
+                    })
+                },
             );
         }
         group.finish();
-    } 
+    }
 
     //  create the batch comparison group
     {
@@ -103,8 +106,10 @@ fn bench_strlen(c: &mut Criterion) {
             b.iter(|| {
                 let mut total = 0;
                 for entry in &all_entries {
-                    total += unsafe { 
-                        black_box(libc::strlen(black_box(entry.d_name.as_ptr() as *const c_char))) 
+                    total += unsafe {
+                        black_box(libc::strlen(black_box(
+                            entry.d_name.as_ptr() as *const c_char
+                        )))
                     };
                 }
                 black_box(total)
@@ -112,7 +117,7 @@ fn bench_strlen(c: &mut Criterion) {
         });
 
         batch_group.finish();
-    } 
+    }
 }
 criterion_group! {
     name = benches;

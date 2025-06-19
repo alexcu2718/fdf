@@ -25,7 +25,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
-/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`. 
+/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`.
 /// This doesn't even matter because we don't use it to calculate strlen anymore, that's an O(1) problem now :)))))))))))))))))))))
 #[inline]
 #[allow(clippy::unnecessary_safety_comment)] //ill fix this later.
@@ -111,9 +111,7 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     if a < b { b } else { a }
 }
 
-
-
-/* 
+/*
 
 
 +-----------------------------------------------------------------------------------------+
@@ -151,15 +149,13 @@ BIT TRICK OPERATION:
    ↓
    trailing_zeros() → finds position of first null byte
 
-*/
-/// Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.  
-/// (c) [Alexander Curtis/<https://github.com/alexcu2718/fdf>] – MIT License.
+*//*
+Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
+/// (c) [Alexander Curtis .
 /// My Cat Diavolo is cute.
+/// */
+
 #[inline]
-#[cfg(target_os = "linux")]
-#[allow(clippy::integer_division)] //i know reclen is always a multiple of 8, so this is fine
-#[allow(clippy::cast_possible_truncation)] //^
-#[allow(clippy::integer_division_remainder_used)] //division is fine.
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 8 bytes
 #[allow(clippy::cast_lossless)] //shutup
 /// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD, no overreads!!!
@@ -180,26 +176,28 @@ BIT TRICK OPERATION:
 ///
 /// Main idea:
 /// - We read the last 8 bytes of the `d_name` field, which is guaranteed to be null-terminated by the kernel.
-/// This is based on the observation that d_name is always null-terminated by the kernel,
+/// This is based on the observation that `d_name` is always null-terminated by the kernel,
 ///  so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks,
 /// we can locate the null terminator with a single 64-bit read and mask, assuming alignment and endianness.
 ///                    
 /// Combining all these tricks, i made this beautiful thing!
+///
 /// # SAFETY
+/// //NOT TESTED ON BIG-ENDIAN, TODO!
 /// This function is `unsafe` because...read it
 /// The caller must uphold the following invariants:
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
 ///  `SWAR` (SIMD Within A Register/bit trick hackery) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
+/// THE REASON WE DO THIS IS BECAUSE THE RECLEN IS PADDED UP TO 8 BYTES (rounded up to the nearest multiple of 8),
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
-     let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset!)
+    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset!)
     // Calculate find the  start of the d_name field
-    // THIS WILL ONLY WORK ON LITTLE-ENDIAN ARCHITECTURES, I CANT BE BOTHERED TO FIGURE THAT OUT, qemu isnt fun
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
-     #[cfg(target_endian = "little")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };//DO NOT USE BYTE OFFSET.
-     #[cfg(target_endian = "big")]   // Convert to native endianness for processing
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.swap_bytes();//change the endianness to little-endian for processing
+    #[cfg(target_endian = "little")]
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
+    #[cfg(target_endian = "big")] // Convert to native endianness for processing
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.swap_bytes(); //change the endianness to little-endian for processing
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
@@ -207,12 +205,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
     // Special handling for 24-byte records (common case):
     // Mask out non-name bytes (d_type and padding) that could cause false null detection
-    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); // (multiply by 0 or 1)
+    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes,
     //we're bit manipulating the last word (a byte/u64) to find the first null byte
     //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
-      // Combine the word with our mask to ensure:
+    // Combine the word with our mask to ensure:
     // - Original name bytes remain unchanged
     // - Non-name bytes are set to 0xFF (guaranteed non-zero)
     let candidate_pos = last_word | mask;
@@ -230,16 +228,16 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // We divide by 8 to convert the bit position to a byte position..
     // We subtract 7 to get the correct offset in the d_name field.
     //>> 3 converts from bit position to byte index (divides by 8)
-     #[cfg(target_endian = "big")]
-    let byte_pos = 7- (zero_bit.leading_zeros() >> 3) as usize;
+    #[cfg(target_endian = "big")] //untested fix for big endian till i can be bothered to fix it.
+    let byte_pos = 7 - (zero_bit.leading_zeros() >> 3) as usize;
     #[cfg(target_endian = "little")]
-    let byte_pos = 7- (zero_bit.trailing_zeros() >> 3) as usize;
-    
+    let byte_pos = 7 - (zero_bit.trailing_zeros() >> 3) as usize;
+
     // The final length is calculated as:
     // `reclen - DIRENT_HEADER_START - byte_pos`
     // This gives us the length of the d_name field, excluding the header and the null
     // byte position.
     // This is the length of the d_name field, excluding the header and the null byte
     // position.
-    reclen  - DIRENT_HEADER_START - byte_pos 
+    reclen - DIRENT_HEADER_START - byte_pos
 }

@@ -80,7 +80,6 @@ s: Socket
 e: Empty
 x: Executable";
 
-
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[allow(clippy::struct_excessive_bools)]

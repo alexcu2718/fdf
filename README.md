@@ -1,15 +1,13 @@
 # fdf
 
+NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
+
 **Name to be changed, I just entered this randomly on my keyboard, it sounds like fd-faster which is funny but thats not my intent,hence name change
 
 Probably the fastest finder you'll find on Linux for regex/glob matching files (see benchmark proof versus fd*)
 
-*For reference <https://github.com/sharkdp/fd>
-
 Honestly this is still a hobby project that still needs much work.
 It's functional, etc.
-
-NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
 
 The CLI is basically an afterthought because I'm focusing on lower levels and going up in functionality, like ascending Plato's cave (increasing abstraction)
 
@@ -19,9 +17,9 @@ Rather that I'm just working on this project for myself because I really wanted 
 
 ## Future plans?
 
-I'd probably just keep the CLI stuff simple and add some additional stuff like being able to filter for metadata etc
+I'd probably just keep the CLI stuff simple
 
-Add some extra metadata filters
+Add some extra metadata filters (because i get a lot of metadata for cheap via specialisation!)
 
 Add POSIX compatibility in general (not too bad)
 

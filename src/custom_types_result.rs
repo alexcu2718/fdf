@@ -6,7 +6,7 @@ use std::sync::Arc;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
-const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "512");
+const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "1024");
 
 //4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 const_from_env!(BUFFER_SIZE:usize="BUFFER_SIZE","4115");
@@ -26,31 +26,12 @@ pub trait AsU8 {
     fn as_bytes(&self) -> &[u8];
 }
 
-impl AsU8 for SlimmerBox<[u8], u16> {
+impl<T> AsU8 for T
+where
+    T: Deref<Target = [u8]>,{
     #[inline]
     fn as_bytes(&self) -> &[u8] {
-        self.as_ref()
-    }
-}
-
-impl AsU8 for Arc<[u8]> {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        self.as_ref()
-    }
-}
-
-impl AsU8 for Vec<u8> {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        self.as_ref()
-    }
-}
-
-impl AsU8 for Box<[u8]> {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        self.as_ref()
+        self.deref()
     }
 }
 
@@ -80,7 +61,7 @@ impl BytesStorage for Arc<[u8]> {
 impl BytesStorage for Vec<u8> {
     #[inline]
     fn from_slice(bytes: &[u8]) -> Self {
-        bytes.to_vec()
+        Self::from(bytes)
     }
 }
 
@@ -113,7 +94,7 @@ impl<S: BytesStorage> OsBytes<S> {
     #[allow(clippy::missing_const_for_fn)]
     /// Returns a reference to the underlying bytes.
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.as_ref()
+        &self.bytes
     }
 
     #[inline]

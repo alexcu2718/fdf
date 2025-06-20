@@ -196,8 +196,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     #[cfg(target_endian = "little")]
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
-    #[cfg(target_endian = "big")] // Convert to native endianness for processing
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.swap_bytes(); //change the endianness to little-endian for processing
+    #[cfg(target_endian = "big")]
+     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
@@ -228,11 +228,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // We divide by 8 to convert the bit position to a byte position..
     // We subtract 7 to get the correct offset in the d_name field.
     //>> 3 converts from bit position to byte index (divides by 8)
-    #[cfg(target_endian = "big")] //untested fix for big endian till i can be bothered to fix it.
-    let byte_pos = 7 - (zero_bit.leading_zeros() >> 3) as usize;
-    #[cfg(target_endian = "little")]
     let byte_pos = 7 - (zero_bit.trailing_zeros() >> 3) as usize;
-
     // The final length is calculated as:
     // `reclen - DIRENT_HEADER_START - byte_pos`
     // This gives us the length of the d_name field, excluding the header and the null

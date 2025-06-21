@@ -2,7 +2,7 @@ use crate::const_from_env;
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 use slimmer_box::SlimmerBox;
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc};
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
@@ -31,7 +31,7 @@ where
     T: Deref<Target = [u8]>,{
     #[inline]
     fn as_bytes(&self) -> &[u8] {
-        self.deref()
+        self
     }
 }
 
@@ -93,7 +93,7 @@ impl<S: BytesStorage> OsBytes<S> {
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
     /// Returns a reference to the underlying bytes.
-    pub fn as_bytes(&self) -> &[u8] {
+    pub  fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
@@ -128,7 +128,7 @@ impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
 #[allow(dead_code)]
 pub type SlimOsBytes = OsBytes<SlimmerBox<[u8], u16>>;
 #[allow(dead_code)]
-pub type ArcOsBytes = OsBytes<std::sync::Arc<[u8]>>;
+pub type ArcOsBytes = OsBytes<Arc<[u8]>>;
 
 ///filter function type for directory entries,
 pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S>>) -> bool;

@@ -51,6 +51,7 @@ fn bench_strlen(c: &mut Criterion) {
             "very_long_directory_name/with_subfolders/and_a_very_long_filename.txt",
         ),
         ("xlarge (129-255)", &"a".repeat(200)),
+        ("max length (255)", &"b".repeat(255)),
     ];
 
     let all_entries: Vec<_> = length_groups

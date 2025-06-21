@@ -1,14 +1,9 @@
 #![allow(clippy::doc_markdown)]
 #[macro_export]
-///A modified helper macro from the standard library to safely access(as per my opinion i guess...)
+///A helper macro to safely access dirent64's
 /// fields of a `libc::dirent64` struct by offset.
-///
-/// It has been modified to handle the `d_reclen` field differently due to its alignment issues, handling the issue subtly for the user.
-/// This macro is used to access fields of a `libc::dirent64` struct by offset, allowing for more flexible and efficient access.
-/// It takes a pointer to a `libc::dirent64` struct and a field name, and returns a pointer to the field.
-/// The field name must be a valid field of the `libc::dirent64` struct.
-/// The macro uses `std::mem::offset_of!` to calculate the offset of the field in the struct.
-/// /// # Safety
+/// 
+/// # Safety
 /// - The caller must ensure that the pointer is valid and points to a `libc::dirent64` struct.
 /// - The field name must be a valid field of the `libc::dirent64` struct.
 macro_rules! offset_ptr {
@@ -40,18 +35,14 @@ macro_rules! offset_ptr {
 
 #[macro_export]
 /// A macro to create a C-style string pointer from a byte slice, the first argument should be a byte slice
-/// the second argument is optional as specifies a custom buffer size to use
+/// the second argument is optional as specifies a custom buffer size.
+/// 
 /// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
 /// or eg `libc::open(cstr!(b"/", 256),libc::O_RDONLY)`
 /// This macro takes a byte slice and returns a pointer to a null-terminated C-style string.
 macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
-        debug_assert!(
-            $bytes.len() < $crate::LOCAL_PATH_MAX,
-            "Input too large for buffer"
-        );
-
         // Create a buffer and make into a pointer
         let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
@@ -126,7 +117,7 @@ macro_rules! skip_dot_entries {
 /// initialises a path buffer for syscall operations,
 // appending a slash/null terminator (if it's a directory etc)
 /// returns a tuple containing the length of the path and the `PathBuffer` itself.
-macro_rules! init_path_buffer_syscall {
+macro_rules! init_path_buffer {
     ( $dir_path:expr) => {{
         let mut start_buffer=$crate::PathBuffer::new(); //create a new path buffer, this is a zeroed buffer of size `LOCAL_PATH_MAX
         let buffer_ptr = start_buffer.as_mut_ptr(); //get the mutable pointer to the buffer
@@ -139,24 +130,9 @@ macro_rules! init_path_buffer_syscall {
     }};
 }
 
-#[macro_export(local_inner_macros)]
-#[allow(clippy::too_long_first_doc_paragraph)]
-/// initialises a path buffer for readdir operations.
-/// the macro appends a slash/null terminator if necessary and returns  `PathBuffer` with the base path+filename
-macro_rules! init_path_buffer_readdir {
-    ($dir_path:expr) => {{
-        let mut buffer = $crate::PathBuffer::new(); //see above comments.
-        let dirp = $dir_path.as_bytes();
-        let dirp_len = dirp.len();
-        let needs_slash = ($dir_path.depth != 0) as u8 | ((dirp != b"/") as u8);
-        let buffer_ptr = buffer.as_mut_ptr();
-        std::ptr::copy_nonoverlapping(dirp.as_ptr(), buffer_ptr, dirp_len);
-        *buffer_ptr.add(dirp_len) = (b'/') * needs_slash;
-        buffer
-    }};
-}
 
-///not intended for public use, will be private when boilerplate is done
+
+///not intended for public use, will be private when boilerplate is donel
 /// a version of `construct_path!` that uses a constant time strlen macro to calculate the length of the name pointer
 /// this is really only an intellectual thing+exercise in reducing branching+complexity. THEY NEED TO BE BENCHMARKED.
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path

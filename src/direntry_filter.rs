@@ -6,7 +6,7 @@
 use crate::direntry::DirEntry;
 use crate::{
     BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer, construct_path,
-    get_dirent_vals, init_path_buffer_syscall, prefetch_next_buffer, prefetch_next_entry,
+    get_dirent_vals, init_path_buffer, prefetch_next_buffer, prefetch_next_entry,
     skip_dot_entries,
 };
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, close, dirent64, open};
@@ -133,8 +133,7 @@ where
         &self,
         func: fn(&[u8], usize, u8) -> bool,
     ) -> Result<impl Iterator<Item = Self>> {
-        let dir_path = self.as_bytes();
-        let fd = dir_path
+        let fd = self
             .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
         //alternatively syntaxes I made.
         //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
@@ -145,7 +144,7 @@ where
             return Err(std::io::Error::last_os_error().into());
         }
 
-        let (path_len, path_buffer) = unsafe { init_path_buffer_syscall!(self) }; // (we provide the depth for some quick checks)
+        let (path_len, path_buffer) = unsafe { init_path_buffer!(self) }; // (we provide the depth for some quick checks)
 
         Ok(DirEntryIteratorFilter {
             fd,

@@ -24,7 +24,7 @@ impl FileType {
     #[must_use]
     #[inline]
     /// Converts a `libc` file type to a `FileType`
-    /// I would *prefer* to use this function instead of the below one.
+    /// I would *prefer* to use this function instead of `from_dtype_fallback` but some some filesystems do not use `d_type` or set to 0
     /// on EXT4/BTRFS this is fine however its not guaranteed so this is not really useful.
     pub const fn from_dtype(d_type: u8) -> Self {
         match d_type {
@@ -43,7 +43,7 @@ impl FileType {
     #[inline]
     ///this is a fallback for when we can't get the file type from libc
     ///this can happen on funky filesystems like NTFS/XFS, BTRFS/ext4 work fine.
-    //fortunately we can just check the dtype, if it's unknowm, it means we have to do a stat call, yay!
+    //fortunately we can just check the dtype, if it's unknowm, it means we have to do an lstat call, yay!
     pub fn from_dtype_fallback(d_type: u8, file_path: &[u8]) -> Self {
         //i wouldve just chained the function calls but it's clearer this way
         match d_type {

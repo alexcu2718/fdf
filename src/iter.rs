@@ -3,7 +3,7 @@
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
     construct_path, cstr, custom_types_result::BytesStorage, get_dirent_vals,
-    init_path_buffer_readdir, offset_ptr, skip_dot_entries,
+    init_path_buffer, offset_ptr, skip_dot_entries,
 };
 use libc::{DIR, closedir, opendir, readdir64};
 use std::marker::PhantomData;
@@ -37,30 +37,34 @@ where
 
     #[inline]
     #[allow(clippy::cast_lossless)]
-    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation)] 
     ///Constructs a new `DirIter` from a `DirEntry<S>`.
     /// This function is used to create a new iterator over directory entries.
     /// It takes a `DirEntry<S>` which contains the directory path and other metadata.
-    /// It initializes the iterator by opening the directory and preparing the path buffer.
+    /// It initialises the iterator by opening the directory and preparing the path buffer.
     /// Utilises libc's `opendir` and `readdir64` for directory reading.
     /// # Errors
     /// TBD
     pub fn new(dir_path: &DirEntry<S>) -> Result<Self> {
-        let dirp = dir_path.as_bytes();
-        let dir = dirp.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
-        //let dir=unsafe{opendir(cstr!(dirp))};
+        let dir = dir_path.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
+        //let dir=unsafe{opendir(cstr!(dir_path))};
         //alternatively this also works if you dont like closures :)
 
         if dir.is_null() {
             return Err(std::io::Error::last_os_error().into());
         }
 
-        let path_buffer = unsafe { init_path_buffer_readdir!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
+        let (_,path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
+        //we actually don't need the length because we inherited it from the parent directory, i did this to avoid having macro duplication
+        //but they're equal, let this trivial assert prove!
+        //also this is the benefit of adding macros, the compiler  may(*tm) optimise away the baselen calculation, which it wouldnt do if it were a function call.
+
+        unsafe{debug_assert_eq!( init_path_buffer!(dir_path).0, dir_path.base_len as _)};
 
         Ok(Self {
             dir,
             path_buffer,
-            base_len: dir_path.base_len,
+            base_len:dir_path.base_len,
             depth: dir_path.depth,
             error: None,
             _phantom: PhantomData, //holds storage type

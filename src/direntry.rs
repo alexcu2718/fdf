@@ -25,7 +25,7 @@ use std::{
 use crate::{
     AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
     custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
-    init_path_buffer_syscall, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
+    init_path_buffer, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
     skip_dot_entries, utils::close_asm, utils::open_asm, utils::unix_time_to_system_time,
 };
 
@@ -132,7 +132,7 @@ where
             unsafe { self.size().is_ok_and(|size| size == 0) } //safe because we know it wont overflow.
         } else if self.is_dir() {
             // for directories, check if they have no entries
-            self.readdir() //we use readdir here because we want to check `quickly`
+            self.getdents() //we use readdir here because we want to check `quickly`
                 //, getdents is more efficient but for listing directories, finding the first entry is a different case.
                 .is_ok_and(|mut entries| entries.next().is_none())
         } else {
@@ -277,7 +277,7 @@ where
     }
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    #[allow(clippy::cast_possible_wrap)]
+    //#[allow(clippy::cast_possible_wrap)]
     ///`getdents` is an iterator over fd,where each consequent index is a directory entry.
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.
@@ -287,19 +287,17 @@ where
     /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
-        let dir_path = self.as_bytes();
-        let fd = dir_path
-           .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-         //let fd = unsafe { open_asm(dir_path) };
-        //alternatively syntaxes I made.
-        // let fd= unsafe{ open(crate::cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-       // let fd= unsafe{ open(cstr!(dir_path,500),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
+
+        
+        let fd = self.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        //let fd = unsafe { open_asm(self) }; //alternative explorative syntax using asm 
+    
 
         if fd < 0 {
             return Err(Error::last_os_error().into());
         }
 
-        let (path_len, path_buffer) = unsafe { init_path_buffer_syscall!(self) };
+        let (path_len, path_buffer) = unsafe { init_path_buffer!(self) };
         //using macros because I was learning macros and they help immensely with readability
         //this is a macro that initialises the path buffer, it returns the length of the
         //path and the path buffer itself, which is a stack allocated buffer that can hold the
@@ -386,9 +384,7 @@ where
                     base_len: self.base_len,
                 };
 
-                unsafe {
-                    debug_assert!(entry.file_name().len() == crate::dirent_const_time_strlen(d));
-                }
+             
 
                 return Some(entry);
             }

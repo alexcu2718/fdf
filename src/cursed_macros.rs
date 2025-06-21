@@ -36,20 +36,13 @@ macro_rules! offset_ptr {
         }
     }};
 }
-//a cheap debug print macro, only prints if debug_assertions is enabled
-#[macro_export]
-macro_rules! debug_print {
-    ($expr:expr) => {
-        #[cfg(debug_assertions)]
-        {
-            dbg!($expr);
-        }
-    };
-}
+
 
 #[macro_export]
-/// A macro to create a C-style string pointer from a byte slice
+/// A macro to create a C-style string pointer from a byte slice, the first argument should be a byte slice
+/// the second argument is optional as specifies a custom buffer size to use
 /// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
+/// or eg `libc::open(cstr!(b"/", 256),libc::O_RDONLY)`
 /// This macro takes a byte slice and returns a pointer to a null-terminated C-style string.
 macro_rules! cstr {
     ($bytes:expr) => {{
@@ -68,13 +61,6 @@ macro_rules! cstr {
         //let caller choose cast
         c_path_buf.cast::<_>()
     }};
-}
-
-#[macro_export]
-#[allow(clippy::too_long_first_doc_paragraph)]
-/// A version of `cstr!` that allows specifying a maximum length for the buffer, intended to be used publically
-///so eg `libc::open(cstr_n!(b"/",2),libc::O_RDONLY)`
-macro_rules! cstr_n {
     ($bytes:expr,$n:expr) => {{
         // Debug assert to check test builds for unexpected conditions
         debug_assert!($bytes.len() < $n, "Input too large for buffer");
@@ -88,6 +74,8 @@ macro_rules! cstr_n {
         c_path_buf.cast::<_>()
     }};
 }
+
+
 
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]

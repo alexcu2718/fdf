@@ -54,15 +54,13 @@ where
             return Err(std::io::Error::last_os_error().into());
         }
 
-        let (_,path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
-        //we actually don't need the length because we inherited it from the parent directory, i did this to avoid having macro duplication
-        //the compiler will optimise this away probably.
-
+        let (base_len,path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
+       
 
         Ok(Self {
             dir,
             path_buffer,
-            base_len:dir_path.base_len,
+            base_len:base_len as _,
             depth: dir_path.depth,
             error: None,
             _phantom: PhantomData, //holds storage type

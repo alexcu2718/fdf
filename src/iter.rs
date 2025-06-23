@@ -56,10 +56,8 @@ where
 
         let (_,path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
         //we actually don't need the length because we inherited it from the parent directory, i did this to avoid having macro duplication
-        //but they're equal, let this trivial assert prove!
-        //also this is the benefit of adding macros, the compiler  may(*tm) optimise away the baselen calculation, which it wouldnt do if it were a function call.
+        //the compiler will optimise this away probably.
 
-        unsafe{debug_assert_eq!( init_path_buffer!(dir_path).0, dir_path.base_len as _)};
 
         Ok(Self {
             dir,

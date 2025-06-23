@@ -27,7 +27,7 @@ where
 
     fn extension(&self) -> Option<&[u8]>;
     fn matches_extension(&self, ext: &[u8]) -> bool;
-    unsafe fn size(&self) -> crate::Result<u64>;
+    fn size(&self) -> crate::Result<u64>;
     fn get_stat(&self) -> crate::Result<stat>;
     fn modified_time(&self) -> crate::Result<SystemTime>;
     fn as_path(&self) -> &Path;
@@ -104,7 +104,7 @@ where
     /// If the file size cannot be determined, returns 0.
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
-    unsafe fn size(&self) -> crate::Result<u64> {
+    fn size(&self) -> crate::Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
     }
 

@@ -129,7 +129,7 @@ where
     pub fn is_empty(&self) -> bool {
         if self.is_regular_file() {
             // for files, check if size is zero without loading all metadata
-            unsafe { self.size().is_ok_and(|size| size == 0) } //safe because we know it wont overflow.
+             self.size().is_ok_and(|size| size == 0) //safe because we know it wont overflow.
         } else if self.is_dir() {
             // for directories, check if they have no entries
             self.getdents() //we use readdir here because we want to check `quickly`

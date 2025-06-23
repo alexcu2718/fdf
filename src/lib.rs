@@ -89,6 +89,8 @@ pub use custom_types_result::{
 mod traits_and_conversions;
 pub use traits_and_conversions::{BytePath, PathAsBytes};
 
+
+
 mod utils;
 
 //pub(crate) use utils::strlen_asm;
@@ -98,8 +100,8 @@ mod glob;
 pub use glob::glob_to_regex;
 mod config;
 pub use config::SearchConfig;
-pub mod filetype;
-pub use filetype::FileType;
+mod filetype;
+pub use filetype::FileType as FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[global_allocator]

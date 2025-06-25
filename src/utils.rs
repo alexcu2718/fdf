@@ -46,7 +46,7 @@ where
 #[allow(clippy::cast_possible_truncation)] //stupid
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(target_arch = "x86_64")]
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 /// Opens a directory using an assembly implementation of open(i'm probably going to learn some bindgen and have some experiments) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
@@ -71,7 +71,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 }
 
 #[inline]
-#[cfg(not(target_os="linux"))]
+#[cfg(not(target_os = "linux"))]
 #[cfg(not(target_arch = "x86_64"))]
 /// Opens a directory using libc's open function. Backup function for non-x86_64 architectures.
 /// Returns -1 on error.
@@ -86,7 +86,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 
 #[inline]
 #[cfg(not(target_arch = "x86_64"))]
-#[cfg(not(target_os="linux"))]
+#[cfg(not(target_os = "linux"))]
 pub unsafe fn close_asm(fd: i32) {
     unsafe { libc::close(fd) };
 }
@@ -94,7 +94,7 @@ pub unsafe fn close_asm(fd: i32) {
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(target_arch = "x86_64")]
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 pub unsafe fn close_asm(fd: i32) {
     use std::arch::asm;
     let _: isize;
@@ -195,7 +195,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
 ///  `SWAR` (SIMD Within A Register/bit trick hackery) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
 /// THE REASON WE DO THIS IS BECAUSE THE RECLEN IS PADDED UP TO 8 BYTES (rounded up to the nearest multiple of 8),
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset!)

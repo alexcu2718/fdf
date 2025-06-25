@@ -66,8 +66,9 @@ mod cursed_macros;
 //crate imports
 mod iter;
 pub(crate) use iter::DirIter;
-
+#[cfg(target_os = "linux")]
 mod direntry_filter;
+#[cfg(target_os = "linux")]
 pub use direntry_filter::DirEntryIteratorFilter;
 
 mod buffer;
@@ -104,6 +105,7 @@ mod filetype;
 pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
+#[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

@@ -89,6 +89,8 @@ where
             let (name_file, dir_info, inode, reclen): (*const u8, u8, u64, usize) =
                 get_dirent_vals!(entry); //get the pointers/values from the struct using macro 
 
+          
+
             skip_dot_entries!(dir_info, name_file, reclen);
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 

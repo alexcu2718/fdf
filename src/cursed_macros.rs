@@ -6,22 +6,46 @@
 /// # Safety
 /// - The caller must ensure that the pointer is valid and points to a `libc::dirent64` struct.
 /// - The field name must be a valid field of the `libc::dirent64` struct.
+/// 
+/// # Field Aliases
+/// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
 macro_rules! offset_ptr {
     // Special case for d_reclen
-    // I recommend casting to usize.
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_reclen //access field directly as it is not aligned like the others
+        (*$entry_ptr).d_reclen // access field directly as it is not aligned like the others
+    }};
+
+    // Handle inode number field with aliasing for BSD systems
+    ($entry_ptr:expr, d_ino) => {{
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        ))]{
+        // SAFETY: Caller must ensure pointer is valid
+        &raw const (*$entry_ptr).d_fileno
+        }
+        
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        )))]{
+        // SAFETY: Caller must ensure pointer is valid
+         &raw const (*$entry_ptr).d_ino
+        }
+        
+        
     }};
 
     // General case for all other fields
     ($entry_ptr:expr, $field:ident) => {{
-
         &raw const (*$entry_ptr).$field 
-        
     }};
 }
-
 
 #[macro_export]
 /// A macro to create a C-style string pointer from a byte slice, the first argument should be a byte slice
@@ -132,6 +156,21 @@ macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
         let d_name = $crate::offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
+            #[cfg(any(
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_vendor = "apple",
+    ))]
+        let bane_len=$dirent.d_namlen as usize;
+        #[cfg(not(any(
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_vendor = "apple",
+        )))]
         let name_len = $crate::dirent_const_time_strlen($dirent);
         std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,
         );

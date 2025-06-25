@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#[allow(unused_imports)]
 use crate::{DirEntryError, Result, buffer::ValueType, cstr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";

@@ -157,7 +157,7 @@ macro_rules! construct_path {
         target_os = "dragonfly",
         target_vendor = "apple",
     ))]
-        let bane_len=$dirent.d_namlen as usize;
+        let base_len=$dirent.d_namlen as usize;
         #[cfg(not(any(
             target_os = "netbsd",
             target_os = "openbsd",

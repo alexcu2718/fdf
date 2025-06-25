@@ -5,7 +5,7 @@ use crate::{
     construct_path, cstr, custom_types_result::BytesStorage, get_dirent_vals, init_path_buffer,
     offset_ptr, skip_dot_entries,
 };
-use libc::{DIR, closedir, opendir, readdir64};
+use libc::{DIR, closedir, opendir};
 use std::marker::PhantomData;
 #[derive(Debug)]
 /// An iterator over directory entries from readdir64 via libc
@@ -80,7 +80,10 @@ where
         }
 
         loop {
-            let entry = unsafe { readdir64(self.dir) };
+            #[cfg(target_os = "linux")]
+            let entry = unsafe { libc::readdir64(self.dir) };
+            #[cfg(not(target_os = "linux"))]
+            let entry = unsafe { libc::readdir(self.dir) };
             if entry.is_null() {
                 return None;
             }

@@ -2,11 +2,11 @@
 #[macro_export]
 ///A helper macro to safely access dirent64's
 /// fields of a `libc::dirent64` struct by offset.
-/// 
+///
 /// # Safety
 /// - The caller must ensure that the pointer is valid and points to a `libc::dirent64` struct.
 /// - The field name must be a valid field of the `libc::dirent64` struct.
-/// 
+///
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
 macro_rules! offset_ptr {
@@ -23,34 +23,32 @@ macro_rules! offset_ptr {
             target_os = "openbsd",
             target_os = "netbsd",
             target_os = "dragonfly"
-        ))]{
-        // SAFETY: Caller must ensure pointer is valid
-        &raw const (*$entry_ptr).d_fileno
+        ))]
+        {
+            // SAFETY: Caller must ensure pointer is valid
+            &raw const (*$entry_ptr).d_fileno
         }
-        
+
         #[cfg(not(any(
             target_os = "freebsd",
             target_os = "openbsd",
             target_os = "netbsd",
             target_os = "dragonfly"
-        )))]{
-        // SAFETY: Caller must ensure pointer is valid
-         &raw const (*$entry_ptr).d_ino
+        )))]
+        {
+            // SAFETY: Caller must ensure pointer is valid
+            &raw const (*$entry_ptr).d_ino
         }
-        
-        
     }};
 
     // General case for all other fields
-    ($entry_ptr:expr, $field:ident) => {{
-        &raw const (*$entry_ptr).$field 
-    }};
+    ($entry_ptr:expr, $field:ident) => {{ &raw const (*$entry_ptr).$field }};
 }
 
 #[macro_export]
 /// A macro to create a C-style string pointer from a byte slice, the first argument should be a byte slice
 /// the second argument is optional as specifies a custom buffer size.
-/// 
+///
 /// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
 /// or eg `libc::open(cstr!(b"/", 256),libc::O_RDONLY)`
 /// This macro takes a byte slice and returns a pointer to a null-terminated C-style string.
@@ -79,8 +77,6 @@ macro_rules! cstr {
         c_path_buf.cast::<_>()
     }};
 }
-
-
 
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
@@ -143,8 +139,6 @@ macro_rules! init_path_buffer {
         (base_len,start_buffer)
     }};
 }
-
-
 
 ///not intended for public use, will be private when boilerplate is donel
 /// a version of `construct_path!` that uses a constant time strlen macro to calculate the length of the name pointer
@@ -282,7 +276,7 @@ macro_rules! strlen_asm {
         )))]
         {
             // Fallback to libc::strlen if no SIMD support
-            libc::strlen($ptr.cast::<_>()) 
+            libc::strlen($ptr.cast::<_>())
         }
     }};
 }

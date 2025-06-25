@@ -37,7 +37,7 @@ pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
 {
-    unsafe{crate::strlen_asm!(ptr) }
+    unsafe { crate::strlen_asm!(ptr) }
 }
 
 #[inline]
@@ -198,7 +198,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     #[cfg(target_endian = "little")]
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
     #[cfg(target_endian = "big")]
-     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
@@ -238,9 +238,3 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // position.
     reclen - DIRENT_HEADER_START - byte_pos
 }
-
-
-
-
-
-

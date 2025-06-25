@@ -5,8 +5,9 @@
 #![allow(clippy::integer_division)] //i know my division is safe.
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
+#[cfg(target_arch = "x86_64")]
+use crate::{prefetch_next_buffer, prefetch_next_entry};
 #[allow(unused_imports)]
-
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
 #[allow(unused_imports)]
 use std::{
@@ -21,15 +22,13 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
-#[cfg(target_arch = "x86_64")]
-use crate::{prefetch_next_buffer, prefetch_next_entry};
 
 #[allow(unused_imports)]
 use crate::{
     AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
-    custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
-    init_path_buffer, offset_ptr,
-    skip_dot_entries, utils::close_asm, utils::open_asm, utils::unix_time_to_system_time,
+    custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals, init_path_buffer,
+    offset_ptr, skip_dot_entries, utils::close_asm, utils::open_asm,
+    utils::unix_time_to_system_time,
 };
 
 #[derive(Clone)]
@@ -47,7 +46,6 @@ where
     pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
                               //2 bytes padding, possible uses? not sure.
-                              
 }
 
 impl<S> DirEntry<S>
@@ -132,7 +130,7 @@ where
     pub fn is_empty(&self) -> bool {
         if self.is_regular_file() {
             // for files, check if size is zero without loading all metadata
-             self.size().is_ok_and(|size| size == 0) //safe because we know it wont overflow.
+            self.size().is_ok_and(|size| size == 0) //safe because we know it wont overflow.
         } else if self.is_dir() {
             // for directories, check if they have no entries
             self.getdents() //we use readdir here because we want to check `quickly`
@@ -291,11 +289,9 @@ where
     /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
-
-        
-        let fd = self.as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-        //let fd = unsafe { open_asm(self) }; //alternative explorative syntax using asm 
-    
+        let fd = self
+            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
+        //let fd = unsafe { open_asm(self) }; //alternative explorative syntax using asm
 
         if fd < 0 {
             return Err(Error::last_os_error().into());
@@ -320,15 +316,12 @@ where
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
-        #[cfg(not(target_os = "linux"))]
-        #[inline]//back up because we cant use getdents on non linux systems, so we use readdir instead
-        #[allow(clippy::missing_errors_doc)]
-        pub fn getdents(&self) ->  Result<impl Iterator<Item = Self> + '_> {
+    #[cfg(not(target_os = "linux"))]
+    #[inline] //back up because we cant use getdents on non linux systems, so we use readdir instead
+    #[allow(clippy::missing_errors_doc)]
+    pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
         self.readdir()
-        }
-
-
-        
+    }
 }
 
 ///Iterator for directory entries using getdents syscall
@@ -396,8 +389,6 @@ where
                     depth: self.parent_depth + 1, // increment depth for child entries
                     base_len: self.base_len,
                 };
-
-             
 
                 return Some(entry);
             }

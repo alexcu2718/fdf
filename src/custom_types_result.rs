@@ -2,7 +2,7 @@ use crate::const_from_env;
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 use slimmer_box::SlimmerBox;
 use std::ops::Deref;
-use std::sync::{Arc};
+use std::sync::Arc;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
@@ -28,7 +28,8 @@ pub trait AsU8 {
 
 impl<T> AsU8 for T
 where
-    T: Deref<Target = [u8]>,{
+    T: Deref<Target = [u8]>,
+{
     #[inline]
     fn as_bytes(&self) -> &[u8] {
         self
@@ -93,7 +94,7 @@ impl<S: BytesStorage> OsBytes<S> {
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
     /// Returns a reference to the underlying bytes.
-    pub  fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 

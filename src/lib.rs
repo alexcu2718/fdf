@@ -89,8 +89,6 @@ pub use custom_types_result::{
 mod traits_and_conversions;
 pub use traits_and_conversions::{BytePath, PathAsBytes};
 
-
-
 mod utils;
 
 //pub(crate) use utils::strlen_asm;
@@ -101,7 +99,7 @@ pub use glob::glob_to_regex;
 mod config;
 pub use config::SearchConfig;
 mod filetype;
-pub use filetype::FileType as FileType;
+pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(target_endian = "little")]
@@ -255,7 +253,4 @@ where
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
     }
-
-
-    
 }

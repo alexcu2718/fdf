@@ -2,9 +2,7 @@
 mod tests {
     #![allow(unused_imports)]
     use crate::traits_and_conversions::{BytePath, PathAsBytes};
-    use crate::{
-        DirEntry, DirIter, FileType, SlimmerBytes, utils::dirent_const_time_strlen,
-    };
+    use crate::{DirEntry, DirIter, FileType, SlimmerBytes, utils::dirent_const_time_strlen};
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
@@ -181,7 +179,7 @@ mod tests {
 
         let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
         let file_path = DirEntry::<SlimmerBytes>::new(".")?.as_full_path()?;
-       
+
         let my_path: Box<[u8]> = file_path.as_bytes().into();
 
         let my_path_std: std::path::PathBuf = std::path::Path::new(".").canonicalize()?;

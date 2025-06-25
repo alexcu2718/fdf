@@ -2,8 +2,8 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
-    construct_path, cstr, custom_types_result::BytesStorage, get_dirent_vals,
-    init_path_buffer, offset_ptr, skip_dot_entries,
+    construct_path, cstr, custom_types_result::BytesStorage, get_dirent_vals, init_path_buffer,
+    offset_ptr, skip_dot_entries,
 };
 use libc::{DIR, closedir, opendir, readdir64};
 use std::marker::PhantomData;
@@ -37,7 +37,7 @@ where
 
     #[inline]
     #[allow(clippy::cast_lossless)]
-    #[allow(clippy::cast_possible_truncation)] 
+    #[allow(clippy::cast_possible_truncation)]
     ///Constructs a new `DirIter` from a `DirEntry<S>`.
     /// This function is used to create a new iterator over directory entries.
     /// It takes a `DirEntry<S>` which contains the directory path and other metadata.
@@ -54,13 +54,12 @@ where
             return Err(std::io::Error::last_os_error().into());
         }
 
-        let (base_len,path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
-       
+        let (base_len, path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
 
         Ok(Self {
             dir,
             path_buffer,
-            base_len:base_len as _,
+            base_len: base_len as _,
             depth: dir_path.depth,
             error: None,
             _phantom: PhantomData, //holds storage type
@@ -88,8 +87,6 @@ where
 
             let (name_file, dir_info, inode, reclen): (*const u8, u8, u64, usize) =
                 get_dirent_vals!(entry); //get the pointers/values from the struct using macro 
-
-          
 
             skip_dot_entries!(dir_info, name_file, reclen);
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise

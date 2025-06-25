@@ -4,13 +4,12 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
-#[cfg(target_arch = "x86_64")]
-use crate::{prefetch_next_buffer, prefetch_next_entry};
 use crate::{
     BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer, construct_path,
-    get_dirent_vals, init_path_buffer, 
-    skip_dot_entries,
+    get_dirent_vals, init_path_buffer, skip_dot_entries,
 };
+#[cfg(target_arch = "x86_64")]
+use crate::{prefetch_next_buffer, prefetch_next_entry};
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, close, dirent64, open};
 use std::marker::PhantomData;
 

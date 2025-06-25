@@ -126,35 +126,30 @@ where
     let check_std_colours = /*arbitrary feature request  */
         std::env::var("FDF_NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
 
-
     if use_colors && !check_std_colours {
         for path in paths.flatten().take(limit_opt) {
-           
-                writer.write_all(extension_colour(&path))?;
-                writer.write_all(&path)?;
-                // add a trailing slash+newline for directories
-                if path.is_dir() {
-                    writer.write_all(NEWLINE_CRLF_RESET)?;
-                }
-                // add a trailing newline for files
-                else {
-                    writer.write_all(NEWLINE_RESET)?;
-                }
-            
+            writer.write_all(extension_colour(&path))?;
+            writer.write_all(&path)?;
+            // add a trailing slash+newline for directories
+            if path.is_dir() {
+                writer.write_all(NEWLINE_CRLF_RESET)?;
+            }
+            // add a trailing newline for files
+            else {
+                writer.write_all(NEWLINE_RESET)?;
+            }
         }
     } else {
         for path in paths.flatten().take(limit_opt) {
-            
-                writer.write_all(&path)?;
-                // add a trailing slash+newline for directories
-                if path.is_dir() {
-                    writer.write_all(NEWLINE_CRLF)?;
-                }
-                // add a trailing newline for files
-                else {
-                    writer.write_all(NEWLINE)?;
-                }
-            
+            writer.write_all(&path)?;
+            // add a trailing slash+newline for directories
+            if path.is_dir() {
+                writer.write_all(NEWLINE_CRLF)?;
+            }
+            // add a trailing newline for files
+            else {
+                writer.write_all(NEWLINE)?;
+            }
         }
     }
     writer.flush()?;

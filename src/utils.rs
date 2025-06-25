@@ -29,6 +29,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 /// This doesn't even matter because we don't use it to calculate strlen anymore, that's an O(1) problem now :)))))))))))))))))))))
 #[inline]
 #[allow(clippy::unnecessary_safety_comment)] //ill fix this later.
+#[allow(unused_unsafe)]
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 16 bytes
 ///Deprecated in favour of a macro (`strlen_asm!`)
 // SAFETY: the caller must guarantee that `ptr` points to a valid null-terminated string of type `T`(i8/u8) and does not start with a null byte.
@@ -36,7 +37,7 @@ pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
 {
-    unsafe { crate::strlen_asm!(ptr) }
+    unsafe{crate::strlen_asm!(ptr) }
 }
 
 #[inline]

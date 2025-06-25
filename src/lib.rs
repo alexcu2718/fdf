@@ -104,6 +104,7 @@ mod filetype;
 pub use filetype::FileType as FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
+#[cfg(target_endian = "little")]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -254,4 +255,7 @@ where
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
     }
+
+
+    
 }

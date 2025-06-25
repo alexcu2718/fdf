@@ -1,5 +1,5 @@
 use libc::{SYS_getdents64, dirent64, syscall};
-use std::arch::asm;
+
 use std::mem::MaybeUninit;
 use std::ops::{Index, IndexMut};
 use std::slice::SliceIndex;
@@ -117,6 +117,7 @@ where
     #[allow(clippy::inline_asm_x86_intel_syntax)]
     #[cfg(target_arch = "x86_64")]
     pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i32 {
+        use std::arch::asm;
         let output;
         unsafe {
             asm!(

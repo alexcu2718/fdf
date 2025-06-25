@@ -16,19 +16,9 @@ macro_rules! offset_ptr {
 
     // General case for all other fields
     ($entry_ptr:expr, $field:ident) => {{
-        const OFFSET: isize = std::mem::offset_of!(libc::dirent64, $field) as isize;
 
-        if true {
-            // Normal field access via offset
-            // SAFETY: Caller must ensure pointer is valid
-            $entry_ptr.byte_offset(OFFSET) as _
-        } else {
-            // Type inference branch (never executed)
-            #[allow(deref_nullptr, unused_unsafe)]
-            unsafe {
-                std::ptr::addr_of!((*std::ptr::null::<libc::dirent64>()).$field)
-            }
-        }
+        &raw const (*$entry_ptr).$field 
+        
     }};
 }
 
@@ -253,7 +243,7 @@ macro_rules! strlen_asm {
         )))]
         {
             // Fallback to libc::strlen if no SIMD support
-            unsafe { libc::strlen($ptr.cast::<i8>()) }
+            libc::strlen($ptr.cast::<_>()) 
         }
     }};
 }

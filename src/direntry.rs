@@ -6,6 +6,7 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
+
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
 #[allow(unused_imports)]
 use std::{
@@ -20,12 +21,14 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
+#[cfg(target_arch = "x86_64")]
+use crate::{prefetch_next_buffer, prefetch_next_entry};
 
 #[allow(unused_imports)]
 use crate::{
     AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
     custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
-    init_path_buffer, offset_ptr, prefetch_next_buffer, prefetch_next_entry,
+    init_path_buffer, offset_ptr,
     skip_dot_entries, utils::close_asm, utils::open_asm, utils::unix_time_to_system_time,
 };
 
@@ -277,6 +280,7 @@ where
     }
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
+    #[cfg(target_os = "linux")]
     //#[allow(clippy::cast_possible_wrap)]
     ///`getdents` is an iterator over fd,where each consequent index is a directory entry.
     /// This function is a low-level syscall wrapper that reads directory entries.
@@ -316,6 +320,15 @@ where
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
+        #[cfg(not(target_os = "linux"))]
+        #[inline]//back up because we cant use getdents on non linux systems, so we use readdir instead
+        #[allow(clippy::missing_errors_doc)]
+        pub fn getdents(&self) ->  Result<impl Iterator<Item = Self> + '_> {
+        self.readdir()
+        }
+
+
+        
 }
 
 ///Iterator for directory entries using getdents syscall

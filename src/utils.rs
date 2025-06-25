@@ -69,6 +69,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 }
 
 #[inline]
+#[cfg(target_os="linux")]
 #[cfg(not(target_arch = "x86_64"))]
 /// Opens a directory using libc's open function. Backup function for non-x86_64 architectures.
 /// Returns -1 on error.
@@ -83,6 +84,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 
 #[inline]
 #[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(target_os="linux"))]
 pub unsafe fn close_asm(fd: i32) {
     unsafe { libc::close(fd) };
 }
@@ -90,6 +92,7 @@ pub unsafe fn close_asm(fd: i32) {
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(target_arch = "x86_64")]
+#[cfg(target_os="linux")]
 pub unsafe fn close_asm(fd: i32) {
     use std::arch::asm;
     let _: isize;

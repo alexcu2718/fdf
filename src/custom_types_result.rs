@@ -70,8 +70,6 @@ impl<S: BytesStorage> OsBytes<S> {
         }
     }
 
-    
-
     #[inline]
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
@@ -108,7 +106,6 @@ impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
     }
 }
 
-
 ///filter function type for directory entries,
 pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S>>) -> bool;
 ///generic filter function type for directory entries
@@ -120,17 +117,16 @@ pub type SlimmerBytes = SlimmerBox<[u8], u16>;
 #[cfg(not(target_os = "linux"))] // If not on Linux, we use a regular Box
 pub type SlimmerBytes = Box<[u8]>;
 
-
 #[cfg(any(
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_vendor = "apple",
-    ))]
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_vendor = "apple",
+))]
 /// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
 /// On BSD systems, it is a 32-bit unsigned integer.
-pub type InodeValue=u32;
+pub type InodeValue = u32;
 #[cfg(not(any(
     target_os = "netbsd",
     target_os = "openbsd",
@@ -140,4 +136,4 @@ pub type InodeValue=u32;
 )))]
 /// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
 /// On BSD systems, it is a 32-bit unsigned integer.
-pub type InodeValue=u64;
+pub type InodeValue = u64;

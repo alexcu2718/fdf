@@ -160,7 +160,7 @@ macro_rules! construct_path {
     }};
 }
 
-#[cfg(all(target_os="linux",target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[macro_export(local_inner_macros)]
 /// Prefetches the next likely entry in the buffer, basically trying to keep cache warm
 macro_rules! prefetch_next_entry {
@@ -176,7 +176,7 @@ macro_rules! prefetch_next_entry {
     };
 }
 
-#[cfg(all(target_os="linux",target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[macro_export]
 /// Prefetches the next buffer for reading, this is used to keep the cache warm for the next read operation
 macro_rules! prefetch_next_buffer {
@@ -327,7 +327,6 @@ macro_rules! impl_bytes_storage {
         )*
     };
 }
-
 
 /// Macro to create a const from an env var with compile-time parsing
 /// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "X");, where X(usize) is the default value if the env var is not set

@@ -58,7 +58,7 @@
 
 use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
-use fdf::{DirEntryError, Finder, glob_to_regex,SlimmerBytes};
+use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
 use std::ffi::OsString;
 use std::io::stdout;
 use std::path::Path;

@@ -5,11 +5,10 @@
 #![allow(clippy::integer_division)] //i know my division is safe.
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
-#[cfg(all(target_os="linux",target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[allow(unused_imports)]
-use crate::{prefetch_next_buffer, prefetch_next_entry,utils::close_asm, utils::open_asm};
+use crate::{prefetch_next_buffer, prefetch_next_entry, utils::close_asm, utils::open_asm};
 #[allow(unused_imports)]
-
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
 #[allow(unused_imports)]
 use std::{
@@ -27,10 +26,9 @@ use std::{
 
 #[allow(unused_imports)]
 use crate::{
-    AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
-    custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals, init_path_buffer,InodeValue,
-    offset_ptr, skip_dot_entries,
-    utils::unix_time_to_system_time,
+    AsU8 as _, BytePath, DirIter, InodeValue, OsBytes, PathBuffer, Result, SyscallBuffer,
+    construct_path, cstr, custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
+    init_path_buffer, offset_ptr, skip_dot_entries, utils::unix_time_to_system_time,
 };
 
 #[derive(Clone)]
@@ -43,7 +41,7 @@ where
 {
     pub(crate) path: OsBytes<S>, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
     pub(crate) file_type: FileType, //1 byte
-    pub(crate) inode: InodeValue,       //8 bytes, i may drop this in the future, it's not very useful.
+    pub(crate) inode: InodeValue, //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
     pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
@@ -326,7 +324,6 @@ where
     }
 }
 
-
 #[cfg(target_os = "linux")]
 ///Iterator for directory entries using getdents syscall
 pub struct DirEntryIterator<S>
@@ -369,7 +366,8 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const libc::dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
+                let d: *const libc::dirent64 =
+                    unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */

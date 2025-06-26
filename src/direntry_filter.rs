@@ -11,7 +11,7 @@ use crate::{
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{prefetch_next_buffer, prefetch_next_entry};
-use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, close, open,dirent64};
+use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, close, dirent64, open};
 use std::marker::PhantomData;
 
 pub struct DirEntryIteratorFilter<S>

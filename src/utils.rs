@@ -45,8 +45,7 @@ where
 #[allow(clippy::items_after_statements)]
 #[allow(clippy::cast_possible_truncation)] //stupid
 #[allow(clippy::inline_asm_x86_intel_syntax)]
-#[cfg(target_arch = "x86_64")]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os="linux",target_arch = "x86_64"))]
 /// Opens a directory using an assembly implementation of open(i'm probably going to learn some bindgen and have some experiments) and returns the file descriptor.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
@@ -71,8 +70,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 }
 
 #[inline]
-#[cfg(not(target_os = "linux"))]
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(all(target_os="linux",target_arch = "x86_64")))]
 /// Opens a directory using libc's open function. Backup function for non-x86_64 architectures.
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
@@ -85,16 +83,14 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 }
 
 #[inline]
-#[cfg(not(target_arch = "x86_64"))]
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(all(target_os="linux",target_arch = "x86_64")))]
 pub unsafe fn close_asm(fd: i32) {
     unsafe { libc::close(fd) };
 }
 
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
-#[cfg(target_arch = "x86_64")]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os="linux",target_arch = "x86_64"))]
 pub unsafe fn close_asm(fd: i32) {
     use std::arch::asm;
     let _: isize;

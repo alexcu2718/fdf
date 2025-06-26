@@ -5,10 +5,12 @@
 #![allow(clippy::integer_division)] //i know my division is safe.
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
-#[cfg(target_arch = "x86_64")]
-use crate::{prefetch_next_buffer, prefetch_next_entry};
+#[cfg(all(target_os="linux",target_arch = "x86_64"))]
 #[allow(unused_imports)]
-use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
+use crate::{prefetch_next_buffer, prefetch_next_entry,utils::close_asm, utils::open_asm};
+#[allow(unused_imports)]
+
+use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
 #[allow(unused_imports)]
 use std::{
     convert::TryFrom,
@@ -27,7 +29,7 @@ use std::{
 use crate::{
     AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
     custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals, init_path_buffer,
-    offset_ptr, skip_dot_entries, utils::close_asm, utils::open_asm,
+    offset_ptr, skip_dot_entries,
     utils::unix_time_to_system_time,
 };
 
@@ -324,6 +326,8 @@ where
     }
 }
 
+
+#[cfg(target_os = "linux")]
 ///Iterator for directory entries using getdents syscall
 pub struct DirEntryIterator<S>
 where
@@ -339,7 +343,7 @@ where
     _marker: PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
                              //this gets compiled away anyway as its as a zst
 }
-
+#[cfg(target_os = "linux")]
 impl<S> Drop for DirEntryIterator<S>
 where
     S: BytesStorage,
@@ -353,7 +357,7 @@ where
         //unsafe { close_asm(self.fd) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
-
+#[cfg(target_os = "linux")]
 impl<S> Iterator for DirEntryIterator<S>
 where
     S: BytesStorage,
@@ -365,7 +369,7 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
+                let d: *const libc::dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */

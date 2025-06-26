@@ -2,7 +2,7 @@
 mod tests {
     #![allow(unused_imports)]
     use crate::traits_and_conversions::{BytePath, PathAsBytes};
-    use crate::{DirEntry, DirIter, FileType, SlimmerBytes, utils::dirent_const_time_strlen};
+    use crate::{DirEntry, DirIter, FileType,SlimmerBytes};
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
@@ -118,14 +118,14 @@ mod tests {
 
         //let _=std::fs::File::
     }
-
+    
     #[test]
     fn test_hidden_files() {
         let temp_dir = std::env::temp_dir();
         let hidden_file = temp_dir.as_path().join(".hidden");
         std::fs::write(&hidden_file, "").unwrap();
 
-        let entry: DirEntry<SlimmerBytes> = DirEntry::new(hidden_file.as_os_str()).unwrap();
+        let entry: DirEntry<crate::SlimmerBytes> = DirEntry::new(hidden_file.as_os_str()).unwrap();
         assert!(entry.is_hidden());
 
         let non_hidden = temp_dir.as_path().join("visible");
@@ -133,6 +133,11 @@ mod tests {
         let entry = DirEntry::<SlimmerBytes>::new(non_hidden.as_os_str()).unwrap();
         assert!(!entry.is_hidden());
     }
+
+
+
+    
+
 
     #[test]
     fn filename_test() {
@@ -143,7 +148,9 @@ mod tests {
         let file_path = new_dir.join("testfile.txt");
         let _ = std::fs::remove_file(&file_path);
         let _ = std::fs::write(&file_path, "test");
+
         let entry = DirEntry::<SlimmerBytes>::new(file_path.as_os_str()).unwrap();
+
         assert_eq!(entry.file_name(), b"testfile.txt");
         let x = std::fs::remove_file(&file_path).is_ok(); //have to check the result to avoid no-op 
         assert!(x, "File should be removed successfully");
@@ -155,10 +162,16 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.as_path().join("testfilenew.txt");
         std::fs::write(&file_path, "test").unwrap();
-
+ 
         let entry: usize = DirEntry::<SlimmerBytes>::new(file_path.as_os_str())
             .unwrap()
             .base_len();
+
+    
+
+
+
+
         let std_entry: usize = (std::path::Path::new(file_path.as_os_str())
             .parent()
             .unwrap()
@@ -178,7 +191,9 @@ mod tests {
         let _ = std::fs::create_dir_all(&temp_dir);
 
         let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
+
         let file_path = DirEntry::<SlimmerBytes>::new(".")?.as_full_path()?;
+     
 
         let my_path: Box<[u8]> = file_path.as_bytes().into();
 
@@ -207,7 +222,9 @@ mod tests {
         let test_file_bytes = test_file_canon.as_os_str().as_bytes();
 
         // Test directory entry
+
         let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?;
+      
         let canonical_path = temp_dir.canonicalize()?;
 
         // Compare paths at byte level
@@ -270,7 +287,9 @@ mod tests {
         // lean up automatically
 
         // init a DirEntry for testing
+  
         let dir_entry = DirEntry::<SlimmerBytes>::new(&dir_path)?;
+ 
 
         // get iterator
         let iter = dir_entry.readdir()?;

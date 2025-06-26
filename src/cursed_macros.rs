@@ -1,11 +1,11 @@
 #![allow(clippy::doc_markdown)]
 #[macro_export]
-///A helper macro to safely access dirent64's
-/// fields of a `libc::dirent64` struct by offset.
+///A helper macro to safely access dirent(64 on linux)'s
+/// fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
 ///
 /// # Safety
-/// - The caller must ensure that the pointer is valid and points to a `libc::dirent64` struct.
-/// - The field name must be a valid field of the `libc::dirent64` struct.
+/// - The caller must ensure that the pointer is valid and points to a 'dirent-type' struct.
+/// - The field name must be a valid field of the 'dirent-type' struct.
 ///
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
@@ -157,7 +157,7 @@ macro_rules! construct_path {
         target_os = "dragonfly",
         target_vendor = "apple",
     ))]
-        let base_len=$dirent.d_namlen as usize;
+        let base_len=(*$dirent).d_namelen as usize;
         #[cfg(not(any(
             target_os = "netbsd",
             target_os = "openbsd",
@@ -174,7 +174,7 @@ macro_rules! construct_path {
     }};
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_os="linux",target_arch = "x86_64"))]
 #[macro_export(local_inner_macros)]
 /// Prefetches the next likely entry in the buffer, basically trying to keep cache warm
 macro_rules! prefetch_next_entry {
@@ -190,7 +190,7 @@ macro_rules! prefetch_next_entry {
     };
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_os="linux",target_arch = "x86_64"))]
 #[macro_export]
 /// Prefetches the next buffer for reading, this is used to keep the cache warm for the next read operation
 macro_rules! prefetch_next_buffer {
@@ -326,6 +326,22 @@ macro_rules! get_dirent_vals {
         }
     }};
 }
+
+#[macro_export]
+// Macro to implement BytesStorage for types that support `From<&[u8]>`
+macro_rules! impl_bytes_storage {
+    ($($type:ty),*) => {
+        $(
+            impl $crate::BytesStorage for $type {
+                #[inline]
+                fn from_slice(bytes: &[u8]) -> Self {
+                    bytes.into()
+                }
+            }
+        )*
+    };
+}
+
 
 /// Macro to create a const from an env var with compile-time parsing
 /// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "X");, where X(usize) is the default value if the env var is not set

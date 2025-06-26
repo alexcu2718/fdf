@@ -58,9 +58,10 @@
 
 use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
-use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
+use fdf::{DirEntryError, Finder, glob_to_regex,SlimmerBytes};
 use std::ffi::OsString;
 use std::io::stdout;
+use std::path::Path;
 use std::str;
 const START_PREFIX: &str = "/";
 mod printer;
@@ -265,9 +266,9 @@ fn main() -> Result<(), DirEntryError> {
 ///simple function to resolve the directory to use.
 fn resolve_directory(
     args_cd: bool,
-    args_directory: Option<std::ffi::OsString>,
+    args_directory: Option<OsString>,
     canonicalise: bool,
-) -> std::ffi::OsString {
+) -> OsString {
     let dot_pattern = ".";
     if args_cd {
         std::env::current_dir().map_or_else(
@@ -283,7 +284,7 @@ fn resolve_directory(
         )
     } else {
         let dir_to_use = args_directory.unwrap_or_else(|| START_PREFIX.into());
-        let path_check = std::path::Path::new(&dir_to_use);
+        let path_check = Path::new(&dir_to_use);
 
         if !path_check.is_dir() {
             eprintln!("{} is not a directory", dir_to_use.to_string_lossy());

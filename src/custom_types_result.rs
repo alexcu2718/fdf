@@ -1,5 +1,6 @@
 use crate::const_from_env;
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
+#[cfg(target_os = "linux")]
 use slimmer_box::SlimmerBox;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -37,6 +38,7 @@ where
 }
 
 // BytesStorage for SlimmerBox
+#[cfg(target_os = "linux")]
 impl BytesStorage for SlimmerBox<[u8], u16> {
     /// # Safety
     /// The input must have a length less than `u16::MAX`
@@ -50,29 +52,7 @@ impl BytesStorage for SlimmerBox<[u8], u16> {
     }
 }
 
-//  BytesStorage for Arc<[u8]>
-impl BytesStorage for Arc<[u8]> {
-    #[inline]
-    fn from_slice(bytes: &[u8]) -> Self {
-        Self::from(bytes)
-    }
-}
-
-//BytesStorage for Vec<[u8]>
-impl BytesStorage for Vec<u8> {
-    #[inline]
-    fn from_slice(bytes: &[u8]) -> Self {
-        Self::from(bytes)
-    }
-}
-
-// BytesStorage for Box<[u8]>
-impl BytesStorage for Box<[u8]> {
-    #[inline]
-    fn from_slice(bytes: &[u8]) -> Self {
-        Self::from(bytes)
-    }
-}
+crate::impl_bytes_storage!(Arc<[u8]>, Vec<u8>, Box<[u8]>);
 
 // OsBytes generic over the storage type, this allows easy switch to arc for multithreading to avoid race conditions:)
 #[derive(Clone, Debug)] //#[repr(C, align(8))]
@@ -89,6 +69,8 @@ impl<S: BytesStorage> OsBytes<S> {
             bytes: S::from_slice(bytes),
         }
     }
+
+    
 
     #[inline]
     #[must_use]
@@ -136,5 +118,8 @@ pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S
 ///generic filter function type for directory entries
 pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
 #[allow(dead_code)]
-/// A type alias for a boxed slice of bytes with a maximum length of `u16`. Perfect for our use case.
+#[cfg(target_os = "linux")]
+/// This is a type alias for a boxed slice of bytes with a slimmer size representation on Linux, 10 bytes not 16
 pub type SlimmerBytes = SlimmerBox<[u8], u16>;
+#[cfg(not(target_os = "linux"))] // If not on Linux, we use a regular Box
+pub type SlimmerBytes = Box<[u8]>;

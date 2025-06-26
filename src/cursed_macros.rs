@@ -141,8 +141,6 @@ macro_rules! init_path_buffer {
 }
 
 ///not intended for public use, will be private when boilerplate is donel
-/// a version of `construct_path!` that uses a constant time strlen macro to calculate the length of the name pointer
-/// this is really only an intellectual thing+exercise in reducing branching+complexity. THEY NEED TO BE BENCHMARKED.
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
 #[macro_export(local_inner_macros)]
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
@@ -150,21 +148,9 @@ macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
         let d_name = $crate::offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
-            #[cfg(any(
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_vendor = "apple",
-    ))]
-        let base_len=(*$dirent).d_namelen as usize;
-        #[cfg(not(any(
-            target_os = "netbsd",
-            target_os = "openbsd",
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_vendor = "apple",
-        )))]
+       #[cfg(not(target_os="linux"))]
+        let name_len=libc::strlen(d_name.cast());
+        #[cfg(target_os="linux")]
         let name_len = $crate::dirent_const_time_strlen($dirent);
         std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,
         );

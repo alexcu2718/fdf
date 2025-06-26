@@ -82,11 +82,10 @@ mod error;
 pub use error::DirEntryError;
 
 mod custom_types_result;
-#[cfg(all(target_os="linux",target_arch = "x86_64"))]
-pub use custom_types_result::{DirEntryFilter,SyscallBuffer};
-pub use custom_types_result::{
+
+pub use custom_types_result::{SyscallBuffer,
     AsU8, BUFFER_SIZE, BytesStorage, FilterType, LOCAL_PATH_MAX, OsBytes,
-    PathBuffer, Result, SlimmerBytes,
+    PathBuffer, Result, SlimmerBytes,DirEntryFilter,InodeValue
 };
 
 mod traits_and_conversions;

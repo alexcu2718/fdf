@@ -28,7 +28,7 @@ use std::{
 #[allow(unused_imports)]
 use crate::{
     AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer, construct_path, cstr,
-    custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals, init_path_buffer,
+    custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals, init_path_buffer,InodeValue,
     offset_ptr, skip_dot_entries,
     utils::unix_time_to_system_time,
 };
@@ -43,7 +43,7 @@ where
 {
     pub(crate) path: OsBytes<S>, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
     pub(crate) file_type: FileType, //1 byte
-    pub(crate) inode: u64,       //8 bytes, i may drop this in the future, it's not very useful.
+    pub(crate) inode: InodeValue,       //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
     pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
@@ -203,7 +203,7 @@ where
     #[must_use]
     ///returns the inode number of the file, rather expensive
     /// i just included it for sake of completeness.
-    pub const fn ino(&self) -> u64 {
+    pub const fn ino(&self) -> InodeValue {
         self.inode
     }
 

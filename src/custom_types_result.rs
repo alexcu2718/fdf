@@ -107,11 +107,7 @@ impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
         Self::new(data.as_ref())
     }
 }
-//generic examples of types :)
-#[allow(dead_code)]
-pub type SlimOsBytes = OsBytes<SlimmerBox<[u8], u16>>;
-#[allow(dead_code)]
-pub type ArcOsBytes = OsBytes<Arc<[u8]>>;
+
 
 ///filter function type for directory entries,
 pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S>>) -> bool;
@@ -123,3 +119,25 @@ pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
 pub type SlimmerBytes = SlimmerBox<[u8], u16>;
 #[cfg(not(target_os = "linux"))] // If not on Linux, we use a regular Box
 pub type SlimmerBytes = Box<[u8]>;
+
+
+#[cfg(any(
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_vendor = "apple",
+    ))]
+/// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
+/// On BSD systems, it is a 32-bit unsigned integer.
+pub type InodeValue=u32;
+#[cfg(not(any(
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_vendor = "apple",
+)))]
+/// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
+/// On BSD systems, it is a 32-bit unsigned integer.
+pub type InodeValue=u64;

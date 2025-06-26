@@ -3,7 +3,7 @@
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
     construct_path, cstr, custom_types_result::BytesStorage, get_dirent_vals, init_path_buffer,
-    offset_ptr, skip_dot_entries,
+    offset_ptr, skip_dot_entries,InodeValue
 };
 use libc::{DIR, closedir, opendir};
 use std::marker::PhantomData;
@@ -12,6 +12,7 @@ use std::marker::PhantomData;
 pub struct DirIter<S>
 //S is a type that implements BytesStorage, which is used to store the path bytes.
 //which can take forms  Vec<u8>,Box<[u8]>,Arc<[u8]> or ideally SlimmerBytes (an alias in this crate for a smaller box type)
+//this is only possible on linux unfortunately.
 where
     S: BytesStorage,
 {
@@ -88,7 +89,7 @@ where
                 return None;
             }
 
-            let (name_file, dir_info, inode, reclen): (*const u8, u8, u64, usize) =
+            let (name_file, dir_info, inode, reclen): (*const u8, u8, InodeValue, usize) =
                 get_dirent_vals!(entry); //get the pointers/values from the struct using macro 
 
             skip_dot_entries!(dir_info, name_file, reclen);

@@ -2,8 +2,8 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, InodeValue, PathBuffer, Result,
-    SyscallBuffer, construct_path, cstr, custom_types_result::BytesStorage,
-    init_path_buffer, offset_ptr, skip_dot_entries,
+    SyscallBuffer, construct_path, cstr, custom_types_result::BytesStorage, init_path_buffer,
+    offset_ptr, skip_dot_entries,
 };
 use libc::{DIR, closedir, opendir};
 use std::marker::PhantomData;
@@ -90,14 +90,12 @@ where
                 return None;
             }
 
-           
-
-                
-            let ( d_type, inode) = unsafe{
-                            (
-                            *offset_ptr!(entry, d_type) as u8, //get the d_type from the dirent structure, this is the type of the entry
-                            *offset_ptr!(entry, d_ino) as InodeValue) //get the inode
-                        }; 
+            let (d_type, inode) = unsafe {
+                (
+                    *offset_ptr!(entry, d_type) as u8, //get the d_type from the dirent structure, this is the type of the entry
+                    *offset_ptr!(entry, d_ino) as InodeValue,
+                ) //get the inode
+            };
 
             skip_dot_entries!(entry);
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise

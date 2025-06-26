@@ -6,8 +6,8 @@
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
 use crate::{
-    BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer, construct_path,InodeValue,
-    offset_ptr, init_path_buffer, skip_dot_entries,
+    BytePath, BytesStorage, FileType, InodeValue, PathBuffer, Result, SyscallBuffer,
+    construct_path, init_path_buffer, offset_ptr, skip_dot_entries,
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{prefetch_next_buffer, prefetch_next_entry};
@@ -62,15 +62,15 @@ where
 
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self);
-                
 
-                
-                let ( d_type, inode, reclen) = 
-                    unsafe{(*offset_ptr!(d, d_type) as u8, //get the d_type from the dirent structure, this is the type of the entry
-                    *offset_ptr!(d, d_ino) as InodeValue, //get the inode
-                    offset_ptr!(d, d_reclen) as usize)}; //get the recl
+                let (d_type, inode, reclen) = unsafe {
+                    (
+                        *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
+                        *offset_ptr!(d, d_ino) as InodeValue, //get the inode
+                        offset_ptr!(d, d_reclen) as usize,
+                    )
+                }; //get the recl
 
-               
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries

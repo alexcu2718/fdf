@@ -105,7 +105,7 @@ macro_rules! skip_dot_entries {
             // Use offset_ptr! to safely access dirent fields regardless of OS
             let d_type = $crate::offset_ptr!($entry, d_type);
             let name_ptr = $crate::offset_ptr!($entry, d_name) as *const u8;
-            
+
             #[cfg(target_os = "linux")]
             {
                 // On Linux, we can check reclen for additional safety
@@ -117,7 +117,7 @@ macro_rules! skip_dot_entries {
                     }
                 }
             }
-            
+
             #[cfg(not(target_os = "linux"))]
             {
                 // Non-Linux systems use simpler check without reclen
@@ -277,7 +277,6 @@ macro_rules! strlen_asm {
         }
     }};
 }
-
 
 #[macro_export]
 // Macro to implement BytesStorage for types that support `From<&[u8]>`

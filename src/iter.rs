@@ -8,7 +8,8 @@ use crate::{
 use libc::{DIR, closedir, opendir};
 use std::marker::PhantomData;
 #[derive(Debug)]
-/// An iterator over directory entries from readdir64 via libc
+/// An iterator over directory entries from readdir (or 64 )via libc
+/// General POSIX compliant directory iterator.
 pub struct DirIter<S>
 //S is a type that implements BytesStorage, which is used to store the path bytes.
 //which can take forms  Vec<u8>,Box<[u8]>,Arc<[u8]> or ideally SlimmerBytes (an alias in this crate for a smaller box type)

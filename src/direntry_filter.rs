@@ -65,7 +65,7 @@ where
                 
 
                 
-                let ( d_type, inode, reclen): ( u8, u64, usize) = 
+                let ( d_type, inode, reclen) = 
                     unsafe{(*offset_ptr!(d, d_type) as u8, //get the d_type from the dirent structure, this is the type of the entry
                     *offset_ptr!(d, d_ino) as InodeValue, //get the inode
                     offset_ptr!(d, d_reclen) as usize)}; //get the recl

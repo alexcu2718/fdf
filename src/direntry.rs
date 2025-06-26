@@ -27,7 +27,7 @@ use std::{
 #[allow(unused_imports)]
 use crate::{
     AsU8 as _, BytePath, DirIter, InodeValue, OsBytes, PathBuffer, Result, SyscallBuffer,
-    construct_path, cstr, custom_types_result::BytesStorage, filetype::FileType, get_dirent_vals,
+    construct_path, cstr, custom_types_result::BytesStorage, filetype::FileType,
     init_path_buffer, offset_ptr, skip_dot_entries, utils::unix_time_to_system_time,
 };
 
@@ -288,7 +288,7 @@ where
     ///  you can likely make the stack copies extremely cheap
     /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
-    pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
+    pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> { //matching type signature of above for consistency
         let fd = self
             .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
         //let fd = unsafe { open_asm(self) }; //alternative explorative syntax using asm
@@ -320,7 +320,7 @@ where
     #[inline] //back up because we cant use getdents on non linux systems, so we use readdir instead
     #[allow(clippy::missing_errors_doc)]
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
-        self.readdir()
+        DirIter::new(self)
     }
 }
 
@@ -372,15 +372,22 @@ where
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
                 // Extract the fields from the dirent structure
-                let (name_ptr, d_type, inode, reclen): (*const u8, u8, u64, usize) = //we have to tell our macro what types 
-                    get_dirent_vals!(d);
+
+
+
+                let ( d_type, inode, reclen) =
+                    unsafe{(
+                        *offset_ptr!(d, d_type) as u8, //get the d_type from the dirent structure, this is the type of the entry
+                    *offset_ptr!(d, d_ino) as InodeValue, //get the inode
+                    offset_ptr!(d, d_reclen) as usize
+                )}; //get the recl
 
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
-                //a macro that extracts the values from the dirent structure, this is a niche optimisation,
-                skip_dot_entries!(d_type, name_ptr, reclen); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
-                //optionally here we can include the reclen, as reclen==24 is when specifically . and .. appear
+            
+                skip_dot_entries!(d);
+        
                 let full_path = unsafe { construct_path!(self, d) }; //here we have a construct_path, forms the full path
                 //does a lot of black magic, dont worrry about it :)
 

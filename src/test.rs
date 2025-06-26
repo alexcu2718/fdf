@@ -12,6 +12,7 @@ mod tests {
     use std::sync::Arc;
 
     #[repr(C)]
+    #[allow(dead_code)] //only relevant for linux
     pub struct Dirent64 {
         d_ino: u64,
         d_off: u64,

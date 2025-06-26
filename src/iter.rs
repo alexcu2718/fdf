@@ -2,7 +2,7 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, InodeValue, PathBuffer, Result,
-    SyscallBuffer, construct_path, cstr, custom_types_result::BytesStorage, get_dirent_vals,
+    SyscallBuffer, construct_path, cstr, custom_types_result::BytesStorage,
     init_path_buffer, offset_ptr, skip_dot_entries,
 };
 use libc::{DIR, closedir, opendir};
@@ -89,16 +89,22 @@ where
                 return None;
             }
 
-            let (name_file, dir_info, inode, reclen): (*const u8, u8, InodeValue, usize) =
-                get_dirent_vals!(entry); //get the pointers/values from the struct using macro 
+           
 
-            skip_dot_entries!(dir_info, name_file, reclen);
+                
+            let ( d_type, inode) = unsafe{
+                            (
+                            *offset_ptr!(entry, d_type) as u8, //get the d_type from the dirent structure, this is the type of the entry
+                            *offset_ptr!(entry, d_ino) as InodeValue) //get the inode
+                        }; 
+
+            skip_dot_entries!(entry);
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
             let full_path = unsafe { construct_path!(self, entry) };
             return Some(DirEntry {
                 path: full_path.into(),
-                file_type: FileType::from_dtype_fallback(dir_info, full_path), //most of the time we get filetype from the value but not always, uses lstat if needed
+                file_type: FileType::from_dtype_fallback(d_type, full_path), //most of the time we get filetype from the value but not always, uses lstat if needed
                 inode,
                 depth: self.depth + 1,   //increment depth for each entry
                 base_len: self.base_len, //inherit base_len from the parent directory

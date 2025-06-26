@@ -91,30 +91,41 @@ macro_rules! cstr {
 ///
 /// - `reclen`: If provided, also checks that reclen == 24
 ///  when testing directory entries, this helps to reduce any checking pointers
+/// NOT INTENDED FOR PUBLIC USE, WILL BE PRIVATE SOON.
+/// A macro to skip . and .. entries when traversing a directory.
+///
+/// Takes 1 mandatory arg:
+/// - `entry`: A pointer to a dirent/dirent64 structure
+///
+/// Automatically handles OS differences in dirent structure and field offsets.
 macro_rules! skip_dot_entries {
-    // Version with reclen check
-    ($d_type:expr, $name_ptr:expr, $reclen:expr) => {{
-        #[allow(clippy::macro_metavars_in_unsafe)]
+    ($entry:expr) => {{
+        #[allow(unused_unsafe)]
         unsafe {
-            //check dtyype first, only 10% of files are directories, then unknown, etc
-            if ($d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN) && $reclen == 24 {
-                match (*$name_ptr.add(0), *$name_ptr.add(1), *$name_ptr.add(2)) {
-                    (b'.', 0, _) | (b'.', b'.', 0) => continue, //if it is . or .., skip it
-                    _ => (),
+            // Use offset_ptr! to safely access dirent fields regardless of OS
+            let d_type = $crate::offset_ptr!($entry, d_type);
+            let name_ptr = $crate::offset_ptr!($entry, d_name) as *const u8;
+            
+            #[cfg(target_os = "linux")]
+            {
+                // On Linux, we can check reclen for additional safety
+                let reclen = $crate::offset_ptr!($entry, d_reclen);
+                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN) && reclen == 24 {
+                    match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
+                        (b'.', 0, _) | (b'.', b'.', 0) => continue,
+                        _ => (),
+                    }
                 }
             }
-        }
-    }};
-
-    // Version without reclen check
-    ($d_type:expr, $name_ptr:expr) => {{
-        #[allow(clippy::macro_metavars_in_unsafe)]
-        unsafe {
-            if $d_type == libc::DT_DIR || $d_type == libc::DT_UNKNOWN {
-                //no reclen check based on user preference
-                match (*$name_ptr.add(0), *$name_ptr.add(1), *$name_ptr.add(2)) {
-                    (b'.', 0, _) | (b'.', b'.', 0) => continue,
-                    _ => (),
+            
+            #[cfg(not(target_os = "linux"))]
+            {
+                // Non-Linux systems use simpler check without reclen
+                if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
+                    match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
+                        (b'.', 0, _) | (b'.', b'.', 0) => continue,
+                        _ => (),
+                    }
                 }
             }
         }
@@ -267,51 +278,6 @@ macro_rules! strlen_asm {
     }};
 }
 
-#[macro_export]
-/// A macro to extract values from a `libc::dirent64` struct.
-/// This macro returns a tuple containing:
-/// - A pointer to the name field (null-terminated string) 'd_name' *const u8
-/// - The file type 'd_type' as u8 (e.g., DT_REG, DT_DIR)
-/// - The inode number 'd_ino' as u64
-/// - The record length 'd_reclen' as usize
-///  Optionally, a minimal version can be used that excludes the record length.
-/// /// Usage:
-/// use libc::dirent64;
-/// use crate::get_dirent_vals;
-/// let dirent: *const libc::dirent64 = todo!(); // Assume this is a valid pointer to a dirent64 struct
-/// let (name_ptr, file_type, inode, reclen):(*const u8,u8,u64,usize) = get_dirent_vals!(dirent);
-/// let (name_ptr, file_type, inode):(*const u8,u8,u64)  = get_dirent_vals!(@minimal dirent); // Minimal version without reclen
-macro_rules! get_dirent_vals {
-    ($d:expr) => {{
-        // return relevant fields with type inferred by user
-
-        unsafe {
-            (
-                // d_name: pointer to the name field (null-terminated string)
-                $crate::offset_ptr!($d, d_name) as _, //let user determine type
-                // d_type: file type (DT_REG, DT_DIR, etc.) this will be 0 if unknown/Filesystem doesnt give dtype, we have to call lstat then alas.
-                *$crate::offset_ptr!($d, d_type) as _,
-                 // d_ino: inode number (represents file unique id)
-                *$crate::offset_ptr!($d, d_ino) as _,
-                 // d_reclen: record length
-                $crate::offset_ptr!($d,d_reclen) as _//this is not guaranteed to be aligned, my macro fixes this!
-
-            )
-        }
-    }};
-    (@minimal $d:expr) => {{
-        //minimal version, as we don't need reclen for readdir,
-        // Cast the dirent pointer to a byte pointer for offset calculations
-        unsafe {
-            (
-
-                $crate::offset_ptr!($d, d_name) as _,
-                *$crate::offset_ptr!($d, d_type) as _,
-                 *$crate::offset_ptr!($d, d_ino) as _,
-            )
-        }
-    }};
-}
 
 #[macro_export]
 // Macro to implement BytesStorage for types that support `From<&[u8]>`

@@ -6,8 +6,8 @@
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
 use crate::{
-    BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer, construct_path,
-    get_dirent_vals, init_path_buffer, skip_dot_entries,
+    BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer, construct_path,InodeValue,
+    offset_ptr, init_path_buffer, skip_dot_entries,
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{prefetch_next_buffer, prefetch_next_entry};
@@ -62,16 +62,19 @@ where
 
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self);
+                
 
-                // Extract the fields from the dirent structure
+                
+                let ( d_type, inode, reclen): ( u8, u64, usize) = 
+                    unsafe{(*offset_ptr!(d, d_type) as u8, //get the d_type from the dirent structure, this is the type of the entry
+                    *offset_ptr!(d, d_ino) as InodeValue, //get the inode
+                    offset_ptr!(d, d_reclen) as usize)}; //get the recl
 
-                let (name_ptr, d_type, reclen, inode): (*const u8, u8, usize, u64) =
-                    get_dirent_vals!(d);
-
+               
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
-                skip_dot_entries!(d_type, name_ptr); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
+                skip_dot_entries!(d); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
                 let full_path = unsafe { construct_path!(self, d) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
@@ -87,6 +90,7 @@ where
                     //if the entry does not match the filter, skip it
                     continue;
                 }
+                // get the inode value, this is used to identify the entry uniquely
 
                 let entry = DirEntry {
                     path: full_path.into(),

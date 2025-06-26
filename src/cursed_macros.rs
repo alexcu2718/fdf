@@ -159,10 +159,17 @@ macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
         let d_name = $crate::offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
-       #[cfg(not(target_os="linux"))]
-        let name_len=libc::strlen(d_name.cast());
+
+       #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos"))]
+        let name_len=*($dirent).d_namlen as usize; //get the name length, this is the length of the entry name
+    //I JUST CHECKED DOCS AND THIS SHOULD DO IT YAY, WHY DID THEY MISSPELL IT? FFS
+       #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos",target_os="linux")))]
+        let name_len=libc::strlen($crate::offset_ptr!($dirent, d_name) as *const _); //get the name length, this is the length of the entry name
+        //using normal strlen because im risk averse on strange OS's
         #[cfg(target_os="linux")]
         let name_len = $crate::dirent_const_time_strlen($dirent);
+
+
         std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,
         );
 

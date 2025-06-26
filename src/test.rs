@@ -55,6 +55,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_dirent_const_time_strlen_optimal_abc() {
         let mut entry = Dirent64 {
             d_ino: 0,

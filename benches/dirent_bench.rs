@@ -1,3 +1,4 @@
+#![cfg(target_os = "linux")]
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use fdf::dirent_const_time_strlen;
 use libc::{c_char, dirent64};

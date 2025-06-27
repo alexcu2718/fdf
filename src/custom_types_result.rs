@@ -1,6 +1,6 @@
 use crate::const_from_env;
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
-#[cfg(any(target_os = "linux",target_os="macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use slimmer_box::SlimmerBox;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -38,7 +38,7 @@ where
 }
 
 // BytesStorage for SlimmerBox
-#[cfg(any(target_os = "linux",target_os="macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl BytesStorage for SlimmerBox<[u8], u16> {
     /// # Safety
     /// The input must have a length less than `u16::MAX`
@@ -111,10 +111,10 @@ pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S
 ///generic filter function type for directory entries
 pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
 #[allow(dead_code)]
-#[cfg(any(target_os = "linux",target_os="macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 /// This is a type alias for a boxed slice of bytes with a slimmer size representation on Linux/macos, 10 bytes not 16
 pub type SlimmerBytes = SlimmerBox<[u8], u16>;
-#[cfg(not(any(target_os = "linux",target_os="macos")))] // If not on Linux/macos, we use a regular Box
+#[cfg(not(any(target_os = "linux", target_os = "macos")))] // If not on Linux/macos, we use a regular Box
 pub type SlimmerBytes = Box<[u8]>;
 
 #[cfg(any(
@@ -122,7 +122,6 @@ pub type SlimmerBytes = Box<[u8]>;
     target_os = "openbsd",
     target_os = "freebsd",
     target_os = "dragonfly",
-   
 ))]
 /// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
 /// On BSD systems, it is a 32-bit unsigned integer.

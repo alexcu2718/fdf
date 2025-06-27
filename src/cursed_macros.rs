@@ -15,7 +15,7 @@ macro_rules! offset_ptr {
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_reclen // access field directly as it is not aligned like the others
     }};
-        ($entry_ptr:expr, d_namlen) => {{
+    ($entry_ptr:expr, d_namlen) => {{
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_namlen // access field directly as it is not aligned like the others
     }};

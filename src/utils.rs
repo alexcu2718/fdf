@@ -194,7 +194,8 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 #[cfg(target_os = "linux")]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
-    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset!)
+    let reclen =  unsafe{   (*dirent).d_reclen} as usize ; //(do not access it via byte_offset!)
+    //let reclen_new=unsafe{ const {(*dirent).d_reclen}}; //reclen is the length of the dirent structure, including the d_name field
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     #[cfg(target_endian = "little")]

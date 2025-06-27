@@ -1,9 +1,11 @@
 # fdf
 
-COMPATIBILITY STATE: WORKING ON LITTLE-ENDIAN LINUX/FREEBSD X86-64 (PROBABLY WORKS ON OPENBSD/NETBSD, TOO LAZY TO CHECK)
-NOT TESTED ON BIG ENDIAN SYSTEMS (LITERALLY NOT EVEN CURL IS AVAILABLE ON PPC 64BIT!!!)
+COMPATIBILITY STATE
+1.Working on Linux 64bit LE
+2.Macos  64bit LE
+3.Free/Open/Net BSD 64bit LE
 
-Next to test: Alpine s390x BE, MacOS (emulating this isn't fun but I had it working on my old laptop, this one isn't so...easy.)
+Next to test: Alpine s390x BE
 
 NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
 

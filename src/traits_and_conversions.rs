@@ -62,7 +62,7 @@ where
         VT: ValueType, // VT==ValueType is u8/i8
     {
         debug_assert!(
-            self.len() < crate::LOCAL_PATH_MAX, //delcared at compile time via env_var or default to 512
+            self.len() < crate::LOCAL_PATH_MAX, //delcared at compile time via env_var or default to 1024
             "Input too large for buffer"
         );
 

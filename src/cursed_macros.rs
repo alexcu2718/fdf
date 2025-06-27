@@ -13,11 +13,16 @@ macro_rules! offset_ptr {
     // Special case for d_reclen
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_reclen // access field directly as it is not aligned like the others
+        (*$entry_ptr).d_reclen as usize // access field directly as it is not aligned like the others
     }};
     ($entry_ptr:expr, d_namlen) => {{
         // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_namlen // access field directly as it is not aligned like the others
+        (*$entry_ptr).d_namlen as usize // access field directly as it is not aligned like the others
+    }};//should this backup to a function call for platforms without d_namlen? TODO
+    //probably not as it would be inconsistent with the rest of the macro
+    ($entry_ptr:expr, d_type) => {{
+        // SAFETY: Caller must ensure pointer is valid
+        &raw const (*$entry_ptr).d_type as u8 // access field directly as it is not aligned like the others
     }};
 
     // Handle inode number field with aliasing for BSD systems
@@ -30,7 +35,7 @@ macro_rules! offset_ptr {
         ))]
         {
             // SAFETY: Caller must ensure pointer is valid
-            &raw const (*$entry_ptr).d_fileno
+            &raw const (*$entry_ptr).d_fileno as $crate::InodeValue
         }
 
         #[cfg(not(any(
@@ -41,7 +46,7 @@ macro_rules! offset_ptr {
         )))]
         {
             // SAFETY: Caller must ensure pointer is valid
-            &raw const (*$entry_ptr).d_ino
+            &raw const (*$entry_ptr).d_ino as $crate::InodeValue
         }
     }};
 
@@ -109,12 +114,12 @@ macro_rules! skip_dot_entries {
             // Use offset_ptr! to safely access dirent fields regardless of OS
             let d_type = $crate::offset_ptr!($entry, d_type);
             let name_ptr = $crate::offset_ptr!($entry, d_name) as *const u8;
-
+            
             #[cfg(target_os = "linux")]
             {
-                // On Linux, we can check reclen for additional safety
+                // On Linux, we can check reclen to avoid pointer checks more.
                 let reclen = $crate::offset_ptr!($entry, d_reclen);
-                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN) && reclen == 24 {
+                if (d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN) && reclen == 24 {
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => continue,
                         _ => (),
@@ -123,9 +128,10 @@ macro_rules! skip_dot_entries {
             }
 
             #[cfg(not(target_os = "linux"))]
+            
             {
                 // Non-Linux systems use simpler check without reclen
-                if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
+                if d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN {
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => continue,
                         _ => (),
@@ -165,7 +171,7 @@ macro_rules! construct_path {
         let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
 
        #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos"))]
-        let name_len=$crate::offset_ptr!($dirent, d_namlen) as usize; //get the name length, this is the length of the entry name
+        let name_len=$crate::offset_ptr!($dirent, d_namlen); //get the name length, this is the length of the entry name
     //I JUST CHECKED DOCS AND THIS SHOULD DO IT YAY, WHY DID THEY MISSPELL IT? FFS
        #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos",target_os="linux")))]
         let name_len=libc::strlen($crate::offset_ptr!($dirent, d_name) as *const _); //get the name length, this is the length of the entry name

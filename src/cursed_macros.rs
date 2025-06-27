@@ -168,7 +168,7 @@ macro_rules! construct_path {
         //using normal strlen because im risk averse on strange OS's
         #[cfg(target_os="linux")]
         let name_len = $crate::dirent_const_time_strlen($dirent);
-    
+
 
 
         std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,

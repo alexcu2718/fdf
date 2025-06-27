@@ -7,6 +7,10 @@ use crate::{
 };
 use libc::{DIR, closedir, opendir};
 use std::marker::PhantomData;
+#[cfg(target_os = "linux")]
+use libc::readdir64 as readdir; //use readdir64 on linux 
+#[cfg(not(target_os = "linux"))]
+use libc::readdir; //use readdir on other platforms, this is the standard POSIX function
 #[derive(Debug)]
 /// An iterator over directory entries from readdir (or 64 )via libc
 /// General POSIX compliant directory iterator.
@@ -82,10 +86,9 @@ where
         }
 
         loop {
-            #[cfg(target_os = "linux")]
-            let entry = unsafe { libc::readdir64(self.dir) };
-            #[cfg(not(target_os = "linux"))]
-            let entry = unsafe { libc::readdir(self.dir) };
+           
+            let entry = unsafe { readdir(self.dir) };
+           
             if entry.is_null() {
                 return None;
             }

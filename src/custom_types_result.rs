@@ -1,6 +1,6 @@
 use crate::const_from_env;
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="macos"))]
 use slimmer_box::SlimmerBox;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -38,7 +38,7 @@ where
 }
 
 // BytesStorage for SlimmerBox
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="macos"))]
 impl BytesStorage for SlimmerBox<[u8], u16> {
     /// # Safety
     /// The input must have a length less than `u16::MAX`
@@ -92,7 +92,7 @@ impl<S: BytesStorage> OsBytes<S> {
     /// Returns a reference to the underlying bytes as an `OsStr`.
     /// This is unsafe because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
     pub fn as_os_str(&self) -> &std::ffi::OsStr {
-        //transmute is safe because osstr <=> bytes on linux (NOT windows)
+        //transmute is safe because osstr <=> bytes on POSIX (NOT windows)
         unsafe { std::mem::transmute(self.as_bytes()) }
     }
 }
@@ -111,10 +111,10 @@ pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S
 ///generic filter function type for directory entries
 pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
 #[allow(dead_code)]
-#[cfg(target_os = "linux")]
-/// This is a type alias for a boxed slice of bytes with a slimmer size representation on Linux, 10 bytes not 16
+#[cfg(any(target_os = "linux",target_os="macos"))]
+/// This is a type alias for a boxed slice of bytes with a slimmer size representation on Linux/macos, 10 bytes not 16
 pub type SlimmerBytes = SlimmerBox<[u8], u16>;
-#[cfg(not(target_os = "linux"))] // If not on Linux, we use a regular Box
+#[cfg(not(any(target_os = "linux",target_os="macos")))] // If not on Linux/macos, we use a regular Box
 pub type SlimmerBytes = Box<[u8]>;
 
 #[cfg(any(

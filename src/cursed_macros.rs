@@ -15,6 +15,10 @@ macro_rules! offset_ptr {
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_reclen // access field directly as it is not aligned like the others
     }};
+        ($entry_ptr:expr, d_namlen) => {{
+        // SAFETY: Caller must ensure pointer is valid
+        (*$entry_ptr).d_namlen // access field directly as it is not aligned like the others
+    }};
 
     // Handle inode number field with aliasing for BSD systems
     ($entry_ptr:expr, d_ino) => {{
@@ -161,7 +165,7 @@ macro_rules! construct_path {
         let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
 
        #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos"))]
-        let name_len=(*$dirent).d_namlen as usize; //get the name length, this is the length of the entry name
+        let name_len=$crate::offset_ptr!($dirent, d_namlen) ; //get the name length, this is the length of the entry name
     //I JUST CHECKED DOCS AND THIS SHOULD DO IT YAY, WHY DID THEY MISSPELL IT? FFS
        #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos",target_os="linux")))]
         let name_len=libc::strlen($crate::offset_ptr!($dirent, d_name) as *const _); //get the name length, this is the length of the entry name
@@ -288,6 +292,7 @@ macro_rules! strlen_asm {
 
 #[macro_export]
 // Macro to implement BytesStorage for types that support `From<&[u8]>`
+//The types must implement `From<&[u8]>` to be used with this macro
 macro_rules! impl_bytes_storage {
     ($($type:ty),*) => {
         $(

@@ -95,7 +95,7 @@ where
 
             let (d_type, inode) = unsafe {
                 (
-                    offset_ptr!(entry, d_type), //get the d_type from the dirent structure, this is the type of the entry
+                   *offset_ptr!(entry, d_type), //get the d_type from the dirent structure, this is the type of the entry
                     offset_ptr!(entry, d_ino) ,
                 ) //get the inode
             };

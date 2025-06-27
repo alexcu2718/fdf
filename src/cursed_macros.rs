@@ -22,7 +22,7 @@ macro_rules! offset_ptr {
     //probably not as it would be inconsistent with the rest of the macro
     ($entry_ptr:expr, d_type) => {{
         // SAFETY: Caller must ensure pointer is valid
-        &raw const (*$entry_ptr).d_type as u8 // access field directly as it is not aligned like the others
+        &raw const (*$entry_ptr).d_type  // access field directly as it is not aligned like the others
     }};
 
     // Handle inode number field with aliasing for BSD systems
@@ -119,7 +119,7 @@ macro_rules! skip_dot_entries {
             {
                 // On Linux, we can check reclen to avoid pointer checks more.
                 let reclen = $crate::offset_ptr!($entry, d_reclen);
-                if (d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN) && reclen == 24 {
+                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN) && reclen == 24 {
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => continue,
                         _ => (),
@@ -131,7 +131,7 @@ macro_rules! skip_dot_entries {
             
             {
                 // Non-Linux systems use simpler check without reclen
-                if d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN {
+                if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => continue,
                         _ => (),

@@ -122,7 +122,7 @@ pub type SlimmerBytes = Box<[u8]>;
     target_os = "openbsd",
     target_os = "freebsd",
     target_os = "dragonfly",
-    target_vendor = "apple",
+   
 ))]
 /// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
 /// On BSD systems, it is a 32-bit unsigned integer.
@@ -132,7 +132,6 @@ pub type InodeValue = u32;
     target_os = "openbsd",
     target_os = "freebsd",
     target_os = "dragonfly",
-    target_vendor = "apple",
 )))]
 /// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
 /// On BSD systems, it is a 32-bit unsigned integer.

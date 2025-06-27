@@ -165,7 +165,7 @@ macro_rules! construct_path {
         let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
 
        #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos"))]
-        let name_len=$crate::offset_ptr!($dirent, d_namlen) ; //get the name length, this is the length of the entry name
+        let name_len=$crate::offset_ptr!($dirent, d_namlen) as usize; //get the name length, this is the length of the entry name
     //I JUST CHECKED DOCS AND THIS SHOULD DO IT YAY, WHY DID THEY MISSPELL IT? FFS
        #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos",target_os="linux")))]
         let name_len=libc::strlen($crate::offset_ptr!($dirent, d_name) as *const _); //get the name length, this is the length of the entry name

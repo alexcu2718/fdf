@@ -1,5 +1,8 @@
 # fdf
 
+COMPATIBILITY STATE: WORKING ON LITTLE-ENDIAN LINUX/FREEBSD X86-64 (PROBABLY WORKS ON OPENBSD/NETBSD, TOO LAZY TO CHECK)
+NOT TESTED ON BIG ENDIAN SYSTEMS (LITERALLY NOT EVEN CURL IS AVAILABLE ON PPC 64BIT!!!)
+
 NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
 
 **Name to be changed, I just entered this randomly on my keyboard, it sounds like fd-faster which is funny but thats not my intent,hence name change
@@ -21,7 +24,7 @@ I'd probably just keep the CLI stuff simple
 
 Add some extra metadata filters (because i get a lot of metadata for cheap via specialisation!)
 
-Add POSIX compatibility in general (not too bad)
+Add POSIX compatibility in general (not too bad) (BSD completed!)
 
 Add Windows...(maybe?) .
 
@@ -40,29 +43,30 @@ cstr! macro: use a byte slice as a pointer (automatically initialise memory, add
 
 BytePath: Cool deref trait for working with &[u8]
 
-## SHORTTSTRINGS(~8)
+## SHORTSTRINGS(under 8 chars)
 
 (PLEASE NOT I HAVE TRIMMED AWAY THE UNNECESSARY INFO FROM THESE TO RETAIN MOST PERTINENT INFORMATION
 SEE BENCHMARKS IN const_str_benchmark.txt for better details and ideally read my benches/dirent_bench.rs)
 
 ```bash
 
- strlen_by_length/const_time_swar/empty
-                        time:   [877.68 ps 879.00 ps 880.32 ps]
-                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
-strlen_by_length/libc_strlen/empty
-                        time:   [1.4977 ns 1.4994 ns 1.5012 ns]
-                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s
+strlen_by_length/const_time_swar/tiny (1-4)
+                        time:   [1.0787 ns 1.0824 ns 1.0861 ns]
+                        thrpt:  [878.07 MiB/s 881.10 MiB/s 884.13 MiB/s]
+strlen_by_length/libc_strlen/tiny (1-4)
+                        time:   [1.7487 ns 1.7581 ns 1.7673 ns]
+                        thrpt:  [539.61 MiB/s 542.44 MiB/s 545.36 MiB/s]
 ```
 
-## LONGSTRINGS(~240)
+## MAXLENGTHSTRINGS (255)
 
 ```bash
- strlen_by_length/const_time_swar/xlarge (129-255)
-                       time:   [1.0687 ns 1.0719 ns 1.0750 ns]
-strlen_by_length/libc_strlen/xlarge (129-255)
-                        time:   [3.1976 ns 3.2114 ns 3.2255 ns]
-                        thrpt:  [57.747 GiB/s 58.000 GiB/s 58.252 GiB/s]
+strlen_by_length/const_time_swar/max length (255)
+                        time:   [1.0391 ns 1.0435 ns 1.0481 ns]
+                        thrpt:  [226.59 GiB/s 227.59 GiB/s 228.56 GiB/s]
+strlen_by_length/libc_strlen/max length (255)
+                        time:   [4.8916 ns 4.9141 ns 4.9365 ns]
+                        thrpt:  [48.108 GiB/s 48.328 GiB/s 48.550 GiB/s]
 ```
 
 ```Rust
@@ -70,7 +74,7 @@ strlen_by_length/libc_strlen/xlarge (129-255)
 //This is the little-endian implementation, see crate for modified version for big-endian
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; 
-    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset!)
+    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset or raw const!!!!!!!!!!!)
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
     let candidate_pos = last_word | mask;//^

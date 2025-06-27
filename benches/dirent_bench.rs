@@ -43,7 +43,6 @@ fn make_dirent(name: &str) -> dirent64 {
 fn bench_strlen(c: &mut Criterion) {
     // First create all test cases
     let length_groups = [
-        ("empty", ""),
         ("tiny (1-4)", "a"),
         ("small (5-16)", "file.txt"),
         ("medium (17-64)", "config_files/settings/default.json"),

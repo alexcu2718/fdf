@@ -19,7 +19,8 @@ rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 slimmer_box = "0.6.5"
-
+[target.'cfg(target_os = "macos")'.dependencies]
+slimmer_box = "0.6.5"
 
 [dev-dependencies]
 criterion = { version = "0.6.0", features = ["cargo_bench_support", "real_blackbox"] }

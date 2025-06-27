@@ -3,6 +3,8 @@
 COMPATIBILITY STATE: WORKING ON LITTLE-ENDIAN LINUX/FREEBSD X86-64 (PROBABLY WORKS ON OPENBSD/NETBSD, TOO LAZY TO CHECK)
 NOT TESTED ON BIG ENDIAN SYSTEMS (LITERALLY NOT EVEN CURL IS AVAILABLE ON PPC 64BIT!!!)
 
+Next to test: Alpine s390x BE, MacOS (emulating this isn't fun but I had it working on my old laptop, this one isn't so...easy.)
+
 NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
 
 **Name to be changed, I just entered this randomly on my keyboard, it sounds like fd-faster which is funny but thats not my intent,hence name change
@@ -35,13 +37,13 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 
 ## Cool bits
 
-Speed! In every benchmark so far tested, it's ranging from a minimum of 1.3x and a maximum of 3.3x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
+Speed! In every benchmark so far tested, it's ranging from a minimum of 1.5x and a maximum of 5x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
 
 dirent_const_strlen const fn, get strlen from a dirent64 in constant time with no branches (benchmarks below)
 
 cstr! macro: use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
 
-BytePath: Cool deref trait for working with &[u8]
+BytePath: Cool deref trait for working with filepaths (derefs to &[u8])
 
 ## SHORTSTRINGS(under 8 chars)
 
@@ -72,6 +74,7 @@ strlen_by_length/libc_strlen/max length (255)
 ```Rust
 //The code is explained better in the true function definition (this is crate agnostic)
 //This is the little-endian implementation, see crate for modified version for big-endian
+// Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; 
     let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset or raw const!!!!!!!!!!!)

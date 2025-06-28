@@ -2,10 +2,10 @@ use crate::const_from_env;
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use slimmer_box::SlimmerBox;
-use std::ops::Deref;
-use std::sync::Arc;
 use std::ffi::OsStr;
+use std::ops::Deref;
 use std::path::Path;
+use std::sync::Arc;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
@@ -25,7 +25,6 @@ pub trait BytesStorage: Deref<Target = [u8]> {
 }
 // Define a trait for types that can be converted to a byte slice
 // This allows us to use different storage types like Arc, Box, Vec, and SlimmerBox
-
 
 // BytesStorage for SlimmerBox
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -106,4 +105,3 @@ pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
 pub type SlimmerBytes = SlimmerBox<[u8], u16>;
 #[cfg(not(any(target_os = "linux", target_os = "macos")))] // If not on Linux/macos, we use a regular Box
 pub type SlimmerBytes = Box<[u8]>;
-

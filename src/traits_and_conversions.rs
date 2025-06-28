@@ -354,5 +354,4 @@ where
             self.depth
         )
     }
-} 
-
+}

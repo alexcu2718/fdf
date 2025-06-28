@@ -84,8 +84,8 @@ pub use error::DirEntryError;
 mod custom_types_result;
 
 pub use custom_types_result::{
-     BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX,
-    OsBytes, PathBuffer, Result, SlimmerBytes, SyscallBuffer,
+    BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer,
+    Result, SlimmerBytes, SyscallBuffer,
 };
 
 mod traits_and_conversions;

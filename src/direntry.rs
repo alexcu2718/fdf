@@ -12,23 +12,25 @@ use crate::{prefetch_next_buffer, prefetch_next_entry, utils::close_asm, utils::
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
 #[allow(unused_imports)]
-use std::{
-    ffi::OsStr,
-    io::Error,
-    marker::PhantomData,
-    os::unix::ffi::OsStrExt,
-};
+use std::{ffi::OsStr, io::Error, marker::PhantomData, os::unix::ffi::OsStrExt};
 
 #[allow(unused_imports)]
 use crate::{
-    BytePath, DirIter, OsBytes, Result, 
-    cstr, custom_types_result::BytesStorage, filetype::FileType, 
-   // utils::unix_time_to_system_time,
+    BytePath,
+    DirIter,
+    OsBytes,
+    Result,
+    cstr,
+    custom_types_result::BytesStorage,
+    filetype::FileType,
+    // utils::unix_time_to_system_time,
 };
 
-#[cfg(target_os= "linux")]
-use crate::{construct_path,skip_dot_or_dot_dot_entries,
-    utils::prefetch_next_entry,utils::prefetch_next_buffer,offset_ptr,init_path_buffer,PathBuffer,SyscallBuffer};
+#[cfg(target_os = "linux")]
+use crate::{
+    PathBuffer, SyscallBuffer, construct_path, init_path_buffer, offset_ptr,
+    skip_dot_or_dot_dot_entries,
+};
 
 #[derive(Clone)]
 pub struct DirEntry<S>
@@ -40,7 +42,7 @@ where
 {
     pub(crate) path: OsBytes<S>, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
     pub(crate) file_type: FileType, //1 byte
-    pub(crate) inode: u64, //8 bytes, i may drop this in the future, it's not very useful.
+    pub(crate) inode: u64,       //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
     pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
@@ -259,9 +261,19 @@ where
 
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;
-        #[cfg(any(target_os = "freebsd",target_os = "openbsd",target_os = "netbsd",target_os = "dragonfly"))]
-        let inode= get_stat.st_ino as u64;
-        #[cfg(not(any(target_os = "freebsd",target_os = "openbsd",target_os = "netbsd",target_os = "dragonfly")))]
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        ))]
+        let inode = get_stat.st_ino as u64;
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        )))]
         let inode = get_stat.st_ino; //on linux, the inode is a u
 
         Ok(Self {

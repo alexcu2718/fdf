@@ -1,9 +1,9 @@
 #![allow(clippy::cast_possible_wrap)]
 #[allow(unused_imports)]
 use crate::{
-    BytePath, DirEntry, DirEntryError as Error, FileType,  PathBuffer, Result,
-    SyscallBuffer, construct_path, cstr, custom_types_result::BytesStorage, init_path_buffer,
-    offset_ptr, skip_dot_or_dot_dot_entries,
+    BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
+    construct_path, cstr, custom_types_result::BytesStorage, init_path_buffer, offset_ptr,
+    skip_dot_or_dot_dot_entries,
 };
 #[cfg(not(target_os = "linux"))]
 use libc::readdir;

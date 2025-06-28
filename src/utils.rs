@@ -88,11 +88,6 @@ pub unsafe fn close_asm(fd: i32) {
     unsafe { libc::close(fd) };
 }
 
-
-
-
-
-
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]

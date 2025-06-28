@@ -4,6 +4,8 @@ use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 use slimmer_box::SlimmerBox;
 use std::ops::Deref;
 use std::sync::Arc;
+use std::ffi::OsStr;
+use std::path::Path;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
@@ -23,25 +25,13 @@ pub trait BytesStorage: Deref<Target = [u8]> {
 }
 // Define a trait for types that can be converted to a byte slice
 // This allows us to use different storage types like Arc, Box, Vec, and SlimmerBox
-pub trait AsU8 {
-    fn as_bytes(&self) -> &[u8];
-}
 
-impl<T> AsU8 for T
-where
-    T: Deref<Target = [u8]>,
-{
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        self
-    }
-}
 
 // BytesStorage for SlimmerBox
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 impl BytesStorage for SlimmerBox<[u8], u16> {
     /// # Safety
-    /// The input must have a length less than `u16::MAX`
+    /// The input must have a length less than `u16::MAX` (GUARANTEED AS RECLEN IS U16)
     #[inline]
     fn from_slice(bytes: &[u8]) -> Self {
         debug_assert!(
@@ -82,7 +72,7 @@ impl<S: BytesStorage> OsBytes<S> {
     #[must_use]
     /// Returns a reference to the underlying bytes as  `&Path`
     #[allow(clippy::missing_const_for_fn)]
-    pub fn as_path(&self) -> &std::path::Path {
+    pub fn as_path(&self) -> &Path {
         self.as_os_str().as_ref()
     }
 
@@ -91,7 +81,7 @@ impl<S: BytesStorage> OsBytes<S> {
     #[allow(clippy::transmute_ptr_to_ptr)]
     /// Returns a reference to the underlying bytes as an `OsStr`.
     /// This is unsafe because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
-    pub fn as_os_str(&self) -> &std::ffi::OsStr {
+    pub fn as_os_str(&self) -> &OsStr {
         //transmute is safe because osstr <=> bytes on POSIX (NOT windows)
         unsafe { std::mem::transmute(self.as_bytes()) }
     }

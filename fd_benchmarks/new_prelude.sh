@@ -22,12 +22,14 @@ fi
 if [ ! -e "$fdf_location" ]; then
 	echo "Cloning fdf to $fdf_location..."
 	git clone "$fdf_repo" "$fdf_location" >/dev/null
+	echo "Building fdf..."
 	cd "$fdf_location" || exit 1
-	cargo b -r -q
+	cargo b -r 
 else
 	echo "fdf already installed at $fdf_location"
+		echo "Building fdf..."
 	cd "$fdf_location" || exit 1
-	cargo b -r -q #check if it's built just incase
+	cargo b -r  #check if it's built just incase
  
 fi
 

@@ -26,7 +26,9 @@ if [ ! -e "$fdf_location" ]; then
 	cargo b -r -q
 else
 	echo "fdf already installed at $fdf_location"
-
+	cd "$fdf_location" || exit 1
+	cargo b -r -q #check if it's built just incase
+ 
 fi
 
 export PATH="$fdf_location/target/release:$PATH"

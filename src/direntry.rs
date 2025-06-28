@@ -9,8 +9,9 @@
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{prefetch_next_buffer, prefetch_next_entry, utils::close_asm, utils::open_asm};
 
+#[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
-
+#[allow(unused_imports)]
 use std::{
     ffi::OsStr,
     io::Error,
@@ -18,12 +19,16 @@ use std::{
     os::unix::ffi::OsStrExt,
 };
 
-
+#[allow(unused_imports)]
 use crate::{
-    BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer,
-    construct_path,/*  cstr*/ custom_types_result::BytesStorage, filetype::FileType, init_path_buffer,
-    offset_ptr, skip_dot_or_dot_dot_entries,// utils::unix_time_to_system_time,
+    BytePath, DirIter, OsBytes, Result, 
+    cstr, custom_types_result::BytesStorage, filetype::FileType, 
+   // utils::unix_time_to_system_time,
 };
+
+#[cfg(target_os= "linux")]
+use crate::{construct_path,skip_dot_or_dot_dot_entries,
+    utils::prefetch_next_entry,utils::prefetch_next_buffer,offset_ptr,init_path_buffer,PathBuffer,SyscallBuffer};
 
 #[derive(Clone)]
 pub struct DirEntry<S>

@@ -6,8 +6,8 @@
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
 use crate::{
-    BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer,
-    construct_path, init_path_buffer, offset_ptr, skip_dot_or_dot_dot_entries
+    BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer, construct_path,
+    init_path_buffer, offset_ptr, skip_dot_or_dot_dot_entries,
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{prefetch_next_buffer, prefetch_next_entry};
@@ -66,15 +66,15 @@ where
                 let (d_type, inode, reclen) = unsafe {
                     (
                         *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                        offset_ptr!(d, d_ino), //get the inode
-                        offset_ptr!(d, d_reclen)
+                        offset_ptr!(d, d_ino),   //get the inode
+                        offset_ptr!(d, d_reclen),
                     )
-                }; 
+                };
 
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
-                skip_dot_or_dot_dot_entries!(d,continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
+                skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 let full_path = unsafe { construct_path!(self, d) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.

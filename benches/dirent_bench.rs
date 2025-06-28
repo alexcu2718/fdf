@@ -1,13 +1,13 @@
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 use fdf::dirent_const_time_strlen;
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 use libc::{c_char, dirent64};
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 use std::hint::black_box;
 
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 #[repr(C, align(8))]
 pub struct LibcDirent64 {
     // Fake a structure similar to libc::dirent64 which we transmute later
@@ -17,14 +17,14 @@ pub struct LibcDirent64 {
     pub d_type: u8,
     pub d_name: [u8; 256],
 }
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 const fn calculate_min_reclen(name_len: usize) -> u16 {
     const HEADER_SIZE: usize = std::mem::offset_of!(LibcDirent64, d_name);
     let total_size = HEADER_SIZE + name_len + 1;
     ((total_size + 7) & !7) as u16 //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
     //this works because it's given the same representation in memory so repr C will ensure the layout is compatible
 }
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 fn make_dirent(name: &str) -> dirent64 {
     let bytes = name.as_bytes();
     assert!(bytes.len() < 256, "Name too long for dirent structure");
@@ -43,7 +43,7 @@ fn make_dirent(name: &str) -> dirent64 {
 
     unsafe { std::mem::transmute(entry) }
 }
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 fn bench_strlen(c: &mut Criterion) {
     // First create all test cases
     let length_groups = [
@@ -125,7 +125,7 @@ fn bench_strlen(c: &mut Criterion) {
     }
 }
 
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 criterion_group! {
     name = benches;
     config = Criterion::default()
@@ -134,12 +134,13 @@ criterion_group! {
         .measurement_time(std::time::Duration::from_secs(3));
     targets = bench_strlen
 }
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 criterion_main!(benches);
 
-#[cfg(not(target_os="linux"))]
-    fn main(){
-
-        eprintln!("
-        THIS TEST IS ONLY VALID FOR LINUX IGNORE")
-    }
+#[cfg(not(target_os = "linux"))]
+fn main() {
+    eprintln!(
+        "
+        THIS TEST IS ONLY VALID FOR LINUX IGNORE"
+    )
+}

@@ -183,7 +183,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// we can locate the null terminator with a single 64-bit read and mask, assuming alignment and endianness.
 ///                    
 /// Combining all these tricks, i made this beautiful thing!
-/// 
+///
 /// WORKING ON BIG-ENDIAN AND LITTLE ENDIAN SYSTEMS (linux)
 ///
 /// # SAFETY

@@ -86,62 +86,6 @@ macro_rules! cstr {
         c_path_buf.cast::<_>()
     }};
 }
-/* 
-#[macro_export]
-#[allow(clippy::too_long_first_doc_paragraph)]
-///NOT INTENDED FO FOR PUBLIC USE, WILL BE PRIVATE SOON.
-/// A macro to skip . and .. entries when traversing
-///
-/// Takes 2 mandatory args:
-/// - `d_type`: The directory entry type (e.g., `(*dirnt).d_type`)
-/// - `name_ptr`: Pointer to the entry name
-///
-/// And 1 optional arg: (the reclen)
-///
-/// - `reclen`: If provided, also checks that reclen == 24
-///  when testing directory entries, this helps to reduce any checking pointers
-/// NOT INTENDED FOR PUBLIC USE, WILL BE PRIVATE SOON.
-/// A macro to skip . and .. entries when traversing a directory.
-///
-/// Takes 1 mandatory arg:
-/// - `entry`: A pointer to a dirent/dirent64 structure
-///
-/// Automatically handles OS differences in dirent structure and field offsets.
-macro_rules! skip_dot_entries {
-    ($entry:expr) => {{
-        #[allow(unused_unsafe)]
-        unsafe {
-            // Use offset_ptr! to safely access dirent fields regardless of OS
-            let d_type = $crate::offset_ptr!($entry, d_type);
-            let name_ptr = $crate::offset_ptr!($entry, d_name) as *const u8;
-            
-            #[cfg(target_os = "linux")]
-            {
-                // On Linux, we can check reclen to avoid pointer checks more.
-                let reclen = $crate::offset_ptr!($entry, d_reclen);
-                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN) && reclen == 24 {
-                    match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
-                        (b'.', 0, _) | (b'.', b'.', 0) => continue,
-                        _ => (),
-                    }
-                }
-            }
-
-            #[cfg(not(target_os = "linux"))]
-            
-            {
-                // Non-Linux systems use simpler check without reclen
-                if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
-                    match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
-                        (b'.', 0, _) | (b'.', b'.', 0) => continue,
-                        _ => (),
-                    }
-                }
-            }
-        }
-    }};
-}*/
-
 
 #[macro_export]
 #[doc(hidden)]
@@ -152,7 +96,6 @@ macro_rules! skip_dot_entries {
 /// ## Usage
 /// ```rust
 /// skip_dot_entries!(entry, continue);
-/// skip_dot_entries!(entry, return Err(()));
 /// ```
 ///
 /// Takes:
@@ -190,7 +133,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
         }
     }};
 }
-
 
 //SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
 
@@ -421,4 +363,3 @@ macro_rules! const_from_env {
         };
     };
 }
-

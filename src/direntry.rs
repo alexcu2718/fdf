@@ -377,7 +377,7 @@ where
                 let (d_type, inode, reclen) = unsafe {
                     (
                         *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                        offset_ptr!(d, d_ino) , //get the inode (u32/u64 depending on OS)
+                        offset_ptr!(d, d_ino),   //get the inode (u32/u64 depending on OS)
                         offset_ptr!(d, d_reclen),
                     )
                 };
@@ -386,7 +386,7 @@ where
 
                 // skip entries that are not valid or are dot entries
 
-                skip_dot_or_dot_dot_entries!(d,continue);//provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
+                skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
 
                 let full_path = unsafe { construct_path!(self, d) }; //here we have a construct_path, forms the full path
                 //does a lot of black magic, dont worrry about it :)

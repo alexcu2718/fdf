@@ -5,12 +5,12 @@ use crate::{
     SyscallBuffer, construct_path, cstr, custom_types_result::BytesStorage, init_path_buffer,
     offset_ptr, skip_dot_or_dot_dot_entries,
 };
-use libc::{DIR, closedir, opendir};
-use std::marker::PhantomData;
-#[cfg(target_os = "linux")]
-use libc::readdir64 as readdir; //use readdir64 on linux 
 #[cfg(not(target_os = "linux"))]
-use libc::readdir; //use readdir on other platforms, this is the standard POSIX function
+use libc::readdir;
+#[cfg(target_os = "linux")]
+use libc::readdir64 as readdir; //use readdir64 on linux
+use libc::{DIR, closedir, opendir};
+use std::marker::PhantomData; //use readdir on other platforms, this is the standard POSIX function
 #[derive(Debug)]
 /// An iterator over directory entries from readdir (or 64 )via libc
 /// General POSIX compliant directory iterator.
@@ -40,8 +40,6 @@ where
         // It is useful for operations that require direct access to the buffer.
         self.path_buffer.as_mut_ptr()
     }
-
-
 
     #[inline]
     #[allow(clippy::cast_lossless)]
@@ -88,21 +86,20 @@ where
         }
 
         loop {
-           
             let entry = unsafe { readdir(self.dir) };
-           
+
             if entry.is_null() {
                 return None;
             }
 
             let (d_type, inode) = unsafe {
                 (
-                   *offset_ptr!(entry, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                    offset_ptr!(entry, d_ino) ,
+                    *offset_ptr!(entry, d_type), //get the d_type from the dirent structure, this is the type of the entry
+                    offset_ptr!(entry, d_ino),
                 ) //get the inode
             };
 
-            skip_dot_or_dot_dot_entries!(entry,continue);//we provide the continue here to make it explicit.
+            skip_dot_or_dot_dot_entries!(entry, continue); //we provide the continue here to make it explicit.
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
             let full_path = unsafe { construct_path!(self, entry) };

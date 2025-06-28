@@ -1,5 +1,5 @@
 #![allow(clippy::doc_markdown)]
-#[macro_export]
+#[macro_export(local_inner_macros)]
 ///A helper macro to safely access dirent(64 on linux)'s
 /// fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
 ///
@@ -56,7 +56,7 @@ macro_rules! offset_ptr {
     ($entry_ptr:expr, $field:ident) => {{ &raw const (*$entry_ptr).$field }};
 }
 
-#[macro_export]
+#[macro_export(local_inner_macros)]
 /// A macro to create a C-style *str pointer from a byte slice,
 ///  the first argument should be a byte slice
 /// the second argument is optional as specifies a custom buffer size.
@@ -111,12 +111,12 @@ macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]
         unsafe {
-            let d_type = $crate::offset_ptr!($entry, d_type);
-            let name_ptr = $crate::offset_ptr!($entry, d_name) as *const u8;
+            let d_type = offset_ptr!($entry, d_type);
+            let name_ptr = offset_ptr!($entry, d_name) as *const u8;
 
             #[cfg(target_os = "linux")]
             {
-                let reclen = $crate::offset_ptr!($entry, d_reclen);
+                let reclen = offset_ptr!($entry, d_reclen);
                 if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN) && reclen == 24 {
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
@@ -163,13 +163,15 @@ macro_rules! init_path_buffer {
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
 macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
-        let d_name = $crate::offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
-        let base_len= $self.base_len as usize;// as usize; //get the base path length, this is the length of the directory path
+        
+
+        let d_name = offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
+        let base_len= $self.base_len(); //get the base path length, this is the length of the directory path
 
         let name_len = {
-        #[cfg(target_os = "linux")]
-        {
-            $crate::dirent_const_time_strlen($dirent) //const time strlen for linux (specialisation)
+         #[cfg(target_os = "linux")]
+        {   use $crate::dirent_const_time_strlen;
+            dirent_const_time_strlen($dirent) //const time strlen for linux (specialisation)
         }
 
         #[cfg(any(
@@ -180,19 +182,19 @@ macro_rules! construct_path {
             target_os = "macos"
         ))]
         {
-            $crate::offset_ptr!($dirent, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
+            offset_ptr!($dirent, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
         }
 
         #[cfg(not(any(
-            target_os = "linux",
+           target_os = "linux",
             target_os = "freebsd",
             target_os = "openbsd",
             target_os = "netbsd",
             target_os = "dragonfly",
             target_os = "macos"
         )))]
-        {
-            unsafe { libc::strlen($crate::offset_ptr!($dirent, d_name) as *const _) }
+        {     
+             libc::strlen(offset_ptr!($dirent, d_name) as *const _) 
             // Fallback for other OSes, using libc::strlen because i cant cover every edge case...
         }
             };
@@ -310,7 +312,7 @@ macro_rules! strlen_asm {
             target_arch = "x86_64",
             any(target_feature = "avx2", target_feature = "sse2")
         )))]
-        {
+        {   
             // Fallback to libc::strlen if no SIMD support
             libc::strlen($ptr.cast::<_>())
         }

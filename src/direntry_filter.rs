@@ -41,6 +41,18 @@ where
     }
 }
 
+impl <S> DirEntryIteratorFilter<S>
+where
+    S: BytesStorage,
+{
+    
+    /// Returns the base length of the path buffer.
+    #[inline]
+    pub const fn base_len(&self) -> usize {
+        self.base_len as _
+    }
+}
+
 impl<S> Iterator for DirEntryIteratorFilter<S>
 where
     S: BytesStorage,

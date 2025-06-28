@@ -41,6 +41,12 @@ where
         self.path_buffer.as_mut_ptr()
     }
 
+    pub const fn base_len(&self)->usize{
+        // This function returns the base length of the path buffer.
+        // It is used to determine the length of the base path for constructing full paths.
+        self.base_len as usize
+    }
+
     #[inline]
     #[allow(clippy::cast_lossless)]
     #[allow(clippy::cast_possible_truncation)]

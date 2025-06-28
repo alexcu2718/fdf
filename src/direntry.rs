@@ -379,6 +379,17 @@ where
     }
 }
 #[cfg(target_os = "linux")]
+impl <S> DirEntryIterator<S>
+where
+    S: BytesStorage,
+{
+    /// Returns the base length of the path buffer.
+    #[inline]
+    pub const fn base_len(&self) -> usize {
+        self.base_len as _
+    }
+}
+#[cfg(target_os = "linux")]
 impl<S> Iterator for DirEntryIterator<S>
 where
     S: BytesStorage,

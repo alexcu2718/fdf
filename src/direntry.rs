@@ -5,6 +5,7 @@
 #![allow(clippy::integer_division)] //i know my division is safe.
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
+use crate::GetInode;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[allow(unused_imports)]
 use crate::{prefetch_next_buffer, prefetch_next_entry, utils::close_asm, utils::open_asm};
@@ -26,7 +27,7 @@ use std::{
 
 #[allow(unused_imports)]
 use crate::{
-    AsU8 as _, BytePath, DirIter, InodeValue, OsBytes, PathBuffer, Result, SyscallBuffer,
+    AsU8 as _, BytePath, DirIter, OsBytes, PathBuffer, Result, SyscallBuffer,
     construct_path, cstr, custom_types_result::BytesStorage, filetype::FileType, init_path_buffer,
     offset_ptr, skip_dot_or_dot_dot_entries, utils::unix_time_to_system_time,
 };
@@ -41,7 +42,7 @@ where
 {
     pub(crate) path: OsBytes<S>, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
     pub(crate) file_type: FileType, //1 byte
-    pub(crate) inode: InodeValue, //8 bytes, i may drop this in the future, it's not very useful.
+    pub(crate) inode: u64, //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
     pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
@@ -201,7 +202,7 @@ where
     #[must_use]
     ///returns the inode number of the file, rather expensive
     /// i just included it for sake of completeness.
-    pub const fn ino(&self) -> InodeValue {
+    pub const fn ino(&self) -> u64 {
         self.inode
     }
 
@@ -260,11 +261,12 @@ where
 
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;
+    
 
         Ok(Self {
             path: path_ref.into(),
             file_type: FileType::from_mode(get_stat.st_mode),
-            inode: get_stat.st_ino,
+            inode:get_stat.inode(),
             depth: 0,
             base_len: path_ref.get_baselen(),
         })

@@ -117,21 +117,3 @@ pub type SlimmerBytes = SlimmerBox<[u8], u16>;
 #[cfg(not(any(target_os = "linux", target_os = "macos")))] // If not on Linux/macos, we use a regular Box
 pub type SlimmerBytes = Box<[u8]>;
 
-#[cfg(any(
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-))]
-/// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
-/// On BSD systems, it is a 32-bit unsigned integer.
-pub type InodeValue = u32;
-#[cfg(not(any(
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-)))]
-/// This is a type alias for the inode value, which is a 64-bit unsigned integer on most systems.
-/// On BSD systems, it is a 32-bit unsigned integer.
-pub type InodeValue = u64;

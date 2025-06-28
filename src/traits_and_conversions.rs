@@ -354,4 +354,36 @@ where
             self.depth
         )
     }
+} 
+
+
+///Convenience trait for consistently getting inode in this crate from stat.
+pub trait GetInode {
+    fn inode(&self)-> u64;
+
+}
+
+
+impl GetInode for libc::stat {
+    #[inline]
+       #[cfg(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"))]
+    /// FreeBSD, OpenBSD, NetBSD, and DragonFly BSD use st_ino as u32, we set to u64 for consistency
+    fn inode(&self) -> u64 {
+        self.st_ino as u64
+    
+    }
+    #[inline]
+    #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly")))]
+    fn inode(&self) -> u64 {
+        self.st_ino
+    }
+
 }

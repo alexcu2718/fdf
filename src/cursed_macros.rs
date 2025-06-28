@@ -35,7 +35,7 @@ macro_rules! offset_ptr {
         ))]
         {
             // SAFETY: Caller must ensure pointer is valid
-            &raw const (*$entry_ptr).d_fileno as $crate::InodeValue
+            &raw const (*$entry_ptr).d_fileno as u64
         }
 
         #[cfg(not(any(
@@ -46,7 +46,7 @@ macro_rules! offset_ptr {
         )))]
         {
             // SAFETY: Caller must ensure pointer is valid
-            &raw const (*$entry_ptr).d_ino as $crate::InodeValue
+            &raw const (*$entry_ptr).d_ino  as u64
         }
     }};
 

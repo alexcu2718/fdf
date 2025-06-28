@@ -84,12 +84,12 @@ pub use error::DirEntryError;
 mod custom_types_result;
 
 pub use custom_types_result::{
-    AsU8, BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, InodeValue, LOCAL_PATH_MAX,
+    AsU8, BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX,
     OsBytes, PathBuffer, Result, SlimmerBytes, SyscallBuffer,
 };
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{BytePath, PathAsBytes};
+pub use traits_and_conversions::{BytePath, PathAsBytes,GetInode};
 
 mod utils;
 

@@ -196,7 +196,9 @@ Options:
   -a, --absolute-path          Show absolute path
   -I, --include-dirs           Include directories
 
-  -g, --glob                   Use a glob pattern
+  -L, --follow                 Include symlinks in traversal,defaults to false
+
+  -g, --glob                   Use a glob pattern,defaults to off
   -n, --max-results <TOP_N>    Retrieves the first eg 10 results, '.cache' / -n 10
   -d, --depth <DEPTH>          Retrieves only traverse to x depth
       --generate <GENERATE>    Generate shell completions [possible values: bash, elvish, fish, powershell, zsh]

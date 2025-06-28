@@ -146,13 +146,26 @@ pub struct Args {
         default_value_t = false,
         help = "Include directories\n"
     )]
+
+    
     keep_dirs: bool,
+
+
+    #[arg(
+        short = 'L',
+        long = "follow",
+        default_value_t = false,
+        help = "Include symlinks in traversal,defaults to false\n"
+    )]
+
+    
+    follow_symlinks: bool,
     #[arg(
         short = 'g',
         long = "glob",
         required = false,
         default_value_t = false,
-        help = "Use a glob pattern"
+        help = "Use a glob pattern,defaults to off"
     )]
     glob: bool,
 
@@ -250,6 +263,7 @@ fn main() -> Result<(), DirEntryError> {
         args.full_path,
         args.extension.map(|x| x.into_bytes().into()),
         args.depth,
+        args.follow_symlinks,
     );
 
     if let Some(types) = args.type_of {

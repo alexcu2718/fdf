@@ -10,6 +10,7 @@ pub struct SearchConfig {
     pub extension_match: Option<Arc<[u8]>>,
     pub file_name: bool,
     pub depth: Option<u8>,
+    pub follow_symlinks: bool,
 }
 
 impl SearchConfig {
@@ -23,6 +24,7 @@ impl SearchConfig {
         file_name: bool,
         extension_match: Option<Arc<[u8]>>,
         depth: Option<u8>,
+        follow_symlinks: bool,
     ) -> Result<Self> {
         let patt = pattern.as_ref();
         let regex_match = if patt == "." || patt.is_empty() {
@@ -46,6 +48,7 @@ impl SearchConfig {
             extension_match,
             file_name,
             depth,
+            follow_symlinks
         })
     }
 
@@ -60,15 +63,19 @@ impl SearchConfig {
     pub fn matches_path<S>(&self, dir: &DirEntry<S>, full_path: bool) -> bool
     where
         S: BytesStorage,
-    {
-        let path = if full_path {
-            dir.as_bytes()
-        } else {
-            dir.file_name()
-        };
 
-        self.regex_match
-            .as_ref()
-            .is_none_or(|reg| reg.is_match(path))
-    }
+    {
+
+        match &self.regex_match {
+        Some(reg) => reg.is_match(
+            if full_path {
+                dir
+            } else {
+                dir.file_name()
+            },
+        ),
+        None => true,
+        }
+   
+}
 }

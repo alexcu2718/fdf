@@ -200,8 +200,10 @@ where
 
     #[inline]
     #[must_use]
-    ///returns the inode number of the file, rather expensive
-    /// i just included it for sake of completeness.
+    ///returns the inode number of the file, cost free check
+    /// this is a unique identifier for the file on the filesystem, it is not the same
+    /// as the file name or path, it is a number that identifies the file on the
+    /// It should be u32 on BSD's but I use u64 for consistency across platforms
     pub const fn ino(&self) -> u64 {
         self.inode
     }
@@ -218,6 +220,13 @@ where
     ///returns the length of the base path (eg /home/user/ is 6 '/home/')
     pub const fn base_len(&self) -> usize {
         self.base_len as _
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_traversible(&self) -> bool {
+        //this is a cost free check, we just check if the file type is a directory or symlink
+        matches!(self.file_type, FileType::Directory | FileType::Symlink)
     }
 
     #[inline]
@@ -274,7 +283,7 @@ where
             target_os = "netbsd",
             target_os = "dragonfly"
         )))]
-        let inode = get_stat.st_ino; //on linux, the inode is a u
+        let inode = get_stat.st_ino; //on linux, the inode is a u64 anyway (avoid redundant casts)
 
         Ok(Self {
             path: path_ref.into(),
@@ -294,7 +303,6 @@ where
     #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[cfg(target_os = "linux")]
-    //#[allow(clippy::cast_possible_wrap)]
     ///`getdents` is an iterator over fd,where each consequent index is a directory entry.
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.

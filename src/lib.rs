@@ -142,6 +142,8 @@ where
         short_path: bool,
         extension_match: Option<Arc<[u8]>>,
         max_depth: Option<u8>,
+        follow_symlinks: bool,
+        
     ) -> Self {
         let config = SearchConfig::new(
             pattern,
@@ -151,6 +153,8 @@ where
             short_path,
             extension_match,
             max_depth,
+            follow_symlinks,
+
         );
 
         let search_config = match config {
@@ -200,7 +204,7 @@ where
         //we have to arbitrarily construct a direntry to start the search.
         let construct_dir = DirEntry::new(&self.root);
 
-        if !construct_dir.as_ref().is_ok_and(DirEntry::is_dir) {
+        if !construct_dir.as_ref().is_ok_and(DirEntry::is_traversible) {
             return Err(DirEntryError::InvalidPath);
         }
 
@@ -232,7 +236,7 @@ where
 
                 let (dirs, files): (Vec<_>, Vec<_>) = entries
                     .filter(|e| !self.search_config.hide_hidden || !e.is_hidden())
-                    .partition(direntry::DirEntry::is_dir);
+                    .partition(|x| x.is_dir() || self.search_config.follow_symlinks && x.is_symlink());
 
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(self, dir, sender);

@@ -401,7 +401,7 @@ where
                     (
                         *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
                         offset_ptr!(d, d_ino),   //get the inode (u32/u64 depending on OS)
-                        offset_ptr!(d, d_reclen),
+                        offset_ptr!(d, d_reclen), //this is variable length field so this macro access is proper.
                     )
                 };
 

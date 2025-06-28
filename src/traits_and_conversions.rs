@@ -221,7 +221,8 @@ where
     #[inline]
     ///checks if the path is absolute,
     fn is_absolute(&self) -> bool {
-        self[0] == b'/'
+        //safe because we know the path is not empty
+        unsafe{*self.get_unchecked(0)==b'/'}
     }
 
     #[inline]

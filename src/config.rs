@@ -3,6 +3,7 @@ use regex::bytes::{Regex, RegexBuilder};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
+#[allow(clippy::struct_excessive_bools)] //shutup
 pub struct SearchConfig {
     pub regex_match: Option<Regex>,
     pub hide_hidden: bool,
@@ -16,6 +17,7 @@ pub struct SearchConfig {
 impl SearchConfig {
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         pattern: impl AsRef<str>,
         hide_hidden: bool,
@@ -27,6 +29,7 @@ impl SearchConfig {
         follow_symlinks: bool,
     ) -> Result<Self> {
         let patt = pattern.as_ref();
+
         let regex_match = if patt == "." || patt.is_empty() {
             None
         } else {
@@ -60,22 +63,18 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
+    #[allow(clippy::if_not_else)]// this is a stylistic choice to avoid unnecessary else branches
     pub fn matches_path<S>(&self, dir: &DirEntry<S>, full_path: bool) -> bool
     where
         S: BytesStorage,
-
     {
-
-        match &self.regex_match {
-        Some(reg) => reg.is_match(
-            if full_path {
-                dir
-            } else {
-                dir.file_name()
+         self.regex_match.as_ref().is_none_or(|reg| reg.is_match(
+            if !full_path {
+                dir.file_name() //this is the likelier path so we choose it first
+             } else {
+               dir
             },
-        ),
-        None => true,
-        }
+       ))
    
 }
 }

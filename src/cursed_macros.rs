@@ -10,11 +10,12 @@
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
 macro_rules! offset_ptr {
-    // Special case for d_reclen
+    // Special case for `d_reclen`/variable length field
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_reclen as usize // access field directly as it is not aligned like the others
     }};
+     // Special case for `d_namlen`/variable length field
     ($entry_ptr:expr, d_namlen) => {{
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_namlen as usize // access field directly as it is not aligned like the others
@@ -26,6 +27,7 @@ macro_rules! offset_ptr {
     }};
 
     // Handle inode number field with aliasing for BSD systems
+    //you can use d_ino or d_fileno (preferentially d_ino for cross-compatbility!)
     ($entry_ptr:expr, d_ino) => {{
         #[cfg(any(
             target_os = "freebsd",
@@ -49,15 +51,17 @@ macro_rules! offset_ptr {
             &raw const (*$entry_ptr).d_ino  as u64
         }
     }};
-
+    
     // General case for all other fields
     ($entry_ptr:expr, $field:ident) => {{ &raw const (*$entry_ptr).$field }};
 }
 
 #[macro_export]
-/// A macro to create a C-style string pointer from a byte slice, the first argument should be a byte slice
+/// A macro to create a C-style *str pointer from a byte slice,
+///  the first argument should be a byte slice
 /// the second argument is optional as specifies a custom buffer size.
-///
+/// 
+/// let mypointer:*const u8= cstr!(b"/home/sir_galahad", 256);
 /// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
 /// or eg `libc::open(cstr!(b"/", 256),libc::O_RDONLY)`
 /// This macro takes a byte slice and returns a pointer to a null-terminated C-style string.
@@ -242,6 +246,8 @@ macro_rules! prefetch_next_buffer {
 /// - **`ptr` must be a valid, non-null pointer to a null-terminated string.**
 /// - **Does not check if the string starts with a null terminator** (unlike `libc::strlen`).
 /// - **Uses unaligned loads** (`_mm_loadu_si128`/`_mm256_loadu_si256`), so alignment is not required.
+/// - WILL NOT DETECT THE IF THE NULL TERMINATOR IS MISSING/FIRST BYTE IS NULL.
+/// - **May read beyond the end of the string** until it finds a null terminator
 macro_rules! strlen_asm {
     ($ptr:expr) => {{
         #[cfg(all(

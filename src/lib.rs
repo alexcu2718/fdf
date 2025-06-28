@@ -173,8 +173,10 @@ where
                         .extension_match
                         .as_ref() //get the filename THEN check extension, we dont want to pick up
                         //stuff like .gitignore or .DS_Store
-                        .is_none_or(|ext| {
-                            (&rdir.as_bytes()[rdir.base_len()..]).matches_extension(ext)
+                        .is_none_or(|ext| unsafe {
+                            //save because rdir.base_len()<rdir.len()
+                        debug_assert!(rdir.base_len() < rdir.len());
+                            (&rdir.get_unchecked(rdir.base_len()..)).matches_extension(ext)
                         })
             }
         };
@@ -203,7 +205,10 @@ where
 
         //we have to arbitrarily construct a direntry to start the search.
         let construct_dir = DirEntry::new(&self.root);
-
+        //check if the directory exists and is traversible
+        //traversible meaning directory/symlink, we follow symlinks as it's the starting filepath
+        //but henceforth we do not follow symlinks unless specified in the config
+        //this is to prevent infinite loops and other issues.
         if !construct_dir.as_ref().is_ok_and(DirEntry::is_traversible) {
             return Err(DirEntryError::InvalidPath);
         }
@@ -220,8 +225,12 @@ where
     #[inline]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
-        let should_send = self.search_config.keep_dirs
-            && (self.custom_filter)(&self.search_config, &dir, self.filter)
+
+
+        let config= &self.search_config;
+
+        let should_send = config.keep_dirs
+            && (self.custom_filter)(config, &dir, self.filter)
             && dir.depth() != 0;
 
         if should_send && self.search_config.depth.is_some_and(|d| dir.depth >= d) {
@@ -235,8 +244,8 @@ where
                 // Store only directories for parallel recursive call
 
                 let (dirs, files): (Vec<_>, Vec<_>) = entries
-                    .filter(|e| !self.search_config.hide_hidden || !e.is_hidden())
-                    .partition(|x| x.is_dir() || self.search_config.follow_symlinks && x.is_symlink());
+                    .filter(|e| !config.hide_hidden || !e.is_hidden())
+                    .partition(|x| x.is_dir() || config.follow_symlinks && x.is_symlink());
 
                 dirs.into_par_iter().for_each(|dir| {
                     Self::process_directory(self, dir, sender);
@@ -245,7 +254,7 @@ where
                 // Process files without intermediate Vec
                 let matched_files: Vec<_> = files
                     .into_iter()
-                    .filter(|entry| (self.custom_filter)(&self.search_config, entry, self.filter))
+                    .filter(|entry| (self.custom_filter)(config, entry, self.filter))
                     .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately
                     .collect(); //by doing it this way we reduce channel contention and avoid an intermediate vec, which is more efficient!
 

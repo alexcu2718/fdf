@@ -176,7 +176,7 @@ where
                         .is_none_or(|ext| unsafe {
                             //save because rdir.base_len()<rdir.len()
                         debug_assert!(rdir.base_len() < rdir.len());
-                            (&rdir.get_unchecked(rdir.base_len()..)).matches_extension(ext)
+                            (rdir.get_unchecked(rdir.base_len()..)).matches_extension(ext)
                         })
             }
         };

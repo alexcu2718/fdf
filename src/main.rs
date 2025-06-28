@@ -293,7 +293,7 @@ fn resolve_directory(
                 } else {
                     path_res
                 };
-                path.to_str().map_or_else(|| dot_pattern.into(), Into::into)
+                path.as_os_str().to_owned()
             },
         )
     } else {

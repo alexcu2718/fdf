@@ -27,9 +27,8 @@ if [ ! -e "$fdf_location" ]; then
 	cargo b -r 
 else
 	echo "fdf already installed at $fdf_location"
-		echo "Building fdf..."
 	cd "$fdf_location" || exit 1
-	cargo b -r  #check if it's built just incase
+	cargo b -r -q #check if it's built just incase
  
 fi
 

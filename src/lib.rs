@@ -89,7 +89,7 @@ pub use custom_types_result::{
 };
 
 mod traits_and_conversions;
-pub use traits_and_conversions::{BytePath, PathAsBytes,GetInode};
+pub use traits_and_conversions::{BytePath, PathAsBytes};
 
 mod utils;
 

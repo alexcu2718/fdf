@@ -5,7 +5,6 @@
 #![allow(clippy::integer_division)] //i know my division is safe.
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
-use crate::GetInode;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[allow(unused_imports)]
 use crate::{prefetch_next_buffer, prefetch_next_entry, utils::close_asm, utils::open_asm};
@@ -261,12 +260,15 @@ where
 
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;
-    
+        #[cfg(any(target_os = "freebsd",target_os = "openbsd",target_os = "netbsd",target_os = "dragonfly"))]
+        let inode= get_stat.st_ino as u64;
+        #[cfg(not(any(target_os = "freebsd",target_os = "openbsd",target_os = "netbsd",target_os = "dragonfly")))]
+        let inode = get_stat.st_ino; //on linux, the inode is a u
 
         Ok(Self {
             path: path_ref.into(),
             file_type: FileType::from_mode(get_stat.st_mode),
-            inode:get_stat.inode(),
+            inode,
             depth: 0,
             base_len: path_ref.get_baselen(),
         })

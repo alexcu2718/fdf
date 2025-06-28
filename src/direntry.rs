@@ -28,7 +28,7 @@ use std::{
 use crate::{
     AsU8 as _, BytePath, DirIter, InodeValue, OsBytes, PathBuffer, Result, SyscallBuffer,
     construct_path, cstr, custom_types_result::BytesStorage, filetype::FileType, init_path_buffer,
-    offset_ptr, skip_dot_entries, utils::unix_time_to_system_time,
+    offset_ptr, skip_dot_or_dot_dot_entries, utils::unix_time_to_system_time,
 };
 
 #[derive(Clone)]
@@ -386,7 +386,7 @@ where
 
                 // skip entries that are not valid or are dot entries
 
-                skip_dot_entries!(d);
+                skip_dot_or_dot_dot_entries!(d,continue);//provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
 
                 let full_path = unsafe { construct_path!(self, d) }; //here we have a construct_path, forms the full path
                 //does a lot of black magic, dont worrry about it :)

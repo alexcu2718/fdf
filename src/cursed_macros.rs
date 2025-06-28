@@ -22,7 +22,7 @@ macro_rules! offset_ptr {
     //probably not as it would be inconsistent with the rest of the macro
     ($entry_ptr:expr, d_type) => {{
         // SAFETY: Caller must ensure pointer is valid
-        &raw const (*$entry_ptr).d_type  // access field directly as it is not aligned like the others
+        &raw const (*$entry_ptr).d_type  // caller must deref this to get the type
     }};
 
     // Handle inode number field with aliasing for BSD systems
@@ -86,7 +86,7 @@ macro_rules! cstr {
         c_path_buf.cast::<_>()
     }};
 }
-
+/* 
 #[macro_export]
 #[allow(clippy::too_long_first_doc_paragraph)]
 ///NOT INTENDED FO FOR PUBLIC USE, WILL BE PRIVATE SOON.
@@ -140,7 +140,57 @@ macro_rules! skip_dot_entries {
             }
         }
     }};
+}*/
+
+
+#[macro_export]
+#[doc(hidden)]
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// NOT INTENDED FOR PUBLIC USE, WILL BE PRIVATE SOON.
+/// A macro to skip . and .. entries when traversing a directory.
+///
+/// ## Usage
+/// ```rust
+/// skip_dot_entries!(entry, continue);
+/// skip_dot_entries!(entry, return Err(()));
+/// ```
+///
+/// Takes:
+/// - `$entry`: pointer to a dirent struct
+/// - `$action`: a control-flow statement (e.g., `continue`, `break`, `return ...`)
+///
+/// Handles Linux vs BSD vs others and optional field differences.
+macro_rules! skip_dot_or_dot_dot_entries {
+    ($entry:expr, $action:expr) => {{
+        #[allow(unused_unsafe)]
+        unsafe {
+            let d_type = $crate::offset_ptr!($entry, d_type);
+            let name_ptr = $crate::offset_ptr!($entry, d_name) as *const u8;
+
+            #[cfg(target_os = "linux")]
+            {
+                let reclen = $crate::offset_ptr!($entry, d_reclen);
+                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN) && reclen == 24 {
+                    match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
+                        (b'.', 0, _) | (b'.', b'.', 0) => $action,
+                        _ => (),
+                    }
+                }
+            }
+
+            #[cfg(not(target_os = "linux"))]
+            {
+                if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
+                    match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
+                        (b'.', 0, _) | (b'.', b'.', 0) => $action,
+                        _ => (),
+                    }
+                }
+            }
+        }
+    }};
 }
+
 
 //SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
 
@@ -168,16 +218,39 @@ macro_rules! init_path_buffer {
 macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
         let d_name = $crate::offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
-        let base_len= $self.base_len as usize; //get the base path length, this is the length of the directory path
+        let base_len= $self.base_len as usize;// as usize; //get the base path length, this is the length of the directory path
 
-       #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos"))]
-        let name_len=$crate::offset_ptr!($dirent, d_namlen); //get the name length, this is the length of the entry name
-    //I JUST CHECKED DOCS AND THIS SHOULD DO IT YAY, WHY DID THEY MISSPELL IT? FFS
-       #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly",target_os="macos",target_os="linux")))]
-        let name_len=libc::strlen($crate::offset_ptr!($dirent, d_name) as *const _); //get the name length, this is the length of the entry name
-        //using normal strlen because im risk averse on strange OS's
-        #[cfg(target_os="linux")]
-        let name_len = $crate::dirent_const_time_strlen($dirent);
+        let name_len = {
+        #[cfg(target_os = "linux")]
+        {
+            $crate::dirent_const_time_strlen($dirent) //const time strlen for linux (specialisation)
+        }
+
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly",
+            target_os = "macos"
+        ))]
+        {
+            $crate::offset_ptr!($dirent, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
+        }
+
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly",
+            target_os = "macos"
+        )))]
+        {
+            unsafe { libc::strlen($crate::offset_ptr!($dirent, d_name) as *const _) }
+            // Fallback for other OSes, using libc::strlen because i cant cover every edge case...
+        }
+            };
+
 
 
 
@@ -348,3 +421,4 @@ macro_rules! const_from_env {
         };
     };
 }
+

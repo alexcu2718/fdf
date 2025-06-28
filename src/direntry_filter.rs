@@ -7,7 +7,7 @@
 use crate::direntry::DirEntry;
 use crate::{
     BytePath, BytesStorage, FileType, PathBuffer, Result, SyscallBuffer,
-    construct_path, init_path_buffer, offset_ptr, skip_dot_entries,
+    construct_path, init_path_buffer, offset_ptr, skip_dot_or_dot_dot_entries
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{prefetch_next_buffer, prefetch_next_entry};
@@ -74,7 +74,7 @@ where
                 self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
-                skip_dot_entries!(d); //requiring d_type is just a niche optimisation, it allows us not to do 'as many' pointer checks
+                skip_dot_or_dot_dot_entries!(d,continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 let full_path = unsafe { construct_path!(self, d) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.

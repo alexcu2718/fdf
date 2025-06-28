@@ -94,8 +94,8 @@ macro_rules! cstr {
 /// A macro to skip . and .. entries when traversing a directory.
 ///
 /// ## Usage
-/// ```rust
-/// skip_dot_entries!(entry, continue);
+/// ```ignore
+/// skip_dot_or_dot_dot_entries!(entry, continue);
 /// ```
 ///
 /// Takes:

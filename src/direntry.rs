@@ -380,7 +380,7 @@ where
     }
 }
 #[cfg(target_os = "linux")]
-impl <S> DirEntryIterator<S>
+impl<S> DirEntryIterator<S>
 where
     S: BytesStorage,
 {
@@ -409,7 +409,7 @@ where
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
                 // Extract the first necessary fieldfrom the dirent structure
                 //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-                self.offset += unsafe{offset_ptr!(d,d_reclen)}; //index to next entry, so when we call next again, we will get the next entry in the buffer
+                self.offset += unsafe { offset_ptr!(d, d_reclen) }; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
 
@@ -418,8 +418,7 @@ where
                 let (d_type, inode) = unsafe {
                     (
                         *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                        offset_ptr!(d, d_ino),   //get the inode (u32/u64 depending on OS), cast to u64 for consistency
-                      
+                        offset_ptr!(d, d_ino), //get the inode (u32/u64 depending on OS), cast to u64 for consistency
                     )
                 };
 

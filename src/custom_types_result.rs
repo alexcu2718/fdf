@@ -9,7 +9,7 @@ use std::sync::Arc;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
-const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096");//set to PATH_MAX, but allow trivial customisation!
+const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096"); //set to PATH_MAX, but allow trivial customisation!
 
 //4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 const_from_env!(BUFFER_SIZE:usize="BUFFER_SIZE","4115");

@@ -17,7 +17,7 @@ macro_rules! offset_ptr {
     }};
      // Special case for `d_namlen`
 
-     
+
     ($entry_ptr:expr, d_namlen) => {{
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_namlen as usize // access field directly as it is not aligned like the others
@@ -48,7 +48,7 @@ macro_rules! offset_ptr {
             &raw const (*$entry_ptr).d_ino  as u64
         }
     }};
-    
+
     // General case for all other fields
     ($entry_ptr:expr, $field:ident) => {{ &raw const (*$entry_ptr).$field }};
 }
@@ -56,7 +56,7 @@ macro_rules! offset_ptr {
 #[macro_export(local_inner_macros)]
 /// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
 /// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)
-/// 
+///
 /// The first argument should be a byte slice
 /// the second argument is optional as specifies a custom buffer size.
 /// let mypointer:*const u8= cstr!(b"/home/sir_galahad", 256);
@@ -161,7 +161,7 @@ macro_rules! init_path_buffer {
 #[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
 macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
-        
+
 
         let d_name = offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.base_len(); //get the base path length, this is the length of the directory path
@@ -191,8 +191,8 @@ macro_rules! construct_path {
             target_os = "dragonfly",
             target_os = "macos"
         )))]
-        {     
-             libc::strlen(offset_ptr!($dirent, d_name) as *const _) 
+        {
+             libc::strlen(offset_ptr!($dirent, d_name) as *const _)
             // Fallback for other OSes, using libc::strlen because i cant cover every edge case...
         }
             };
@@ -310,7 +310,7 @@ macro_rules! strlen_asm {
             target_arch = "x86_64",
             any(target_feature = "avx2", target_feature = "sse2")
         )))]
-        {   
+        {
             // Fallback to libc::strlen if no SIMD support
             libc::strlen($ptr.cast::<_>())
         }

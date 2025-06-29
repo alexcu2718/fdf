@@ -51,7 +51,7 @@ impl SearchConfig {
             extension_match,
             file_name,
             depth,
-            follow_symlinks
+            follow_symlinks,
         })
     }
 
@@ -63,18 +63,17 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
-    #[allow(clippy::if_not_else)]// this is a stylistic choice to avoid unnecessary else branches
+    #[allow(clippy::if_not_else)] // this is a stylistic choice to avoid unnecessary else branches
     pub fn matches_path<S>(&self, dir: &DirEntry<S>, full_path: bool) -> bool
     where
         S: BytesStorage,
     {
-         self.regex_match.as_ref().is_none_or(|reg| reg.is_match(
-            if !full_path {
+        self.regex_match.as_ref().is_none_or(|reg| {
+            reg.is_match(if !full_path {
                 dir.file_name() //this is the likelier path so we choose it first
-             } else {
-               dir
-            },
-       ))
-   
-}
+            } else {
+                dir
+            })
+        })
+    }
 }

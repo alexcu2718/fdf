@@ -143,7 +143,6 @@ where
         extension_match: Option<Arc<[u8]>>,
         max_depth: Option<u8>,
         follow_symlinks: bool,
-        
     ) -> Self {
         let config = SearchConfig::new(
             pattern,
@@ -154,7 +153,6 @@ where
             extension_match,
             max_depth,
             follow_symlinks,
-
         );
 
         let search_config = match config {
@@ -175,7 +173,7 @@ where
                         //stuff like .gitignore or .DS_Store
                         .is_none_or(|ext| unsafe {
                             //save because rdir.base_len()<rdir.len()
-                        debug_assert!(rdir.base_len() < rdir.len());
+                            debug_assert!(rdir.base_len() < rdir.len());
                             (rdir.get_unchecked(rdir.base_len()..)).matches_extension(ext)
                         })
             }
@@ -225,13 +223,10 @@ where
     #[inline]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
+        let config = &self.search_config;
 
-
-        let config= &self.search_config;
-
-        let should_send = config.keep_dirs
-            && (self.custom_filter)(config, &dir, self.filter)
-            && dir.depth() != 0;
+        let should_send =
+            config.keep_dirs && (self.custom_filter)(config, &dir, self.filter) && dir.depth() != 0;
 
         if should_send && self.search_config.depth.is_some_and(|d| dir.depth >= d) {
             let _ = sender.send(vec![dir]); //have to put into a vec, this doesnt matter because this only happens when we depth limit

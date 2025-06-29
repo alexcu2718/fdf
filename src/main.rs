@@ -146,10 +146,7 @@ pub struct Args {
         default_value_t = false,
         help = "Include directories\n"
     )]
-
-    
     keep_dirs: bool,
-
 
     #[arg(
         short = 'L',
@@ -157,8 +154,6 @@ pub struct Args {
         default_value_t = false,
         help = "Include symlinks in traversal,defaults to false\n"
     )]
-
-    
     follow_symlinks: bool,
     #[arg(
         short = 'g',

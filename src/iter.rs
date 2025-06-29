@@ -41,7 +41,7 @@ where
         self.path_buffer.as_mut_ptr()
     }
 
-    pub const fn base_len(&self)->usize{
+    pub const fn base_len(&self) -> usize {
         // This function returns the base length of the path buffer.
         // It is used to determine the length of the base path for constructing full paths.
         self.base_len as usize
@@ -98,12 +98,8 @@ where
                 return None;
             }
 
-       
-
             skip_dot_or_dot_dot_entries!(entry, continue); //we provide the continue here to make it explicit.
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
-
-                  
 
             let (d_type, inode) = unsafe {
                 (

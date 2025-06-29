@@ -6,6 +6,7 @@ use crate::DirEntryError;
 use crate::Result;
 use crate::buffer::ValueType;
 use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
+use memchr::memrchr;
 use std::ffi::OsStr;
 use std::fmt;
 use std::mem::MaybeUninit;
@@ -14,8 +15,6 @@ use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use memchr::memrchr;
-
 
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
 pub trait BytePath<T>
@@ -83,8 +82,8 @@ where
     /// If the file has contains no returns `None`.
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-    memrchr(b'.', self).map(|pos| &self[pos+1..])
-}
+        memrchr(b'.', self).map(|pos| &self[pos + 1..])
+    }
 
     /// Converts the byte slice into a `PathBuf`.
     /// This is a simple conversion that does not check if the path is valid.
@@ -126,7 +125,7 @@ where
     #[inline]
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    #[cfg(not(target_os="netbsd"))]
+    #[cfg(not(target_os = "netbsd"))]
     fn modified_time(&self) -> crate::Result<SystemTime> {
         self.get_stat().and_then(|s| {
             crate::unix_time_to_system_time(s.st_mtime, s.st_mtime_nsec as i32)
@@ -137,11 +136,11 @@ where
     #[inline]
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    #[cfg(target_os="netbsd")]
+    #[cfg(target_os = "netbsd")]
     fn modified_time(&self) -> crate::Result<SystemTime> {
         self.get_stat().and_then(|s| {
             crate::unix_time_to_system_time(s.st_mtime, s.st_mtimensec as i32) //we have to use st_mtimensec on netbsd, why they did this, i do not know.
-            //and im lazy to check an os 0.0001% of the world uses.
+                //and im lazy to check an os 0.0001% of the world uses.
                 .map_err(|_| crate::DirEntryError::TimeError)
         })
     }
@@ -236,7 +235,7 @@ where
     ///checks if the path is absolute,
     fn is_absolute(&self) -> bool {
         //safe because we know the path is not empty
-        unsafe{*self.get_unchecked(0)==b'/'}
+        unsafe { *self.get_unchecked(0) == b'/' }
     }
 
     #[inline]
@@ -247,7 +246,7 @@ where
 
     /// Get the length of the basename of a path (up to and including the last '/')
     #[inline]
-     #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation)]
     fn get_baselen(&self) -> u16 {
         memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
     }

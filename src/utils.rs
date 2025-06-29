@@ -238,7 +238,5 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // `reclen - DIRENT_HEADER_START - byte_pos`
     // This gives us the length of the d_name field, excluding the header and the null
     // byte position.
-    // This is the length of the d_name field, excluding the header and the null byte
-    // position.
     reclen - DIRENT_HEADER_START - byte_pos
 }

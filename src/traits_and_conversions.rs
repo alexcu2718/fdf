@@ -125,9 +125,22 @@ where
     #[inline]
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
+    #[cfg(not(target_os="netbsd"))]
     fn modified_time(&self) -> crate::Result<SystemTime> {
         self.get_stat().and_then(|s| {
             crate::unix_time_to_system_time(s.st_mtime, s.st_mtime_nsec as i32)
+                .map_err(|_| crate::DirEntryError::TimeError)
+        })
+    }
+    /// Get last modification time, this will be more useful when I implement filters for it. (netbsd specific)
+    #[inline]
+    #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
+    #[allow(clippy::missing_errors_doc)] //fixing errors later
+    #[cfg(target_os="netbsd")]
+    fn modified_time(&self) -> crate::Result<SystemTime> {
+        self.get_stat().and_then(|s| {
+            crate::unix_time_to_system_time(s.st_mtime, s.st_mtimensec as i32) //we have to use st_mtimensec on netbsd, why they did this, i do not know.
+            //and im lazy to check an os 0.0001% of the world uses.
                 .map_err(|_| crate::DirEntryError::TimeError)
         })
     }

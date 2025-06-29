@@ -1,12 +1,16 @@
 # fdf
 
-COMPATIBILITY STATE
+COMPATIBILITY STATE (BIG+LITTLE ENDIAN COMPATIBLE)
+
 1.Working on Linux 64bit
+
 2.Macos  64bit
+
 3.Free/Open/Net BSD 64bit
-3. Tested on 64bit PPC Linux (Ubuntu) Little Endian
-5. Alpine/MUSL
-Next to test: Alpine s390x BE
+
+3.Tested on 64bit PPC Linux (Ubuntu)
+
+5.Alpine/MUSL
 
 NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
 

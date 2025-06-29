@@ -98,15 +98,19 @@ where
                 return None;
             }
 
+       
+
+            skip_dot_or_dot_dot_entries!(entry, continue); //we provide the continue here to make it explicit.
+            //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
+
+                  
+
             let (d_type, inode) = unsafe {
                 (
                     *offset_ptr!(entry, d_type), //get the d_type from the dirent structure, this is the type of the entry
                     offset_ptr!(entry, d_ino),
                 ) //get the inode
             };
-
-            skip_dot_or_dot_dot_entries!(entry, continue); //we provide the continue here to make it explicit.
-            //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
             let full_path = unsafe { construct_path!(self, entry) };
             return Some(DirEntry {

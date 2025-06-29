@@ -72,21 +72,24 @@ where
                 let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
 
+
+
                 #[cfg(target_arch = "x86_64")]
-                prefetch_next_entry!(self);
+                prefetch_next_entry!(self);//check how much is left remaining in buffer, if reasonable to hold more, warm cache
+                self.offset += unsafe{offset_ptr!(d,d_reclen)}; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
-                let (d_type, inode, reclen) = unsafe {
-                    (
-                        *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                        offset_ptr!(d, d_ino),   //get the inode
-                        offset_ptr!(d, d_reclen),
-                    )
-                };
-
-                self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
+                let (d_type, inode) = unsafe {
+                    (
+                        *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
+                        offset_ptr!(d, d_ino),   //get the inode
+                    )
+                };
+
+
+                // skip entries that are not valid or are dot entries
                 let full_path = unsafe { construct_path!(self, d) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.

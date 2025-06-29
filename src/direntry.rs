@@ -407,21 +407,21 @@ where
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
-                // Extract the fields from the dirent structure
-
-                let (d_type, inode, reclen) = unsafe {
-                    (
-                        *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                        offset_ptr!(d, d_ino),   //get the inode (u32/u64 depending on OS)
-                        offset_ptr!(d, d_reclen), //this is variable length field so this macro access is proper.
-                    )
-                };
-
-                self.offset += reclen; //index to next entry, so when we call next again, we will get the next entry in the buffer
+                // Extract the first necessary fieldfrom the dirent structure
+                //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+                self.offset += unsafe{offset_ptr!(d,d_reclen)}; //index to next entry, so when we call next again, we will get the next entry in the buffer
 
                 // skip entries that are not valid or are dot entries
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
+                //extract the remaining ones
+                let (d_type, inode) = unsafe {
+                    (
+                        *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
+                        offset_ptr!(d, d_ino),   //get the inode (u32/u64 depending on OS), cast to u64 for consistency
+                      
+                    )
+                };
 
                 let full_path = unsafe { construct_path!(self, d) }; //here we have a construct_path, forms the full path
                 //does a lot of black magic, dont worrry about it :)

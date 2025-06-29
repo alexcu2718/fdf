@@ -10,12 +10,14 @@
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
 macro_rules! offset_ptr {
-    // Special case for `d_reclen`/variable length field
+    // Special case for `d_reclen`
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_reclen as usize // access field directly as it is not aligned like the others
     }};
-     // Special case for `d_namlen`/variable length field
+     // Special case for `d_namlen`
+
+     
     ($entry_ptr:expr, d_namlen) => {{
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_namlen as usize // access field directly as it is not aligned like the others
@@ -57,10 +59,11 @@ macro_rules! offset_ptr {
 }
 
 #[macro_export(local_inner_macros)]
-/// A macro to create a C-style *str pointer from a byte slice,
-///  the first argument should be a byte slice
-/// the second argument is optional as specifies a custom buffer size.
+/// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
+/// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)
 /// 
+/// The first argument should be a byte slice
+/// the second argument is optional as specifies a custom buffer size.
 /// let mypointer:*const u8= cstr!(b"/home/sir_galahad", 256);
 /// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
 /// or eg `libc::open(cstr!(b"/", 256),libc::O_RDONLY)`

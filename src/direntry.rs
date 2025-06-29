@@ -37,6 +37,7 @@ pub struct DirEntry<S>
 //S is a storage type, this is used to store the path of the entry, it can be a Box, Arc, Vec, etc.
 //ordered by size, so Box<[u8]> is 16 bytes, Arc<[u8]> is 24 bytes, Vec<u8> is 24 bytes, SlimerBox<[u8], u16> is 10 bytes
 //S is a generic type that implements BytesStorage trait aka  vec/arc/box/SlimmerBytes(SlimmerBox<[u8], u16>).
+//Slimmerbox is Box<[u8]> on non linux/macos due to package limitations,TBD.
 where
     S: BytesStorage,
 {

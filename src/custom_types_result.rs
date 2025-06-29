@@ -9,7 +9,7 @@ use std::sync::Arc;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 // This will be set at runtime from the environment variable yet it's still const, :)
-const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "1024");
+const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096");//set to PATH_MAX, but allow trivial customisation!
 
 //4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 const_from_env!(BUFFER_SIZE:usize="BUFFER_SIZE","4115");
@@ -40,7 +40,7 @@ impl BytesStorage for SlimmerBox<[u8], u16> {
         unsafe { Self::new_unchecked(bytes) }
     }
 }
-
+//through this macro one can implement it for their own types yay!
 crate::impl_bytes_storage!(Arc<[u8]>, Vec<u8>, Box<[u8]>);
 
 // OsBytes generic over the storage type, this allows easy switch to arc for multithreading to avoid race conditions:)

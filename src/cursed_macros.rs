@@ -23,11 +23,6 @@ macro_rules! offset_ptr {
         (*$entry_ptr).d_namlen as usize // access field directly as it is not aligned like the others
     }};//should this backup to a function call for platforms without d_namlen? TODO
     //probably not as it would be inconsistent with the rest of the macro
-    ($entry_ptr:expr, d_type) => {{
-        // SAFETY: Caller must ensure pointer is valid
-        &raw const (*$entry_ptr).d_type  // caller must deref this to get the type
-    }};
-
     // Handle inode number field with aliasing for BSD systems
     //you can use d_ino or d_fileno (preferentially d_ino for cross-compatbility!)
     ($entry_ptr:expr, d_ino) => {{

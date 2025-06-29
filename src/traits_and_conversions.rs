@@ -249,13 +249,7 @@ where
     #[inline]
      #[allow(clippy::cast_possible_truncation)]
     fn get_baselen(&self) -> u16 {
-        if let Some(pos) = memrchr(b'/', self) {
-            // Include the '/' in the length
-            (pos + 1) as _
-        } else {
-            // No '/' found, return length 1 (just the filename)
-            1
-        }
+        memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
     }
 
     #[inline]

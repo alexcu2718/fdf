@@ -14,6 +14,8 @@ use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use memchr::memrchr;
+
 
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
 pub trait BytePath<T>
@@ -81,12 +83,11 @@ where
     /// If the file has contains no returns `None`.
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        if !self.contains(&b'.') {
-            return None;
-        }
-        self.rsplit(|&b| b == b'.').next()
-    }
+    memrchr(b'.', self).map(|pos| &self[pos+1..])
+}
 
+    /// Converts the byte slice into a `PathBuf`.
+    /// This is a simple conversion that does not check if the path is valid.
     fn to_path(&self) -> PathBuf {
         // Convert the byte slice to a PathBuf
         PathBuf::from(self.as_os_str())
@@ -246,11 +247,15 @@ where
 
     /// Get the length of the basename of a path (up to and including the last '/')
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
+     #[allow(clippy::cast_possible_truncation)]
     fn get_baselen(&self) -> u16 {
-        self.rsplitn(2, |&c| c == b'/')
-            .nth(1)
-            .map_or(1, |parent| parent.len() + 1) as _ // +1 to include trailing slash etc
+        if let Some(pos) = memrchr(b'/', self) {
+            // Include the '/' in the length
+            (pos + 1) as _
+        } else {
+            // No '/' found, return length 1 (just the filename)
+            1
+        }
     }
 
     #[inline]

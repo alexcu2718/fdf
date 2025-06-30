@@ -327,9 +327,8 @@ where
 
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); //check how much is left remaining in buffer, if reasonable to hold more, warm cache
-                self.offset += unsafe { offset_ptr!(d, d_reclen) }; //index to next entry, so when we call next again, we will get the next entry in the buffer
-
-                // skip entries that are not valid or are dot entries
+               
+              
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 let (d_type, inode) = unsafe {
                     (

@@ -377,7 +377,7 @@ impl<S> DirEntryIterator<S>
 where
     S: BytesStorage,
 {
-    /// Returns the base length of the path buffer.
+    /// Returns the index of the file name in the path, so we can get the file name from the path instantly
     #[inline]
     pub const fn file_name_index(&self) -> usize {
         self.file_name_index as _

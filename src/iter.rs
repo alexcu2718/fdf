@@ -23,7 +23,7 @@ where
 {
     dir: *mut DIR,
     path_buffer: PathBuffer,
-    base_len: u16, //mainly used for indexing tricks, to trivially find the filename(avoid recalculation)
+    file_name_index: u16, //mainly used for indexing tricks, to trivially find the filename(avoid recalculation)
     depth: u8, //if youve got directories bigger than 255 levels deep, you should probably rethink your life choices.
     error: Option<Error>,
     _phantom: PhantomData<S>, //this justholds the type information for later, this compiles away due to being zero sized.
@@ -41,10 +41,10 @@ where
         self.path_buffer.as_mut_ptr()
     }
 
-    pub const fn base_len(&self) -> usize {
+    pub const fn file_name_index(&self) -> usize {
         // This function returns the base length of the path buffer.
         // It is used to determine the length of the base path for constructing full paths.
-        self.base_len as _
+        self.file_name_index as _
     }
 
     #[inline]
@@ -71,7 +71,7 @@ where
         Ok(Self {
             dir,
             path_buffer,
-            base_len: base_len as _,
+            file_name_index: base_len as _,
             depth: dir_path.depth,
             error: None,
             _phantom: PhantomData, //holds storage type
@@ -114,7 +114,7 @@ where
                 file_type: FileType::from_dtype_fallback(d_type, full_path), //most of the time we get filetype from the value but not always, uses lstat if needed
                 inode,
                 depth: self.depth + 1,   //increment depth for each entry
-                base_len: self.base_len, //inherit base_len from the parent directory
+                file_name_index: self.file_name_index, //inherit base_len from the parent directory
             });
         }
     }

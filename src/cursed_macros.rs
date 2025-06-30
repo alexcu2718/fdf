@@ -166,7 +166,7 @@ macro_rules! construct_path {
 
 
         let d_name = offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
-        let base_len= $self.base_len(); //get the base path length, this is the length of the directory path
+        let base_len= $self.file_name_index(); //get the base path length, this is the length of the directory path
 
         let name_len = {
          #[cfg(target_os = "linux")]

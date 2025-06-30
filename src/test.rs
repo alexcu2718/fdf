@@ -115,7 +115,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir_path);
         for entry in entries_clone2 {
             assert_eq!(entry.depth(), 1);
-            assert_eq!(entry.base_len() as usize, dir_path.as_os_str().len() + 1);
+            assert_eq!(entry.file_name_index() as usize, dir_path.as_os_str().len() + 1);
         }
 
         //let _=std::fs::File::
@@ -162,7 +162,7 @@ mod tests {
 
         let entry: usize = DirEntry::<SlimmerBytes>::new(file_path.as_os_str())
             .unwrap()
-            .base_len();
+            .file_name_index();
 
         let std_entry: usize = (std::path::Path::new(file_path.as_os_str())
             .parent()

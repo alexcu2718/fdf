@@ -2,7 +2,7 @@
 #![allow(clippy::single_char_lifetime_names)]
 // THIS IS PRETTY MUCH A CARBON COPY OF `direntry.rs`
 // THE ONLY DIFFERENCE IS THAT IT ALLOWS YOU TO FILTER THE ENTRIES BY A FUNCTION.
-// THIS IS USEFUL IF YOU WANT TO AVOID UNNECESSARY ALLOCATIONS AND
+// THIS IS USEFUL IF YOU WANT TO AVOID UNNECESSARY HEAP ALLOCATIONS FOR NON-DIRECTORIES(BIG PERFORMANCE IMPACT) AND
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
@@ -22,11 +22,11 @@ where
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from, it is used to read the directory entries via syscall
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.3k bytes~ish
     pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
-    pub(crate) base_len: u16, // base path length, this is the length of the path up to and including the last slash
+    pub(crate) file_name_index: u16, // base path length, this is the length of the path up to and including the last slash
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-    pub(crate) filter_func: fn(&TempDirent, &SearchConfig) -> bool, // filter function, this is used to filter the entries based on the provided function
+    pub(crate) filter_func: fn(&TempDirent<S>, &SearchConfig) -> bool, // filter function, this is used to filter the entries based on the provided function
     pub(crate) search_config: &'a SearchConfig, // search configuration, this is used to pass the search configuration to the filter function
     _marker: PhantomData<S>, //placeholder for the storage type, this is used to ensure that the iterator can be used with any storage type
 }
@@ -49,24 +49,55 @@ where
 {
     /// Returns the base length of the path buffer.
     #[inline]
-    pub const fn base_len(&self) -> usize {
-        self.base_len as _
+    pub const fn file_name_index(&self) -> usize {
+        self.file_name_index as _
     }
 }
 
-pub struct TempDirent<'a> {
+pub struct TempDirent<'a,S> {
     pub(crate) path: &'a [u8], // path of the entry, this is used to store the path of the entry 16b (64bit)
     pub(crate) depth: u8, // depth of the entry, this is used to calculate the depth of   1bytes
     pub(crate) file_type: FileType, // file type of the entry, this is used to determine the type of the entry 1bytes
     pub(crate) base_len: u16,       //used to calculate filename via indexing 2bytes
     pub(crate) inode: u64, // inode of the entry, this is used to uniquely identify the entry 8bytes
+    _marker: PhantomData<S>, // placeholder for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
 }
 
-impl std::ops::Deref for TempDirent<'_> {
+impl <S>std::ops::Deref for TempDirent<'_,S> {
     type Target = [u8];
     #[inline]
     fn deref(&self) -> &Self::Target {
         self.path
+    }
+}
+
+
+impl <S>std::convert::AsRef<[u8]> for TempDirent<'_,S> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.path
+    }
+}
+
+impl<S> Into<DirEntry<S>> for TempDirent<'_,S> 
+where
+    S: BytesStorage,{
+    #[inline]
+    fn into(self) -> DirEntry<S> {
+        self.to_direntry()
+    }
+}
+
+impl<S> std::fmt::Debug for TempDirent<'_,S> {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TempDirent")
+            .field("path", &self.path)
+            .field("depth", &self.depth)
+            .field("file_type", &self.file_type)
+            .field("base_len", &self.base_len)
+            .field("inode", &self.inode)
+            .finish()
     }
 }
 
@@ -75,33 +106,34 @@ impl std::ops::Deref for TempDirent<'_> {
 /// entry, so we can filter entries without allocating memory on the heap.
 /// It is used in the `DirEntryIteratorFilter` iterator to filter entries based on the
 /// provided filter function.
-impl<'a> TempDirent<'a> {
+impl<'a,S> TempDirent<'a,S>
+where
+    S: BytesStorage,{
     /// Returns a new `TempDirent` with the given path, depth, file type and base length.
     /// for filtering purposes (so we can avoid heap allocations)
     #[inline]
-    pub const fn new(path: &'a [u8], depth: u8, file_type: FileType, base_len: u16,ino:u64) -> Self {
+    pub const fn new(path: &'a [u8], depth: u8, file_type: FileType, base_len: u16,inode:u64) -> Self {
         Self {
             path,
             depth,
             file_type,
             base_len,
-            inode: ino, //inode is used to uniquely identify the entry, this is used to avoid duplicates
+            inode, //inode is used to uniquely identify the entry, this is used to avoid duplicates
+            _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
         }
     }
 
     /// Converts the temporary dirent into a `DirEntry`.
     #[inline]
-    pub fn to_direntry<S>(self) -> DirEntry<S>
-    where
-        S: BytesStorage,
-    {
+    pub fn to_direntry(self) -> DirEntry<S>{
+
         // Converts the temporary dirent into a DirEntry, this is used to convert the temporary dirent into a DirEntry
         DirEntry {
             path: self.path.into(),
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
-            base_len: self.base_len,
+            file_name_index: self.base_len,
 
 
 
@@ -134,7 +166,7 @@ impl<'a> TempDirent<'a> {
     pub fn matches_path(&self, file_name_only: bool, cfg: &SearchConfig) -> bool {
         // Checks if the entry matches the search configuration
         // this is used to filter entries by path
-        cfg.matches_path_internal(self.path, file_name_only, self.base_len as usize)
+        cfg.matches_path_internal(self.path, file_name_only, self.file_name_index())
     }
 
     #[inline]
@@ -171,10 +203,35 @@ impl<'a> TempDirent<'a> {
     }
 
     #[inline]
+    #[must_use]
+    ///costly check for empty files
+    ///i dont see much use for this function
+    /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
+    /// for files, it checks if the size is zero without loading all metadata
+    /// for directories, it checks if they have no entries
+    /// for special files like devices, sockets, etc., it returns false
+    pub fn is_empty(self) -> bool 
+      where
+        S: BytesStorage,
+    {
+        match self.file_type {
+            FileType::RegularFile => {
+                self.size().is_ok_and(|size| size == 0)
+                //this checks if the file size is zero, this is a costly check as it requires a stat call
+            }
+            FileType::Directory => {
+                self.to_direntry().readdir() //if we can read the directory, we check if it has no entries
+                    .is_ok_and(|mut entries| entries.next().is_none())
+            }
+            _ => false,
+        }
+    }
+
+    #[inline]
     pub const fn file_name_index(&self) -> usize {
         // Returns the index of the file name in the path, this is used to get the file name of the entry
         // it is calculated by adding the base length to the depth of the entry
-        self.base_len as usize
+        self.base_len as _
     }
     #[inline]
     pub fn file_name(&self) -> &[u8] {
@@ -283,7 +340,7 @@ where
 
                 let file_type = FileType::from_dtype_fallback(d_type, full_path); //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
 
-                let temp_dirent = TempDirent::new(full_path, depth, file_type, self.base_len,inode); //create a temporary dirent, this is used to store the path, depth and file type of the entry
+                let temp_dirent = TempDirent::new(full_path, depth, file_type, self.file_name_index,inode); //create a temporary dirent, this is used to store the path, depth and file type of the entry
 
                 // apply the filter function to the entry
                 //ive had to map the filetype to a value, it's mapped to libc dirent dtype values, this is temporary
@@ -296,7 +353,7 @@ where
 
              
 
-                return Some(temp_dirent.to_direntry()); // convert the temporary dirent to a DirEntry and return it
+                return Some(temp_dirent.into()); // convert the temporary dirent to a DirEntry and return it
             }
 
             // prefetch the next buffer content before reading
@@ -334,7 +391,7 @@ where
     pub fn getdents_filter(
         &self,
         search_config: &SearchConfig,
-        func: fn(&TempDirent, &SearchConfig) -> bool,
+        func: fn(&TempDirent<S>, &SearchConfig) -> bool,
     ) -> Result<impl Iterator<Item = Self>> {
         let fd = self
             .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
@@ -353,7 +410,7 @@ where
             fd,
             buffer: SyscallBuffer::new(),
             path_buffer,
-            base_len: path_len as _,
+            file_name_index: path_len as _,
             parent_depth: self.depth,
             offset: 0,
             remaining_bytes: 0,

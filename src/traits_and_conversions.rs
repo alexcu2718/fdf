@@ -32,7 +32,7 @@ where
     fn get_stat(&self) -> crate::Result<stat>;
     fn modified_time(&self) -> crate::Result<SystemTime>;
     fn as_path(&self) -> &Path;
-    fn get_baselen(&self) -> u16;
+    fn file_name_index(&self) -> u16;
     fn as_os_str(&self) -> &OsStr;
     fn exists(&self) -> bool;
     fn is_readable(&self) -> bool;
@@ -247,7 +247,7 @@ where
     /// Get the length of the basename of a path (up to and including the last '/')
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
-    fn get_baselen(&self) -> u16 {
+    fn file_name_index(&self) -> u16 {
         memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
     }
 

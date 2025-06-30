@@ -45,7 +45,7 @@ where
     pub(crate) file_type: FileType, //1 byte
     pub(crate) inode: u64,       //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
-    pub(crate) base_len: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
+    pub(crate) file_name_index: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
                               //total 22 bytes
                               //2 bytes padding, possible uses? not sure.
 }
@@ -152,7 +152,7 @@ where
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
-            base_len: (full_path.len() - self.file_name().len()) as _,
+            file_name_index: (full_path.len() - self.file_name().len()) as _,
         }; //we need the length up to the filename INCLUDING
         //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
         //so we subtract the filename length from the total length, probably could've been done more elegantly.
@@ -189,7 +189,7 @@ where
     #[must_use]
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
-        unsafe { self.get_unchecked(self.base_len()..) }
+        unsafe { self.get_unchecked(self.file_name_index()..) }
     }
 
     #[inline]
@@ -212,8 +212,8 @@ where
     #[inline]
     #[must_use]
     ///returns the length of the base path (eg /home/user/ is 6 '/home/')
-    pub const fn base_len(&self) -> usize {
-        self.base_len as _
+    pub const fn file_name_index(&self) -> usize {
+        self.file_name_index as _
     }
 
     #[inline]
@@ -227,7 +227,7 @@ where
     #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
-        unsafe { *self.get_unchecked(self.base_len()) == b'.' } //we yse the base_len as a way to index to filename immediately, this means
+        unsafe { *self.get_unchecked(self.file_name_index()) == b'.' } //we yse the base_len as a way to index to filename immediately, this means
         //we can store a full path and still get the filename without copying.
         //this is safe because we know that the base_len is always less than the length of the path
     }
@@ -237,7 +237,7 @@ where
     pub fn dirname(&self) -> &[u8] {
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
-                .get_unchecked(..self.base_len() - 1)
+                .get_unchecked(..self.file_name_index() - 1)
                 .rsplit(|&b| b == b'/')
                 .next()
                 .unwrap_or(self.as_bytes())
@@ -248,7 +248,7 @@ where
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
-        unsafe { self.get_unchecked(..std::cmp::max(self.base_len() - 1, 1)) }
+        unsafe { self.get_unchecked(..std::cmp::max(self.file_name_index() - 1, 1)) }
 
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
@@ -284,7 +284,7 @@ where
             file_type: FileType::from_mode(get_stat.st_mode),
             inode,
             depth: 0,
-            base_len: path_ref.get_baselen(),
+            file_name_index: path_ref.file_name_index(),
         })
     }
 
@@ -327,7 +327,7 @@ where
             fd,
             buffer: SyscallBuffer::new(),
             path_buffer,
-            base_len: path_len as _,
+            file_name_index: path_len as _,
             parent_depth: self.depth,
             offset: 0,
             remaining_bytes: 0,
@@ -351,7 +351,7 @@ where
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from(it's completely useless after the iterator is dropped)
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
     pub(crate) path_buffer: PathBuffer, // buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
-    pub(crate) base_len: u16, // base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
+    pub(crate) file_name_index: u16, // base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
@@ -379,8 +379,8 @@ where
 {
     /// Returns the base length of the path buffer.
     #[inline]
-    pub const fn base_len(&self) -> usize {
-        self.base_len as _
+    pub const fn file_name_index(&self) -> usize {
+        self.file_name_index as _
     }
 }
 #[cfg(target_os = "linux")]
@@ -423,7 +423,7 @@ where
                     file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
                     inode,
                     depth: self.parent_depth + 1, // increment depth for child entries
-                    base_len: self.base_len,
+                    file_name_index: self.file_name_index,
                 };
 
                 return Some(entry);

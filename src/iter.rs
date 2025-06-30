@@ -44,7 +44,7 @@ where
     pub const fn base_len(&self) -> usize {
         // This function returns the base length of the path buffer.
         // It is used to determine the length of the base path for constructing full paths.
-        self.base_len as usize
+        self.base_len as _
     }
 
     #[inline]

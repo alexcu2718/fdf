@@ -57,15 +57,8 @@ where
     #[inline]
     #[must_use]
     ///costly check for executables
-    pub fn is_executable(&self) -> bool {
-        if !self.is_regular_file() {
-            return false;
-        }
-
-        unsafe {
-            // x_ok checks for execute permission
-            self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0)
-        }
+    pub fn is_executable(&self) -> bool {//X_OK is the execute permission, requires access call
+    self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0) }
     }
 
     ///cost free check for block devices
@@ -130,19 +123,18 @@ where
     /// for directories, it checks if they have no entries
     /// for special files like devices, sockets, etc., it returns false
     pub fn is_empty(&self) -> bool {
-        if self.is_regular_file() {
-            // for files, check if size is zero without loading all metadata
-            self.size().is_ok_and(|size| size == 0) //safe because we know it wont overflow.
-        } else if self.is_dir() {
-            // for directories, check if they have no entries
-            self.getdents() //we use readdir here because we want to check `quickly`
-                //, getdents is more efficient but for listing directories, finding the first entry is a different case.
-                .is_ok_and(|mut entries| entries.next().is_none())
-        } else {
-            // special files like devices, sockets, etc.
-            false
+    match self.file_type() {
+        FileType::RegularFile => {
+            self.size().is_ok_and(|size| size == 0)
+            //this checks if the file size is zero, this is a costly check as it requires a stat call
         }
+        FileType::Directory => {
+            self.readdir()//if we can read the directory, we check if it has no entries
+                .is_ok_and(|mut entries| entries.next().is_none())
+        }
+        _ => false,
     }
+}
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]

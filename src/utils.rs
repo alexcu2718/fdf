@@ -110,8 +110,9 @@ pub(crate) const fn const_min(a: usize, b: usize) -> usize {
     if a < b { a } else { b }
 }
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
-    if a < b { b } else { a }
+    const_min(b, a)
 }
+
 
 /*
 

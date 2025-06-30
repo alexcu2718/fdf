@@ -382,6 +382,20 @@ where
     pub const fn file_name_index(&self) -> usize {
         self.file_name_index as _
     }
+    #[inline]
+    ///Returns a pointer to the dirent64 in the buffer then increments the offset by the size of the dirent structure.
+    /// this is so that when we next time we call next_getdents_read, we get the next entry in the buffer.
+    /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
+    /// the pointer is valid and that we don't read past the end of the buffer.
+    /// This is only used in the iterator implementation, so we can safely assume that the pointer
+    /// is valid and that we don't read past the end of the buffer.
+    pub unsafe fn next_getdents_read(&mut self) -> *const libc::dirent64 {
+
+        let d=unsafe { self.buffer.next_getdents_read(self.offset) };
+        self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+        d //this is a pointer to the dirent64 structure, which contains the directory entry information
+    }
+
 }
 #[cfg(target_os = "linux")]
 impl<S> Iterator for DirEntryIterator<S>
@@ -395,15 +409,13 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const libc::dirent64 =
-                    unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
+                let d: *const libc::dirent64 =unsafe{self.next_getdents_read()} ; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
                 // Extract the first necessary fieldfrom the dirent structure
                 //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-                self.offset += unsafe { offset_ptr!(d, d_reclen) }; //index to next entry, so when we call next again, we will get the next entry in the buffer
-
+  
                 // skip entries that are not valid or are dot entries
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry

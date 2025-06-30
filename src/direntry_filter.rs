@@ -52,6 +52,13 @@ where
     pub const fn file_name_index(&self) -> usize {
         self.file_name_index as _
     }
+    #[inline]
+    pub unsafe fn next_getdents_read(&mut self) -> *const libc::dirent64 {
+
+        let d=unsafe { self.buffer.next_getdents_read(self.offset) };
+        self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+        d //this is a pointer to the dirent64 structure, which contains the directory entry information
+    }
 }
 
 pub struct TempDirent<'a,S> {
@@ -315,7 +322,7 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const dirent64 = unsafe { self.buffer.next_getdents_read(self.offset) }; //get next entry in the buffer,
+                let d: *const dirent64 = unsafe{self.next_getdents_read()} ; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
 
                 #[cfg(target_arch = "x86_64")]

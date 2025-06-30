@@ -9,7 +9,7 @@ pub struct SearchConfig {
     pub hide_hidden: bool,
     pub keep_dirs: bool,
     pub extension_match: Option<Arc<[u8]>>,
-    pub file_name: bool,
+    pub file_name_only: bool,
     pub depth: Option<u8>,
     pub follow_symlinks: bool,
 }
@@ -23,7 +23,7 @@ impl SearchConfig {
         hide_hidden: bool,
         case_insensitive: bool,
         keep_dirs: bool,
-        file_name: bool,
+        file_name_only: bool,
         extension_match: Option<Arc<[u8]>>,
         depth: Option<u8>,
         follow_symlinks: bool,
@@ -49,7 +49,7 @@ impl SearchConfig {
             hide_hidden,
             keep_dirs,
             extension_match,
-            file_name,
+            file_name_only,
             depth,
             follow_symlinks,
         })

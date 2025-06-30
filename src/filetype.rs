@@ -66,6 +66,16 @@ impl FileType {
     pub const fn is_socket(&self) -> bool {
         matches!(self, Self::Socket)
     }
+    #[inline]
+    pub const fn is_unknown(&self) -> bool {
+        matches!(self, Self::Unknown)
+    }
+    #[inline]
+    /// Returns true if the file type is traversible, i.e. a directory or sy
+    /// symlink.
+    pub const fn is_traversible(&self) -> bool {
+        matches!(self, Self::Directory | Self::Symlink)
+    }
 
     #[must_use]
     #[inline]

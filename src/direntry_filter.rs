@@ -12,7 +12,7 @@ use crate::{
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{prefetch_next_buffer, prefetch_next_entry};
-use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, close, dirent64, open};
+use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
 use std::marker::PhantomData;
 
 pub struct DirEntryIteratorFilter<'a, S>
@@ -59,6 +59,15 @@ pub struct TempDirent<'a> {
     pub(crate) depth: u8, // depth of the entry, this is used to calculate the depth of   1bytes
     pub(crate) file_type: FileType, // file type of the entry, this is used to determine the type of the entry 1bytes
     pub(crate) base_len: u16,       //used to calculate filename via indexing 2bytes
+    pub(crate) inode: u64, // inode of the entry, this is used to uniquely identify the entry 8bytes
+}
+
+impl std::ops::Deref for TempDirent<'_> {
+    type Target = [u8];
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.path
+    }
 }
 
 /// A temporary directory entry used for filtering purposes.
@@ -70,12 +79,33 @@ impl<'a> TempDirent<'a> {
     /// Returns a new `TempDirent` with the given path, depth, file type and base length.
     /// for filtering purposes (so we can avoid heap allocations)
     #[inline]
-    pub const fn new(path: &'a [u8], depth: u8, file_type: FileType, base_len: u16) -> Self {
+    pub const fn new(path: &'a [u8], depth: u8, file_type: FileType, base_len: u16,ino:u64) -> Self {
         Self {
             path,
             depth,
             file_type,
             base_len,
+            inode: ino, //inode is used to uniquely identify the entry, this is used to avoid duplicates
+        }
+    }
+
+    /// Converts the temporary dirent into a `DirEntry`.
+    #[inline]
+    pub fn to_direntry<S>(self) -> DirEntry<S>
+    where
+        S: BytesStorage,
+    {
+        // Converts the temporary dirent into a DirEntry, this is used to convert the temporary dirent into a DirEntry
+        DirEntry {
+            path: self.path.into(),
+            file_type: self.file_type,
+            inode: self.inode,
+            depth: self.depth,
+            base_len: self.base_len,
+
+
+
+
         }
     }
 
@@ -84,6 +114,11 @@ impl<'a> TempDirent<'a> {
         // Checks if the file name ends with the given extension
         // this is used to filter entries by extension
         self.file_name().matches_extension(ext)
+    }
+    #[inline]
+    pub const fn inode(&self) -> u64 {
+        // Returns the inode of the entry, this is used to uniquely identify the entry
+        self.inode
     }
 
     #[inline]
@@ -96,17 +131,17 @@ impl<'a> TempDirent<'a> {
     }
 
     #[inline]
-    pub fn matches_path(&self, cfg: &SearchConfig) -> bool {
+    pub fn matches_path(&self, file_name_only: bool, cfg: &SearchConfig) -> bool {
         // Checks if the entry matches the search configuration
         // this is used to filter entries by path
-        cfg.matches_path_internal(self.path, false, self.base_len as usize)
+        cfg.matches_path_internal(self.path, file_name_only, self.base_len as usize)
     }
 
     #[inline]
     #[must_use]
     pub const fn is_traversible(&self) -> bool {
         //this is a cost free check, we just check if the file type is a directory or symlink
-        matches!(self.file_type, FileType::Directory | FileType::Symlink)
+        self.file_type.is_traversible()
     }
     #[inline]
     pub const fn path(&self) -> &[u8] {
@@ -119,11 +154,7 @@ impl<'a> TempDirent<'a> {
     ///costly check for executables
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
-        self.is_regular_file()
-            && unsafe {
-                self.path
-                    .as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0)
-            }
+        self.is_regular_file() && unsafe { self.path.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0) }
     }
 
     #[inline]
@@ -155,54 +186,54 @@ impl<'a> TempDirent<'a> {
     #[inline]
     #[must_use]
     pub const fn is_block_device(&self) -> bool {
-        matches!(self.file_type, FileType::BlockDevice)
+        self.file_type.is_block_device()
     }
 
     ///Cost free check for character devices
     #[inline]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
-        matches!(self.file_type, FileType::CharDevice)
+        self.file_type.is_char_device()
     }
 
     ///Cost free check for fifos
     #[inline]
     #[must_use]
     pub const fn is_fifo(&self) -> bool {
-        matches!(self.file_type, FileType::Fifo)
+        self.file_type.is_fifo()
     }
 
     ///Cost free check for sockets
     #[inline]
     #[must_use]
     pub const fn is_socket(&self) -> bool {
-        matches!(self.file_type, FileType::Socket)
+        self.file_type.is_socket()
     }
 
     ///Cost free check for regular files
     #[inline]
     #[must_use]
     pub const fn is_regular_file(&self) -> bool {
-        matches!(self.file_type, FileType::RegularFile)
+        self.file_type.is_regular_file()
     }
 
     ///Cost free check for directories
     #[inline]
     #[must_use]
     pub const fn is_dir(&self) -> bool {
-        matches!(self.file_type, FileType::Directory)
+        self.file_type.is_dir()
     }
     ///cost free check for unknown file types
     #[inline]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
-        matches!(self.file_type, FileType::Unknown)
+        self.file_type.is_unknown()
     }
     ///cost free check for symlinks
     #[inline]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
-        matches!(self.file_type, FileType::Symlink)
+        self.file_type.is_symlink()
     }
 
     #[inline]
@@ -252,7 +283,7 @@ where
 
                 let file_type = FileType::from_dtype_fallback(d_type, full_path); //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
 
-                let temp_dirent = TempDirent::new(full_path, depth, file_type, self.base_len); //create a temporary dirent, this is used to store the path, depth and file type of the entry
+                let temp_dirent = TempDirent::new(full_path, depth, file_type, self.base_len,inode); //create a temporary dirent, this is used to store the path, depth and file type of the entry
 
                 // apply the filter function to the entry
                 //ive had to map the filetype to a value, it's mapped to libc dirent dtype values, this is temporary
@@ -261,17 +292,11 @@ where
                     //if the entry does not match the filter, skip it
                     continue;
                 }
-                // get the inode value, this is used to identify the entry uniquely
+         
 
-                let entry = DirEntry {
-                    path: full_path.into(),
-                    file_type, //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
-                    inode,
-                    depth,
-                    base_len: self.base_len,
-                };
+             
 
-                return Some(entry);
+                return Some(temp_dirent.to_direntry()); // convert the temporary dirent to a DirEntry and return it
             }
 
             // prefetch the next buffer content before reading

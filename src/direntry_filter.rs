@@ -59,6 +59,10 @@ where
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
+    #[inline]
+    pub fn check_remaining_bytes(& mut self)->i64{
+        unsafe{self.buffer.getdents64(self.fd) }
+    }
 }
 
 pub struct TempDirent<'a,S> {
@@ -367,7 +371,7 @@ where
             prefetch_next_buffer!(self);
 
             // check remaining bytes
-            self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+            self.remaining_bytes = self.check_remaining_bytes(); //get the remaining bytes in the buffer,
             self.offset = 0;
 
             if self.remaining_bytes <= 0 {

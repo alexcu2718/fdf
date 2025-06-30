@@ -395,6 +395,10 @@ where
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
+    #[inline]
+    pub fn check_remaining_bytes(& mut self)->i64{
+        unsafe{self.buffer.getdents64(self.fd) }
+    }
 
 }
 #[cfg(target_os = "linux")]
@@ -413,9 +417,6 @@ where
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
-                // Extract the first necessary fieldfrom the dirent structure
-                //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-  
                 // skip entries that are not valid or are dot entries
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
@@ -444,7 +445,7 @@ where
             #[cfg(target_arch = "x86_64")]
             prefetch_next_buffer!(self);
             // check remaining bytes
-            self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+            self.remaining_bytes =  self.check_remaining_bytes() ; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
             //self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) }; //see for asm implemetation
             self.offset = 0;
             if self.remaining_bytes <= 0 {

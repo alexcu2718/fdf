@@ -3,7 +3,7 @@ if ! which hyperfine > /dev/null 2>&1; then
     echo "You can get it here: https://github.com/sharkdp/hyperfine"
     exit 1
 fi
-
+cd "$(dirname $0)"
 source "config.sh"
 
 # Analysis

@@ -57,8 +57,9 @@ where
     #[inline]
     #[must_use]
     ///costly check for executables
-    pub fn is_executable(&self) -> bool {//X_OK is the execute permission, requires access call
-    self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0) }
+    pub fn is_executable(&self) -> bool {
+        //X_OK is the execute permission, requires access call
+        self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0) }
     }
 
     ///cost free check for block devices
@@ -123,18 +124,18 @@ where
     /// for directories, it checks if they have no entries
     /// for special files like devices, sockets, etc., it returns false
     pub fn is_empty(&self) -> bool {
-    match self.file_type() {
-        FileType::RegularFile => {
-            self.size().is_ok_and(|size| size == 0)
-            //this checks if the file size is zero, this is a costly check as it requires a stat call
+        match self.file_type() {
+            FileType::RegularFile => {
+                self.size().is_ok_and(|size| size == 0)
+                //this checks if the file size is zero, this is a costly check as it requires a stat call
+            }
+            FileType::Directory => {
+                self.readdir() //if we can read the directory, we check if it has no entries
+                    .is_ok_and(|mut entries| entries.next().is_none())
+            }
+            _ => false,
         }
-        FileType::Directory => {
-            self.readdir()//if we can read the directory, we check if it has no entries
-                .is_ok_and(|mut entries| entries.next().is_none())
-        }
-        _ => false,
     }
-}
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]

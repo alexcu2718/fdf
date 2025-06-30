@@ -171,11 +171,7 @@ where
                         .extension_match
                         .as_ref() //get the filename THEN check extension, we dont want to pick up
                         //stuff like .gitignore or .DS_Store
-                        .is_none_or(|ext| unsafe {
-                            //save because rdir.base_len()<rdir.len()
-                            debug_assert!(rdir.base_len() < rdir.len());
-                            (rdir.get_unchecked(rdir.base_len()..)).matches_extension(ext)
-                        })
+                        .is_none_or(|ext| (rdir.file_name()).matches_extension(ext))
             }
         };
 

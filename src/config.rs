@@ -60,6 +60,24 @@ impl SearchConfig {
     pub fn matches_with<F: FnOnce(&[u8]) -> bool>(&self, path: &[u8], predicate: F) -> bool {
         predicate(path)
     }
+    #[inline]
+    #[must_use]
+    #[allow(dead_code)]
+    #[allow(clippy::if_not_else)] // this is a stylistic choice to avoid unnecessary else branches
+    pub(crate) fn matches_path_internal(
+        &self,
+        dir: &[u8],
+        full_path: bool,
+        path_len: usize,
+    ) -> bool {
+        self.regex_match.as_ref().is_none_or(|reg| {
+            reg.is_match(if !full_path {
+                unsafe { dir.get_unchecked(path_len..) } //this is the likelier path so we choose it first
+            } else {
+                dir
+            })
+        })
+    }
 
     #[inline]
     #[must_use]

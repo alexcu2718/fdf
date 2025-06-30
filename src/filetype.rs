@@ -38,6 +38,34 @@ impl FileType {
             _ => Self::Unknown,
         }
     }
+    #[inline]
+    pub const fn is_dir(&self) -> bool {
+        matches!(self, Self::Directory)
+    }
+    #[inline]
+    pub const fn is_regular_file(&self) -> bool {
+        matches!(self, Self::RegularFile)
+    }
+    #[inline]
+    pub const fn is_symlink(&self) -> bool {
+        matches!(self, Self::Symlink)
+    }
+    #[inline]
+    pub const fn is_block_device(&self) -> bool {
+        matches!(self, Self::BlockDevice)
+    }
+    #[inline]
+    pub const fn is_char_device(&self) -> bool {
+        matches!(self, Self::CharDevice)
+    }
+    #[inline]
+    pub const fn is_fifo(&self) -> bool {
+        matches!(self, Self::Fifo)
+    }
+    #[inline]
+    pub const fn is_socket(&self) -> bool {
+        matches!(self, Self::Socket)
+    }
 
     #[must_use]
     #[inline]

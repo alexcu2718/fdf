@@ -113,9 +113,8 @@ macro_rules! skip_dot_or_dot_dot_entries {
             let name_ptr = offset_ptr!($entry, d_name) as *const u8;
 
             #[cfg(target_os = "linux")]
-            {
-                let reclen = offset_ptr!($entry, d_reclen);
-                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN) && reclen == 24 {
+            {                                                                   //reclen is always 24 for . and .. on linux,
+                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN) && offset_ptr!($entry, d_reclen)==24 {
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),
@@ -369,3 +368,4 @@ macro_rules! const_from_env {
         };
     };
 }
+

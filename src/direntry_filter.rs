@@ -28,7 +28,7 @@ where
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     pub(crate) filter_func: fn(&TempDirent<S>, &SearchConfig) -> bool, // filter function, this is used to filter the entries based on the provided function
     pub(crate) search_config: &'a SearchConfig, // search configuration, this is used to pass the search configuration to the filter function
-    _marker: PhantomData<S>, //placeholder for the storage type, this is used to ensure that the iterator can be used with any storage type
+   
 }
 
 impl<S> Drop for DirEntryIteratorFilter<'_, S>
@@ -60,7 +60,7 @@ where
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
-    pub fn check_remaining_bytes(& mut self)->i64{
+    pub fn check_remaining_bytes(&mut self)->i64{
         unsafe{self.buffer.getdents64(self.fd) }
     }
 }
@@ -426,7 +426,7 @@ where
             remaining_bytes: 0,
             filter_func: func,
             search_config,
-            _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
+            
         })
     }
 }

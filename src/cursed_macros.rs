@@ -1,4 +1,11 @@
 #![allow(clippy::doc_markdown)]
+
+
+use macro_pub::macro_pub;
+
+
+
+
 #[macro_export(local_inner_macros)]
 ///A helper macro to safely access dirent(64 on linux)'s
 /// fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
@@ -91,7 +98,7 @@ macro_rules! cstr {
     }};
 }
 
-#[macro_export]
+#[macro_pub(crate)]
 #[doc(hidden)]
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// NOT INTENDED FOR PUBLIC USE, WILL BE PRIVATE SOON.
@@ -142,7 +149,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
 }
 
 //SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
-
+#[macro_pub(crate)]
 #[macro_export]
 /// initialises a path buffer for syscall operations,
 // appending a slash/null terminator (if it's a directory etc)
@@ -152,7 +159,7 @@ macro_rules! init_path_buffer {
         let mut start_buffer=$crate::PathBuffer::new(); //create a new path buffer, this is a zeroed buffer of size `LOCAL_PATH_MAX
         let buffer_ptr = start_buffer.as_mut_ptr(); //get the mutable pointer to the buffer
         let mut base_len=$dir_path.len(); //get the length of the directory path, this is the length of the directory path
-        let needs_slash = (($dir_path.depth() != 0) as u8) | (( base_len !=1) as u8); //check if we need to append a slash(bitmasking it to 0 or 1)
+        let needs_slash = (( base_len !=1) as u8); //check if we need to append a slash(bitmasking it to 0 or 1) (if it's not root, we need a slash)
         std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, base_len);
         *buffer_ptr.add(base_len) = (b'/') * needs_slash; //add slash or null terminator appropriately (completely deterministic)
         base_len += needs_slash as usize; //increment the base_len length by 1 if we added a slash, otherwise it stays the same
@@ -162,8 +169,7 @@ macro_rules! init_path_buffer {
 
 ///not intended for public use, will be private when boilerplate is donel
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
-#[macro_export(local_inner_macros)]
-#[allow(clippy::too_long_first_doc_paragraph)] //i like monologues, ok?
+#[macro_pub(crate)]
 macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
 
@@ -214,7 +220,7 @@ macro_rules! construct_path {
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[macro_export(local_inner_macros)]
+#[macro_pub(crate)]
 /// Prefetches the next likely entry in the buffer, basically trying to keep cache warm
 macro_rules! prefetch_next_entry {
     ($self:ident) => {
@@ -230,7 +236,7 @@ macro_rules! prefetch_next_entry {
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[macro_export]
+#[macro_pub(crate)]
 /// Prefetches the next buffer for reading, this is used to keep the cache warm for the next read operation
 macro_rules! prefetch_next_buffer {
     ($self:ident) => {
@@ -374,11 +380,13 @@ macro_rules! const_from_env {
         };
     };
 }
-///NOT MEANT TO BE PUBLIC API, WILL BE PRIVATE SOON
-/// 
+
+
+//the below 2 macros are needed due to the fact we have 3 types of iterators, this makes it a lot cleaner!
+
 /// Constructs a `DirEntry<S>` from a `dirent64`/`dirent` pointer for any relevant self type
 /// Needed to be done via macro to avoid issues with duplication/mutability of structs 
-#[macro_export]
+#[macro_pub(crate)]
 macro_rules! construct_dirent {
     ($self:ident, $dirent:ident) => {{
         let (d_type, inode) = unsafe {
@@ -400,14 +408,13 @@ macro_rules! construct_dirent {
         }
     }};
 }
-///NOT MEANT TO BE PUBLIC API, WILL BE PRIVATE SOON
-/// 
-/// 
+
+
 /// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
 /// This is used to filter entries without allocating memory on the heap.
 /// It is a temporary structure that is used to filter entries before they are converted to `DirEntry<S>`.
 /// Needed to be done via macro to avoid issues with duplication/mutability of structs 
-#[macro_export]
+#[macro_pub(crate)]
 macro_rules! construct_temp_dirent {
     ($self:ident, $dirent:ident) => {{
         

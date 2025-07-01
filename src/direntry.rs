@@ -8,7 +8,7 @@
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{
-    construct_dirent, prefetch_next_buffer, prefetch_next_entry, utils::close_asm, utils::open_asm,
+    cursed_macros::construct_dirent, cursed_macros::prefetch_next_buffer, cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,
 };
 
 #[allow(unused_imports)]
@@ -30,8 +30,8 @@ use crate::{
 
 #[cfg(target_os = "linux")]
 use crate::{
-    PathBuffer, SyscallBuffer, construct_path, init_path_buffer, offset_ptr,
-    skip_dot_or_dot_dot_entries,
+    PathBuffer, SyscallBuffer, cursed_macros::construct_path, cursed_macros::init_path_buffer, offset_ptr,
+    cursed_macros::skip_dot_or_dot_dot_entries,
 };
 
 #[derive(Clone)]

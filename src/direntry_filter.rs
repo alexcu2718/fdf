@@ -8,10 +8,10 @@
 use crate::direntry::DirEntry;
 use crate::{
     BytePath, BytesStorage, FileType, PathBuffer, Result, SearchConfig, SyscallBuffer,
-    construct_path, init_path_buffer, offset_ptr, skip_dot_or_dot_dot_entries,construct_temp_dirent,
+    cursed_macros::construct_path, cursed_macros::init_path_buffer, offset_ptr, cursed_macros::skip_dot_or_dot_dot_entries,cursed_macros::construct_temp_dirent,
 };
 #[cfg(target_arch = "x86_64")]
-use crate::{prefetch_next_buffer, prefetch_next_entry};
+use crate::{cursed_macros::prefetch_next_buffer, cursed_macros::prefetch_next_entry};
 use libc::{X_OK, access, close, dirent64};
 use std::marker::PhantomData;
 

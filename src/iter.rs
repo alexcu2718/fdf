@@ -2,8 +2,8 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
-    construct_dirent, construct_path, cstr, custom_types_result::BytesStorage, init_path_buffer,
-    offset_ptr, skip_dot_or_dot_dot_entries,
+    cursed_macros::construct_dirent, cursed_macros::construct_path, cstr, custom_types_result::BytesStorage, cursed_macros::init_path_buffer,
+    offset_ptr, cursed_macros::skip_dot_or_dot_dot_entries,
 };
 use libc::{DIR, closedir, opendir};
 #[cfg(not(target_os = "linux"))]
@@ -114,7 +114,7 @@ where
             .field("file_name_index", &self.file_name_index)
             .field("parent_depth", &self.parent_depth)
             .field("error", &self.error)
-            .finish()
+            .finish_non_exhaustive() //we're not including dir pointer here, as it is not safe to expose(and its fairly useless to the user)
     }
 }
 

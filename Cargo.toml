@@ -14,6 +14,7 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 clap = { version = "4.5.31", features = ["derive"] }
 clap_complete = "4.5.46"
 libc = "0.2.170"
+macro_pub = "0.1.0"
 memchr = "2.7.5"
 rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf"] }
@@ -25,8 +26,8 @@ slimmer_box = "0.6.5"
 mimalloc = "0.1.43"
 
 
-[dev-dependencies]
-criterion = { version = "0.6.0", features = ["cargo_bench_support", "real_blackbox"] }
+
+
 [profile.release]
 opt-level = 3
 debug = false
@@ -35,6 +36,13 @@ lto = true
 codegen-units = 1
 panic = "abort"  
 
+
+[dev-dependencies]
+criterion = { version = "0.6.0", features = ["cargo_bench_support", "real_blackbox"] }
+
+
+
 [[bench]]
+#[allow(clippy::struct_excessive_bools)]
 name = "dirent_bench"
 harness = false

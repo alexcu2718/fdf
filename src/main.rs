@@ -249,7 +249,7 @@ fn main() -> Result<(), DirEntryError> {
         process_glob_regex(&start_pattern, args.glob)
     };
 
-    let mut finder: Finder<SlimmerBytes> = Finder::new(
+    let mut finder: Finder<SlimmerBytes> = Finder::init(
         &path,
         &pattern)
         .keep_hidden(!args.hidden)

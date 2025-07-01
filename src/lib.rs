@@ -133,7 +133,7 @@ where
     #[allow(clippy::too_many_arguments)]
     #[inline]
     /// Create a new Finder instance.
-    pub fn new(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> FinderBuilder<S> {
+    pub fn init(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> FinderBuilder<S> {
         FinderBuilder::new(root, pattern)
     }
 
@@ -218,7 +218,7 @@ where
     }
 }
 
-
+#[allow(clippy::struct_excessive_bools)]//....
 pub struct FinderBuilder<S>
 where S: BytesStorage,{
     root: OsString,
@@ -239,11 +239,11 @@ impl<S> FinderBuilder<S>
 where
     S: BytesStorage + 'static + Clone + Send,
 {
-    /// Create a new FinderBuilder with required fields
+    /// Create a new `FinderBuilder` with required fields
     pub fn new(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> Self {
         Self {
             root: root.as_ref().to_owned(),
-            pattern: pattern.as_ref().to_string(),
+            pattern: pattern.as_ref().to_owned(),
             hide_hidden: false,
             case_insensitive: false,
             keep_dirs: false,
@@ -255,52 +255,55 @@ where
             
         }
     }
-
+      #[must_use]
     /// Set whether to hide hidden files
-    pub fn keep_hidden(mut self, hide_hidden: bool) -> Self {
+    pub const fn keep_hidden(mut self, hide_hidden: bool) -> Self {
         self.hide_hidden = hide_hidden;
         self
     }
-
+      #[must_use]
     /// Set case insensitive matching
-    pub fn case_insensitive(mut self, case_insensitive: bool) -> Self {
+    pub const fn case_insensitive(mut self, case_insensitive: bool) -> Self {
         self.case_insensitive = case_insensitive;
         self
     }
-
+      #[must_use]
     /// Set whether to keep directories in results
-    pub fn keep_dirs(mut self, keep_dirs: bool) -> Self {
+    pub const fn keep_dirs(mut self, keep_dirs: bool) -> Self {
         self.keep_dirs = keep_dirs;
         self
     }
-
+      #[must_use]
     /// Set whether to use short paths
-    pub fn file_name_only(mut self, short_path: bool) -> Self {
+    pub const fn file_name_only(mut self, short_path: bool) -> Self {
         self.file_name_only = short_path;
         self
     }
-
+      #[must_use]
     /// Set extension to match
-    pub fn extension_match(mut self, extension_match: Option<String>) -> Self {
+    pub fn extension_match<C:AsRef<str>>(mut self, extension_match: Option<C>) -> Self
+   {
         
-        self.extension_match =extension_match.as_ref().map(|x| x.as_bytes().into() );
+        self.extension_match =extension_match.map(|x| x.as_ref().as_bytes().into() );
         self
     }
-
+      #[must_use]
     /// Set maximum search depth
-    pub fn max_depth(mut self, max_depth: Option<u8>) -> Self {
+    pub const fn max_depth(mut self, max_depth: Option<u8>) -> Self {
         self.max_depth = max_depth;
         self
     }
 
     /// Set whether to follow symlinks
-    pub fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
+      #[must_use]
+    pub const fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
         self.follow_symlinks = follow_symlinks;
         self
     }
 
     /// Set a custom filter
-    pub fn filter(mut self, filter: Option<DirEntryFilter<S>>) -> Self {
+    #[must_use]
+    pub const fn filter(mut self, filter: Option<DirEntryFilter<S>>) -> Self {
         self.filter = filter;
         self
     }

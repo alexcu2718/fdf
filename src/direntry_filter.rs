@@ -8,13 +8,19 @@
 use crate::direntry::DirEntry;
 use crate::{
     BytePath, BytesStorage, FileType, PathBuffer, Result, SearchConfig, SyscallBuffer,
-    cursed_macros::construct_path, cursed_macros::init_path_buffer, offset_ptr, cursed_macros::skip_dot_or_dot_dot_entries,cursed_macros::construct_temp_dirent,
+    cursed_macros::construct_path, cursed_macros::construct_temp_dirent,
+    cursed_macros::init_path_buffer, cursed_macros::skip_dot_or_dot_dot_entries, offset_ptr,
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{cursed_macros::prefetch_next_buffer, cursed_macros::prefetch_next_entry};
 use libc::{X_OK, access, close, dirent64};
 use std::marker::PhantomData;
-
+/// An iterator that filters directory entries based on a provided filter function.
+///
+/// This iterator reads directory entries using the `getdents` syscall and filters them based on
+/// the provided filter function. It avoids unnecessary heap allocations by using a temporary
+/// `TempDirent` struct to hold the entry data, which is then converted to a `DirEntry` when needed.
+/// The iterator is designed to be efficient and to work with any type that implements the `BytesStorage` trait.
 pub struct DirEntryIteratorFilter<'a, S>
 where
     S: BytesStorage,
@@ -57,14 +63,13 @@ where
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
-      #[inline]
+    #[inline]
     /// Checks the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
     pub(crate) unsafe fn check_remaining_bytes(&mut self) {
-         self.remaining_bytes =unsafe{self.buffer.getdents64(self.fd) };
-         self.offset = 0;
-
+        self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+        self.offset = 0;
     }
 }
 
@@ -72,7 +77,7 @@ pub struct TempDirent<'a, S> {
     pub(crate) path: &'a [u8], // path of the entry, this is used to store the path of the entry 16b (64bit)
     pub(crate) depth: u8, // depth of the entry, this is used to calculate the depth of   1bytes
     pub(crate) file_type: FileType, // file type of the entry, this is used to determine the type of the entry 1bytes
-    pub(crate) file_name_index: u16,       //used to calculate filename via indexing 2bytes
+    pub(crate) file_name_index: u16, //used to calculate filename via indexing 2bytes
     pub(crate) inode: u64, // inode of the entry, this is used to uniquely identify the entry 8bytes
     _marker: PhantomData<S>, // placeholder for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
 }
@@ -103,7 +108,9 @@ where
 }
 
 impl<S> std::fmt::Debug for TempDirent<'_, S>
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TempDirent")
             .field("path", &self.path.to_string_lossy())
@@ -186,8 +193,6 @@ where
         // this is used to filter entries by path
         cfg.matches_path_internal(self.path, file_name_only, self.file_name_index())
     }
-
-
 
     #[inline]
     #[must_use]
@@ -345,10 +350,10 @@ where
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
 
                 // skip entries that are not valid or are dot entries
-   
-                let temp_dirent:TempDirent<'_, S> =construct_temp_dirent!(self, d); //construct a temporary dirent from the dirent64 pointer, this is used to filter the entries without allocating memory on the heap
-        
-                // apply the filter function to the entry  
+
+                let temp_dirent: TempDirent<'_, S> = construct_temp_dirent!(self, d); //construct a temporary dirent from the dirent64 pointer, this is used to filter the entries without allocating memory on the heap
+
+                // apply the filter function to the entry
                 //ive had to map the filetype to a value, it's mapped to libc dirent dtype values, this is temporary
                 //while i look at implementing a decent state machine for this
 
@@ -365,8 +370,7 @@ where
             prefetch_next_buffer!(self);
 
             // check remaining bytes
-            unsafe{self.check_remaining_bytes()}; //get the remaining bytes in the buffer,
-          
+            unsafe { self.check_remaining_bytes() }; //get the remaining bytes in the buffer,
 
             if self.remaining_bytes <= 0 {
                 // If no more entries, return None,

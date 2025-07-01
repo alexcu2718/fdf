@@ -28,8 +28,6 @@ where
     data: MaybeUninit<[T; SIZE]>,
 }
 
-
-
 impl<T, const SIZE: usize, Idx> Index<Idx> for AlignedBuffer<T, SIZE>
 where
     T: ValueType,
@@ -90,6 +88,7 @@ where
     /// # Safety
     /// The buffer must be initialised before calling this
     #[inline]
+    #[allow(dead_code)]
     pub const unsafe fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { &mut *self.data.as_mut_ptr() }
     }
@@ -118,6 +117,7 @@ where
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::inline_asm_x86_intel_syntax)]
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[allow(dead_code)]
     pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i32 {
         use std::arch::asm;
         let output;
@@ -150,6 +150,7 @@ where
     /// # Safety
     /// The range must be within initialised portion of the buffer
     #[inline]
+    #[allow(dead_code)]
     pub unsafe fn get_unchecked_mut<R>(&mut self, range: R) -> &mut R::Output
     where
         R: SliceIndex<[T]>,

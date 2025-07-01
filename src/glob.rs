@@ -57,6 +57,7 @@
 #![allow(clippy::return_and_then)]
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::error_impl_error)]
+#![doc(hidden)]
 //#! BIG EXPLANATION
 //#! I WANTED TO USE THIS CRATE FOR GLOB MATCHING, BUT I DIDNT WANT TO USE THE FULL DEPENDENCY. SO I REMOVED EVERY DEPENDENCY :)
 //#! we've isolated the code here to be not reliant on any library.
@@ -702,9 +703,6 @@ where
 /// See the module-level documentation for a description of the pattern
 /// features supported.
 ///
-/// # Errors
-/// Most of the [`Error`] values, mostly syntax errors in
-/// the specified glob pattern.
 #[allow(clippy::missing_inline_in_public_items)]
 pub fn glob_to_regex(pattern: &str) -> Result<String, Error> {
     let parser = GlobIterator {

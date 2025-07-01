@@ -4,6 +4,10 @@ use libc::{EACCES, EAGAIN, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use std::{fmt, io};
 
 #[derive(Debug)]
+/// An error type for directory entry operations.
+///
+/// This enum represents various errors that can occur when working with directory entries,
+/// such as invalid paths, metadata errors, and IO errors.
 pub enum DirEntryError {
     InvalidPath,
     InvalidStat,

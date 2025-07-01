@@ -84,12 +84,14 @@ pub use error::DirEntryError;
 mod custom_types_result;
 
 pub use custom_types_result::{
-    BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, PathBuffer,
-    Result, SlimmerBytes, SyscallBuffer,
+    BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, Result,
+    SlimmerBytes,
 };
 
+pub(crate) use custom_types_result::{PathBuffer, SyscallBuffer};
+
 mod traits_and_conversions;
-pub use traits_and_conversions::{BytePath, PathAsBytes};
+pub use traits_and_conversions::BytePath;
 
 mod utils;
 
@@ -218,9 +220,16 @@ where
     }
 }
 
-#[allow(clippy::struct_excessive_bools)]//....
+/// A builder for creating a `Finder` instance with customisable options.
+///
+/// This builder allows you to set various options such as hiding hidden files, case sensitivity,
+/// keeping directories in results, matching file extensions, setting maximum search depth,
+/// following symlinks, and applying a custom filter function.
+#[allow(clippy::struct_excessive_bools)] //....
 pub struct FinderBuilder<S>
-where S: BytesStorage,{
+where
+    S: BytesStorage,
+{
     root: OsString,
     pattern: String,
     hide_hidden: bool,
@@ -231,9 +240,7 @@ where S: BytesStorage,{
     max_depth: Option<u8>,
     follow_symlinks: bool,
     filter: Option<DirEntryFilter<S>>,
-    
 }
-
 
 impl<S> FinderBuilder<S>
 where
@@ -252,42 +259,39 @@ where
             max_depth: None,
             follow_symlinks: false,
             filter: None,
-            
         }
     }
-      #[must_use]
+    #[must_use]
     /// Set whether to hide hidden files
     pub const fn keep_hidden(mut self, hide_hidden: bool) -> Self {
         self.hide_hidden = hide_hidden;
         self
     }
-      #[must_use]
+    #[must_use]
     /// Set case insensitive matching
     pub const fn case_insensitive(mut self, case_insensitive: bool) -> Self {
         self.case_insensitive = case_insensitive;
         self
     }
-      #[must_use]
+    #[must_use]
     /// Set whether to keep directories in results
     pub const fn keep_dirs(mut self, keep_dirs: bool) -> Self {
         self.keep_dirs = keep_dirs;
         self
     }
-      #[must_use]
+    #[must_use]
     /// Set whether to use short paths
     pub const fn file_name_only(mut self, short_path: bool) -> Self {
         self.file_name_only = short_path;
         self
     }
-      #[must_use]
+    #[must_use]
     /// Set extension to match
-    pub fn extension_match<C:AsRef<str>>(mut self, extension_match: Option<C>) -> Self
-   {
-        
-        self.extension_match =extension_match.map(|x| x.as_ref().as_bytes().into() );
+    pub fn extension_match<C: AsRef<str>>(mut self, extension_match: Option<C>) -> Self {
+        self.extension_match = extension_match.map(|x| x.as_ref().as_bytes().into());
         self
     }
-      #[must_use]
+    #[must_use]
     /// Set maximum search depth
     pub const fn max_depth(mut self, max_depth: Option<u8>) -> Self {
         self.max_depth = max_depth;
@@ -295,7 +299,7 @@ where
     }
 
     /// Set whether to follow symlinks
-      #[must_use]
+    #[must_use]
     pub const fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
         self.follow_symlinks = follow_symlinks;
         self

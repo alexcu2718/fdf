@@ -9,18 +9,16 @@ use std::sync::Arc;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
 
-// This will be set at runtime from the environment variable yet it's still const, :)
 const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096"); //set to PATH_MAX, but allow trivial customisation!
 
 //4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 const_from_env!(BUFFER_SIZE:usize="BUFFER_SIZE","4115");
 //basically this is the should allow getdents to grab a lot of entries in one go
 
-pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
+pub(crate) type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
-// Define the trait that all storage types must implement (for our main types)
-//I can probably extend this more.
+///  a trait that all storage types must implement (for our main types) (so the user can use their own types if they want)
 pub trait BytesStorage: Deref<Target = [u8]> {
     fn from_slice(bytes: &[u8]) -> Self;
 }
@@ -44,7 +42,10 @@ impl BytesStorage for SlimmerBox<[u8], u16> {
 //through this macro one can implement it for their own types yay!
 crate::impl_bytes_storage!(Arc<[u8]>, Vec<u8>, Box<[u8]>);
 
-// OsBytes generic over the storage type, this allows easy switch to arc for multithreading to avoid race conditions:)
+/// `OsBytes` provides a generic wrapper around byte storage types that implement the `BytesStorage` trait.
+///
+/// It allows for easy conversion between byte slices and various storage types, such as `Box`, `Arc`, `Vec`, or `SlimmerBox`.
+///  ( switch to arc for multithreading to avoid race conditions:))
 #[derive(Clone, Debug)] //#[repr(C, align(8))]
 pub struct OsBytes<S: BytesStorage> {
     pub(crate) bytes: S,

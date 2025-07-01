@@ -1,10 +1,7 @@
 #![allow(clippy::doc_markdown)]
 
-
-use macro_pub::macro_pub;
-
-
-
+use macro_pub::macro_pub; //i didnt want to to use this macro but it saved a LOT of hassle/boilerplate. (vlight depdendency
+//might remove this when less lazy.
 
 #[macro_export(local_inner_macros)]
 ///A helper macro to safely access dirent(64 on linux)'s
@@ -16,6 +13,11 @@ use macro_pub::macro_pub;
 ///
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
+///   Example: `offset_ptr!(entry_ptr, d_ino)` -> aliases to d_fileno and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
+/// - On Linux, `d_reclen` is used to access the record length directly, this is a special case, since it is not aligned like the others.
+///  Example: `offset_ptr!(entry_ptr, d_reclen)` -> returns the record length as usize (internal consistency, be glad it works!)
+/// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
+///  the other fields are accessed normally, as raw pointers to the field.
 macro_rules! offset_ptr {
     // Special case for `d_reclen`
     ($entry_ptr:expr, d_reclen) => {{
@@ -59,8 +61,6 @@ macro_rules! offset_ptr {
     // General case for all other fields
     ($entry_ptr:expr, $field:ident) => {{ &raw const (*$entry_ptr).$field }};
 }
-
-
 
 #[macro_export(local_inner_macros)]
 /// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
@@ -328,8 +328,8 @@ macro_rules! strlen_asm {
 }
 
 #[macro_export]
-// Macro to implement BytesStorage for types that support `From<&[u8]>`
-//The types must implement `From<&[u8]>` to be used with this macro
+/// Macro to implement `BytesStorage` for types that support `From<&[u8]>`
+///The types must implement `From<&[u8]>` to be used with this macro
 macro_rules! impl_bytes_storage {
     ($($type:ty),*) => {
         $(
@@ -343,9 +343,18 @@ macro_rules! impl_bytes_storage {
     };
 }
 
-/// Macro to create a const from an env var with compile-time parsing
+/// Macro to create a const from an env var with compile-time parsing (Please read the docs carefully)
+///
+///
 /// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "X");, where X(usize) is the default value if the env var is not set
 ///
+/// Example usage:
+/// ```
+/// use fdf::const_from_env;
+/// const_from_env!(MYVAR: usize = "NYVAR", "6969");
+/// assert_eq!(MYVAR, 6969); //6969 is the default value if the environment variable NYVAR is not set
+/// ```
+/// /// This macro allows you to define a constant that can be set via an environment variable at compile time.`
 /// I realise people could have massive filesystems, i should probably write a rebuild script on value change.TODO!
 #[macro_export]
 macro_rules! const_from_env {
@@ -380,11 +389,10 @@ macro_rules! const_from_env {
     };
 }
 
-
 //the below 2 macros are needed due to the fact we have 3 types of iterators, this makes it a lot cleaner!
 
 /// Constructs a `DirEntry<S>` from a `dirent64`/`dirent` pointer for any relevant self type
-/// Needed to be done via macro to avoid issues with duplication/mutability of structs 
+/// Needed to be done via macro to avoid issues with duplication/mutability of structs
 #[macro_pub(crate)]
 macro_rules! construct_dirent {
     ($self:ident, $dirent:ident) => {{
@@ -408,15 +416,13 @@ macro_rules! construct_dirent {
     }};
 }
 
-
 /// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
 /// This is used to filter entries without allocating memory on the heap.
 /// It is a temporary structure that is used to filter entries before they are converted to `DirEntry<S>`.
-/// Needed to be done via macro to avoid issues with duplication/mutability of structs 
+/// Needed to be done via macro to avoid issues with duplication/mutability of structs
 #[macro_pub(crate)]
 macro_rules! construct_temp_dirent {
     ($self:ident, $dirent:ident) => {{
-        
         let (d_type, inode) = unsafe {
             (
                 *offset_ptr!($dirent, d_type), // get d_type

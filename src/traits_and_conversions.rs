@@ -298,19 +298,6 @@ where
     }
 }
 
-pub trait PathAsBytes {
-    fn as_bytes(&self) -> &[u8];
-}
-
-#[allow(clippy::transmute_ptr_to_ptr)]
-impl PathAsBytes for Path {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        //&[u8] <=> &OsStr <=> &Path on linux
-        unsafe { transmute::<&Self, _>(self) }
-    }
-}
-
 impl<S> fmt::Display for DirEntry<S>
 where
     S: BytesStorage,
@@ -375,7 +362,9 @@ where
 }
 
 impl<S> std::fmt::Debug for DirEntry<S>
-where S: BytesStorage {
+where
+    S: BytesStorage,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Dirent")
             .field("path", &self.to_string_lossy())
@@ -387,5 +376,3 @@ where S: BytesStorage {
             .finish()
     }
 }
-
-

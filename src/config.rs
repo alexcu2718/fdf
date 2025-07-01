@@ -4,14 +4,28 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 #[allow(clippy::struct_excessive_bools)] //shutup
+/// This struct holds the configuration for searching directories.
+///
+///
+/// It includes options for regex matching, hiding hidden files, keeping directories,
+/// matching file extensions, whether to search file names only, depth of search,
+/// and whether to follow symlinks.
 pub struct SearchConfig {
     pub regex_match: Option<Regex>,
+    ///a regex to match against the file names
+    ///if this is None, then the pattern is empty or just a dot, so we
+    ///match everything, otherwise we match against the regex
     pub hide_hidden: bool,
+    ///if true, then we hide hidden files (those starting with a dot)
     pub keep_dirs: bool,
+    ///if true, then we keep directories in the results, otherwise we only return non-directory files
     pub extension_match: Option<Arc<[u8]>>,
+    ///if this is Some, then we match against the extension of the file otherwise accept (if none)
     pub file_name_only: bool,
+    ///if true, then we only match against the file name, otherwise we match against the full path when regexing
     pub depth: Option<u8>,
-    pub follow_symlinks: bool,
+    ///the maximum depth to search, if None then no limit
+    pub follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
 }
 
 impl SearchConfig {

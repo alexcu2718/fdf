@@ -249,9 +249,7 @@ fn main() -> Result<(), DirEntryError> {
         process_glob_regex(&start_pattern, args.glob)
     };
 
-    let mut finder: Finder<SlimmerBytes> = Finder::init(
-        &path,
-        &pattern)
+    let mut finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_sensitive)
         .keep_dirs(args.keep_dirs)
@@ -261,17 +259,12 @@ fn main() -> Result<(), DirEntryError> {
         .follow_symlinks(args.follow_symlinks)
         .build();
 
-
     if let Some(types) = args.type_of {
         let type_filter = build_type_filter(&types);
         finder = finder.with_type_filter(type_filter);
     }
 
-
-
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n);
-
-
 
     Ok(())
 }

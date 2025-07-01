@@ -8,7 +8,8 @@
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{
-    cursed_macros::construct_dirent, cursed_macros::prefetch_next_buffer, cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,
+    cursed_macros::construct_dirent, cursed_macros::prefetch_next_buffer,
+    cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,
 };
 
 #[allow(unused_imports)]
@@ -30,16 +31,20 @@ use crate::{
 
 #[cfg(target_os = "linux")]
 use crate::{
-    PathBuffer, SyscallBuffer, cursed_macros::construct_path, cursed_macros::init_path_buffer, offset_ptr,
-    cursed_macros::skip_dot_or_dot_dot_entries,
+    PathBuffer, SyscallBuffer, cursed_macros::construct_path, cursed_macros::init_path_buffer,
+    cursed_macros::skip_dot_or_dot_dot_entries, offset_ptr,
 };
 
 #[derive(Clone)]
+/// A struct representing a directory entry.
+/// This struct is used to represent a directory entry in a filesystem.
+///
+///
+/// The `DirEntry` struct is used to represent a
+/// S is a storage type, this is used to store the path of the entry, it can be a Box, Arc, Vec, etc.
+///ordered by size, so `Box<[u8]>` is 16 bytes, `Arc<[u8]>` is 24 bytes, `Vec<u8>` is 24 bytes, `SlimmerBox<[u8], u16>` is 10 bytes
+///Slimmerbox is `Box<[u8]>` on non linux/macos due to package limitations,TBD.
 pub struct DirEntry<S>
-//S is a storage type, this is used to store the path of the entry, it can be a Box, Arc, Vec, etc.
-//ordered by size, so Box<[u8]> is 16 bytes, Arc<[u8]> is 24 bytes, Vec<u8> is 24 bytes, SlimerBox<[u8], u16> is 10 bytes
-//S is a generic type that implements BytesStorage trait aka  vec/arc/box/SlimmerBytes(SlimmerBox<[u8], u16>).
-//Slimmerbox is Box<[u8]> on non linux/macos due to package limitations,TBD.
 where
     S: BytesStorage,
 {
@@ -89,7 +94,7 @@ where
     #[inline]
     #[must_use]
     pub const fn is_socket(&self) -> bool {
-         self.file_type.is_socket()
+        self.file_type.is_socket()
     }
 
     ///Cost free check for regular files
@@ -109,7 +114,7 @@ where
     #[inline]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
-             self.file_type.is_unknown()
+        self.file_type.is_unknown()
     }
     ///cost free check for symlinks
     #[inline]
@@ -395,9 +400,8 @@ where
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
     pub(crate) unsafe fn check_remaining_bytes(&mut self) {
-         self.remaining_bytes =unsafe{self.buffer.getdents64(self.fd) };
-         self.offset = 0;
-
+        self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+        self.offset = 0;
     }
 }
 #[cfg(target_os = "linux")]
@@ -414,7 +418,7 @@ where
             if self.offset < self.remaining_bytes as usize {
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_read() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
-                
+
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
                 // skip entries that are not valid or are dot entries
@@ -430,7 +434,7 @@ where
             prefetch_next_buffer!(self);
             // check remaining bytes
             unsafe { self.check_remaining_bytes() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
-           
+
             if self.remaining_bytes <= 0 {
                 // If no more entries, return None,
                 return None;

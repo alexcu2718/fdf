@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
-    use crate::traits_and_conversions::{BytePath, PathAsBytes};
+    use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
     use std::env::temp_dir;
     use std::fs;

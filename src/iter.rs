@@ -1,9 +1,10 @@
 #![allow(clippy::cast_possible_wrap)]
 #[allow(unused_imports)]
 use crate::{
-    BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
-    cursed_macros::construct_dirent, cursed_macros::construct_path, cstr, custom_types_result::BytesStorage, cursed_macros::init_path_buffer,
-    offset_ptr, cursed_macros::skip_dot_or_dot_dot_entries,
+    BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer, cstr,
+    cursed_macros::construct_dirent, cursed_macros::construct_path,
+    cursed_macros::init_path_buffer, cursed_macros::skip_dot_or_dot_dot_entries,
+    custom_types_result::BytesStorage, offset_ptr,
 };
 use libc::{DIR, closedir, opendir};
 #[cfg(not(target_os = "linux"))]
@@ -28,9 +29,6 @@ where
     error: Option<Error>,
     _phantom: PhantomData<S>, //this justholds the type information for later, this compiles away due to being zero sized.
 }
-
-
-
 
 impl<S> DirIter<S>
 where
@@ -102,8 +100,7 @@ where
     }
 }
 
-
-impl <S> std::fmt::Debug for DirIter<S>
+impl<S> std::fmt::Debug for DirIter<S>
 where
     S: BytesStorage,
 {

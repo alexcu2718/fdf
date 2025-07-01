@@ -251,22 +251,27 @@ fn main() -> Result<(), DirEntryError> {
 
     let mut finder: Finder<SlimmerBytes> = Finder::new(
         &path,
-        &pattern,
-        !args.hidden,
-        args.case_sensitive,
-        args.keep_dirs,
-        args.full_path,
-        args.extension.map(|x| x.into_bytes().into()),
-        args.depth,
-        args.follow_symlinks,
-    );
+        &pattern)
+        .keep_hidden(!args.hidden)
+        .case_insensitive(args.case_sensitive)
+        .keep_dirs(args.keep_dirs)
+        .file_name_only(args.full_path)
+        .extension_match(args.extension)
+        .max_depth(args.depth)
+        .follow_symlinks(args.follow_symlinks)
+        .build();
+
 
     if let Some(types) = args.type_of {
         let type_filter = build_type_filter(&types);
         finder = finder.with_type_filter(type_filter);
     }
 
-    let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n); //.map_err(|e| DirEntryError::from(e))?;
+
+
+    let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n);
+
+
 
     Ok(())
 }

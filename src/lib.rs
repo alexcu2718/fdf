@@ -133,54 +133,8 @@ where
     #[allow(clippy::too_many_arguments)]
     #[inline]
     /// Create a new Finder instance.
-    pub fn new(
-        root: impl AsRef<OsStr>,
-        pattern: impl AsRef<str>,
-        hide_hidden: bool,
-        case_insensitive: bool,
-        keep_dirs: bool,
-        short_path: bool,
-        extension_match: Option<Arc<[u8]>>,
-        max_depth: Option<u8>,
-        follow_symlinks: bool,
-    ) -> Self {
-        let config = SearchConfig::new(
-            pattern,
-            hide_hidden,
-            case_insensitive,
-            keep_dirs,
-            short_path,
-            extension_match,
-            max_depth,
-            follow_symlinks,
-        );
-
-        let search_config = match config {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("Error creating search config: {e}");
-                std::process::exit(1);
-            }
-        };
-        // The lambda functions are used to filter directories and non-directories based on the search configuration.
-        let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
-            {
-                rfilter.is_none_or(|f| f(rdir))
-                    && rconfig.matches_path(rdir, rconfig.file_name_only)
-                    && rconfig
-                        .extension_match
-                        .as_ref() //get the filename THEN check extension, we dont want to pick up
-                        //stuff like .gitignore or .DS_Store
-                        .is_none_or(|ext| rdir.file_name().matches_extension(ext))
-            }
-        };
-
-        Self {
-            root: root.as_ref().to_owned(),
-            search_config,
-            filter: None,
-            custom_filter: lambda,
-        }
+    pub fn new(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> FinderBuilder<S> {
+        FinderBuilder::new(root, pattern)
     }
 
     #[must_use]
@@ -230,7 +184,7 @@ where
             return; // stop processing this directory if depth limit is reached
         }
 
-        match dir.readdir() {
+        match dir.getdents() {
             Ok(entries) => {
                 // Store only directories for parallel recursive call
 
@@ -260,6 +214,134 @@ where
                 | DirEntryError::InvalidPath,
             ) => {}
             Err(e) => eprintln!("Unexpected error: {e}"),
+        }
+    }
+}
+
+
+pub struct FinderBuilder<S>
+where S: BytesStorage,{
+    root: OsString,
+    pattern: String,
+    hide_hidden: bool,
+    case_insensitive: bool,
+    keep_dirs: bool,
+    file_name_only: bool,
+    extension_match: Option<Arc<[u8]>>,
+    max_depth: Option<u8>,
+    follow_symlinks: bool,
+    filter: Option<DirEntryFilter<S>>,
+    
+}
+
+
+impl<S> FinderBuilder<S>
+where
+    S: BytesStorage + 'static + Clone + Send,
+{
+    /// Create a new FinderBuilder with required fields
+    pub fn new(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> Self {
+        Self {
+            root: root.as_ref().to_owned(),
+            pattern: pattern.as_ref().to_string(),
+            hide_hidden: false,
+            case_insensitive: false,
+            keep_dirs: false,
+            file_name_only: true,
+            extension_match: None,
+            max_depth: None,
+            follow_symlinks: false,
+            filter: None,
+            
+        }
+    }
+
+    /// Set whether to hide hidden files
+    pub fn keep_hidden(mut self, hide_hidden: bool) -> Self {
+        self.hide_hidden = hide_hidden;
+        self
+    }
+
+    /// Set case insensitive matching
+    pub fn case_insensitive(mut self, case_insensitive: bool) -> Self {
+        self.case_insensitive = case_insensitive;
+        self
+    }
+
+    /// Set whether to keep directories in results
+    pub fn keep_dirs(mut self, keep_dirs: bool) -> Self {
+        self.keep_dirs = keep_dirs;
+        self
+    }
+
+    /// Set whether to use short paths
+    pub fn file_name_only(mut self, short_path: bool) -> Self {
+        self.file_name_only = short_path;
+        self
+    }
+
+    /// Set extension to match
+    pub fn extension_match(mut self, extension_match: Option<String>) -> Self {
+        
+        self.extension_match =extension_match.as_ref().map(|x| x.as_bytes().into() );
+        self
+    }
+
+    /// Set maximum search depth
+    pub fn max_depth(mut self, max_depth: Option<u8>) -> Self {
+        self.max_depth = max_depth;
+        self
+    }
+
+    /// Set whether to follow symlinks
+    pub fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
+        self.follow_symlinks = follow_symlinks;
+        self
+    }
+
+    /// Set a custom filter
+    pub fn filter(mut self, filter: Option<DirEntryFilter<S>>) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    /// Build the Finder instance
+    pub fn build(self) -> Finder<S> {
+        let config = SearchConfig::new(
+            self.pattern,
+            self.hide_hidden,
+            self.case_insensitive,
+            self.keep_dirs,
+            self.file_name_only,
+            self.extension_match,
+            self.max_depth,
+            self.follow_symlinks,
+        );
+
+        let search_config = match config {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("Error creating search config: {e}");
+                std::process::exit(1);
+            }
+        };
+
+        let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
+            {
+                rfilter.is_none_or(|f| f(rdir))
+                    && rconfig.matches_path(rdir, rconfig.file_name_only)
+                    && rconfig
+                        .extension_match
+                        .as_ref()
+                        .is_none_or(|ext| rdir.file_name().matches_extension(ext))
+            }
+        };
+
+        Finder {
+            root: self.root,
+            search_config,
+            filter: self.filter,
+            custom_filter: lambda,
         }
     }
 }

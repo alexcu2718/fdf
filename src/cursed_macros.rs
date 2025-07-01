@@ -53,6 +53,8 @@ macro_rules! offset_ptr {
     ($entry_ptr:expr, $field:ident) => {{ &raw const (*$entry_ptr).$field }};
 }
 
+
+
 #[macro_export(local_inner_macros)]
 /// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
 /// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)

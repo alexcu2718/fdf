@@ -8,7 +8,7 @@
 use crate::direntry::DirEntry;
 use crate::{
     BytePath, BytesStorage, FileType, PathBuffer, Result, SearchConfig, SyscallBuffer,
-    construct_path, init_path_buffer, offset_ptr, skip_dot_or_dot_dot_entries,
+    construct_path, init_path_buffer, offset_ptr, skip_dot_or_dot_dot_entries,construct_temp_dirent,
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{prefetch_next_buffer, prefetch_next_entry};
@@ -67,7 +67,7 @@ pub struct TempDirent<'a, S> {
     pub(crate) path: &'a [u8], // path of the entry, this is used to store the path of the entry 16b (64bit)
     pub(crate) depth: u8, // depth of the entry, this is used to calculate the depth of   1bytes
     pub(crate) file_type: FileType, // file type of the entry, this is used to determine the type of the entry 1bytes
-    pub(crate) base_len: u16,       //used to calculate filename via indexing 2bytes
+    pub(crate) file_name_index: u16,       //used to calculate filename via indexing 2bytes
     pub(crate) inode: u64, // inode of the entry, this is used to uniquely identify the entry 8bytes
     _marker: PhantomData<S>, // placeholder for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
 }
@@ -104,7 +104,7 @@ impl<S> std::fmt::Debug for TempDirent<'_, S> {
             .field("path", &self.path)
             .field("depth", &self.depth)
             .field("file_type", &self.file_type)
-            .field("base_len", &self.base_len)
+            .field("base_len", &self.file_name_index)
             .field("inode", &self.inode)
             .finish()
     }
@@ -134,7 +134,7 @@ where
             path,
             depth,
             file_type: FileType::from_dtype_fallback(d_type, path), //file type is mapped to a FileType enum, this is used to determine the type of the entry
-            base_len,
+            file_name_index: base_len,
             inode, //inode is used to uniquely identify the entry, this is used to avoid duplicates
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
         }
@@ -149,7 +149,7 @@ where
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
-            file_name_index: self.base_len,
+            file_name_index: self.file_name_index,
         }
     }
 
@@ -244,7 +244,7 @@ where
     pub const fn file_name_index(&self) -> usize {
         // Returns the index of the file name in the path, this is used to get the file name of the entry
         // it is calculated by adding the base length to the depth of the entry
-        self.base_len as _
+        self.file_name_index as _
     }
     #[inline]
     pub fn file_name(&self) -> &[u8] {
@@ -337,16 +337,13 @@ where
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
 
                 // skip entries that are not valid or are dot entries
-                let full_path = unsafe { construct_path!(self, d) }; //a macro that constructs it, the full details are a bit lengthy
-                //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
-                //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
-
-                let temp_dirent =
-                    TempDirent::new(full_path, self.parent_depth + 1, self.file_name_index, d); //create a temporary dirent, this is used to store the path, depth and file type of the entry
-                //let temp_dirent=Self::
-                // apply the filter function to the entry
+   
+                let temp_dirent:TempDirent<'_, S> =construct_temp_dirent!(self, d); //construct a temporary dirent from the dirent64 pointer, this is used to filter the entries without allocating memory on the heap
+        
+                // apply the filter function to the entry  
                 //ive had to map the filetype to a value, it's mapped to libc dirent dtype values, this is temporary
                 //while i look at implementing a decent state machine for this
+
                 if !temp_dirent.filter(self.search_config, self.filter_func) {
                     //if the entry does not match the filter, skip it
                     continue;

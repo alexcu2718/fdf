@@ -68,54 +68,54 @@ where
     #[inline]
     #[must_use]
     pub const fn is_block_device(&self) -> bool {
-        matches!(self.file_type, FileType::BlockDevice)
+        self.file_type.is_block_device()
     }
 
     ///Cost free check for character devices
     #[inline]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
-        matches!(self.file_type, FileType::CharDevice)
+        self.file_type.is_char_device()
     }
 
     ///Cost free check for fifos
     #[inline]
     #[must_use]
     pub const fn is_fifo(&self) -> bool {
-        matches!(self.file_type, FileType::Fifo)
+        self.file_type.is_fifo()
     }
 
     ///Cost free check for sockets
     #[inline]
     #[must_use]
     pub const fn is_socket(&self) -> bool {
-        matches!(self.file_type, FileType::Socket)
+         self.file_type.is_socket()
     }
 
     ///Cost free check for regular files
     #[inline]
     #[must_use]
     pub const fn is_regular_file(&self) -> bool {
-        matches!(self.file_type, FileType::RegularFile)
+        self.file_type.is_regular_file()
     }
 
     ///Cost free check for directories
     #[inline]
     #[must_use]
     pub const fn is_dir(&self) -> bool {
-        matches!(self.file_type, FileType::Directory)
+        self.file_type.is_dir()
     }
     ///cost free check for unknown file types
     #[inline]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
-        matches!(self.file_type, FileType::Unknown)
+             self.file_type.is_unknown()
     }
     ///cost free check for symlinks
     #[inline]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
-        matches!(self.file_type, FileType::Symlink)
+        self.file_type.is_symlink()
     }
     #[inline]
     #[must_use]
@@ -394,8 +394,10 @@ where
     /// Checks the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
-    pub(crate) unsafe fn check_remaining_bytes(&mut self) -> i64 {
-        unsafe { self.buffer.getdents64(self.fd) }
+    pub(crate) unsafe fn check_remaining_bytes(&mut self) {
+         self.remaining_bytes =unsafe{self.buffer.getdents64(self.fd) };
+         self.offset = 0;
+
     }
 }
 #[cfg(target_os = "linux")]
@@ -412,6 +414,7 @@ where
             if self.offset < self.remaining_bytes as usize {
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_read() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
+                
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
                 // skip entries that are not valid or are dot entries
@@ -426,9 +429,8 @@ where
             #[cfg(target_arch = "x86_64")]
             prefetch_next_buffer!(self);
             // check remaining bytes
-            self.remaining_bytes = unsafe { self.check_remaining_bytes() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
-            //self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) }; //see for asm implemetation
-            self.offset = 0;
+            unsafe { self.check_remaining_bytes() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
+           
             if self.remaining_bytes <= 0 {
                 // If no more entries, return None,
                 return None;

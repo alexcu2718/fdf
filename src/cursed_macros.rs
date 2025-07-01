@@ -150,7 +150,7 @@ macro_rules! init_path_buffer {
         let mut start_buffer=$crate::PathBuffer::new(); //create a new path buffer, this is a zeroed buffer of size `LOCAL_PATH_MAX
         let buffer_ptr = start_buffer.as_mut_ptr(); //get the mutable pointer to the buffer
         let mut base_len=$dir_path.len(); //get the length of the directory path, this is the length of the directory path
-        let needs_slash = (($dir_path.depth() != 0) as u8) | (($dir_path.as_bytes() != b"/") as u8); //check if we need to append a slash(bitmasking it to 0 or 1)
+        let needs_slash = (($dir_path.depth() != 0) as u8) | (( base_len !=1) as u8); //check if we need to append a slash(bitmasking it to 0 or 1)
         std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, base_len);
         *buffer_ptr.add(base_len) = (b'/') * needs_slash; //add slash or null terminator appropriately (completely deterministic)
         base_len += needs_slash as usize; //increment the base_len length by 1 if we added a slash, otherwise it stays the same
@@ -372,8 +372,10 @@ macro_rules! const_from_env {
         };
     };
 }
-
-/// Constructs a `DirEntry<S>` from a `dirent64` pointer for any relvant self type
+///NOT MEANT TO BE PUBLIC API, WILL BE PRIVATE SOON
+/// 
+/// Constructs a `DirEntry<S>` from a `dirent64`/`dirent` pointer for any relevant self type
+/// Needed to be done via macro to avoid issues with duplication/mutability of structs 
 #[macro_export]
 macro_rules! construct_dirent {
     ($self:ident, $dirent:ident) => {{
@@ -387,12 +389,43 @@ macro_rules! construct_dirent {
         let full_path = unsafe { construct_path!($self, $dirent) };
         let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
 
-        DirEntry {
+        $crate::DirEntry {
             path: full_path.into(),
             file_type,
             inode,
             depth: $self.parent_depth + 1,
             file_name_index: $self.file_name_index,
+        }
+    }};
+}
+///NOT MEANT TO BE PUBLIC API, WILL BE PRIVATE SOON
+/// 
+/// 
+/// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
+/// This is used to filter entries without allocating memory on the heap.
+/// It is a temporary structure that is used to filter entries before they are converted to `DirEntry<S>`.
+/// Needed to be done via macro to avoid issues with duplication/mutability of structs 
+#[macro_export]
+macro_rules! construct_temp_dirent {
+    ($self:ident, $dirent:ident) => {{
+        
+        let (d_type, inode) = unsafe {
+            (
+                *offset_ptr!($dirent, d_type), // get d_type
+                offset_ptr!($dirent, d_ino),   // get inode
+            )
+        };
+
+        let full_path = unsafe { construct_path!($self, $dirent) };
+        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
+
+        $crate::direntry_filter::TempDirent {
+            path: full_path,
+            file_type,
+            inode,
+            depth: $self.parent_depth + 1,
+            file_name_index: $self.file_name_index,
+            _marker: std::marker::PhantomData,
         }
     }};
 }

@@ -178,3 +178,11 @@ impl std::fmt::Display for FileType {
         }
     }
 }
+
+
+impl From<libc::stat> for FileType {
+    #[inline]
+    fn from(stat: libc::stat) -> Self {
+        Self::from_stat(&stat)
+    }
+}

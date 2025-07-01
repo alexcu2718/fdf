@@ -9,7 +9,7 @@
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{
     cursed_macros::construct_dirent, cursed_macros::prefetch_next_buffer,
-    cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,
+    cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,utils::resolve_inode
 };
 
 #[allow(unused_imports)]
@@ -273,23 +273,10 @@ where
 
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly"
-        ))]
-        let inode = get_stat.st_ino as u64;
-        #[cfg(not(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly"
-        )))]
-        let inode = get_stat.st_ino; //on linux, its u64, on bsd's its u32, so we use u64 for consistency
+        let inode = resolve_inode(&get_stat); //resolves inode to u64 but avoids redundant cast
         Ok(Self {
             path: path_ref.into(),
-            file_type: FileType::from_stat(&get_stat),
+            file_type: get_stat.into(),
             inode,
             depth: 0,
             file_name_index: path_ref.file_name_index(),

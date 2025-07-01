@@ -66,7 +66,7 @@ where
     pub(crate) fn read_dir(&mut self) -> Option<*mut dirent> {
         // This function reads the directory entries and populates the iterator.
         // It is called when the iterator is created or when it needs to be reset.
-        let d = unsafe { readdir(self.dir) };
+        let d:*mut dirent = unsafe { readdir(self.dir) };
         // This function reads the directory entries and returns a pointer to the dirent structure.
         // It is used by the next function to get the next entry in the directory.
         if d.is_null() {

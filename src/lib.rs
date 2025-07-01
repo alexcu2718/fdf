@@ -131,8 +131,6 @@ where
     S: BytesStorage + 'static + Clone + Send,
 {
     #[must_use]
-    #[allow(clippy::fn_params_excessive_bools)]
-    #[allow(clippy::too_many_arguments)]
     #[inline]
     /// Create a new Finder instance.
     pub fn init(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> FinderBuilder<S> {

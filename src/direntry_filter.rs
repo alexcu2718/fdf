@@ -97,11 +97,12 @@ where
     }
 }
 
-impl<S> std::fmt::Debug for TempDirent<'_, S> {
-    #[inline]
+impl<S> std::fmt::Debug for TempDirent<'_, S>
+where S: BytesStorage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TempDirent")
-            .field("path", &self.path)
+            .field("path", &self.path.to_string_lossy())
+            .field("file_name", &self.file_name())
             .field("depth", &self.depth)
             .field("file_type", &self.file_type)
             .field("base_len", &self.file_name_index)

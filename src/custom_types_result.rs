@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 ///Generic result type for directory entry operations
 pub type Result<T> = std::result::Result<T, DirEntryError>;
+
 // This will be set at runtime from the environment variable yet it's still const, :)
 const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096"); //set to PATH_MAX, but allow trivial customisation!
 

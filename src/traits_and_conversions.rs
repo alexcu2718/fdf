@@ -374,19 +374,16 @@ where
     }
 }
 
-impl<S> fmt::Debug for DirEntry<S>
-where
-    S: BytesStorage,
-{
-    ///debug format for `DirEntry` (showing a vector of bytes is... not very useful)
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "DirEntry(Filename:{},FileType:{},Inode:{},Depth:{})",
-            self.to_string_lossy(),
-            self.file_type,
-            self.inode,
-            self.depth
-        )
+impl<S> std::fmt::Debug for DirEntry<S>
+where S: BytesStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Dirent")
+            .field("path", &self.to_string_lossy())
+            .field("file_name", &self.file_name().to_string_lossy())
+            .field("depth", &self.depth)
+            .field("file_type", &self.file_type)
+            .field("file_name_index", &self.file_name_index)
+            .field("inode", &self.inode)
+            .finish()
     }
 }

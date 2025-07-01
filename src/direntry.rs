@@ -269,6 +269,8 @@ where
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
         let path_ref = path.as_ref().as_bytes();
 
+
+
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;
         #[cfg(any(
@@ -284,11 +286,11 @@ where
             target_os = "netbsd",
             target_os = "dragonfly"
         )))]
-   
+        let inode = get_stat.st_ino; //on linux, its u64, on bsd's its u32, so we use u64 for consistency
         Ok(Self {
             path: path_ref.into(),
             file_type: FileType::from_stat(&get_stat),
-            inode:get_stat.st_ino,
+            inode,
             depth: 0,
             file_name_index: path_ref.file_name_index(),
         })

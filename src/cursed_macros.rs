@@ -110,7 +110,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
         #[allow(unused_unsafe)]
         unsafe {
             let d_type = offset_ptr!($entry, d_type);
-         
 
             #[cfg(target_os = "linux")]
             {
@@ -129,7 +128,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(not(target_os = "linux"))]
             {
                 if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
-                     let name_ptr = offset_ptr!($entry, d_name) as *const u8;
+                    let name_ptr = offset_ptr!($entry, d_name) as *const u8;
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),
@@ -372,4 +371,28 @@ macro_rules! const_from_env {
             parse_env::<{ VAL.len() }>(VAL.as_bytes())
         };
     };
+}
+
+/// Constructs a `DirEntry<S>` from a `dirent64` pointer for any relvant self type
+#[macro_export]
+macro_rules! construct_dirent {
+    ($self:ident, $dirent:ident) => {{
+        let (d_type, inode) = unsafe {
+            (
+                *offset_ptr!($dirent, d_type), // get d_type
+                offset_ptr!($dirent, d_ino),   // get inode
+            )
+        };
+
+        let full_path = unsafe { construct_path!($self, $dirent) };
+        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
+
+        DirEntry {
+            path: full_path.into(),
+            file_type,
+            inode,
+            depth: $self.parent_depth + 1,
+            file_name_index: $self.file_name_index,
+        }
+    }};
 }

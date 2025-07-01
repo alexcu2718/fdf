@@ -32,6 +32,7 @@ where
     fn get_stat(&self) -> crate::Result<stat>;
     fn modified_time(&self) -> crate::Result<SystemTime>;
     fn as_path(&self) -> &Path;
+    unsafe fn open_fd(&self) -> crate::Result<i32>;
     fn file_name_index(&self) -> u16;
     fn as_os_str(&self) -> &OsStr;
     fn exists(&self) -> bool;
@@ -106,6 +107,28 @@ where
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
     fn size(&self) -> crate::Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
+    }
+    #[inline]
+    unsafe fn open_fd(&self) -> crate::Result<i32> {
+        // Opens the file and returns a file descriptor.
+        // This is a low-level operation that may fail if the file does not exist or cannot be opened.
+        self.as_cstr_ptr(|ptr| {
+            let fd = unsafe {
+                libc::open(
+                    ptr,
+                    libc::O_RDONLY,
+                    libc::O_NONBLOCK,
+                    libc::O_DIRECTORY,
+                    libc::O_CLOEXEC,
+                )
+            };
+
+            if fd < 0 {
+                Err(std::io::Error::last_os_error().into())
+            } else {
+                Ok(fd)
+            }
+        })
     }
 
     #[inline]

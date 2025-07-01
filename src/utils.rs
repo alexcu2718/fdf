@@ -113,7 +113,6 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     const_min(b, a)
 }
 
-
 /*
 
 

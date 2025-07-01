@@ -2,14 +2,14 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer,
-    construct_path, cstr, custom_types_result::BytesStorage, init_path_buffer, offset_ptr,
-    skip_dot_or_dot_dot_entries,
+    construct_dirent, construct_path, cstr, custom_types_result::BytesStorage, init_path_buffer,
+    offset_ptr, skip_dot_or_dot_dot_entries,
 };
-#[cfg(not(target_os = "linux"))]
-use libc::readdir;
-#[cfg(target_os = "linux")]
-use libc::readdir64 as readdir; //use readdir64 on linux
 use libc::{DIR, closedir, opendir};
+#[cfg(not(target_os = "linux"))]
+use libc::{dirent, readdir};
+#[cfg(target_os = "linux")]
+use libc::{dirent64 as dirent, readdir64 as readdir}; //use readdir64 on linux
 use std::marker::PhantomData; //use readdir on other platforms, this is the standard POSIX function
 #[derive(Debug)]
 /// An iterator over directory entries from readdir (or 64 )via libc
@@ -24,7 +24,7 @@ where
     dir: *mut DIR,
     path_buffer: PathBuffer,
     file_name_index: u16, //mainly used for indexing tricks, to trivially find the filename(avoid recalculation)
-    depth: u8, //if youve got directories bigger than 255 levels deep, you should probably rethink your life choices.
+    parent_depth: u8, //if youve got directories bigger than 255 levels deep, you should probably rethink your life choices.
     error: Option<Error>,
     _phantom: PhantomData<S>, //this justholds the type information for later, this compiles away due to being zero sized.
 }
@@ -40,11 +40,38 @@ where
         // It is useful for operations that require direct access to the buffer.
         self.path_buffer.as_mut_ptr()
     }
-
+    #[inline]
     pub const fn file_name_index(&self) -> usize {
         // This function returns the base length of the path buffer.
         // It is used to determine the length of the base path for constructing full paths.
         self.file_name_index as _
+    }
+    #[inline]
+    //internal function to read the directory entries
+    //this is a private function that reads the directory entries and returns a pointer to the DIR
+    //it is used by the new function to initialise the iterator.
+    /// Reads the directory entries and returns a pointer to the DIR structure.
+    pub(crate) fn open_dir(direntry: &DirEntry<S>) -> Result<*mut DIR> {
+        let dir = direntry.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
+        // This function reads the directory entries and populates the iterator.
+        // It is called when the iterator is created or when it needs to be reset.
+        if dir.is_null() {
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        Ok(dir)
+    }
+    #[inline]
+    pub(crate) fn read_dir(&mut self) -> Option<*mut dirent> {
+        // This function reads the directory entries and populates the iterator.
+        // It is called when the iterator is created or when it needs to be reset.
+        let d = unsafe { readdir(self.dir) };
+        // This function reads the directory entries and returns a pointer to the dirent structure.
+        // It is used by the next function to get the next entry in the directory.
+        if d.is_null() {
+            return None;
+        }
+        Some(d)
     }
 
     #[inline]
@@ -58,21 +85,14 @@ where
     /// # Errors
     /// TBD
     pub fn new(dir_path: &DirEntry<S>) -> Result<Self> {
-        let dir = dir_path.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
-        //let dir=unsafe{opendir(cstr!(dir_path))};
-        //alternatively this also works if you dont like closures :)
-
-        if dir.is_null() {
-            return Err(std::io::Error::last_os_error().into());
-        }
-
+        let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
         let (base_len, path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
 
         Ok(Self {
             dir,
             path_buffer,
             file_name_index: base_len as _,
-            depth: dir_path.depth,
+            parent_depth: dir_path.depth,
             error: None,
             _phantom: PhantomData, //holds storage type
         })
@@ -92,30 +112,14 @@ where
         }
 
         loop {
-            let entry = unsafe { readdir(self.dir) };
-
-            if entry.is_null() {
-                return None;
-            }
+            let entry = self.read_dir()?; //read the next entry from the directory, this is a pointer to the dirent structure.
 
             skip_dot_or_dot_dot_entries!(entry, continue); //we provide the continue here to make it explicit.
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
-            let (d_type, inode) = unsafe {
-                (
-                    *offset_ptr!(entry, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                    offset_ptr!(entry, d_ino),
-                ) //get the inode
-            };
-
-            let full_path = unsafe { construct_path!(self, entry) };
-            return Some(DirEntry {
-                path: full_path.into(),
-                file_type: FileType::from_dtype_fallback(d_type, full_path), //most of the time we get filetype from the value but not always, uses lstat if needed
-                inode,
-                depth: self.depth + 1,   //increment depth for each entry
-                file_name_index: self.file_name_index, //inherit base_len from the parent directory
-            });
+            return Some(
+                construct_dirent!(self, entry), //construct the dirent from the pointer, and the path buffer.
+            );
         }
     }
 }

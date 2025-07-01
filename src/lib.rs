@@ -230,7 +230,7 @@ where
             return; // stop processing this directory if depth limit is reached
         }
 
-        match dir.getdents() {
+        match dir.readdir() {
             Ok(entries) => {
                 // Store only directories for parallel recursive call
 

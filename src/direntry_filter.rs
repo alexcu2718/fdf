@@ -12,7 +12,7 @@ use crate::{
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{prefetch_next_buffer, prefetch_next_entry};
-use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, dirent64, open};
+use libc::{X_OK, access, close, dirent64};
 use std::marker::PhantomData;
 
 pub struct DirEntryIteratorFilter<'a, S>
@@ -28,7 +28,6 @@ where
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     pub(crate) filter_func: fn(&TempDirent<S>, &SearchConfig) -> bool, // filter function, this is used to filter the entries based on the provided function
     pub(crate) search_config: &'a SearchConfig, // search configuration, this is used to pass the search configuration to the filter function
-   
 }
 
 impl<S> Drop for DirEntryIteratorFilter<'_, S>
@@ -53,19 +52,18 @@ where
         self.file_name_index as _
     }
     #[inline]
-    pub unsafe fn next_getdents_read(&mut self) -> *const libc::dirent64 {
-
-        let d=unsafe { self.buffer.next_getdents_read(self.offset) };
+    pub(crate) const unsafe fn next_getdents_read(&mut self) -> *const libc::dirent64 {
+        let d = unsafe { self.buffer.next_getdents_read(self.offset) };
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
-    pub fn check_remaining_bytes(&mut self)->i64{
-        unsafe{self.buffer.getdents64(self.fd) }
+    pub(crate) fn check_remaining_bytes(&mut self) -> i64 {
+        unsafe { self.buffer.getdents64(self.fd) }
     }
 }
 
-pub struct TempDirent<'a,S> {
+pub struct TempDirent<'a, S> {
     pub(crate) path: &'a [u8], // path of the entry, this is used to store the path of the entry 16b (64bit)
     pub(crate) depth: u8, // depth of the entry, this is used to calculate the depth of   1bytes
     pub(crate) file_type: FileType, // file type of the entry, this is used to determine the type of the entry 1bytes
@@ -74,7 +72,7 @@ pub struct TempDirent<'a,S> {
     _marker: PhantomData<S>, // placeholder for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
 }
 
-impl <S>std::ops::Deref for TempDirent<'_,S> {
+impl<S> std::ops::Deref for TempDirent<'_, S> {
     type Target = [u8];
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -82,24 +80,24 @@ impl <S>std::ops::Deref for TempDirent<'_,S> {
     }
 }
 
-
-impl <S>std::convert::AsRef<[u8]> for TempDirent<'_,S> {
+impl<S> std::convert::AsRef<[u8]> for TempDirent<'_, S> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.path
     }
 }
 
-impl<S> Into<DirEntry<S>> for TempDirent<'_,S> 
+impl<S> From<TempDirent<'_, S>> for DirEntry<S>
 where
-    S: BytesStorage,{
+    S: BytesStorage,
+{
     #[inline]
-    fn into(self) -> DirEntry<S> {
-        self.to_direntry()
+    fn from(val: TempDirent<'_, S>) -> Self {
+        val.to_direntry()
     }
 }
 
-impl<S> std::fmt::Debug for TempDirent<'_,S> {
+impl<S> std::fmt::Debug for TempDirent<'_, S> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TempDirent")
@@ -117,17 +115,25 @@ impl<S> std::fmt::Debug for TempDirent<'_,S> {
 /// entry, so we can filter entries without allocating memory on the heap.
 /// It is used in the `DirEntryIteratorFilter` iterator to filter entries based on the
 /// provided filter function.
-impl<'a,S> TempDirent<'a,S>
+impl<'a, S> TempDirent<'a, S>
 where
-    S: BytesStorage,{
+    S: BytesStorage,
+{
     /// Returns a new `TempDirent` with the given path, depth, file type and base length.
     /// for filtering purposes (so we can avoid heap allocations)
     #[inline]
-    pub const fn new(path: &'a [u8], depth: u8, file_type: FileType, base_len: u16,inode:u64) -> Self {
+    pub fn new(path: &'a [u8], depth: u8, base_len: u16, dirent: *const dirent64) -> Self {
+        let (d_type, inode) = unsafe {
+            (
+                *offset_ptr!(dirent, d_type), //get the d_type from the dirent structure, this is the type of the entry
+                offset_ptr!(dirent, d_ino),   //get the inode
+            )
+        };
+
         Self {
             path,
             depth,
-            file_type,
+            file_type: FileType::from_dtype_fallback(d_type, path), //file type is mapped to a FileType enum, this is used to determine the type of the entry
             base_len,
             inode, //inode is used to uniquely identify the entry, this is used to avoid duplicates
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
@@ -136,8 +142,7 @@ where
 
     /// Converts the temporary dirent into a `DirEntry`.
     #[inline]
-    pub fn to_direntry(self) -> DirEntry<S>{
-
+    pub fn to_direntry(&self) -> DirEntry<S> {
         // Converts the temporary dirent into a DirEntry, this is used to convert the temporary dirent into a DirEntry
         DirEntry {
             path: self.path.into(),
@@ -145,10 +150,6 @@ where
             inode: self.inode,
             depth: self.depth,
             file_name_index: self.base_len,
-
-
-
-
         }
     }
 
@@ -221,8 +222,8 @@ where
     /// for files, it checks if the size is zero without loading all metadata
     /// for directories, it checks if they have no entries
     /// for special files like devices, sockets, etc., it returns false
-    pub fn is_empty(self) -> bool 
-      where
+    pub fn is_empty(&self) -> bool
+    where
         S: BytesStorage,
     {
         match self.file_type {
@@ -231,7 +232,8 @@ where
                 //this checks if the file size is zero, this is a costly check as it requires a stat call
             }
             FileType::Directory => {
-                self.to_direntry().readdir() //if we can read the directory, we check if it has no entries
+                self.to_direntry()
+                    .readdir() //if we can read the directory, we check if it has no entries
                     .is_ok_and(|mut entries| entries.next().is_none())
             }
             _ => false,
@@ -326,32 +328,22 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const dirent64 = unsafe{self.next_getdents_read()} ; //get next entry in the buffer,
+                let d: *const dirent64 = unsafe { self.next_getdents_read() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
 
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); //check how much is left remaining in buffer, if reasonable to hold more, warm cache
-               
-              
+
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
-                let (d_type, inode) = unsafe {
-                    (
-                        *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                        offset_ptr!(d, d_ino),   //get the inode
-                    )
-                };
 
                 // skip entries that are not valid or are dot entries
                 let full_path = unsafe { construct_path!(self, d) }; //a macro that constructs it, the full details are a bit lengthy
                 //but essentially its null initialised buffer, copy the starting path (+an additional slash if needed) and copy name of entry
                 //this is probably the cheapest way to do it, as it avoids unnecessary allocations and copies.
 
-                let depth = self.parent_depth + 1; // increment depth for child entries
-
-                let file_type = FileType::from_dtype_fallback(d_type, full_path); //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
-
-                let temp_dirent = TempDirent::new(full_path, depth, file_type, self.file_name_index,inode); //create a temporary dirent, this is used to store the path, depth and file type of the entry
-
+                let temp_dirent =
+                    TempDirent::new(full_path, self.parent_depth + 1, self.file_name_index, d); //create a temporary dirent, this is used to store the path, depth and file type of the entry
+                //let temp_dirent=Self::
                 // apply the filter function to the entry
                 //ive had to map the filetype to a value, it's mapped to libc dirent dtype values, this is temporary
                 //while i look at implementing a decent state machine for this
@@ -359,9 +351,6 @@ where
                     //if the entry does not match the filter, skip it
                     continue;
                 }
-         
-
-             
 
                 return Some(temp_dirent.into()); // convert the temporary dirent to a DirEntry and return it
             }
@@ -403,16 +392,7 @@ where
         search_config: &SearchConfig,
         func: fn(&TempDirent<S>, &SearchConfig) -> bool,
     ) -> Result<impl Iterator<Item = Self>> {
-        let fd = self
-            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-        //alternatively syntaxes I made.
-        //let fd= unsafe{ open(cstr_n!(dir_path,256),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-        //let fd= unsafe{ open(cstr!(dir_path),O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) };
-        // let fd=unsafe{open_asm(dir_path)};
-
-        if fd < 0 {
-            return Err(std::io::Error::last_os_error().into());
-        }
+        let fd = unsafe { self.open_fd()? }; //open the directory and get the file descriptor, this is used to read the directory entries via syscall
 
         let (path_len, path_buffer) = unsafe { init_path_buffer!(self) }; // (we provide the depth for some quick checks)
 
@@ -426,7 +406,6 @@ where
             remaining_bytes: 0,
             filter_func: func,
             search_config,
-            
         })
     }
 }

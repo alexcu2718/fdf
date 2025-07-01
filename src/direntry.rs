@@ -7,7 +7,9 @@
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-use crate::{prefetch_next_buffer, prefetch_next_entry, utils::close_asm, utils::open_asm};
+use crate::{
+    construct_dirent, prefetch_next_buffer, prefetch_next_entry, utils::close_asm, utils::open_asm,
+};
 
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
@@ -46,8 +48,8 @@ where
     pub(crate) inode: u64,       //8 bytes, i may drop this in the future, it's not very useful.
     pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
     pub(crate) file_name_index: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
-                              //total 22 bytes
-                              //2 bytes padding, possible uses? not sure.
+                                     //total 22 bytes
+                                     //2 bytes padding, possible uses? not sure.
 }
 
 impl<S> DirEntry<S>
@@ -307,13 +309,7 @@ where
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
         //matching type signature of above for consistency
-        let fd = self
-            .as_cstr_ptr(|ptr| unsafe { open(ptr, O_RDONLY, O_NONBLOCK, O_DIRECTORY, O_CLOEXEC) });
-        //let fd = unsafe { open_asm(self) }; //alternative explorative syntax using asm
-
-        if fd < 0 {
-            return Err(Error::last_os_error().into());
-        }
+        let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY)
 
         let (path_len, path_buffer) = unsafe { init_path_buffer!(self) };
         //using macros because I was learning macros and they help immensely with readability
@@ -383,23 +379,24 @@ where
         self.file_name_index as _
     }
     #[inline]
-    ///Returns a pointer to the dirent64 in the buffer then increments the offset by the size of the dirent structure.
-    /// this is so that when we next time we call next_getdents_read, we get the next entry in the buffer.
+    ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
+    /// this is so that when we next time we call `next_getdents_read`, we get the next entry in the buffer.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
     /// This is only used in the iterator implementation, so we can safely assume that the pointer
     /// is valid and that we don't read past the end of the buffer.
-    pub unsafe fn next_getdents_read(&mut self) -> *const libc::dirent64 {
-
-        let d=unsafe { self.buffer.next_getdents_read(self.offset) };
+    pub(crate) const unsafe fn next_getdents_read(&mut self) -> *const libc::dirent64 {
+        let d = unsafe { self.buffer.next_getdents_read(self.offset) };
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
-    pub fn check_remaining_bytes(& mut self)->i64{
-        unsafe{self.buffer.getdents64(self.fd) }
+    /// Checks the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read.
+    /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
+    /// the pointer is valid and that we don't read past the end of the buffer.
+    pub(crate) unsafe fn check_remaining_bytes(&mut self) -> i64 {
+        unsafe { self.buffer.getdents64(self.fd) }
     }
-
 }
 #[cfg(target_os = "linux")]
 impl<S> Iterator for DirEntryIterator<S>
@@ -413,7 +410,7 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const libc::dirent64 =unsafe{self.next_getdents_read()} ; //get next entry in the buffer,
+                let d: *const libc::dirent64 = unsafe { self.next_getdents_read() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 #[cfg(target_arch = "x86_64")]
                 prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
@@ -421,23 +418,7 @@ where
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract the remaining ones
-                let (d_type, inode) = unsafe {
-                    (
-                        *offset_ptr!(d, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                        offset_ptr!(d, d_ino), //get the inode (u32/u64 depending on OS), cast to u64 for consistency
-                    )
-                };
-
-                let full_path = unsafe { construct_path!(self, d) }; //here we have a construct_path, forms the full path
-                //does a lot of black magic, dont worrry about it :)
-
-                let entry = DirEntry {
-                    path: full_path.into(),
-                    file_type: FileType::from_dtype_fallback(d_type, full_path), //if d_type is unknown fallback to lstat otherwise we get for freeeeeeeee
-                    inode,
-                    depth: self.parent_depth + 1, // increment depth for child entries
-                    file_name_index: self.file_name_index,
-                };
+                let entry = construct_dirent!(self, d); //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
 
                 return Some(entry);
             }
@@ -445,7 +426,7 @@ where
             #[cfg(target_arch = "x86_64")]
             prefetch_next_buffer!(self);
             // check remaining bytes
-            self.remaining_bytes =  self.check_remaining_bytes() ; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
+            self.remaining_bytes = unsafe { self.check_remaining_bytes() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
             //self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) }; //see for asm implemetation
             self.offset = 0;
             if self.remaining_bytes <= 0 {

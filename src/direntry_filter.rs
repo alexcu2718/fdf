@@ -57,9 +57,14 @@ where
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
-    #[inline]
-    pub(crate) fn check_remaining_bytes(&mut self) -> i64 {
-        unsafe { self.buffer.getdents64(self.fd) }
+      #[inline]
+    /// Checks the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read.
+    /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
+    /// the pointer is valid and that we don't read past the end of the buffer.
+    pub(crate) unsafe fn check_remaining_bytes(&mut self) {
+         self.remaining_bytes =unsafe{self.buffer.getdents64(self.fd) };
+         self.offset = 0;
+
     }
 }
 
@@ -181,6 +186,8 @@ where
         // this is used to filter entries by path
         cfg.matches_path_internal(self.path, file_name_only, self.file_name_index())
     }
+
+
 
     #[inline]
     #[must_use]
@@ -358,8 +365,8 @@ where
             prefetch_next_buffer!(self);
 
             // check remaining bytes
-            self.remaining_bytes = self.check_remaining_bytes(); //get the remaining bytes in the buffer,
-            self.offset = 0;
+            unsafe{self.check_remaining_bytes()}; //get the remaining bytes in the buffer,
+          
 
             if self.remaining_bytes <= 0 {
                 // If no more entries, return None,

@@ -11,7 +11,7 @@ use libc::{dirent, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64 as dirent, readdir64 as readdir}; //use readdir64 on linux
 use std::marker::PhantomData; //use readdir on other platforms, this is the standard POSIX function
-#[derive(Debug)]
+
 /// An iterator over directory entries from readdir (or 64 )via libc
 /// General POSIX compliant directory iterator.
 pub struct DirIter<S>
@@ -28,6 +28,9 @@ where
     error: Option<Error>,
     _phantom: PhantomData<S>, //this justholds the type information for later, this compiles away due to being zero sized.
 }
+
+
+
 
 impl<S> DirIter<S>
 where
@@ -96,6 +99,22 @@ where
             error: None,
             _phantom: PhantomData, //holds storage type
         })
+    }
+}
+
+
+impl <S> std::fmt::Debug for DirIter<S>
+where
+    S: BytesStorage,
+{
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DirIter")
+            .field("path_buffer", &self.path_buffer)
+            .field("file_name_index", &self.file_name_index)
+            .field("parent_depth", &self.parent_depth)
+            .field("error", &self.error)
+            .finish()
     }
 }
 

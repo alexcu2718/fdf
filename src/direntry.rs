@@ -284,12 +284,11 @@ where
             target_os = "netbsd",
             target_os = "dragonfly"
         )))]
-        let inode = get_stat.st_ino; //on linux, the inode is a u64 anyway (avoid redundant casts)
-
+   
         Ok(Self {
             path: path_ref.into(),
-            file_type: FileType::from_mode(get_stat.st_mode),
-            inode,
+            file_type: FileType::from_stat(&get_stat),
+            inode:get_stat.st_ino,
             depth: 0,
             file_name_index: path_ref.file_name_index(),
         })

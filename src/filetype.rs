@@ -137,6 +137,14 @@ impl FileType {
                 _ => Self::Unknown,
             })
     }
+    #[must_use]
+    #[inline]
+    /// Converts a `libc::stat` to a `FileType`
+    /// This is useful for when you have a `stat` struct and want to get the file type
+    /// without having to call `lstat` again.
+    pub const fn from_stat(stat: &libc::stat) -> Self {
+        Self::from_mode(stat.st_mode)
+    }
 
     #[must_use]
     #[inline]

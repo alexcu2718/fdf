@@ -23,7 +23,7 @@ use macro_pub::macro_pub; //i didnt want to to use this macro but it saved a LOT
 /// let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
 /// let d_name_ptr:*const _ = offset_ptr!(entry_ptr, d_name);
 /// let d_reclen:usize = offset_ptr!(entry_ptr, d_reclen);
-/// 
+///
 /// let d_namlen:usize = offset_ptr!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
 /// let d_ino_ptr :u64= offset_ptr!(entry_ptr, d_ino); // This
 macro_rules! offset_ptr {
@@ -369,14 +369,14 @@ macro_rules! impl_bytes_storage {
 /// # Usage
 /// ```
 /// use fdf::const_from_env;
-/// 
+///
 /// // Creates a constant with documentation
 /// const_from_env!(
 ///     /// Maximum path length for local filesystem operations
 ///     /// Default: 4096 (typical Linux PATH_MAX)
 ///     LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096"
 /// );
-/// 
+///
 /// assert_eq!(LOCAL_PATH_MAX, 4096);
 /// ```
 ///

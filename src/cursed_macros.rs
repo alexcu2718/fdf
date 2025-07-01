@@ -448,6 +448,8 @@ macro_rules! construct_dirent {
 /// This is used to filter entries without allocating memory on the heap.
 /// It is a temporary structure that is used to filter entries before they are converted to `DirEntry<S>`.
 /// Needed to be done via macro to avoid issues with duplication/mutability of structs
+/// 
+ //not used YET
 #[macro_pub(crate)]
 macro_rules! construct_temp_dirent {
     ($self:ident, $dirent:ident) => {{

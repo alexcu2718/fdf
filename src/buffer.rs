@@ -74,6 +74,7 @@ where
 
     #[inline]
     #[must_use]
+    #[allow(dead_code)] //not used YET
     pub const fn as_ptr(&self) -> *const T {
         self.data.as_ptr().cast()
     }

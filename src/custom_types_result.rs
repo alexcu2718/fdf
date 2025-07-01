@@ -23,6 +23,7 @@ const_from_env!(
 //basically this is the should allow getdents to grab a lot of entries in one go
 
 pub(crate) type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
+#[allow(dead_code)]
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
 ///  a trait that all storage types must implement (for our main types) (so the user can use their own types if they want)

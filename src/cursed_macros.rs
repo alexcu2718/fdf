@@ -150,7 +150,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
 
 //SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
 #[macro_pub(crate)]
-#[macro_export]
 /// initialises a path buffer for syscall operations,
 // appending a slash/null terminator (if it's a directory etc)
 /// returns a tuple containing the length of the path and the `PathBuffer` itself.

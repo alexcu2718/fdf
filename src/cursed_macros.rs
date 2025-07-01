@@ -17,12 +17,20 @@ use macro_pub::macro_pub; //i didnt want to to use this macro but it saved a LOT
 /// - On Linux, `d_reclen` is used to access the record length directly, this is a special case, since it is not aligned like the others.
 ///  Example: `offset_ptr!(entry_ptr, d_reclen)` -> returns the record length as usize (internal consistency, be glad it works!)
 /// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
-///  the other fields are accessed normally, as raw pointers to the field.
+///  the other fields are accessed normally, as raw pointers to the field
+/// /// # Usage
+/// ```ignore
+/// let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
+/// let d_name_ptr:*const _ = offset_ptr!(entry_ptr, d_name);
+/// let d_reclen:usize = offset_ptr!(entry_ptr, d_reclen);
+/// 
+/// let d_namlen:usize = offset_ptr!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
+/// let d_ino_ptr :u64= offset_ptr!(entry_ptr, d_ino); // This
 macro_rules! offset_ptr {
     // Special case for `d_reclen`
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_reclen as usize // access field directly as it is not aligned like the others
+        (*$entry_ptr).d_reclen as usize // /return usize
     }};
      // Special case for `d_namlen`
 
@@ -356,12 +364,32 @@ macro_rules! impl_bytes_storage {
 /// ```
 /// /// This macro allows you to define a constant that can be set via an environment variable at compile time.`
 /// I realise people could have massive filesystems, i should probably write a rebuild script on value change.TODO!
+/// Macro to create a const from an env var with compile-time parsing
+///
+/// # Usage
+/// ```
+/// use fdf::const_from_env;
+/// 
+/// // Creates a constant with documentation
+/// const_from_env!(
+///     /// Maximum path length for local filesystem operations
+///     /// Default: 4096 (typical Linux PATH_MAX)
+///     LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096"
+/// );
+/// 
+/// assert_eq!(LOCAL_PATH_MAX, 4096);
+/// ```
+///
+/// # Notes
+/// - The value is parsed at compile time
+/// - Environment variables must contain only numeric characters
+/// - Consider rebuilding if environment variable changes (TODO: add rebuild script)
 #[macro_export]
 macro_rules! const_from_env {
-    ($name:ident: $t:ty = $env:expr, $default:expr) => {
+    ($(#[$meta:meta])* $name:ident: $t:ty = $env:expr, $default:expr) => {
+        $(#[$meta])*
         pub const $name: $t = {
             // Manual parsing for primitive types
-            //we have to assume it's indexed basically in order to be const
             const fn parse_env<const N: usize>(s: &[u8]) -> $t {
                 let mut i = 0;
                 let mut n = 0;

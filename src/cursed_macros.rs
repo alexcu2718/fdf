@@ -444,32 +444,3 @@ macro_rules! construct_dirent {
     }};
 }
 
-/// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
-/// This is used to filter entries without allocating memory on the heap.
-/// It is a temporary structure that is used to filter entries before they are converted to `DirEntry<S>`.
-/// Needed to be done via macro to avoid issues with duplication/mutability of structs
-/// 
- //not used YET
-#[macro_pub(crate)]
-macro_rules! construct_temp_dirent {
-    ($self:ident, $dirent:ident) => {{
-        let (d_type, inode) = unsafe {
-            (
-                *offset_ptr!($dirent, d_type), // get d_type
-                offset_ptr!($dirent, d_ino),   // get inode
-            )
-        };
-
-        let full_path = unsafe { construct_path!($self, $dirent) };
-        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
-
-        $crate::direntry_filter::TempDirent {
-            path: full_path,
-            file_type,
-            inode,
-            depth: $self.parent_depth + 1,
-            file_name_index: $self.file_name_index,
-            _marker: std::marker::PhantomData,
-        }
-    }};
-}

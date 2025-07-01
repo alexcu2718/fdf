@@ -8,13 +8,15 @@
 use crate::direntry::DirEntry;
 use crate::{
     BytePath, BytesStorage, FileType, PathBuffer, Result, SearchConfig, SyscallBuffer,
-    cursed_macros::construct_path, cursed_macros::construct_temp_dirent,
+    cursed_macros::construct_path,
     cursed_macros::init_path_buffer, cursed_macros::skip_dot_or_dot_dot_entries, offset_ptr,
 };
 #[cfg(target_arch = "x86_64")]
 use crate::{cursed_macros::prefetch_next_buffer, cursed_macros::prefetch_next_entry};
 use libc::{X_OK, access, close, dirent64};
 use std::marker::PhantomData;
+use macro_pub::macro_pub;
+
 /// An iterator that filters directory entries based on a provided filter function.
 ///
 /// This iterator reads directory entries using the `getdents` syscall and filters them based on
@@ -417,4 +419,35 @@ where
             search_config,
         })
     }
+}
+
+///moved macro here because linux only while experimenting.
+/// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
+/// This is used to filter entries without allocating memory on the heap.
+/// It is a temporary structure that is used to filter entries before they are converted to `DirEntry<S>`.
+/// Needed to be done via macro to avoid issues with duplication/mutability of structs
+/// 
+ //not used YET
+#[macro_pub(crate)]
+macro_rules! construct_temp_dirent {
+    ($self:ident, $dirent:ident) => {{
+        let (d_type, inode) = unsafe {
+            (
+                *offset_ptr!($dirent, d_type), // get d_type
+                offset_ptr!($dirent, d_ino),   // get inode
+            )
+        };
+
+        let full_path = unsafe { construct_path!($self, $dirent) };
+        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
+
+        $crate::direntry_filter::TempDirent {
+            path: full_path,
+            file_type,
+            inode,
+            depth: $self.parent_depth + 1,
+            file_name_index: $self.file_name_index,
+            _marker: std::marker::PhantomData,
+        }
+    }};
 }

@@ -26,15 +26,20 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
         .ok_or(DirEntryError::TimeError)
 }
 
+/// Calculates the length of a null-terminated string pointed to by `ptr`,
+/// returning the number of bytes before the null terminator.
+
 /// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`.
-/// This doesn't even matter because we don't use it to calculate strlen anymore, that's an O(1) problem now :)))))))))))))))))))))
+/// Interesting benchmarks results:
+/// It's faster than my constant_time strlen for dirents for small strings, but after 32 bytes, it becomes slower.
+/// It is also faster than the libc implementation but only for size below 128...?wtf.
 #[inline]
 #[allow(clippy::unnecessary_safety_comment)] //ill fix this later.
 #[allow(unused_unsafe)]
 #[allow(clippy::ptr_as_ptr)]
 pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
-    T: ValueType
+    T: ValueType,
 {
     unsafe { crate::cursed_macros::strlen_asm!(ptr) }
 }
@@ -111,14 +116,6 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     const_min(b, a)
 }
 
-
-
-
-
-
-
-
-
 /// This function resolves the inode from a `libc::stat` structure in a platform-independent way(well, POSIX way).
 /// It is used to get the inode number of a file or directory.
 /// It returns a u64 value representing the inode number.
@@ -128,18 +125,18 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
     // This function resolves the inode from a `libc::stat` structure.
     // It is used to get the inode number of a file or directory.
     #[cfg(not(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly"
-        )))]
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    )))]
     return libcstat.st_ino;
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly"
-        ))]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    ))]
     return libcstat.st_ino as u64; // FreeBSD uses u32 for st_ino, so we cast it to u64
 }
 

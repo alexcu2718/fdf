@@ -63,6 +63,8 @@ use std::{
 
 mod cursed_macros;
 
+mod temp_dirent;
+pub use temp_dirent::TempDirent;
 //crate imports
 mod iter;
 pub(crate) use iter::DirIter;
@@ -97,8 +99,8 @@ mod utils;
 
 //pub(crate) use utils::strlen_asm;
 #[cfg(target_os = "linux")]
-pub use utils::{dirent_const_time_strlen};
-pub use utils::{unix_time_to_system_time,strlen};
+pub use utils::dirent_const_time_strlen;
+pub use utils::{strlen, unix_time_to_system_time};
 
 mod glob;
 pub use glob::glob_to_regex;
@@ -119,10 +121,10 @@ pub struct Finder<S>
 where
     S: BytesStorage,
 {
-    root: OsString,
-    search_config: SearchConfig,
-    filter: Option<DirEntryFilter<S>>,
-    custom_filter: FilterType<S>,
+    pub(crate) root: OsString,
+    pub(crate) search_config: SearchConfig,
+    pub(crate) filter: Option<DirEntryFilter<S>>,
+    pub(crate) custom_filter: FilterType<S>,
 }
 ///The Finder struct is used to find files in a directory.
 impl<S> Finder<S>
@@ -228,16 +230,16 @@ pub struct FinderBuilder<S>
 where
     S: BytesStorage,
 {
-    root: OsString,
-    pattern: String,
-    hide_hidden: bool,
-    case_insensitive: bool,
-    keep_dirs: bool,
-    file_name_only: bool,
-    extension_match: Option<Arc<[u8]>>,
-    max_depth: Option<u8>,
-    follow_symlinks: bool,
-    filter: Option<DirEntryFilter<S>>,
+    pub(crate) root: OsString,
+    pub(crate) pattern: String,
+    pub(crate) hide_hidden: bool,
+    pub(crate) case_insensitive: bool,
+    pub(crate) keep_dirs: bool,
+    pub(crate) file_name_only: bool,
+    pub(crate) extension_match: Option<Arc<[u8]>>,
+    pub(crate) max_depth: Option<u8>,
+    pub(crate) follow_symlinks: bool,
+    pub(crate) filter: Option<DirEntryFilter<S>>,
 }
 
 impl<S> FinderBuilder<S>
@@ -260,25 +262,25 @@ where
         }
     }
     #[must_use]
-    /// Set whether to hide hidden files
+    /// Set whether to hide hidden files, defaults to true
     pub const fn keep_hidden(mut self, hide_hidden: bool) -> Self {
         self.hide_hidden = hide_hidden;
         self
     }
     #[must_use]
-    /// Set case insensitive matching
+    /// Set case insensitive matching,defaults to true
     pub const fn case_insensitive(mut self, case_insensitive: bool) -> Self {
         self.case_insensitive = case_insensitive;
         self
     }
     #[must_use]
-    /// Set whether to keep directories in results
+    /// Set whether to keep directories in results,defaults to false
     pub const fn keep_dirs(mut self, keep_dirs: bool) -> Self {
         self.keep_dirs = keep_dirs;
         self
     }
     #[must_use]
-    /// Set whether to use short paths
+    /// Set whether to use short pathss in regex matching, defaults to true
     pub const fn file_name_only(mut self, short_path: bool) -> Self {
         self.file_name_only = short_path;
         self
@@ -296,7 +298,7 @@ where
         self
     }
 
-    /// Set whether to follow symlinks
+    /// Set whether to follow symlinks, defaults to false. Careful for recursion!
     #[must_use]
     pub const fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
         self.follow_symlinks = follow_symlinks;
@@ -335,10 +337,7 @@ where
             {
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_path(rdir, rconfig.file_name_only)
-                    && rconfig
-                        .extension_match
-                        .as_ref()
-                        .is_none_or(|ext| rdir.file_name().matches_extension(ext))
+                    && rconfig.matches_extension(&rdir.file_name()) // Check if the entry matches the extension (or if no extension is set)
             }
         };
 

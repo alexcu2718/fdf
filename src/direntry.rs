@@ -9,9 +9,9 @@
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{
     cursed_macros::construct_dirent, cursed_macros::prefetch_next_buffer,
-    cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm
+    cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,
 };
-use crate::utils::resolve_inode;
+use crate::{temp_dirent::TempDirent, utils::resolve_inode};
 
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
@@ -180,6 +180,19 @@ where
     }
 
     #[inline]
+    #[cfg(target_os = "linux")]
+    pub fn to_temp_dirent(&self) -> TempDirent<S> {
+        TempDirent {
+            path: self.path.as_bytes(),
+            inode: self.inode,
+            file_type: self.file_type,
+            file_name_index: self.file_name_index as _,
+            depth: self.depth as _,
+            _marker: PhantomData::<S>,
+        }
+    }
+
+    #[inline]
     #[must_use]
     ///returns the file type of the file (eg directory, regular file, etc)
     pub const fn file_type(&self) -> FileType {
@@ -226,6 +239,7 @@ where
 
     #[inline]
     #[must_use]
+    ///Checks if the file is a directory or symlink, this is a cost free check
     pub const fn is_traversible(&self) -> bool {
         //this is a cost free check, we just check if the file type is a directory or symlink
         matches!(self.file_type, FileType::Directory | FileType::Symlink)
@@ -269,8 +283,6 @@ where
     /// This will error if path isn't valid/permission problems etc.
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
         let path_ref = path.as_ref().as_bytes();
-
-
 
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;

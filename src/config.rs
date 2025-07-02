@@ -1,3 +1,4 @@
+use crate::traits_and_conversions::BytePath;
 use crate::{DirEntry, DirEntryError, Result, custom_types_result::BytesStorage};
 use regex::bytes::{Regex, RegexBuilder};
 use std::sync::Arc;
@@ -15,15 +16,15 @@ pub struct SearchConfig {
     ///a regex to match against the file names
     ///if this is None, then the pattern is empty or just a dot, so we
     ///match everything, otherwise we match against the regex
-    pub hide_hidden: bool,
+    pub(crate) hide_hidden: bool,
     ///if true, then we hide hidden files (those starting with a dot)
-    pub keep_dirs: bool,
+    pub(crate) keep_dirs: bool,
     ///if true, then we keep directories in the results, otherwise we only return non-directory files
-    pub extension_match: Option<Arc<[u8]>>,
+    pub(crate) extension_match: Option<Arc<[u8]>>,
     ///if this is Some, then we match against the extension of the file otherwise accept (if none)
-    pub file_name_only: bool,
+    pub(crate) file_name_only: bool,
     ///if true, then we only match against the file name, otherwise we match against the full path when regexing
-    pub depth: Option<u8>,
+    pub(crate) depth: Option<u8>,
     ///the maximum depth to search, if None then no limit
     pub follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
 }
@@ -73,6 +74,16 @@ impl SearchConfig {
     #[must_use]
     pub fn matches_with<F: FnOnce(&[u8]) -> bool>(&self, path: &[u8], predicate: F) -> bool {
         predicate(path)
+    }
+
+    #[inline]
+    pub fn matches_extension<S>(&self, entry: &S) -> bool
+    where
+        S: std::ops::Deref<Target = [u8]>,
+    {
+        self.extension_match
+            .as_ref()
+            .is_none_or(|ext| entry.matches_extension(ext))
     }
     #[inline]
     #[must_use]

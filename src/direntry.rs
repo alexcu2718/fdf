@@ -11,6 +11,7 @@ use crate::{
     cursed_macros::construct_dirent, cursed_macros::prefetch_next_buffer,
     cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,
 };
+#[allow(unused_imports)]
 use crate::{temp_dirent::TempDirent, utils::resolve_inode};
 
 #[allow(unused_imports)]

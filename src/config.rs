@@ -12,7 +12,7 @@ use std::sync::Arc;
 /// matching file extensions, whether to search file names only, depth of search,
 /// and whether to follow symlinks.
 pub struct SearchConfig {
-    pub regex_match: Option<Regex>,
+    pub(crate) regex_match: Option<Regex>,
     ///a regex to match against the file names
     ///if this is None, then the pattern is empty or just a dot, so we
     ///match everything, otherwise we match against the regex
@@ -26,7 +26,7 @@ pub struct SearchConfig {
     ///if true, then we only match against the file name, otherwise we match against the full path when regexing
     pub(crate) depth: Option<u8>,
     ///the maximum depth to search, if None then no limit
-    pub follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
+    pub(crate) follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
 }
 
 impl SearchConfig {
@@ -81,6 +81,7 @@ impl SearchConfig {
     where
         S: std::ops::Deref<Target = [u8]>,
     {
+        debug_assert!(!entry.contains(&b'/')); // ensure that the entry is a file name and not a path
         self.extension_match
             .as_ref()
             .is_none_or(|ext| entry.matches_extension(ext))
@@ -97,6 +98,11 @@ impl SearchConfig {
     ) -> bool {
         self.regex_match.as_ref().is_none_or(|reg| {
             reg.is_match(if !full_path {
+                debug_assert!(path_len <= dir.len(), "path_len is greater than dir length");
+                debug_assert!(
+                    !(&dir[path_len..]).contains(&b'/'),
+                    "filename should not contain a directory separator"
+                );
                 unsafe { dir.get_unchecked(path_len..) } //this is the likelier path so we choose it first
             } else {
                 dir
@@ -113,6 +119,11 @@ impl SearchConfig {
     {
         self.regex_match.as_ref().is_none_or(|reg| {
             reg.is_match(if !full_path {
+                debug_assert!(
+                    !dir.file_name().contains(&b'/'),
+                    "file_name contains a directory separator"
+                );
+
                 dir.file_name() //this is the likelier path so we choose it first
             } else {
                 dir

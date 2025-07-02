@@ -1,4 +1,3 @@
-
 #![allow(unused_imports)]
 use macro_pub::macro_pub; //i didnt want to to use this macro but it saved a LOT of hassle/boilerplate. (vlight depdendency
 //might remove this when less lazy.
@@ -443,7 +442,6 @@ macro_rules! construct_dirent {
         }
     }};
 }
-
 
 /// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
 /// This is used to filter entries without allocating memory on the heap.

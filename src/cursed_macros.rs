@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 use macro_pub::macro_pub; //i didnt want to to use this macro but it saved a LOT of hassle/boilerplate. (vlight depdendency
 //might remove this when less lazy.
-
+#[allow(clippy::doc_markdown)]
 #[macro_export(local_inner_macros)]
 ///A helper macro to safely access dirent(64 on linux)'s
 /// fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
@@ -12,7 +12,7 @@ use macro_pub::macro_pub; //i didnt want to to use this macro but it saved a LOT
 ///
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
-///   Example: `offset_ptr!(entry_ptr, d_ino)` -> aliases to d_fileno and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
+///   Example: `offset_ptr!(entry_ptr, d_ino)` -> aliases to `d_fileno` and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
 /// - On Linux, `d_reclen` is used to access the record length directly, this is a special case, since it is not aligned like the others.
 ///  Example: `offset_ptr!(entry_ptr, d_reclen)` -> returns the record length as usize (internal consistency, be glad it works!)
 /// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
@@ -75,7 +75,7 @@ macro_rules! offset_ptr {
 ///
 /// The first argument should be a byte slice
 /// the second argument is optional as specifies a custom buffer size.
-/// let mypointer:*const u8= cstr!(b"/home/sir_galahad", 256);
+/// `cstr!(b"/home/sir_galahad", 256)`
 /// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
 /// or eg `libc::open(cstr!(b"/", 256),libc::O_RDONLY)`
 /// This macro takes a byte slice and returns a pointer to a null-terminated C-style string.
@@ -373,7 +373,7 @@ macro_rules! impl_bytes_storage {
 /// const_from_env!(
 ///     /// Maximum path length for local filesystem operations
 ///     /// Default: 4096 (typical Linux PATH_MAX)
-///     LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096"
+///     LOCAL_PATH_MAX: usize = "`LOCAL_PATH_MAX`", "4096"
 /// );
 ///
 /// assert_eq!(LOCAL_PATH_MAX, 4096);
@@ -384,6 +384,7 @@ macro_rules! impl_bytes_storage {
 /// - Environment variables must contain only numeric characters
 /// - Consider rebuilding if environment variable changes (TODO: add rebuild script)
 #[macro_export]
+#[allow(clippy::doc_markdown)]
 macro_rules! const_from_env {
     ($(#[$meta:meta])* $name:ident: $t:ty = $env:expr, $default:expr) => {
         $(#[$meta])*

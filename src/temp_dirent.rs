@@ -1,3 +1,6 @@
+#![allow(clippy::single_char_lifetime_names)]
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(clippy::missing_errors_doc)]
 use crate::BytesStorage;
 use crate::DirEntry;
 use crate::FileType;

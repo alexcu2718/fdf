@@ -28,10 +28,13 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 
 /// Calculates the length of a null-terminated string pointed to by `ptr`,
 /// returning the number of bytes before the null terminator.
-
+///
+/// # Safety
+/// This function is `unsafe` because it dereferences a raw pointer, it will not work on 0 length strings, they MUST be null-terminated.
+///
 /// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`.
-/// Interesting benchmarks results:
-/// It's faster than my constant_time strlen for dirents for small strings, but after 32 bytes, it becomes slower.
+/// Interesting benchmarks resuls:
+/// It's faster than my constant time strlen for dirents for small strings, but after 32 bytes, it becomes slower.
 /// It is also faster than the libc implementation but only for size below 128...?wtf.
 #[inline]
 #[allow(clippy::unnecessary_safety_comment)] //ill fix this later.

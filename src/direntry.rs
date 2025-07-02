@@ -9,8 +9,9 @@
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{
     cursed_macros::construct_dirent, cursed_macros::prefetch_next_buffer,
-    cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,utils::resolve_inode
+    cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm
 };
+use crate::utils::resolve_inode;
 
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};

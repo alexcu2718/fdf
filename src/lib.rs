@@ -97,8 +97,8 @@ mod utils;
 
 //pub(crate) use utils::strlen_asm;
 #[cfg(target_os = "linux")]
-pub use utils::{dirent_const_time_strlen,strlen};
-pub use utils::unix_time_to_system_time;
+pub use utils::{dirent_const_time_strlen};
+pub use utils::{unix_time_to_system_time,strlen};
 
 mod glob;
 pub use glob::glob_to_regex;

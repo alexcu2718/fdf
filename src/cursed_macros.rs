@@ -254,7 +254,7 @@ macro_rules! prefetch_next_buffer {
     };
 }
 
-#[macro_export]
+#[macro_pub(crate)]
 #[allow(clippy::ptr_as_ptr)]
 /// A high-performance, SIMD-accelerated `strlen` for null-terminated strings.
 ///

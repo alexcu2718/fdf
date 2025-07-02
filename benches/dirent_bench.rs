@@ -1,7 +1,7 @@
 #[cfg(target_os = "linux")]
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 #[cfg(target_os = "linux")]
-use fdf::dirent_const_time_strlen;
+use fdf::{dirent_const_time_strlen,strlen as asm_strlen};
 #[cfg(target_os = "linux")]
 use libc::{c_char, dirent64};
 #[cfg(target_os = "linux")]
@@ -88,6 +88,12 @@ fn bench_strlen(c: &mut Criterion) {
                     })
                 },
             );
+
+            group.bench_with_input(
+                BenchmarkId::new("asm_strlen", size_name),
+                &entry,
+                |b, e| b.iter(|| unsafe { black_box(asm_strlen(black_box(e.d_name.as_ptr() as *const c_char))) }),
+            );
         }
         group.finish();
     }
@@ -116,6 +122,15 @@ fn bench_strlen(c: &mut Criterion) {
                             entry.d_name.as_ptr() as *const c_char
                         )))
                     };
+                }
+                black_box(total)
+            })
+        });
+        batch_group.bench_function("asm_strlen_batch", |b| {
+            b.iter(|| {
+                let mut total = 0;
+                for entry in &all_entries {
+                    total += unsafe { black_box(asm_strlen(black_box(entry.d_name.as_ptr() as *const c_char))) };
                 }
                 black_box(total)
             })

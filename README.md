@@ -194,7 +194,7 @@ Options:
 
   -s, --case-sensitive         Enable case-sensitive matching
 
-  -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads [default: 12]
+  -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads [default: <MAX_THREADS>]
   -a, --absolute-path          Show absolute path
   -I, --include-dirs           Include directories
 

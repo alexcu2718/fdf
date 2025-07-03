@@ -63,7 +63,8 @@ use std::ffi::OsString;
 use std::io::stdout;
 use std::path::Path;
 use std::str;
-const START_PREFIX: &str = "/";
+use std::env;
+
 mod printer;
 use printer::write_paths_coloured;
 mod type_config;
@@ -89,21 +90,12 @@ struct Args {
     pattern: Option<String>,
     #[arg(
         value_name = "PATH",
-        help = format!("Path to search (defaults to {START_PREFIX})\nUse -c to do current directory\n"),
+        help = format!("Path to search (defaults to current working directory )\n"),
         value_hint=ValueHint::DirPath,
         required=false,
         index=2
     )]
     directory: Option<OsString>,
-    #[arg(
-        short = 'c',
-        long = "current-directory",
-        conflicts_with = "directory",
-        help = "Uses the current directory to load\n",
-        default_value = "false"
-    )]
-    current_directory: bool,
-
     #[arg(
         short = 'E',
         long = "extension",
@@ -186,7 +178,7 @@ struct Args {
         short = 't',
         long = "type",
         required = false,
-        help = format!("Select type of files (can use multiple times), available options are:\n{}", FILE_TYPES),
+        help = format!("Select type of files (can use multiple times).\n Available options are:\n{}", FILE_TYPES),
         value_delimiter = ',',
         num_args = 1..,
     )]
@@ -219,7 +211,10 @@ fn main() -> Result<(), DirEntryError> {
         .num_threads(args.thread_num)
         .build_global()
         .map_err(DirEntryError::RayonError)?;
-    let path = resolve_directory(args.current_directory, args.directory, args.absolute_path);
+
+
+
+    let path = resolve_directory(args.directory, args.absolute_path);
 
     if let Some(generator) = args.generate {
         let mut cmd = Args::command();
@@ -272,28 +267,15 @@ fn main() -> Result<(), DirEntryError> {
 #[allow(clippy::must_use_candidate)]
 ///simple function to resolve the directory to use.
 fn resolve_directory(
-    args_cd: bool,
     args_directory: Option<OsString>,
     canonicalise: bool,
 ) -> OsString {
-    let dot_pattern = ".";
-    if args_cd {
-        std::env::current_dir().map_or_else(
-            |_| dot_pattern.into(),
-            |path_res| {
-                let path = if canonicalise {
-                    path_res.canonicalize().unwrap_or(path_res)
-                } else {
-                    path_res
-                };
-                path.as_os_str().to_owned()
-            },
-        )
-    } else {
-        let dir_to_use = args_directory.unwrap_or_else(|| START_PREFIX.into());
+    
+   
+        let dir_to_use = args_directory.unwrap_or_else(|| generate_start_prefix());
         let path_check = Path::new(&dir_to_use);
 
-        if !path_check.is_dir() {
+        if !path_check.is_dir() && !path_check.is_symlink() {
             eprintln!("{} is not a directory", dir_to_use.to_string_lossy());
             std::process::exit(1);
         }
@@ -315,7 +297,7 @@ fn resolve_directory(
             dir_to_use
         }
     }
-}
+
 
 fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     if !args_glob {
@@ -326,4 +308,15 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
         eprintln!("This can't be processed as a glob pattern");
         std::process::exit(1)
     })
+}
+
+
+
+
+fn generate_start_prefix() -> OsString {
+    env::current_dir()
+        .ok()
+        .map(|p| p.into_os_string())
+        .or_else(|| env::var_os("HOME"))
+        .unwrap_or_else(|| OsString::from("."))
 }

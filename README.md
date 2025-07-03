@@ -203,9 +203,14 @@ Arguments:
              Use -c to do current directory
 
 
-Options:
-  -c, --current-directory      Uses the current directory to load
+Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
+Arguments:
+  [PATTERN]  Pattern to search for
+  [PATH]     Path to search (defaults to current working directory )
+
+
+Options:
   -E, --extension <EXTENSION>  filters based on extension, eg -E .txt or -E txt
 
   -H, --hidden                 Shows hidden files eg .gitignore or .bashrc, defaults to off
@@ -224,11 +229,12 @@ Options:
 
   -n, --max-results <TOP_N>    Retrieves the first eg 10 results, '.cache' / -n 10
 
-  -d, --depth <DEPTH>          Retrieves only traverse to x depth ( >0)
+  -d, --depth <DEPTH>          Retrieves only traverse to x depth
 
       --generate <GENERATE>    Generate shell completions
                                 [possible values: bash, elvish, fish, powershell, zsh]
-  -t, --type <TYPE_OF>...      Select type of files (can use multiple times), available options are:
+  -t, --type <TYPE_OF>...      Select type of files (can use multiple times).
+                                Available options are:
                                d: Directory
                                u: Unknown
                                l: Symlink
@@ -245,5 +251,5 @@ Options:
 
   -h, --help                   Print help
   -V, --version                Print version
-
+  
 ```

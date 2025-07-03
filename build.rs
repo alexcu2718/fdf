@@ -1,8 +1,16 @@
 #![allow(clippy::all)]
 #![allow(warnings)]
+
 use std::thread;
+use std::io::Write;
+
 
 fn main() {
+
+
+
+
+    //set threadcounts for rayon.
     const MIN_THREADS: usize = 1;
     let num_threads =
         thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
@@ -13,5 +21,5 @@ fn main() {
         println!("cargo:rustc-env=CPU_COUNT={num_threads}");
     }
 
-    //clippy was nagging.
+
 }

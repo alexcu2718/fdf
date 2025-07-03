@@ -1,7 +1,6 @@
-
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
-use fdf::{ strlen as asm_strlen};
+use fdf::strlen as asm_strlen;
 
 use std::hint::black_box;
 
@@ -31,7 +30,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     reclen - DIRENT_HEADER_START - byte_pos
 }
 
-
 #[repr(C, align(8))]
 pub struct LibcDirent64 {
     // Fake a structure similar to libc::dirent64
@@ -42,15 +40,14 @@ pub struct LibcDirent64 {
     pub d_name: [u8; 256],
 }
 
-
 const fn calculate_min_reclen(name_len: usize) -> u16 {
     const HEADER_SIZE: usize = std::mem::offset_of!(LibcDirent64, d_name);
     let total_size = HEADER_SIZE + name_len + 1;
-    ((total_size + 7) & !7) as u16 //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
+    (((total_size + 7) / 8) * 8) as u16//reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
     //this works because it's given the same representation in memory so repr C will ensure the layout is compatible
 }
 
-fn make_dirent(name: &str) ->  LibcDirent64  {
+fn make_dirent(name: &str) -> LibcDirent64 {
     let bytes = name.as_bytes();
     assert!(bytes.len() < 256, "Name too long for dirent structure");
 
@@ -133,9 +130,11 @@ fn bench_strlen(c: &mut Criterion) {
             b.iter(|| {
                 let mut total = 0;
                 for entry in &all_entries {
-                    total += unsafe { black_box(dirent_const_time_strlen(black_box( entry as *const _  ))) };
+                    total += unsafe {
+                        black_box(dirent_const_time_strlen(black_box(entry as *const _)))
+                    };
                 }
-                black_box(total)
+                black_box(total)//make sure compiler does not optimise this away
             })
         });
 
@@ -144,12 +143,10 @@ fn bench_strlen(c: &mut Criterion) {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(libc::strlen(black_box(
-                            entry.d_name.as_ptr() as *const _
-                        )))
+                        black_box(libc::strlen(black_box(entry.d_name.as_ptr() as *const _)))
                     };
                 }
-                black_box(total)
+                black_box(total) //make sure compiler does not optimise this away
             })
         });
         batch_group.bench_function("asm_strlen_batch", |b| {
@@ -157,9 +154,7 @@ fn bench_strlen(c: &mut Criterion) {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(asm_strlen(
-                            black_box(entry.d_name.as_ptr() as *const _),
-                        ))
+                        black_box(asm_strlen(black_box(entry.d_name.as_ptr() as *const _)))
                     };
                 }
                 black_box(total)
@@ -170,15 +165,13 @@ fn bench_strlen(c: &mut Criterion) {
     }
 }
 
-
 criterion_group! {
     name = benches;
     config = Criterion::default()
-        .sample_size(1000)
+        .sample_size(5000)
         .warm_up_time(std::time::Duration::from_millis(500))
         .measurement_time(std::time::Duration::from_secs(3));
     targets = bench_strlen
 }
 
 criterion_main!(benches);
-

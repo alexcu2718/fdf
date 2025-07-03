@@ -10,8 +10,11 @@ repository = "https://github.com/alexcu2718/fdf"
 keywords = ["search", "filesystem", "parallel", "regex", "cli"]
 categories = ["filesystem", "command-line-utilities", "concurrency"]
 
-[dependencies]
+[build-dependencies]
 ansic = "0.1.7"
+
+[dependencies]
+compile_time_ls_colours = { git = "https://github.com/alexcu2718/compile_time_ls_colours" }
 clap = { version = "4.5.31", features = ["derive"] }
 clap_complete = "4.5.46"
 libc = "0.2.170"

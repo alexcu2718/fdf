@@ -53,6 +53,7 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_lossless)]
 //#![allow(clippy::non_ex)]
+
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
@@ -84,6 +85,8 @@ mod error;
 pub use error::DirEntryError;
 
 mod custom_types_result;
+
+
 
 pub use custom_types_result::{
     BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, Result,
@@ -180,8 +183,11 @@ where
         let should_send =
             config.keep_dirs && (self.custom_filter)(config, &dir, self.filter) && dir.depth() != 0;
 
-        if should_send && self.search_config.depth.is_some_and(|d| dir.depth >= d) {
-            let _ = sender.send(vec![dir]); //have to put into a vec, this doesnt matter because this only happens when we depth limit
+        if self.search_config.depth.is_some_and(|d| dir.depth >= d) {
+
+            if should_send{
+                let _ = sender.send(vec![dir]);
+            } //have to put into a vec, this doesnt matter because this only happens when we depth limit
 
             return; // stop processing this directory if depth limit is reached
         }
@@ -248,10 +254,11 @@ where
 {
     /// Create a new `FinderBuilder` with required fields
     pub fn new(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> Self {
+
         Self {
             root: root.as_ref().to_owned(),
             pattern: pattern.as_ref().to_owned(),
-            hide_hidden: false,
+            hide_hidden: true,
             case_insensitive: false,
             keep_dirs: false,
             file_name_only: true,

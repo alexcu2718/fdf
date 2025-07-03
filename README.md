@@ -44,7 +44,7 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 
 ## Cool bits
 
-Speed! In every benchmark so far tested, it's ranging from a minimum of 1.5x and a maximum of 5x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
+Speed! In every benchmark so far tested, it's ranging from a minimum of 1.2x and a maximum of 2x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
 
 dirent_const_strlen const fn, get strlen from a dirent64 in constant time with no branches (benchmarks below)
 
@@ -52,10 +52,18 @@ cstr! macro: use a byte slice as a pointer (automatically initialise memory, add
 
 BytePath: Cool deref trait for working with filepaths (derefs to &[u8])
 
+This is a compile-time hash map of file extensions to their corresponding ANSI color codes based on the LS_COLORS environment variable.
+defined as
+
+```rust
+pub static LS_COLOURS_HASHMAP: Map<&'static [u8], &'static [u8]>
+```
+
+(it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>)
+
 ## SHORTSTRINGS(under 8 chars)
 
-(PLEASE NOT I HAVE TRIMMED AWAY THE UNNECESSARY INFO FROM THESE TO RETAIN MOST PERTINENT INFORMATION
-SEE BENCHMARKS IN const_str_benchmark.txt for better details and ideally read my benches/dirent_bench.rs)
+SEE BENCHMARKS IN const_str_benchmark.txt for better details and ideally read my benches/dirent_bench.rs
 
 ```bash
 
@@ -157,7 +165,7 @@ TODO LIST MAYBE:
 ## Requirements
 
 - **Linux/Macos/Bsd only**: Specific posix syscalls.
-- **64 bit tested only**
+- **64 bit tested only(+PPC BE64bit)**
 
 ## Installation
 

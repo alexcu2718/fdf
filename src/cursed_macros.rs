@@ -165,7 +165,7 @@ macro_rules! init_path_buffer {
         let mut start_buffer=$crate::PathBuffer::new(); //create a new path buffer, this is a zeroed buffer of size `LOCAL_PATH_MAX
         let buffer_ptr = start_buffer.as_mut_ptr(); //get the mutable pointer to the buffer
         let mut base_len=$dir_path.len(); //get the length of the directory path, this is the length of the directory path
-        let needs_slash = (( base_len !=1) as u8); //check if we need to append a slash(bitmasking it to 0 or 1) (if it's not root, we need a slash)
+        let needs_slash =  (($dir_path.as_bytes() != b"/") as u8);//check if we need to append a slash(bitmasking it to 0 or 1) (if it's not root, we need a slash)
         std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, base_len);
         *buffer_ptr.add(base_len) = (b'/') * needs_slash; //add slash or null terminator appropriately (completely deterministic)
         base_len += needs_slash as usize; //increment the base_len length by 1 if we added a slash, otherwise it stays the same
@@ -183,7 +183,7 @@ macro_rules! construct_path {
         let d_name = offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.file_name_index(); //get the base path length, this is the length of the directory path
 
-        let name_len = {
+        let name_len = { 
          #[cfg(target_os = "linux")]
         {   use $crate::dirent_const_time_strlen;
             dirent_const_time_strlen($dirent) //const time strlen for linux (specialisation)
@@ -209,8 +209,8 @@ macro_rules! construct_path {
             target_os = "macos"
         )))]
         {   use $crate::strlen;
-             libc::strlen(offset_ptr!($dirent, d_name) as *const _)
-            // Fallback for other OSes, using libc::strlen because i cant cover every edge case...
+             strlen((offset_ptr!($dirent, d_name).cast::<i8>()))
+            // Fallback for other OSes
         }
             };
 

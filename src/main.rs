@@ -171,14 +171,14 @@ struct Args {
     #[arg(
         short = 'd',
         long = "depth",
-        help = "Retrieves only traverse to x depth"
+        help = "Retrieves only traverse to x depth\n"
     )]
     depth: Option<u8>,
     #[arg(
         long = "generate",
         action = ArgAction::Set,
         value_parser = value_parser!(Shell),
-        help = "Generate shell completions"
+        help = "Generate shell completions\n"
     )]
     generate: Option<Shell>,
 
@@ -222,16 +222,14 @@ fn main() -> Result<(), DirEntryError> {
     let path = resolve_directory(args.current_directory, args.directory, args.absolute_path);
 
     if let Some(generator) = args.generate {
-        let mut cmd = Args::command();
-        let cmd_clone = cmd.clone();
-        generate(
-            generator,
-            &mut cmd,
-            cmd_clone.get_name().to_owned(),
-            &mut stdout(),
-        );
-        return Ok(());
-    }
+    let mut cmd = Args::command();
+    let bin_name = cmd.get_name().to_owned(); 
+    cmd.set_bin_name("fdf");
+
+    generate(generator, &mut cmd, bin_name, &mut stdout());
+    return Ok(());
+}
+
 
     let start_pattern = args.pattern.as_ref().map_or_else(
         || {
@@ -241,11 +239,18 @@ fn main() -> Result<(), DirEntryError> {
         std::clone::Clone::clone,
     );
 
+
+
     let pattern = if args.fixed_string {
         regex::escape(&start_pattern)
     } else {
         process_glob_regex(&start_pattern, args.glob)
     };
+
+    if args.depth.is_some_and(|d| d == 0) {
+        eprintln!("Error: Depth cannot be 0. Exiting.");
+        std::process::exit(1);
+    }
 
     let mut finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
         .keep_hidden(!args.hidden)

@@ -186,24 +186,40 @@ fdf . /usr/local -E py -H
 
 ## Options (T)
 
+ fdf --help
+Usage: fdf [OPTIONS] [PATTERN] [PATH]
+
+Arguments:
+  [PATTERN]  Pattern to search for
+  [PATH]     Path to search (defaults to /)
+             Use -c to do current directory
+
+
 Options:
   -c, --current-directory      Uses the current directory to load
 
   -E, --extension <EXTENSION>  filters based on extension, eg -E .txt or -E txt
-  -H, --hidden                 Shows hidden files eg .gitignore or .bashrc
 
-  -s, --case-sensitive         Enable case-sensitive matching
+  -H, --hidden                 Shows hidden files eg .gitignore or .bashrc, defaults to off
 
-  -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads [default: <MAX_THREADS>]
-  -a, --absolute-path          Show absolute path
-  -I, --include-dirs           Include directories
+  -s, --case-sensitive         Enable case-sensitive matching, defaults to false
+
+  -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads
+                                [default: 12]
+  -a, --absolute-path          Show absolute paths of results, defaults to false
+
+  -I, --include-dirs           Include directories, defaults to off
 
   -L, --follow                 Include symlinks in traversal,defaults to false
 
   -g, --glob                   Use a glob pattern,defaults to off
+
   -n, --max-results <TOP_N>    Retrieves the first eg 10 results, '.cache' / -n 10
-  -d, --depth <DEPTH>          Retrieves only traverse to x depth
-      --generate <GENERATE>    Generate shell completions [possible values: bash, elvish, fish, powershell, zsh]
+
+  -d, --depth <DEPTH>          Retrieves only traverse to x depth ( >0)
+
+      --generate <GENERATE>    Generate shell completions
+                                [possible values: bash, elvish, fish, powershell, zsh]
   -t, --type <TYPE_OF>...      Select type of files (can use multiple times), available options are:
                                d: Directory
                                u: Unknown
@@ -215,8 +231,10 @@ Options:
                                s: Socket
                                e: Empty
                                x: Executable
-  -p, --full-path              Use a full path for regex matching
-  -F, --fixed-strings          Use a fixed string not a regex
+  -p, --full-path              Use a full path for regex matching, default to false
+
+  -F, --fixed-strings          Use a fixed string not a regex, defaults to false
+
   -h, --help                   Print help
   -V, --version                Print version
 

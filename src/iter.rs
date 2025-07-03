@@ -63,10 +63,11 @@ where
         Ok(dir)
     }
     #[inline]
-    pub(crate) fn read_dir(&mut self) -> Option<*mut dirent> {
+    /// Reads the next directory entry from the iterator.
+    pub fn read_dir(&mut self) -> Option<*const dirent> {
         // This function reads the directory entries and populates the iterator.
         // It is called when the iterator is created or when it needs to be reset.
-        let d: *mut dirent = unsafe { readdir(self.dir) };
+        let d: *const dirent = unsafe { readdir(self.dir) };
         // This function reads the directory entries and returns a pointer to the dirent structure.
         // It is used by the next function to get the next entry in the directory.
         if d.is_null() {
@@ -74,6 +75,18 @@ where
         }
         Some(d)
     }
+    #[inline]
+    #[allow(dead_code)] //annoying 
+    /// Reads the next directory entry without checking for null pointers.
+    /// This function is unsafe because it does not check if the directory pointer is null.
+    /// SAFETY: This function assumes that the directory pointer is valid and not null.
+    pub unsafe fn read_dir_unchecked(&mut self) -> *const dirent {
+        // This function reads the directory entries without checking for null pointers.
+        // It is used internally by the iterator to read the next entry.
+        unsafe{readdir(self.dir)}
+    }
+
+
 
     #[inline]
     #[allow(clippy::cast_lossless)]
@@ -83,9 +96,7 @@ where
     /// It takes a `DirEntry<S>` which contains the directory path and other metadata.
     /// It initialises the iterator by opening the directory and preparing the path buffer.
     /// Utilises libc's `opendir` and `readdir64` for directory reading.
-    /// # Errors
-    /// TBD
-    pub fn new(dir_path: &DirEntry<S>) -> Result<Self> {
+    pub(crate) fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
         let (base_len, path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
 

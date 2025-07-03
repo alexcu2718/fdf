@@ -94,19 +94,13 @@ where
         unsafe { &mut *self.data.as_mut_ptr() }
     }
 
-    /// # Safety
-    /// The buffer must be initialised before calling this
-    #[inline]
-    #[cfg(target_os = "linux")]
-    pub const unsafe fn next_getdents_read(&self, index: usize) -> *const libc::dirent64 {
-        unsafe { self.as_ptr().add(index).cast::<_>() } //cast into  above
-    }
+   
 
     /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     #[inline]
     #[cfg(target_os = "linux")]
-    pub unsafe fn getdents64(&mut self, fd: i32) -> i64 {
+    pub(crate) unsafe fn getdents64_internal(&mut self, fd: i32) -> i64 {
         unsafe { libc::syscall(libc::SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
     }
 
@@ -119,13 +113,13 @@ where
     #[allow(clippy::inline_asm_x86_intel_syntax)]
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     #[allow(dead_code)]
-    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i32 {
+    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         use std::arch::asm;
         let output;
         unsafe {
             asm!(
                 "syscall",
-                inout("rax") libc::SYS_getdents64 as i32 => output,
+                inout("rax") libc::SYS_getdents64  => output,
                 in("rdi") fd,
                 in("rsi") self.as_mut_ptr(),
                 in("rdx") SIZE,

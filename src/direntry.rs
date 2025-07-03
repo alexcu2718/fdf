@@ -8,8 +8,8 @@
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{
-    cursed_macros::construct_dirent, cursed_macros::prefetch_next_buffer,
-    cursed_macros::prefetch_next_entry, utils::close_asm, utils::open_asm,
+    cursed_macros::construct_dirent, 
+    utils::close_asm, utils::open_asm,
 };
 #[allow(unused_imports)]
 use crate::{temp_dirent::TempDirent, utils::resolve_inode};
@@ -387,24 +387,60 @@ where
     }
     #[inline]
     ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
-    /// this is so that when we next time we call `next_getdents_read`, we get the next entry in the buffer.
+    /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
     /// This is only used in the iterator implementation, so we can safely assume that the pointer
     /// is valid and that we don't read past the end of the buffer.
-    pub(crate) const unsafe fn next_getdents_read(&mut self) -> *const libc::dirent64 {
-        let d = unsafe { self.buffer.next_getdents_read(self.offset) };
+    pub unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
+        let d:*const libc::dirent64 =unsafe{self.buffer.as_ptr().add(self.offset).cast::<_>()};
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
-    /// Checks the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read.
+    /// Checks the remaining bytes in the buffer, and resets the offset to 0.
+    /// This is a syscall that returns the number of bytes left to read.
+    /// 
+    /// 
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
-    pub(crate) unsafe fn check_remaining_bytes(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+    pub unsafe fn getdents_syscall(&mut self) {
+        self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
         self.offset = 0;
     }
+    
+    
+    
+
+
+    #[inline]
+    /// Prefetches the next likely entry in the buffer to keep the cache warm.
+    pub(crate) fn prefetch_next_entry(&self) {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            if self.offset + 128 < self.remaining_bytes as usize {
+                unsafe {
+                    use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                    let next_entry = self.buffer.as_ptr().add(self.offset + 64).cast();
+                    _mm_prefetch(next_entry, _MM_HINT_T0);
+                }
+            }
+        }
+    }
+
+    #[inline]
+    /// Prefetches the start of the buffer to keep the cache warm.
+    pub(crate) fn prefetch_next_buffer(&self) {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            unsafe {
+                use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0);
+            }
+        }
+    }
+
+
 }
 #[cfg(target_os = "linux")]
 impl<S> Iterator for DirEntryIterator<S>
@@ -418,24 +454,23 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
-                let d: *const libc::dirent64 = unsafe { self.next_getdents_read() }; //get next entry in the buffer,
+                let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
+                self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
 
-                #[cfg(target_arch = "x86_64")]
-                prefetch_next_entry!(self); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
-                // skip entries that are not valid or are dot entries
+              
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
-                //extract the remaining ones
+                //extract non . and .. files
                 let entry = construct_dirent!(self, d); //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
 
                 return Some(entry);
             }
-            // prefetch the next buffer content before reading
-            #[cfg(target_arch = "x86_64")]
-            prefetch_next_buffer!(self);
-            // check remaining bytes
-            unsafe { self.check_remaining_bytes() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
+            // prefetch the next buffer content before reading, only applies if no 
+           
+            self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-linux systems
+            // issue a syscall once out of entries
+            unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
 
             if self.remaining_bytes <= 0 {
                 // If no more entries, return None,

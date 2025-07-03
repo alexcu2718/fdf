@@ -11,8 +11,7 @@ use crate::{
     cursed_macros::construct_path, cursed_macros::construct_temp_dirent,
     cursed_macros::init_path_buffer, cursed_macros::skip_dot_or_dot_dot_entries, offset_ptr,
 };
-#[cfg(target_arch = "x86_64")]
-use crate::{cursed_macros::prefetch_next_buffer, cursed_macros::prefetch_next_entry};
+
 use libc::{close, dirent64};
 
 /// An iterator that filters directory entries based on a provided filter function.
@@ -58,8 +57,8 @@ where
         self.file_name_index as _
     }
     #[inline]
-    pub(crate) const unsafe fn next_getdents_read(&mut self) -> *const libc::dirent64 {
-        let d = unsafe { self.buffer.next_getdents_read(self.offset) };
+    pub const unsafe fn next_getdents_read(&mut self) -> *const dirent64 {
+        let d:*const libc::dirent64 =unsafe{self.buffer.as_ptr().add(self.offset).cast::<_>()};
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
@@ -67,9 +66,37 @@ where
     /// Checks the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
-    pub(crate) unsafe fn check_remaining_bytes(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64(self.fd) };
+    pub(crate) unsafe fn getdents_syscall(&mut self) {
+        self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
         self.offset = 0;
+    }
+
+
+    #[inline]
+    /// Prefetches the next likely entry in the buffer to keep the cache warm.
+    pub(crate) fn prefetch_next_entry(&self) {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            if self.offset + 128 < self.remaining_bytes as usize {
+                unsafe {
+                    use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                    let next_entry = self.buffer.as_ptr().add(self.offset + 64).cast();
+                    _mm_prefetch(next_entry, _MM_HINT_T0);
+                }
+            }
+        }
+    }
+
+    #[inline]
+    /// Prefetches the start of the buffer to keep the cache warm.
+    pub(crate) fn prefetch_next_buffer(&self) {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            unsafe {
+                use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0);
+            }
+        }
     }
 }
 
@@ -92,8 +119,9 @@ where
                 let d: *const dirent64 = unsafe { self.next_getdents_read() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
 
-                #[cfg(target_arch = "x86_64")]
-                prefetch_next_entry!(self); //check how much is left remaining in buffer, if reasonable to hold more, warm cache
+               
+                self.prefetch_next_entry(); //check how much is left remaining in buffer, if reasonable to hold more, warm cache
+                //no op on non-x86-64 
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
 
@@ -114,11 +142,10 @@ where
             }
 
             // prefetch the next buffer content before reading
-            #[cfg(target_arch = "x86_64")]
-            prefetch_next_buffer!(self);
+            self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-linux systems
 
             // check remaining bytes
-            unsafe { self.check_remaining_bytes() }; //get the remaining bytes in the buffer,
+            unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
 
             if self.remaining_bytes <= 0 {
                 // If no more entries, return None,

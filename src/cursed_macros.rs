@@ -208,7 +208,7 @@ macro_rules! construct_path {
             target_os = "dragonfly",
             target_os = "macos"
         )))]
-        {
+        {   use $crate::strlen;
              libc::strlen(offset_ptr!($dirent, d_name) as *const _)
             // Fallback for other OSes, using libc::strlen because i cant cover every edge case...
         }
@@ -225,33 +225,7 @@ macro_rules! construct_path {
     }};
 }
 
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[macro_pub(crate)]
-/// Prefetches the next likely entry in the buffer, basically trying to keep cache warm
-macro_rules! prefetch_next_entry {
-    ($self:ident) => {
-        //we know it's going to be accessed soon, since reclen(size of the entry) is often 40 or below, this seems a good compromise.
-        if $self.offset + 128 < $self.remaining_bytes as usize {
-            unsafe {
-                use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-                let next_entry = $self.buffer.as_ptr().add($self.offset + 64).cast();
-                _mm_prefetch(next_entry, _MM_HINT_T0);// bvvvvvvvv333333333333 CAT DID THIS IM LK\\\Z//im leaving this art
-            }
-        }
-    };
-}
 
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[macro_pub(crate)]
-/// Prefetches the next buffer for reading, this is used to keep the cache warm for the next read operation
-macro_rules! prefetch_next_buffer {
-    ($self:ident) => {
-        unsafe {
-            use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-            _mm_prefetch($self.buffer.as_ptr().cast(), _MM_HINT_T0);
-        }
-    };
-}
 
 #[macro_pub(crate)]
 #[allow(clippy::ptr_as_ptr)]

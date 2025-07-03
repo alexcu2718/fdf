@@ -2,25 +2,21 @@
 
 source "prelude.sh"
 source "new_prelude.sh"
-
-echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE NO GIT IGNORE IN MINE YET."
+echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET."
 echo "Note: Hyperfine may show small discrepancies due to benchmarking overhead. For accurate counts, run commands directly."
 
 COMMAND_FIND="fdf '.' '$SEARCH_ROOT' -HI"
 COMMAND_FD="fd '.' '$SEARCH_ROOT' -HI"
 
-# Create output directory
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
-# First get accurate baseline counts
 echo -e "\nGetting accurate file counts..."
 fd_count=$(eval "$COMMAND_FD" | wc -l)
 fdf_count=$(eval "$COMMAND_FIND" | wc -l)
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
-# Run benchmarks with stabilization
 echo -e "\nRunning benchmarks..."
 hyperfine \
   --warmup "$WARMUP_COUNT" \
@@ -29,12 +25,10 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-no-pattern.md"
 
-# Improved difference checking
 echo -e "\nAnalyzing differences..."
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf.lst"
 
-# Create the diff file
 diff -u "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst" > "./fd_diff_no_pattern.md"
 
 differences=$(comm -3 "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst" | wc -l)

@@ -2,7 +2,7 @@
 
 source "prelude.sh"
 source "new_prelude.sh"
-echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE NO GIT IGNORE IN MINE YET."
+echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET."
 echo "Note: Benchmarking relative directory searches (../)"
 
 # Setup output directories

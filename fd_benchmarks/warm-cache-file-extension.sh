@@ -21,7 +21,7 @@ fdf_count=$(eval "$COMMAND_FIND" | wc -l)
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
-# Run benchmarks with stabilization
+# Run benchmarks with stabilisation
 echo -e "\nRunning benchmarks..."
 hyperfine \
   --warmup "$WARMUP_COUNT" \
@@ -30,7 +30,7 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-file-extension.md"
 
-# Improved difference checking
+
 echo -e "\nAnalyzing differences..."
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_extension.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_extension.lst"

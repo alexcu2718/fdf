@@ -3,7 +3,7 @@
 source "prelude.sh"
 source "new_prelude.sh"
 
-echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE NO GIT IGNORE IN MINE YET."
+echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET."
 echo "Note: Hyperfine may show small discrepancies due to benchmarking overhead."
 
 # Setup output directories
@@ -21,7 +21,7 @@ fdf_count=$(eval "$COMMAND_FIND" | wc -l)
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
-# Run benchmarks with stabilization
+# Run benchmarks with stabilisation
 echo -e "\nRunning benchmarks..."
 hyperfine \
   --warmup "$WARMUP_COUNT" \
@@ -29,5 +29,34 @@ hyperfine \
   "$COMMAND_FIND" \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-type-filtering-directory.md"
+
+# Improved difference checking
+echo -e "\nAnalyzing differences..."
+eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_type_d.lst"
+eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_type_d.lst"
+
+# Create the diff file
+diff -u "$OUTPUT_DIR/fd_type_d.lst" "$OUTPUT_DIR/fdf_type_d.lst" > "./fd_diff_type_d.md"
+
+differences=$(comm -3 "$OUTPUT_DIR/fd_type_d.lst" "$OUTPUT_DIR/fdf_type_d.lst" | wc -l)
+echo "Total files differing: $differences"
+
+if [[ $differences -gt 0 ]]; then
+  echo -e "\nFiles only in fd:"
+  comm -23 "$OUTPUT_DIR/fd_type_d.lst" "$OUTPUT_DIR/fdf_type_d.lst"
+  
+  echo -e "\nFiles only in fdf:"
+  comm -13 "$OUTPUT_DIR/fd_type_d.lst" "$OUTPUT_DIR/fdf_type_d.lst"
+  
+  echo -e "\nNote: Small differences may occur due to:"
+  echo "- Filesystem timestamp changes during execution"
+  echo "- Race conditions in very fast scans"
+  echo "- Hyperfine measurement artifacts"
+else
+  echo "No differences found in direct execution"
+fi
+
+echo -e "\nBenchmark results saved to $OUTPUT_DIR/results-warm-cache-type-filtering-directory.md"
+echo "Diff results saved to $OUTPUT_DIR/fd_diff_type_d.md"
 
 

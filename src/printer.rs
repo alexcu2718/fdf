@@ -3,51 +3,70 @@ use fdf::{BytePath, DirEntry, FileType, Result};
 use std::collections::HashMap;
 use std::io::{BufWriter, IsTerminal, Write, stdout};
 use std::sync::OnceLock;
+use ansic::ansi;
+//im going to make this compile time to figure out LS colours soon.
+// Helper macro to convert ansi! output to byte strings
+macro_rules! ansi_bytes {
+    ($($t:tt)*) => {
+        ansi!($($t)*).as_bytes()
+    };
+}
+
+
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
 const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
 const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
-const RESET: &[u8] = b"\x1b[0m";
-const COLOUR_RS: &[u8] = b"\x1b[38;2;200;60;0m";
-const COLOUR_PY: &[u8] = b"\x1b[38;2;0;200;200m";
-const COLOUR_CPP: &[u8] = b"\x1b[38;2;0;100;200m";
-const COLOUR_H: &[u8] = b"\x1b[38;2;80;160;220m";
-const COLOUR_C: &[u8] = b"\x1b[38;2;255;255;224m";
-const COLOUR_LUA: &[u8] = b"\x1b[38;2;0;0;255m";
-const COLOUR_HTML: &[u8] = b"\x1b[38;2;255;105;180m";
-const COLOUR_CSS: &[u8] = b"\x1b[38;2;150;200;50m";
-const COLOUR_JS: &[u8] = b"\x1b[38;2;240;220;80m";
-const COLOUR_JSON: &[u8] = b"\x1b[38;2;160;140;200m";
-const COLOUR_TOML: &[u8] = b"\x1b[38;2;200;120;80m";
-const COLOUR_TXT: &[u8] = b"\x1b[38;2;128;128;128m";
-const COLOUR_MD: &[u8] = b"\x1b[38;2;100;180;100m";
-const COLOUR_INI: &[u8] = b"\x1b[38;2;180;80;80m";
-const COLOUR_CFG: &[u8] = b"\x1b[38;2;180;80;80m";
-const COLOUR_XML: &[u8] = b"\x1b[38;2;130;90;200m";
-const COLOUR_YML: &[u8] = b"\x1b[38;2;130;90;200m";
-const COLOUR_TS: &[u8] = b"\x1b[38;2;90;150;250m";
-const COLOUR_SH: &[u8] = b"\x1b[38;2;100;250;100m";
-const COLOUR_BAT: &[u8] = b"\x1b[38;2;200;200;0m";
-const COLOUR_PS1: &[u8] = b"\x1b[38;2;200;200;0m";
-const COLOUR_RB: &[u8] = b"\x1b[38;2;200;0;200m";
-const COLOUR_PHP: &[u8] = b"\x1b[38;2;80;80;200m";
-const COLOUR_PL: &[u8] = b"\x1b[38;2;80;80;200m";
-const COLOUR_R: &[u8] = b"\x1b[38;2;0;180;0m";
-const COLOUR_CS: &[u8] = b"\x1b[38;2;50;50;50m";
-const COLOUR_JAVA: &[u8] = b"\x1b[38;2;150;50;50m";
-const COLOUR_GO: &[u8] = b"\x1b[38;2;0;150;150m";
-const COLOUR_SWIFT: &[u8] = b"\x1b[38;2;250;50;150m";
-const COLOUR_KT: &[u8] = b"\x1b[38;2;50;150;250m";
-const COLOUR_SCSS: &[u8] = b"\x1b[38;2;245;166;35m";
-const COLOUR_LESS: &[u8] = b"\x1b[38;2;245;166;35m";
-const COLOUR_CSV: &[u8] = b"\x1b[38;2;160;160;160m";
-const COLOUR_TSV: &[u8] = b"\x1b[38;2;160;160;160m";
-const COLOUR_XLS: &[u8] = b"\x1b[38;2;64;128;64m";
-const COLOUR_XLSX: &[u8] = b"\x1b[38;2;64;128;64m";
-const COLOUR_SQL: &[u8] = b"\x1b[38;2;100;100;100m";
-// default colors if LS_COLORS is not set
-const DEFAULT_SYMLINK_COLOR: &[u8] = b"\x1b[38;2;230;150;60m";
-const DEFAULT_DIR_COLOR: &[u8] = b"\x1b[38;2;30;144;255m";
+const RESET: &[u8] = ansi_bytes!(reset);
+
+
+
+// Helper macro to convert ansi! output to byte strings
+
+// Reset and color constants as byte strings
+
+// File type colors
+const COLOUR_RS: &[u8] = ansi_bytes!(rgb(200, 60, 0));
+const COLOUR_PY: &[u8] = ansi_bytes!(rgb(0, 200, 200));
+const COLOUR_CPP: &[u8] = ansi_bytes!(rgb(0, 100, 200));
+const COLOUR_H: &[u8] = ansi_bytes!(rgb(80, 160, 220));
+const COLOUR_C: &[u8] = ansi_bytes!(rgb(255, 255, 224));
+const COLOUR_LUA: &[u8] = ansi_bytes!(rgb(0, 0, 255));
+const COLOUR_HTML: &[u8] = ansi_bytes!(rgb(255, 105, 180));
+const COLOUR_CSS: &[u8] = ansi_bytes!(rgb(150, 200, 50));
+const COLOUR_JS: &[u8] = ansi_bytes!(rgb(240, 220, 80));
+const COLOUR_JSON: &[u8] = ansi_bytes!(rgb(160, 140, 200));
+const COLOUR_TOML: &[u8] = ansi_bytes!(rgb(200, 120, 80));
+const COLOUR_TXT: &[u8] = ansi_bytes!(rgb(128, 128, 128));
+const COLOUR_MD: &[u8] = ansi_bytes!(rgb(100, 180, 100));
+const COLOUR_INI: &[u8] = ansi_bytes!(rgb(180, 80, 80));
+const COLOUR_CFG: &[u8] = ansi_bytes!(rgb(180, 80, 80));
+const COLOUR_XML: &[u8] = ansi_bytes!(rgb(130, 90, 200));
+const COLOUR_YML: &[u8] = ansi_bytes!(rgb(130, 90, 200));
+const COLOUR_TS: &[u8] = ansi_bytes!(rgb(90, 150, 250));
+const COLOUR_SH: &[u8] = ansi_bytes!(rgb(100, 250, 100));
+const COLOUR_BAT: &[u8] = ansi_bytes!(rgb(200, 200, 0));
+const COLOUR_PS1: &[u8] = ansi_bytes!(rgb(200, 200, 0));
+const COLOUR_RB: &[u8] = ansi_bytes!(rgb(200, 0, 200));
+const COLOUR_PHP: &[u8] = ansi_bytes!(rgb(80, 80, 200));
+const COLOUR_PL: &[u8] = ansi_bytes!(rgb(80, 80, 200));
+const COLOUR_R: &[u8] = ansi_bytes!(rgb(0, 180, 0));
+const COLOUR_CS: &[u8] = ansi_bytes!(rgb(50, 50, 50));
+const COLOUR_JAVA: &[u8] = ansi_bytes!(rgb(150, 50, 50));
+const COLOUR_GO: &[u8] = ansi_bytes!(rgb(0, 150, 150));
+const COLOUR_SWIFT: &[u8] = ansi_bytes!(rgb(250, 50, 150));
+const COLOUR_KT: &[u8] = ansi_bytes!(rgb(50, 150, 250));
+const COLOUR_SCSS: &[u8] = ansi_bytes!(rgb(245, 166, 35));
+const COLOUR_LESS: &[u8] = ansi_bytes!(rgb(245, 166, 35));
+const COLOUR_CSV: &[u8] = ansi_bytes!(rgb(160, 160, 160));
+const COLOUR_TSV: &[u8] = ansi_bytes!(rgb(160, 160, 160));
+const COLOUR_XLS: &[u8] = ansi_bytes!(rgb(64, 128, 64));
+const COLOUR_XLSX: &[u8] = ansi_bytes!(rgb(64, 128, 64));
+const COLOUR_SQL: &[u8] = ansi_bytes!(rgb(100, 100, 100));
+
+// Default colors if LS_COLORS is not set
+const DEFAULT_SYMLINK_COLOR: &[u8] = ansi_bytes!(rgb(230, 150, 60));
+const DEFAULT_DIR_COLOR: &[u8] = ansi_bytes!(rgb(30, 144, 255));
 
 #[allow(clippy::inline_always)]
 #[inline(always)]

@@ -12,6 +12,13 @@ use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
 use std::marker::PhantomData;
+/// A temporary directory entry used for filtering purposes.
+/// Used to avoid heap allocations.
+/// 
+/// This struct is used to store the path, depth, file type and base length of the
+/// entry, so we can filter entries without allocating memory on the heap.
+/// It is used in the `DirEntryIteratorFilter` iterator to filter entries based on the
+/// provided filter function.
 pub struct TempDirent<'a, S> {
     pub(crate) path: &'a [u8], // path of the entry, this is used to store the path of the entry 16b (64bit)
     pub(crate) depth: u8, // depth of the entry, this is used to calculate the depth of   1bytes

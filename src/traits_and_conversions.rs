@@ -36,6 +36,9 @@ where
     fn file_name_index(&self) -> u16;
     fn as_os_str(&self) -> &OsStr;
     fn exists(&self) -> bool;
+    fn to_direntry<S>(&self)->Result<DirEntry<S>>
+    where
+        S: BytesStorage;
     fn is_readable(&self) -> bool;
     fn is_writable(&self) -> bool;
     fn metadata(&self) -> crate::Result<std::fs::Metadata>;
@@ -84,6 +87,20 @@ where
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
         memrchr(b'.', self).map(|pos| &self[pos + 1..])
+    }
+
+
+    /// Converts the byte slice into a `DirEntry`.
+    /// This is a convenience method that allows you to create a `DirEntry` from a
+    /// byte slice without needing to convert it to an `OsStr` first.
+    #[inline]
+    fn to_direntry<S>(&self) -> Result<DirEntry<S>>
+    where
+        S: BytesStorage,
+    {
+        // Convert the byte slice to an OsStr and then to a DirEntry
+  
+        DirEntry::<S>::new(self.as_os_str())
     }
 
     /// Converts the byte slice into a `PathBuf`.
@@ -350,6 +367,8 @@ where
         Self::new(path)
     }
 }
+
+
 
 impl<S> AsRef<Path> for DirEntry<S>
 where

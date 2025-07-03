@@ -57,6 +57,7 @@ where
         self.file_name_index as _
     }
     #[inline]
+    #[allow(clippy::missing_safety_doc)]
     pub const unsafe fn next_getdents_read(&mut self) -> *const dirent64 {
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer

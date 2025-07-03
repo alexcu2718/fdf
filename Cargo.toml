@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.3.0"
+version = "0.4.0"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"
@@ -10,8 +10,6 @@ repository = "https://github.com/alexcu2718/fdf"
 keywords = ["search", "filesystem", "parallel", "regex", "cli"]
 categories = ["filesystem", "command-line-utilities", "concurrency"]
 
-[build-dependencies]
-ansic = "0.1.7"
 
 [dependencies]
 compile_time_ls_colours = { git = "https://github.com/alexcu2718/compile_time_ls_colours" }

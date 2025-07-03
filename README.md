@@ -68,22 +68,30 @@ SEE BENCHMARKS IN const_str_benchmark.txt for better details and ideally read my
 ```bash
 
 strlen_by_length/const_time_swar/tiny (1-4)
-                        time:   [1.0787 ns 1.0824 ns 1.0861 ns]
-                        thrpt:  [878.07 MiB/s 881.10 MiB/s 884.13 MiB/s]
+                           time:   [961.66 ps 964.31 ps 966.95 ps]
+                         thrpt:  [986.27 MiB/s 988.97 MiB/s 991.69 MiB/s]
 strlen_by_length/libc_strlen/tiny (1-4)
-                        time:   [1.7487 ns 1.7581 ns 1.7673 ns]
-                        thrpt:  [539.61 MiB/s 542.44 MiB/s 545.36 MiB/s]
+                          time:   [1.6422 ns 1.6466 ns 1.6511 ns]
+                           thrpt:  [577.60 MiB/s 579.17 MiB/s 580.73 MiB/s]
+ strlen_by_length/asm_strlen/tiny (1-4)
+                          time:   [718.41 ps 720.59 ps 722.76 ps]
+                          thrpt:  [1.2886 GiB/s 1.2925 GiB/s 1.2964 GiB/s]
 ```
 
 ## MAXLENGTHSTRINGS (255)
 
 ```bash
-strlen_by_length/const_time_swar/max length (255)
-                        time:   [1.0391 ns 1.0435 ns 1.0481 ns]
-                        thrpt:  [226.59 GiB/s 227.59 GiB/s 228.56 GiB/s]
-strlen_by_length/libc_strlen/max length (255)
-                        time:   [4.8916 ns 4.9141 ns 4.9365 ns]
-                        thrpt:  [48.108 GiB/s 48.328 GiB/s 48.550 GiB/s]
+   strlen_by_length/const_time_swar/max length (255)
+                         time:   [963.74 ps 966.35 ps 969.00 ps]
+                         thrpt:  [245.09 GiB/s 245.76 GiB/s 246.42 GiB/s]
+  strlen_by_length/libc_strlen/max length (255) #interesting!
+                         time:   [3.3193 ns 3.3281 ns 3.3368 ns]
+                        thrpt:  [71.172 GiB/s 71.359 GiB/s 71.548 GiB/s]
+  strlen_by_length/asm_strlen/max length (255)
+                        time:   [4.6074 ns 4.6290 ns 4.6513 ns]
+                       thrpt:  [51.058 GiB/s 51.304 GiB/s 51.544 GiB/s]
+
+
 ```
 
 ```Rust
@@ -102,22 +110,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 
     reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }
-```
 
-instant build guide script for testing/the impatient:
-(If you're on EXT4/BTRFS `with a somewhat modern kernel, it'll work)
-
-```bash
-
-#!/bin/bash
-dest_dir=$HOME/Downloads/fdf
-mkdir -p $dest_dir
-git clone https://github.com/alexcu2718/fdf $dest_dir
-cd $dest_dir
-cargo b -r -q 
-export PATH="$dest_dir/target/release:$PATH"
-echo "$(which fdf)"
-```
 
 ```bash
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
@@ -129,38 +122,6 @@ echo "$(which fdf)"
 | `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 | 
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
 ```
-
-TODO LIST MAYBE:
---Arena allocator potentially,  written from scratch (see microsoft's edit for a nice one) //github.com/microsoft/edit/tree/main/src/arena
-
---io_uring for Batched Syscalls: E.g., batched open/read ops. This will be extremely challenging.
-
---String Interning: Trivial for ASCII, but efficient Unicode handling is another beast entirely.
-
---Threading without rayon: My attempts have come close but aren’t quite there yet. I'll rely on rayon for now until I can think of a smart way to implement an appropriate work distributing algorithm, TODO!
-
---Some sort of iterator adaptor+filter, which would allow one to avoid a lot more allocations on non-directories.
-
---I think there's ultimately a hard limit in syscalls, I've played around with an experimental zig iouring getdents implementation but it's out of my comfort zone, A LOT, I'll probably do it still(if possible)
-
-****THIS IS NOT FINISHED, I have no idea what the plans are, i'm just making stuff go fast and learning ok.
-
----
-
-## Features
-
-- **Ultra-fast multi-threaded directory traversal**
-- **Powerful regex pattern matching** (with glob support via `-g`)
-- **Extension filtering** (`-E jpg,png`)
-- **Hidden file toggle** (default: excluded)
-- **Case sensitivity control** (`-s` for case-sensitive)
-- **File type filtering** (files, directories via `-t`)
-- **Thread configuration** for performance tuning (`-j 8`)
-- **Max results limit** (`-n 100`)
-- **Full path matching** (`-p`)
-- **Fixed-string search** (non-regex via `-F`)
-
----
 
 ## Requirements
 
@@ -253,3 +214,24 @@ Options:
   -V, --version                Print version
   
 ```
+
+TODO LIST (Maybe):
+
+-- Arena Allocator (potentially): Written from scratch. See Microsoft's edit for a nice example:
+   <https://github.com/microsoft/edit/tree/main/src/arena>
+
+-- io_uring for Batched Syscalls: e.g., batched open/read operations.
+   This will be extremely challenging.
+
+-- String Interning: Trivial for ASCII, but efficient Unicode handling is an entirely different beast.
+
+-- Threading Without Rayon: My attempts have come close, but aren’t quite there yet.
+   I'll rely on Rayon for now until I can come up with a smart way to implement an appropriate work-distributing algorithm. TODO!
+
+-- Iterator Adaptor + Filter: Some kind of adaptor that avoids a lot of unnecessary allocations on non-directories.
+
+-- Syscall Limits: I think there’s ultimately a hard limit on syscalls.
+   I've experimented with an early Zig `io_uring + getdents` implementation — but it's well outside my comfort zone (A LOT).
+   I’ll probably give it a go anyway (if possible).
+
+**** THIS IS NOT FINISHED. I have no idea what the long-term plans are — I'm just trying to make stuff go fast and learn, OK?

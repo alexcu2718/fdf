@@ -260,6 +260,8 @@ dependencies = [
  "clap_complete",
  "criterion",
  "libc",
+ "macro_pub",
+ "memchr",
  "mimalloc",
  "rayon",
  "regex",
@@ -343,6 +345,15 @@ name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+
+[[package]]
+name = "macro_pub"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cede240e13256fcfbade77d11b9bbe68c2d002856279f92d1d64c3c583c58f21"
+dependencies = [
+ "xxhash-rust",
+]
 
 [[package]]
 name = "memchr"
@@ -778,3 +789,9 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"

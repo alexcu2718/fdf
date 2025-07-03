@@ -1,31 +1,56 @@
-#[cfg(target_os = "linux")]
+
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-#[cfg(target_os = "linux")]
-use fdf::{dirent_const_time_strlen, strlen as asm_strlen};
-#[cfg(target_os = "linux")]
-use libc::{c_char, dirent64};
-#[cfg(target_os = "linux")]
+
+use fdf::{ strlen as asm_strlen};
+
 use std::hint::black_box;
 
-#[cfg(target_os = "linux")]
+#[inline(always)]
+//modified version to work for this test function(copy pasted really)
+pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(LibcDirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
+    let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
+    //let reclen_new=unsafe{ const {(*dirent).d_reclen}}; //reclen is the length of the dirent structure, including the d_name field
+    // Calculate find the  start of the d_name field
+    //  Access the last 8 bytes(word) of the dirent structure as a u64 word
+    #[cfg(target_endian = "little")]
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
+    #[cfg(target_endian = "big")]
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
+
+    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
+
+    let candidate_pos = last_word | mask;
+
+    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is zero
+        & !candidate_pos//ensures only bytes that were zero retain the underflowed high bit.
+        & 0x8080_8080_8080_8080; //  0x8080_8080_8080_8080 -->This masks out the high bit of each byte, so we can find the first zero byte
+
+    let byte_pos = 7 - (zero_bit.trailing_zeros() >> 3) as usize;
+
+    reclen - DIRENT_HEADER_START - byte_pos
+}
+
+
 #[repr(C, align(8))]
 pub struct LibcDirent64 {
-    // Fake a structure similar to libc::dirent64 which we transmute later
+    // Fake a structure similar to libc::dirent64
     pub d_ino: u64,
     pub d_off: u64,
     pub d_reclen: u16,
     pub d_type: u8,
     pub d_name: [u8; 256],
 }
-#[cfg(target_os = "linux")]
+
+
 const fn calculate_min_reclen(name_len: usize) -> u16 {
     const HEADER_SIZE: usize = std::mem::offset_of!(LibcDirent64, d_name);
     let total_size = HEADER_SIZE + name_len + 1;
     ((total_size + 7) & !7) as u16 //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
     //this works because it's given the same representation in memory so repr C will ensure the layout is compatible
 }
-#[cfg(target_os = "linux")]
-fn make_dirent(name: &str) -> dirent64 {
+
+fn make_dirent(name: &str) ->  LibcDirent64  {
     let bytes = name.as_bytes();
     assert!(bytes.len() < 256, "Name too long for dirent structure");
 
@@ -41,10 +66,11 @@ fn make_dirent(name: &str) -> dirent64 {
     entry.d_name[..bytes.len()].copy_from_slice(bytes);
     entry.d_name[bytes.len()] = 0;
 
-    unsafe { std::mem::transmute(entry) }
+    entry
 }
-#[cfg(target_os = "linux")]
+
 fn bench_strlen(c: &mut Criterion) {
+    eprintln!("if testing on macos/bsd, this may break, will test soon");
     // First create all test cases
     let length_groups = [
         ("tiny (1-4)", "a"),
@@ -84,14 +110,14 @@ fn bench_strlen(c: &mut Criterion) {
                 &entry,
                 |b, e| {
                     b.iter(|| unsafe {
-                        black_box(libc::strlen(black_box(e.d_name.as_ptr() as *const c_char)))
+                        black_box(libc::strlen(black_box(e.d_name.as_ptr() as *const _)))
                     })
                 },
             );
 
             group.bench_with_input(BenchmarkId::new("asm_strlen", size_name), &entry, |b, e| {
                 b.iter(|| unsafe {
-                    black_box(asm_strlen(black_box(e.d_name.as_ptr() as *const c_char)))
+                    black_box(asm_strlen(black_box(e.d_name.as_ptr() as *const _)))
                 })
             });
         }
@@ -107,7 +133,7 @@ fn bench_strlen(c: &mut Criterion) {
             b.iter(|| {
                 let mut total = 0;
                 for entry in &all_entries {
-                    total += unsafe { black_box(dirent_const_time_strlen(black_box(entry))) };
+                    total += unsafe { black_box(dirent_const_time_strlen(black_box( entry as *const _  ))) };
                 }
                 black_box(total)
             })
@@ -119,7 +145,7 @@ fn bench_strlen(c: &mut Criterion) {
                 for entry in &all_entries {
                     total += unsafe {
                         black_box(libc::strlen(black_box(
-                            entry.d_name.as_ptr() as *const c_char
+                            entry.d_name.as_ptr() as *const _
                         )))
                     };
                 }
@@ -132,7 +158,7 @@ fn bench_strlen(c: &mut Criterion) {
                 for entry in &all_entries {
                     total += unsafe {
                         black_box(asm_strlen(
-                            black_box(entry.d_name.as_ptr() as *const c_char),
+                            black_box(entry.d_name.as_ptr() as *const _),
                         ))
                     };
                 }
@@ -144,7 +170,7 @@ fn bench_strlen(c: &mut Criterion) {
     }
 }
 
-#[cfg(target_os = "linux")]
+
 criterion_group! {
     name = benches;
     config = Criterion::default()
@@ -153,13 +179,6 @@ criterion_group! {
         .measurement_time(std::time::Duration::from_secs(3));
     targets = bench_strlen
 }
-#[cfg(target_os = "linux")]
+
 criterion_main!(benches);
 
-#[cfg(not(target_os = "linux"))]
-fn main() {
-    eprintln!(
-        "
-        THIS TEST IS ONLY VALID FOR LINUX IGNORE"
-    )
-}

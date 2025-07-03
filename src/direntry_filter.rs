@@ -58,7 +58,7 @@ where
     }
     #[inline]
     pub const unsafe fn next_getdents_read(&mut self) -> *const dirent64 {
-        let d:*const libc::dirent64 =unsafe{self.buffer.as_ptr().add(self.offset).cast::<_>()};
+        let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
@@ -70,7 +70,6 @@ where
         self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
         self.offset = 0;
     }
-
 
     #[inline]
     /// Prefetches the next likely entry in the buffer to keep the cache warm.
@@ -119,9 +118,8 @@ where
                 let d: *const dirent64 = unsafe { self.next_getdents_read() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
 
-               
                 self.prefetch_next_entry(); //check how much is left remaining in buffer, if reasonable to hold more, warm cache
-                //no op on non-x86-64 
+                //no op on non-x86-64
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
 

@@ -7,10 +7,7 @@
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-use crate::{
-    cursed_macros::construct_dirent, 
-    utils::close_asm, utils::open_asm,
-};
+use crate::{cursed_macros::construct_dirent, utils::close_asm, utils::open_asm};
 #[allow(unused_imports)]
 use crate::{temp_dirent::TempDirent, utils::resolve_inode};
 
@@ -37,26 +34,40 @@ use crate::{
     cursed_macros::skip_dot_or_dot_dot_entries, offset_ptr,
 };
 
-#[derive(Clone)]
 /// A struct representing a directory entry.
-/// This struct is used to represent a directory entry in a filesystem.
 ///
-///
-/// The `DirEntry` struct is used to represent a
-/// S is a storage type, this is used to store the path of the entry, it can be a Box, Arc, Vec, etc.
-///ordered by size, so `Box<[u8]>` is 16 bytes, `Arc<[u8]>` is 24 bytes, `Vec<u8>` is 24 bytes, `SlimmerBox<[u8], u16>` is 10 bytes
-///Slimmerbox is `Box<[u8]>` on non linux/macos due to package limitations,TBD.
+/// `S` is a storage type (e.g., `Box<[u8]>`, `Arc<[u8]>`, `Vec<u8>`) used to hold the path bytes.
+#[derive(Clone)]
 pub struct DirEntry<S>
 where
     S: BytesStorage,
 {
-    pub(crate) path: OsBytes<S>, //10 bytes,this is basically a box with a much thinner pointer, it's 10 bytes instead of 16.
-    pub(crate) file_type: FileType, //1 byte
-    pub(crate) inode: u64,       //8 bytes, i may drop this in the future, it's not very useful.
-    pub(crate) depth: u8, //1 bytes    , this is a max of 255 directories deep, it's also 1 bytes so keeps struct below 24bytes.
-    pub(crate) file_name_index: u16, //2 bytes     , this info is free and helps to get the filename.its formed by path length until  and including last /.
-                                     //total 22 bytes
-                                     //2 bytes padding, possible uses? not sure.
+    /// Path to the entry, stored as OS-native bytes.
+    ///
+    /// This is a thin pointer wrapper around the storage `S`, optimized for size (~10 bytes). ( on linux/macos, not tested bsds etc)
+    pub(crate) path: OsBytes<S>,
+
+    /// File type (file, directory, symlink, etc.).
+    ///
+    /// Stored as a 1-byte enum.
+    pub(crate) file_type: FileType,
+
+    /// Inode number of the file.
+    ///
+    /// 8 bytes, (may be hidden under a cfg flag in future for relevant reasons/32bit systems(if i ever do that.))
+    pub(crate) inode: u64,
+
+    /// Depth of the directory entry relative to the root.
+    ///
+    /// Stored as a single byte, supporting up to 255 levels deep.
+    pub(crate) depth: u8,
+
+    /// Offset in the path buffer where the file name starts.
+    ///
+    /// This helps quickly extract the file name from the full path.
+    pub(crate) file_name_index: u16,
+    // 2 bytes free here., we need to leave 1 byte free so we can save on the size of the option/result enum.
+    //i'm not sure what's a good use of 1 byte
 }
 
 impl<S> DirEntry<S>
@@ -392,26 +403,22 @@ where
     /// the pointer is valid and that we don't read past the end of the buffer.
     /// This is only used in the iterator implementation, so we can safely assume that the pointer
     /// is valid and that we don't read past the end of the buffer.
-    pub unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
-        let d:*const libc::dirent64 =unsafe{self.buffer.as_ptr().add(self.offset).cast::<_>()};
+    pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
+        let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
         self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
     /// Checks the remaining bytes in the buffer, and resets the offset to 0.
     /// This is a syscall that returns the number of bytes left to read.
-    /// 
-    /// 
+    ///
+    ///
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
     pub unsafe fn getdents_syscall(&mut self) {
         self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
         self.offset = 0;
     }
-    
-    
-    
-
 
     #[inline]
     /// Prefetches the next likely entry in the buffer to keep the cache warm.
@@ -439,9 +446,8 @@ where
             }
         }
     }
-
-
 }
+
 #[cfg(target_os = "linux")]
 impl<S> Iterator for DirEntryIterator<S>
 where
@@ -458,16 +464,14 @@ where
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
 
-              
-
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
                 let entry = construct_dirent!(self, d); //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
 
                 return Some(entry);
             }
-            // prefetch the next buffer content before reading, only applies if no 
-           
+            // prefetch the next buffer content before reading, only applies if no
+
             self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-linux systems
             // issue a syscall once out of entries
             unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read

@@ -225,8 +225,6 @@ macro_rules! construct_path {
     }};
 }
 
-
-
 #[macro_pub(crate)]
 #[allow(clippy::ptr_as_ptr)]
 /// A high-performance, SIMD-accelerated `strlen` for null-terminated strings.

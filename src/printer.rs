@@ -1,9 +1,9 @@
+use ansic::ansi;
 use fdf::BytesStorage;
 use fdf::{BytePath, DirEntry, FileType, Result};
 use std::collections::HashMap;
 use std::io::{BufWriter, IsTerminal, Write, stdout};
 use std::sync::OnceLock;
-use ansic::ansi;
 //im going to make this compile time to figure out LS colours soon.
 // Helper macro to convert ansi! output to byte strings
 macro_rules! ansi_bytes {
@@ -12,14 +12,11 @@ macro_rules! ansi_bytes {
     };
 }
 
-
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
 const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
 const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
 const RESET: &[u8] = ansi_bytes!(reset);
-
-
 
 // Helper macro to convert ansi! output to byte strings
 

@@ -134,7 +134,7 @@ struct Args {
     #[arg(
         short = 'a',
         long = "absolute-path",
-        help = "Show absolute paths of results, defaults to false\n",
+        help = "Show absolute paths of results, defaults to false\n"
     )]
     absolute_path: bool,
 
@@ -197,7 +197,7 @@ struct Args {
         long = "full-path",
         required = false,
         default_value_t = false,
-        help = "Use a full path for regex matching, default to false\n",
+        help = "Use a full path for regex matching, default to false\n"
     )]
     full_path: bool,
 
@@ -222,14 +222,13 @@ fn main() -> Result<(), DirEntryError> {
     let path = resolve_directory(args.current_directory, args.directory, args.absolute_path);
 
     if let Some(generator) = args.generate {
-    let mut cmd = Args::command();
-    let bin_name = cmd.get_name().to_owned(); 
-    cmd.set_bin_name("fdf");
+        let mut cmd = Args::command();
+        let bin_name = cmd.get_name().to_owned();
+        cmd.set_bin_name("fdf");
 
-    generate(generator, &mut cmd, bin_name, &mut stdout());
-    return Ok(());
-}
-
+        generate(generator, &mut cmd, bin_name, &mut stdout());
+        return Ok(());
+    }
 
     let start_pattern = args.pattern.as_ref().map_or_else(
         || {
@@ -238,8 +237,6 @@ fn main() -> Result<(), DirEntryError> {
         },
         std::clone::Clone::clone,
     );
-
-
 
     let pattern = if args.fixed_string {
         regex::escape(&start_pattern)

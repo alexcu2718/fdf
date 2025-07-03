@@ -76,17 +76,15 @@ where
         Some(d)
     }
     #[inline]
-    #[allow(dead_code)] //annoying 
+    #[allow(dead_code)] //annoying
     /// Reads the next directory entry without checking for null pointers.
     /// This function is unsafe because it does not check if the directory pointer is null.
     /// SAFETY: This function assumes that the directory pointer is valid and not null.
     pub unsafe fn read_dir_unchecked(&mut self) -> *const dirent {
         // This function reads the directory entries without checking for null pointers.
         // It is used internally by the iterator to read the next entry.
-        unsafe{readdir(self.dir)}
+        unsafe { readdir(self.dir) }
     }
-
-
 
     #[inline]
     #[allow(clippy::cast_lossless)]

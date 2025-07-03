@@ -156,10 +156,8 @@ TODO LIST MAYBE:
 
 ## Requirements
 
-- **Linux only**: Specific linux syscalls for Linux filesystems
-- **Rust 1.74+** (recommended for building from source)
-
----
+- **Linux/Macos/Bsd only**: Specific posix syscalls.
+- **64 bit tested only**
 
 ## Installation
 

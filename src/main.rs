@@ -84,13 +84,12 @@ x: Executable";
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[allow(clippy::struct_excessive_bools)]
-///generate our arguments and parse them.
-pub struct Args {
+struct Args {
     #[arg(value_name = "PATTERN", help = "Pattern to search for", index = 1)]
     pattern: Option<String>,
     #[arg(
         value_name = "PATH",
-        help = format!("Path to search (defaults to {START_PREFIX})\nUse -c to do current directory"),
+        help = format!("Path to search (defaults to {START_PREFIX})\nUse -c to do current directory\n"),
         value_hint=ValueHint::DirPath,
         required=false,
         index=2
@@ -108,35 +107,34 @@ pub struct Args {
     #[arg(
         short = 'E',
         long = "extension",
-        help = format!("filters based on extension, eg -E .txt or -E txt"),
+        help = format!("filters based on extension, eg -E .txt or -E txt\n"),
     )]
     extension: Option<String>,
 
     #[arg(
         short = 'H',
         long = "hidden",
-        help = "Shows hidden files eg .gitignore or .bashrc\n"
+        help = "Shows hidden files eg .gitignore or .bashrc, defaults to off\n"
     )]
     hidden: bool,
     #[arg(
         short = 's',
         long = "case-sensitive",
-        default_value_t = true,
-        help = "Enable case-sensitive matching\n"
+        default_value_t = false,
+        help = "Enable case-sensitive matching, defaults to false\n"
     )]
     case_sensitive: bool,
     #[arg(
         short = 'j',
         long = "threads",
         default_value_t = env!("CPU_COUNT").parse::<usize>().unwrap_or(1),
-        help = "Number of threads to use, defaults to available threads",
+        help = "Number of threads to use, defaults to available threads\n",
     )]
     thread_num: usize,
     #[arg(
         short = 'a',
         long = "absolute-path",
-       // default_value_t = env!("CPU_COUNT").parse::<usize>().unwrap_or(1),
-        help = "Show absolute path",
+        help = "Show absolute paths of results, defaults to false\n",
     )]
     absolute_path: bool,
 
@@ -144,7 +142,7 @@ pub struct Args {
         short = 'I',
         long = "include-dirs",
         default_value_t = false,
-        help = "Include directories\n"
+        help = "Include directories, defaults to off\n"
     )]
     keep_dirs: bool,
 
@@ -160,14 +158,14 @@ pub struct Args {
         long = "glob",
         required = false,
         default_value_t = false,
-        help = "Use a glob pattern,defaults to off"
+        help = "Use a glob pattern,defaults to off\n"
     )]
     glob: bool,
 
     #[arg(
         short = 'n',
         long = "max-results",
-        help = "Retrieves the first eg 10 results, '.cache' / -n 10"
+        help = "Retrieves the first eg 10 results, '.cache' / -n 10\n"
     )]
     top_n: Option<usize>,
     #[arg(
@@ -199,7 +197,7 @@ pub struct Args {
         long = "full-path",
         required = false,
         default_value_t = false,
-        help = "Use a full path for regex matching"
+        help = "Use a full path for regex matching, default to false\n",
     )]
     full_path: bool,
 
@@ -208,7 +206,7 @@ pub struct Args {
         long = "fixed-strings",
         required = false,
         default_value_t = false,
-        help = "Use a fixed string not a regex",
+        help = "Use a fixed string not a regex, defaults to false\n",
         conflicts_with = "glob"
     )]
     fixed_string: bool,

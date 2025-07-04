@@ -203,9 +203,9 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
 name = "compile_time_ls_colours"
-version = "0.3.3"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a22de519afd867c2123c94fb7aa4853b8940027a6b0a7d831cd294f45caa860a"
+checksum = "e284f594d16d329bc4f0d26ef7dcf9745da8a3b6e674cbd6b0f0ff0115d7a89d"
 dependencies = [
  "ansic",
  "phf",
@@ -290,7 +290,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "fdf"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "clap",
  "clap_complete",

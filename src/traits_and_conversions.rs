@@ -36,7 +36,7 @@ where
     fn file_name_index(&self) -> u16;
     fn as_os_str(&self) -> &OsStr;
     fn exists(&self) -> bool;
-    fn to_direntry<S>(&self)->Result<DirEntry<S>>
+    fn to_direntry<S>(&self) -> Result<DirEntry<S>>
     where
         S: BytesStorage;
     fn is_readable(&self) -> bool;
@@ -89,7 +89,6 @@ where
         memrchr(b'.', self).map(|pos| &self[pos + 1..])
     }
 
-
     /// Converts the byte slice into a `DirEntry`.
     /// This is a convenience method that allows you to create a `DirEntry` from a
     /// byte slice without needing to convert it to an `OsStr` first.
@@ -99,7 +98,7 @@ where
         S: BytesStorage,
     {
         // Convert the byte slice to an OsStr and then to a DirEntry
-  
+
         DirEntry::<S>::new(self.as_os_str())
     }
 
@@ -367,8 +366,6 @@ where
         Self::new(path)
     }
 }
-
-
 
 impl<S> AsRef<Path> for DirEntry<S>
 where

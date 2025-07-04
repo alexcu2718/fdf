@@ -6,10 +6,10 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-use crate::{ utils::close_asm, utils::open_asm};
-#[allow(unused_imports)]
 use crate::{temp_dirent::TempDirent, utils::resolve_inode};
+#[allow(unused_imports)]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+use crate::{utils::close_asm, utils::open_asm};
 
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
@@ -29,10 +29,7 @@ use crate::{
 };
 
 #[cfg(target_os = "linux")]
-use crate::{
-    PathBuffer, SyscallBuffer, 
-     offset_ptr,
-};
+use crate::{PathBuffer, SyscallBuffer, offset_ptr};
 
 /// A struct representing a directory entry.
 ///

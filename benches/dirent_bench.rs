@@ -43,7 +43,7 @@ pub struct LibcDirent64 {
 const fn calculate_min_reclen(name_len: usize) -> u16 {
     const HEADER_SIZE: usize = std::mem::offset_of!(LibcDirent64, d_name);
     let total_size = HEADER_SIZE + name_len + 1;
-    (((total_size + 7) / 8) * 8) as u16//reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
+    (((total_size + 7) / 8) * 8) as u16 //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
     //this works because it's given the same representation in memory so repr C will ensure the layout is compatible
 }
 
@@ -134,7 +134,7 @@ fn bench_strlen(c: &mut Criterion) {
                         black_box(dirent_const_time_strlen(black_box(entry as *const _)))
                     };
                 }
-                black_box(total)//make sure compiler does not optimise this away
+                black_box(total) //make sure compiler does not optimise this away
             })
         });
 

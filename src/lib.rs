@@ -86,8 +86,6 @@ pub use error::DirEntryError;
 
 mod custom_types_result;
 
-
-
 pub use custom_types_result::{
     BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, Result,
     SlimmerBytes,
@@ -184,8 +182,7 @@ where
             config.keep_dirs && (self.custom_filter)(config, &dir, self.filter) && dir.depth() != 0;
 
         if self.search_config.depth.is_some_and(|d| dir.depth >= d) {
-
-            if should_send{
+            if should_send {
                 let _ = sender.send(vec![dir]);
             } //have to put into a vec, this doesnt matter because this only happens when we depth limit
 
@@ -254,7 +251,6 @@ where
 {
     /// Create a new `FinderBuilder` with required fields
     pub fn new(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> Self {
-
         Self {
             root: root.as_ref().to_owned(),
             pattern: pattern.as_ref().to_owned(),

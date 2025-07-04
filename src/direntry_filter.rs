@@ -7,12 +7,8 @@
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
 use crate::{
-    BytePath, BytesStorage, PathBuffer, Result, SearchConfig, SyscallBuffer, TempDirent,
-    
-    offset_ptr,
+    BytePath, BytesStorage, PathBuffer, Result, SearchConfig, SyscallBuffer, TempDirent, offset_ptr,
 };
-
-
 
 use libc::{close, dirent64};
 

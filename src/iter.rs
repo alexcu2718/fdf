@@ -2,7 +2,6 @@
 #[allow(unused_imports)]
 use crate::{
     BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer, cstr,
-   
     custom_types_result::BytesStorage, offset_ptr,
 };
 use libc::{DIR, closedir, opendir};

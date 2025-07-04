@@ -1,9 +1,4 @@
-
 use compile_time_ls_colours::colour_hashmap;
-
-
-
-
 
 use fdf::BytesStorage;
 use fdf::{BytePath, DirEntry, FileType, Result};
@@ -17,9 +12,6 @@ const RESET: &[u8] = b"\x1b[0m";
 const DEFAULT_SYMLINK_COLOR: &[u8] = b"\x1b[38;2;230;150;60m";
 const DEFAULT_DIR_COLOR: &[u8] = b"\x1b[38;2;30;144;255m";
 
-
-
-
 #[allow(clippy::inline_always)]
 #[inline(always)]
 fn extension_colour<S>(entry: &DirEntry<S>) -> &[u8]
@@ -29,17 +21,15 @@ where
     // check if it's a symlink and use  LS_COLORS symlink color
     match entry.file_type() {
         // Handle symlinks first (they override directory status)
-        FileType::Symlink => {
-            colour_hashmap(b"symlink",DEFAULT_SYMLINK_COLOR)
-        }
+        FileType::Symlink => colour_hashmap(b"symlink", DEFAULT_SYMLINK_COLOR),
 
         // Then handle directories
-        FileType::Directory => colour_hashmap(b"directory",DEFAULT_DIR_COLOR),
+        FileType::Directory => colour_hashmap(b"directory", DEFAULT_DIR_COLOR),
 
         // for all other  files, color by extension
-        _ => entry.extension().map_or(RESET, |pos| colour_hashmap(pos,RESET))
-        
-        
+        _ => entry
+            .extension()
+            .map_or(RESET, |pos| colour_hashmap(pos, RESET)),
     }
 }
 

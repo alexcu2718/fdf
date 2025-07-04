@@ -1,3 +1,4 @@
+#![allow(unused_macros)]
 
 //i didnt want to to use this macro but it saved a LOT of hassle/boilerplate. (vlight depdendency
 //might remove this when less lazy.
@@ -105,7 +106,6 @@ macro_rules! cstr {
     }};
 }
 
-
 #[doc(hidden)]
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// NOT INTENDED FOR PUBLIC USE, WILL BE PRIVATE SOON.
@@ -171,9 +171,6 @@ macro_rules! init_path_buffer {
         (base_len,start_buffer)
     }};
 }
-
-
-
 
 #[allow(clippy::ptr_as_ptr)]
 /// A high-performance, SIMD-accelerated `strlen` for null-terminated strings.
@@ -264,7 +261,7 @@ macro_rules! construct_path {
         let d_name = offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.file_name_index(); //get the base path length, this is the length of the directory path
 
-        let name_len = { /* 
+        let name_len = { /*
          #[cfg(target_os = "linux")]
         {   use $crate::dirent_const_time_strlen;
             dirent_const_time_strlen($dirent) //const time strlen for linux (specialisation)
@@ -305,8 +302,6 @@ macro_rules! construct_path {
 
     }};
 }
-
-
 
 #[macro_export]
 /// Macro to implement `BytesStorage` for types that support `From<&[u8]>`

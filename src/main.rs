@@ -7,6 +7,7 @@
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
+#![allow(clippy::redundant_closure_for_method_calls)]
 #![allow(clippy::macro_metavars_in_unsafe)]
 #![allow(clippy::shadow_unrelated)]
 #![allow(clippy::print_stderr)]
@@ -59,11 +60,11 @@
 use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
+use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 use std::path::Path;
 use std::str;
-use std::env;
 
 mod printer;
 use printer::write_paths_coloured;
@@ -212,8 +213,6 @@ fn main() -> Result<(), DirEntryError> {
         .build_global()
         .map_err(DirEntryError::RayonError)?;
 
-
-
     let path = resolve_directory(args.directory, args.absolute_path);
 
     if let Some(generator) = args.generate {
@@ -266,38 +265,32 @@ fn main() -> Result<(), DirEntryError> {
 
 #[allow(clippy::must_use_candidate)]
 ///simple function to resolve the directory to use.
-fn resolve_directory(
-    args_directory: Option<OsString>,
-    canonicalise: bool,
-) -> OsString {
-    
-   
-        let dir_to_use = args_directory.unwrap_or_else(|| generate_start_prefix());
-        let path_check = Path::new(&dir_to_use);
+fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> OsString {
+    let dir_to_use = args_directory.unwrap_or_else(|| generate_start_prefix());
+    let path_check = Path::new(&dir_to_use);
 
-        if !path_check.is_dir() && !path_check.is_symlink() {
-            eprintln!("{} is not a directory", dir_to_use.to_string_lossy());
-            std::process::exit(1);
-        }
-
-        if canonicalise {
-            match path_check.canonicalize() {
-                //stupid yank spelling.
-                Ok(canonical_path) => canonical_path.into_os_string(),
-                Err(e) => {
-                    eprintln!(
-                        "Failed to canonicalise path {} {}",
-                        path_check.to_string_lossy(),
-                        e
-                    );
-                    std::process::exit(1);
-                }
-            }
-        } else {
-            dir_to_use
-        }
+    if !path_check.is_dir() && !path_check.is_symlink() {
+        eprintln!("{} is not a directory", dir_to_use.to_string_lossy());
+        std::process::exit(1);
     }
 
+    if canonicalise {
+        match path_check.canonicalize() {
+            //stupid yank spelling.
+            Ok(canonical_path) => canonical_path.into_os_string(),
+            Err(e) => {
+                eprintln!(
+                    "Failed to canonicalise path {} {}",
+                    path_check.to_string_lossy(),
+                    e
+                );
+                std::process::exit(1);
+            }
+        }
+    } else {
+        dir_to_use
+    }
+}
 
 fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     if !args_glob {
@@ -309,9 +302,6 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
         std::process::exit(1)
     })
 }
-
-
-
 
 fn generate_start_prefix() -> OsString {
     env::current_dir()

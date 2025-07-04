@@ -12,9 +12,10 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
 [dependencies]
-compile_time_ls_colours = { git = "https://github.com/alexcu2718/compile_time_ls_colours" }
+
 clap = { version = "4.5.31", features = ["derive"] }
 clap_complete = "4.5.46"
+compile_time_ls_colours = "0.1.0"
 libc = "0.2.170"
 memchr = "2.7.5"
 rayon = "1.10.0"

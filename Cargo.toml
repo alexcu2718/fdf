@@ -27,7 +27,8 @@ slimmer_box = "0.6.5"
 mimalloc = "0.1.43"
 
 
-
+[dev-dependencies]
+criterion = { version = "0.6.0", features = ["cargo_bench_support", "real_blackbox"] }
 
 [profile.release]
 opt-level = 3
@@ -36,11 +37,6 @@ strip=true
 lto = true
 codegen-units = 1
 panic = "abort"  
-
-
-
-[target.'cfg(bench)'.dependencies]
-criterion = { version = "0.6.0", features = ["cargo_bench_support", "real_blackbox"] }
 
 
 

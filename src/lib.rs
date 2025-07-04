@@ -64,6 +64,9 @@ use std::{
 #[macro_use]
 pub(crate) mod cursed_macros;
 
+#[macro_use]
+pub mod colour_macro;
+
 mod temp_dirent;
 pub use temp_dirent::TempDirent;
 //crate imports

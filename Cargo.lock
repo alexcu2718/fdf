@@ -202,16 +202,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
-name = "compile_time_ls_colours"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ee6e0484ddd83b624258bf5a26606c723c78215ef5029adbbcb9b79638405a4"
-dependencies = [
- "ansic",
- "phf",
-]
-
-[[package]]
 name = "criterion"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -291,13 +281,14 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 name = "fdf"
 version = "0.4.1"
 dependencies = [
+ "ansic",
  "clap",
  "clap_complete",
- "compile_time_ls_colours",
  "criterion",
  "libc",
  "memchr",
  "mimalloc",
+ "phf",
  "rayon",
  "regex",
  "slimmer_box",

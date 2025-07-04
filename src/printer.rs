@@ -1,16 +1,46 @@
-use compile_time_ls_colours::file_type_colour;
+
+
+
+
+
 use fdf::BytesStorage;
+use fdf::colour_macro::colour_path_or_alternative;
 use fdf::{BytePath, DirEntry, FileType, Result};
 use std::io::{BufWriter, IsTerminal, Write, stdout};
+
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
 const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
 const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
 const RESET: &[u8] = b"\x1b[0m";
 
+pub const NO_COLOUR: &[u8] = b"\x1b[0m"; // Reset colour code
+// Default colour code for symbolic links.
+pub const DEFAULT_SYMLINK_COLOUR: &[u8] = b"\x1b[38;2;230;150;60m";
+
+// Default colour code for directories.
+pub const DEFAULT_DIR_COLOUR: &[u8] = b"\x1b[38;2;30;144;255m";
+
+
+#[macro_export]
+macro_rules! file_type_colour {
+    
+    (symlink) => { // if it's a symlink, use the default symlink colour
+        colour_path_or_alternative(b"symlink", DEFAULT_SYMLINK_COLOUR)
+    };
+    (directory) => { // if it's a directory, use the default directory colour
+         colour_path_or_alternative(b"directory", DEFAULT_DIR_COLOUR)
+    };
+    ($other:ident) => { // for any other file type, use the colour from the LS_COLORS map or NO_COLOUR
+         colour_path_or_alternative($other, NO_COLOUR)
+    };
+}
+
+
 
 #[allow(clippy::inline_always)]
 #[inline(always)]
+
 fn extension_colour<S>(entry: &DirEntry<S>) -> &[u8]
 where
     S: BytesStorage + 'static + Clone,

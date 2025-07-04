@@ -166,7 +166,7 @@ Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
 Arguments:
   [PATTERN]  Pattern to search for
-  [PATH]     Path to search (defaults to /)
+  [PATH]     Path to search (defaults to CURRENT WORKING DIRECTORY)
              Use -c to do current directory
 
 
@@ -185,7 +185,7 @@ Options:
   -s, --case-sensitive         Enable case-sensitive matching, defaults to false
 
   -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads
-                                [default: 12]
+                                [default: NUM_OF_CORES]
   -a, --absolute-path          Show absolute paths of results, defaults to false
 
   -I, --include-dirs           Include directories, defaults to off

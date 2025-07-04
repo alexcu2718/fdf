@@ -13,7 +13,7 @@ pub enum FileType {
     BlockDevice,
     CharDevice,
     Directory,
-    Fifo,
+    Pipe,
     Symlink,
     RegularFile,
     Socket,
@@ -32,7 +32,7 @@ impl FileType {
             DT_DIR => Self::Directory,
             DT_BLK => Self::BlockDevice,
             DT_CHR => Self::CharDevice,
-            DT_FIFO => Self::Fifo,
+            DT_FIFO => Self::Pipe,
             DT_LNK => Self::Symlink,
             DT_SOCK => Self::Socket,
             _ => Self::Unknown,
@@ -59,8 +59,8 @@ impl FileType {
         matches!(self, Self::CharDevice)
     }
     #[inline]
-    pub const fn is_fifo(&self) -> bool {
-        matches!(self, Self::Fifo)
+    pub const fn is_pipe(&self) -> bool {
+        matches!(self, Self::Pipe)
     }
     #[inline]
     pub const fn is_socket(&self) -> bool {
@@ -89,7 +89,7 @@ impl FileType {
             DT_DIR => Self::Directory,
             DT_BLK => Self::BlockDevice,
             DT_CHR => Self::CharDevice,
-            DT_FIFO => Self::Fifo,
+            DT_FIFO => Self::Pipe,
             DT_LNK => Self::Symlink,
             DT_SOCK => Self::Socket,
             _ => Self::from_bytes(file_path),
@@ -114,7 +114,7 @@ impl FileType {
             S_IFDIR => Self::Directory,
             S_IFBLK => Self::BlockDevice,
             S_IFCHR => Self::CharDevice,
-            S_IFIFO => Self::Fifo,
+            S_IFIFO => Self::Pipe,
             S_IFLNK => Self::Symlink,
             S_IFSOCK => Self::Socket,
             _ => Self::Unknown,
@@ -132,7 +132,7 @@ impl FileType {
                 ft if ft.is_symlink() => Self::Symlink,
                 ft if ft.is_block_device() => Self::BlockDevice,
                 ft if ft.is_char_device() => Self::CharDevice,
-                ft if ft.is_fifo() => Self::Fifo,
+                ft if ft.is_fifo() => Self::Pipe,
                 ft if ft.is_socket() => Self::Socket,
                 _ => Self::Unknown,
             })
@@ -155,7 +155,7 @@ impl FileType {
             Self::Directory => DT_DIR,
             Self::BlockDevice => DT_BLK,
             Self::CharDevice => DT_CHR,
-            Self::Fifo => DT_FIFO,
+            Self::Pipe => DT_FIFO,
             Self::Symlink => DT_LNK,
             Self::Socket => DT_SOCK,
             Self::Unknown => 0, // DT_UNKNOWN
@@ -170,7 +170,7 @@ impl std::fmt::Display for FileType {
             Self::BlockDevice => write!(f, "Block device"),
             Self::CharDevice => write!(f, "Character device"),
             Self::Directory => write!(f, "Directory"),
-            Self::Fifo => write!(f, "FIFO"),
+            Self::Pipe => write!(f, "FIFO"),
             Self::Symlink => write!(f, "Symlink"),
             Self::RegularFile => write!(f, "Regular file"),
             Self::Socket => write!(f, "Socket"),

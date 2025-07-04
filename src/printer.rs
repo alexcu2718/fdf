@@ -8,7 +8,6 @@ const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
 const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
 const RESET: &[u8] = b"\x1b[0m";
 
-
 #[allow(clippy::inline_always)]
 #[inline(always)]
 fn extension_colour<S>(entry: &DirEntry<S>) -> &[u8]
@@ -19,9 +18,12 @@ where
     match entry.file_type() {
         // Handle symlinks first (they override directory status)
         FileType::Symlink => file_type_colour!(symlink),
-
-        // Then handle directories
         FileType::Directory => file_type_colour!(directory),
+        FileType::BlockDevice => file_type_colour!(block_device),
+        FileType::CharDevice => file_type_colour!(character_device),
+        FileType::Socket => file_type_colour!(socket),
+        FileType::Pipe => file_type_colour!(pipe),
+        //executable isn't here because it requires a stat call, i might add it. doesnt affect performance since printing is the bottleneck
 
         // for all other  files, color by extension
         _ => entry

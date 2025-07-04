@@ -41,7 +41,7 @@ where
                 }
             }
             'p' => {
-                if entry.is_fifo() {
+                if entry.is_pipe() {
                     return true;
                 }
             }

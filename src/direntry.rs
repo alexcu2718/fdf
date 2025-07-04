@@ -93,11 +93,11 @@ where
         self.file_type.is_char_device()
     }
 
-    ///Cost free check for fifos
+    ///Cost free check for pipes (FIFOs)
     #[inline]
     #[must_use]
-    pub const fn is_fifo(&self) -> bool {
-        self.file_type.is_fifo()
+    pub const fn is_pipe(&self) -> bool {
+        self.file_type.is_pipe()
     }
 
     ///Cost free check for sockets

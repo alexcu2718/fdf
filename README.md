@@ -27,6 +27,14 @@ It has better performance than `fd` on equivalent featuresets but 'fd'
 has an immense set, of which I'm not going to replicate
 Rather that I'm just working on this project for myself because I really wanted to know what happens when you optimally write hardware specific code( and how to write it!)
 
+## WHY?
+
+Well, I found find slow, I didn't know fd existed, I didn't expect some random test project to actually be good.
+
+Then finally, the reward is a tool I can use for the rest of my life to find stuff.
+
+Mostly though, I just enjoy learning.
+
 ## Future plans?
 
 I'd probably just keep the CLI stuff simple
@@ -50,9 +58,7 @@ dirent_const_strlen const fn, get strlen from a dirent64 in constant time with n
 
 cstr! macro: use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
 
-BytePath: Cool deref trait for working with filepaths (derefs to &[u8])
-
-This is a compile-time hash map of file extensions to their corresponding ANSI color codes based on the LS_COLORS environment variable.
+Below is a compile-time hash map of file extensions to their corresponding ANSI color codes based on the LS_COLORS environment variable.
 defined as
 
 ```rust

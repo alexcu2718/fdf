@@ -1,10 +1,10 @@
 [package]
 name = "fdf"
-version = "0.4.2"
+version = "0.4.3"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"
-description = "A fast, multi-threaded filesystem search tool"
+description = "A fast, multi-threaded filesystem search tool with regex/glob support and extremely pretty colours!"
 documentation = "https://docs.rs/fdf"
 repository = "https://github.com/alexcu2718/fdf"
 keywords = ["search", "filesystem", "parallel", "regex", "cli"]
@@ -14,7 +14,7 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 [dependencies]
 clap = { version = "4.5.31", features = ["derive"] }
 clap_complete = "4.5.46"
-compile_time_ls_colours = "0.3.1"
+compile_time_ls_colours = "0.3.3"
 
 libc = "0.2.170"
 memchr = "2.7.5"

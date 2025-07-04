@@ -44,7 +44,7 @@ pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
 {
-    unsafe { crate::cursed_macros::strlen_asm!(ptr) }
+    unsafe { strlen_asm!(ptr) }
 }
 
 #[inline]

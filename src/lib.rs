@@ -61,8 +61,8 @@ use std::{
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
-
-mod cursed_macros;
+#[macro_use]
+pub(crate) mod cursed_macros;
 
 mod temp_dirent;
 pub use temp_dirent::TempDirent;

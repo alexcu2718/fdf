@@ -7,7 +7,7 @@
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-use crate::{cursed_macros::construct_dirent, utils::close_asm, utils::open_asm};
+use crate::{ utils::close_asm, utils::open_asm};
 #[allow(unused_imports)]
 use crate::{temp_dirent::TempDirent, utils::resolve_inode};
 
@@ -30,8 +30,8 @@ use crate::{
 
 #[cfg(target_os = "linux")]
 use crate::{
-    PathBuffer, SyscallBuffer, cursed_macros::construct_path, cursed_macros::init_path_buffer,
-    cursed_macros::skip_dot_or_dot_dot_entries, offset_ptr,
+    PathBuffer, SyscallBuffer, 
+     offset_ptr,
 };
 
 /// A struct representing a directory entry.

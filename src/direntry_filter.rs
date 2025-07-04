@@ -8,9 +8,11 @@
 use crate::direntry::DirEntry;
 use crate::{
     BytePath, BytesStorage, PathBuffer, Result, SearchConfig, SyscallBuffer, TempDirent,
-    cursed_macros::construct_path, cursed_macros::construct_temp_dirent,
-    cursed_macros::init_path_buffer, cursed_macros::skip_dot_or_dot_dot_entries, offset_ptr,
+    
+    offset_ptr,
 };
+
+
 
 use libc::{close, dirent64};
 

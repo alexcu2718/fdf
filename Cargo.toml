@@ -16,7 +16,6 @@ compile_time_ls_colours = { git = "https://github.com/alexcu2718/compile_time_ls
 clap = { version = "4.5.31", features = ["derive"] }
 clap_complete = "4.5.46"
 libc = "0.2.170"
-macro_pub = "0.1.0"
 memchr = "2.7.5"
 rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf"] }

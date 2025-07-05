@@ -203,9 +203,9 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
 name = "compile_time_ls_colours"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e39560e6d4bc084b1f08f27635b77fac494cd64e3d03e605dca36dd32679fcb7"
+checksum = "e94c120dd7047087b52ebcc27891ea2866d5072bb35a278949150250395f0861"
 dependencies = [
  "ansic",
  "phf",

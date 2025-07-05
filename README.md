@@ -1,29 +1,37 @@
 # fdf
 
-COMPATIBILITY STATE (BIG+LITTLE ENDIAN COMPATIBLE)
+(Jeremy Clarkson voice )
+'Probably the fastest finder you'll find on POSIX for regex/glob matching files (see benchmark proof versus fd*)'
 
-1.Working on Linux 64bit
+## COMPATIBILITY STATE
 
-2.Macos  64bit
+1.Working on Linux 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions.
 
-3.Free/Open/Net BSD 64bit
+2.Somehow working on Aarch 64 Linux/Android Debian (basically, it works on my phone via termux!) (I didn't need to change anything!)
+
+2.Macos  64bit  (Tested on Sonoma)
+
+3.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd.)
 
 3.Tested on 64bit PPC Linux (Ubuntu)
 
 5.Alpine/MUSL
 
+## INTRO
+
 NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
 
-**Name to be changed, I just entered this randomly on my keyboard, it sounds like fd-faster which is funny but thats not my intent,hence name change
+I have to change the name first and make the API actually coherent (I haven't tried using it as a crate yet)
 
-Probably the fastest finder you'll find on Linux for regex/glob matching files (see benchmark proof versus fd*)
+As I fix and improve certain features, I will make it open to contributions.
 
 Honestly this is still a hobby project that still needs much work.
-It's functional, etc.
+It works for the subset I've implemented perfectly but it's far from complete.
 
 The CLI is basically an afterthought because I'm focusing on lower levels and going up in functionality, like ascending Plato's cave (increasing abstraction)
+Essentially ,I add those at the end (make the foundations strong so you do crazy stuff)
 
-It has better performance than `fd` on equivalent featuresets but 'fd'
+It has better performance than `fd` on equivalent featuresets but `fd`
 has an immense set, of which I'm not going to replicate
 Rather that I'm just working on this project for myself because I really wanted to know what happens when you optimally write hardware specific code( and how to write it!)
 
@@ -41,11 +49,9 @@ I'd probably just keep the CLI stuff simple
 
 Add some extra metadata filters (because i get a lot of metadata for cheap via specialisation!)
 
-Add POSIX compatibility in general (not too bad) (BSD completed!)
+Add POSIX compatibility in general ( illumos/solaris QEMU isn't straight forward, quite esoteric)
 
-Add Windows...(maybe?) .
-
-Too many internal changes.
+Add Windows... Well, This would take a fundamental rewrite because of architectural differences, I might do it. (Who uses the terminal on windows?)
 
 Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)
 ..and exceedingly efficient.
@@ -131,7 +137,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 
 ## Requirements
 
-- **Linux/Macos/Bsd only**: Specific posix syscalls.
+- **Linux/Macos/BSD only**: Specific posix syscalls.
 - **64 bit tested only(+PPC BE64bit)**
 
 ## Installation
@@ -161,15 +167,6 @@ fdf . /usr/local -E py -H
 
 ## Options (T)
 
- fdf --help
-Usage: fdf [OPTIONS] [PATTERN] [PATH]
-
-Arguments:
-  [PATTERN]  Pattern to search for
-  [PATH]     Path to search (defaults to CURRENT WORKING DIRECTORY)
-             Use -c to do current directory
-
-
 Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
 Arguments:
@@ -185,7 +182,7 @@ Options:
   -s, --case-sensitive         Enable case-sensitive matching, defaults to false
 
   -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads
-                                [default: NUM_OF_CORES]
+                                [default: NUM_CORES]
   -a, --absolute-path          Show absolute paths of results, defaults to false
 
   -I, --include-dirs           Include directories, defaults to off
@@ -194,7 +191,7 @@ Options:
 
   -g, --glob                   Use a glob pattern,defaults to off
 
-  -n, --max-results <TOP_N>    Retrieves the first eg 10 results, '.cache' / -n 10
+  -n, --max-results <TOP_N>    Retrieves the first N results (not ordered!)
 
   -d, --depth <DEPTH>          Retrieves only traverse to x depth
 

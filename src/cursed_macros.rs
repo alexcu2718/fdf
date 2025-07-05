@@ -93,8 +93,6 @@ macro_rules! cstr {
         c_path_buf.cast::<_>()
     }};
     ($bytes:expr,$n:expr) => {{
-        // Debug assert to check test builds for unexpected conditions
-        debug_assert!($bytes.len() < $n, "Input too large for buffer");
 
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();

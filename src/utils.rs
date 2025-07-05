@@ -255,7 +255,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // - Maintains the exact position of any null bytes in the name
     //I have changed the definition since the original README, I found a more rigorous backing!
     // We subtract 7 to get the correct offset in the d_name field.
-    let byte_pos = 7 - find_zero_byte_u64(candidate_pos);
+    let byte_pos = 7 - unsafe{find_zero_byte_u64(candidate_pos)}; // a constant time SWAR function
     // The final length is calculated as:
     // `reclen - DIRENT_HEADER_START - byte_pos`
     // This gives us the length of the d_name field, excluding the header and the null

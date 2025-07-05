@@ -21,7 +21,6 @@ has an immense set, of which I'm not going to replicate
 Rather that I'm just working on this project for myself because I really wanted to know what
 happens when you optimally write hardware specific code( and how to write it!)
 
-
 ## How to test
 
 git clone <https://github.com/alexcu2718/fdf> && ./fdf/fd_benchmarks/run_all_tests_USE_ME.sh
@@ -47,16 +46,27 @@ This runs a **comprehensive** suite of internal library+CLI tests as well as ben
 -Speed!
  In every benchmark so far tested, it's ranging from a minimum of 1.2x and a maximum of 2x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
 
--dirent_const_strlen const fn, get strlen from a dirent64 in constant time with no branches (benchmarks below)
+-dirent_const_strlen
+ a  constant function which gets strlen from a dirent64 in constant time with no branches, only applicable to Linux
 
--cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
+-cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, add **null terminator** for FFI use)
+
+```rust
+
+use fdf::cstr;
+let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't it")}; //automatically  create an inline null stack allocated of length PATH_MAX(4096) and add a null pointer
+
+let dont_go_over_my_bounds:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5 
+//hence why its unsafe!
+let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
+
+```
 
 -A black magic macro that can colour filepaths based on a compile time perfect hashmap
 (I made it into a separate crate)
 it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>
 
-
-## NECESSARY DISCLAIMERS AND WARNING WHAT-NOT
+## NECESSARY DISCLAIMERS (I might have a conscience somewhere)
 
 I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
 Notably I modified it because it's quite old and has a lot of silly dependencies (i removed all of them).

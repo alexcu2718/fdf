@@ -6,7 +6,7 @@ use crate::DirEntryError;
 use crate::Result;
 use crate::buffer::ValueType;
 use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
-use memchr::memrchr;
+use crate::memchr_derivations::memrchr;
 use std::ffi::OsStr;
 use std::fmt;
 use std::mem::MaybeUninit;

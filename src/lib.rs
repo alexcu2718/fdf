@@ -78,6 +78,9 @@ mod buffer;
 mod test;
 pub(crate) use buffer::AlignedBuffer;
 
+
+mod memchr_derivations;
+pub use memchr_derivations::{contains_zero_byte,memrchr,find_zero_byte_u64};
 mod direntry;
 pub use direntry::DirEntry;
 

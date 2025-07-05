@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.4.5"
+version = "0.4.7"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"
@@ -17,7 +17,6 @@ clap = { version = "4.5.31", features = ["derive"] }
 clap_complete = "4.5.46"
 compile_time_ls_colours = "0.4.1"
 libc = "0.2.170"
-memchr = "2.7.5"
 rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf"] }
 [target.'cfg(target_os = "linux")'.dependencies]

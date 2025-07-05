@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #[allow(unused_imports)]
-use crate::{DirEntryError, Result, buffer::ValueType, cstr};
+use crate::{DirEntryError, Result, buffer::ValueType, cstr,find_zero_byte_u64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
@@ -190,8 +190,8 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 #[inline]
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 8 bytes
 #[allow(clippy::cast_lossless)] //shutup
-/// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD, no overreads!!!
-/// O(1) complexity, no branching, and no loops.
+/// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD.
+/// Constant time (therefore branchless)
 ///
 /// This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
 /// It's probably the most efficient way to calculate the length
@@ -253,17 +253,9 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // - Original name bytes preserved
     // - Non-name bytes forced to 0xFF (guaranteed non-zero)
     // - Maintains the exact position of any null bytes in the name
-    //  Subtract 0x0101... from each byte (underflows if byte was 0)
-    //  AND with inverse to isolate underflowed bits
-    //  Mask high bits to find first zero byte
-    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is zero
-        & !candidate_pos//ensures only bytes that were zero retain the underflowed high bit.
-        & 0x8080_8080_8080_8080; //  0x8080_8080_8080_8080 -->This masks out the high bit of each byte, so we can find the first zero byte
-    // The trailing zeros of the zero_bit gives us the position of the first zero byte.
-    // We divide by 8 to convert the bit position to a byte position..
+    //I have changed the definition since the original README, I found a more rigorous backing!
     // We subtract 7 to get the correct offset in the d_name field.
-    //>> 3 converts from bit position to byte index (divides by 8)
-    let byte_pos = 7 - (zero_bit.trailing_zeros() >> 3) as usize;
+    let byte_pos = 7 - find_zero_byte_u64(candidate_pos);
     // The final length is calculated as:
     // `reclen - DIRENT_HEADER_START - byte_pos`
     // This gives us the length of the d_name field, excluding the header and the null

@@ -1,21 +1,9 @@
 # fdf
 
 (Jeremy Clarkson voice )
-'Probably the fastest finder you'll find on POSIX for regex/glob matching files (see benchmark proof versus fd*)'
+'Probably the fastest finder you'll find on POSIX for regex/glob matching files`
 
-## COMPATIBILITY STATE
-
-1.Working on Linux 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions.
-
-2.Somehow working on Aarch 64 Linux/Android Debian (basically, it works on my phone via termux!) (I didn't need to change anything!)
-
-2.Macos  64bit  (Tested on Sonoma)
-
-3.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd.)
-
-3.Tested on 64bit PPC Linux (Ubuntu)
-
-5.Alpine/MUSL
+**i do have benchmark suites!**
 
 ## INTRO
 
@@ -26,14 +14,56 @@ I have to change the name first and make the API actually coherent (I haven't tr
 As I fix and improve certain features, I will make it open to contributions.
 
 Honestly this is still a hobby project that still needs much work.
+
 It works for the subset I've implemented perfectly but it's far from complete.
-
-The CLI is basically an afterthought because I'm focusing on lower levels and going up in functionality, like ascending Plato's cave (increasing abstraction)
-Essentially ,I add those at the end (make the foundations strong so you do crazy stuff)
-
 It has better performance than `fd` on equivalent featuresets but `fd`
 has an immense set, of which I'm not going to replicate
-Rather that I'm just working on this project for myself because I really wanted to know what happens when you optimally write hardware specific code( and how to write it!)
+Rather that I'm just working on this project for myself because I really wanted to know what
+happens when you optimally write hardware specific code( and how to write it!)
+
+
+## How to test
+
+git clone <https://github.com/alexcu2718/fdf> && ./fdf/fd_benchmarks/run_all_tests_USE_ME.sh
+
+BE WARNED, I CLONE THE LLVM REPO TO CREATE A SUSTAINABLE ENVIRONMENT FOR TESTING, I DO THIS SPECIFICALLY IN /tmp
+so this will be deleted at next shutdown, same goes for macos, not BSD (well, I only played around in QEMU, seems they've got a distinctively different system)
+
+This runs a **comprehensive** suite of internal library+CLI tests as well as benchmarks.
+
+## Cool bits
+
+```bash
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+| `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 |
+| `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
+
+
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 | 
+| `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
+```
+
+-Speed!
+ In every benchmark so far tested, it's ranging from a minimum of 1.2x and a maximum of 2x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
+
+-dirent_const_strlen const fn, get strlen from a dirent64 in constant time with no branches (benchmarks below)
+
+-cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
+
+-A black magic macro that can colour filepaths based on a compile time perfect hashmap
+(I made it into a separate crate)
+it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>
+
+
+## NECESSARY DISCLAIMERS AND WARNING WHAT-NOT
+
+I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
+Notably I modified it because it's quite old and has a lot of silly dependencies (i removed all of them).
+
+I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161>
+I've found a much more rigorous way of doing some bit tricks via this, there's unstable features included so I thought I'd appreciate the backing
+of validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment.
 
 ## WHY?
 
@@ -42,6 +72,17 @@ Well, I found find slow, I didn't know fd existed, I didn't expect some random t
 Then finally, the reward is a tool I can use for the rest of my life to find stuff.
 
 Mostly though, I just enjoy learning.
+
+To put it in perspective, I did not know any C before I started this project, I noticed that every type of file finding tool will inevitably rely on some kind of iterator that will heap allocate regardless of whether or not it's a match, we're talking a hella lot of random allocations which I suspect may be a big bottleneck.
+
+Even though my project in it's current state is faster, I've got some experiments to try filtering before allocating
+Unfortunately, you have to have to allocate heap space for directories in stdlib (because they're necessary for the next call)
+
+Which is partially why I felt the need to rewrite it from libc, it's just the standard library was too high level.
+
+I'm curious to see what happens when you filter before allocation, this is something I have partially working in my current crate
+but the implementation details like that is not accessible via CLI. If it proves to be performant, it will eventually be in there.
+Obviously, I'm having to learn a lot to do these things and taking the time to understand, get inspired and implement things...
 
 ## Future plans?
 
@@ -55,23 +96,6 @@ Add Windows... Well, This would take a fundamental rewrite because of architectu
 
 Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)
 ..and exceedingly efficient.
-
-## Cool bits
-
-Speed! In every benchmark so far tested, it's ranging from a minimum of 1.2x and a maximum of 2x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
-
-dirent_const_strlen const fn, get strlen from a dirent64 in constant time with no branches (benchmarks below)
-
-cstr! macro: use a byte slice as a pointer (automatically initialise memory, add null terminator for FFI use) or alternatively cstr_n (MEANT FOR FILEPATHS!)
-
-Below is a compile-time hash map of file extensions to their corresponding ANSI color codes based on the LS_COLORS environment variable.
-defined as
-
-```rust
-pub static LS_COLOURS_HASHMAP: Map<&'static [u8], &'static [u8]>
-```
-
-(it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>)
 
 ## SHORTSTRINGS(under 8 chars)
 
@@ -124,21 +148,18 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 }
 
 
-```bash
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 |
-| `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
+## COMPATIBILITY STATE
 
+1.Working on Linux(MUSL too) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions  
 
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 | 
-| `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
-```
+2.Somehow working on Aarch 64 Linux/Android Debian (basically, it works on my phone via termux!) (( and I didn't need to change anything!))
 
-## Requirements
+2.Macos  64bit  (Tested on Sonoma)
 
-- **Linux/Macos/BSD only**: Specific posix syscalls.
-- **64 bit tested only(+PPC BE64bit)**
+3.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
+
+4.Works on big endian systems, tested on PPC64 (took a while to get it working)
+
 
 ## Installation
 
@@ -224,9 +245,18 @@ TODO LIST (Maybe):
    <https://github.com/microsoft/edit/tree/main/src/arena>
 
 -- io_uring for Batched Syscalls: e.g., batched open/read operations.
-   This will be extremely challenging.
+   This will be extremely challenging. Unfortunately uring lacks the op code required for getdents, however
+   other op codes are available, but this would require a LOT of work, it also would require an async runtime
+   Which inevitably means tokio, which means most of my work in avoiding dependencies goes down the bin
+   (I'm already unhappy being reliant on rayon but that's on the list to remove.)
 
 -- String Interning: Trivial for ASCII, but efficient Unicode handling is an entirely different beast.
+   (although, creating an enum at compile time of common filepaths on your pc and doing some manipulations sounds cool+cursed)
+
+-- I might continue developing my compile time hashmap for LS_COLORS, it's got a good general use case and the macro use is pretty fun!
+   However I do have a separate commit at <https://github.com/alexcu2718/compile_time_ls_colours/tree/no_phf_build>
+   Which has no dependencies, although it's REALLY shit to do without doing a HELLA lot of byte manipulation yourself.
+   (also, it's runtime statically initialised, not as cool!)
 
 -- Threading Without Rayon: My attempts have come close, but aren’t quite there yet.
    I'll rely on Rayon for now until I can come up with a smart way to implement an appropriate work-distributing algorithm. TODO!

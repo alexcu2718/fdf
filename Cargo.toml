@@ -10,6 +10,7 @@ repository = "https://github.com/alexcu2718/fdf"
 keywords = ["search", "filesystem", "parallel", "regex", "cli"]
 categories = ["filesystem", "command-line-utilities", "concurrency"]
 
+    
 
 [dependencies]
 clap = { version = "4.5.31", features = ["derive"] }

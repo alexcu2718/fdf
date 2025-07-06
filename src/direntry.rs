@@ -195,9 +195,9 @@ where
             path: self.path.as_bytes(),
             inode: self.inode,
             file_type: self.file_type,
-            file_name_index: self.file_name_index as _,
+            file_name_index: self.file_name_index,
             depth: self.depth as _,
-            _marker: PhantomData::<S>,
+            _marker: PhantomData::<S>,//we need to hold type information to convert interchangeably between the two.
         }
     }
 
@@ -308,7 +308,7 @@ where
     /// Returns an iterator over the directory entries using `readdir64` as opposed to `getdents`, this uses a higher level api
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    pub fn readdir(&self) -> Result<impl Iterator<Item = Self> + '_> {
+    pub fn readdir(&self) -> Result<impl Iterator<Item = Self>> {
         DirIter::new(self)
     }
     #[inline]
@@ -322,8 +322,8 @@ where
     ///  you can likely make the stack copies extremely cheap
     /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
-    pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
-        let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY)
+    pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
+        let fd = unsafe { self.open_fd()? }; //returns none if not a directory/invalid/null etc.
         let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new();
 
         let path_len = unsafe { path_buffer.init_from_direntry(self) };
@@ -345,7 +345,7 @@ where
     #[cfg(not(target_os = "linux"))]
     #[inline] //back up because we cant use getdents on non linux systems, so we use readdir instead
     #[allow(clippy::missing_errors_doc)]
-    pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
+    pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         DirIter::new(self)
     }
 }
@@ -403,8 +403,8 @@ where
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
-    /// Checks the remaining bytes in the buffer, and resets the offset to 0.
-    /// This is a syscall that returns the number of bytes left to read.
+    /// Send a syscall to request a stream of bytes from the OS (`SYS_getdents64`)
+    /// This is a syscall that returns a buffer up to size `LOCAL_PATH_MAX`
     ///
     ///
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that

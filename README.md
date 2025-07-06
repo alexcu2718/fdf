@@ -23,28 +23,71 @@ happens when you optimally write hardware specific code( and how to write it!)
 
 ## How to test
 
-git clone <https://github.com/alexcu2718/fdf> && ./fdf/fd_benchmarks/run_all_tests_USE_ME.sh
+git clone <https://github.com/alexcu2718/fdf>  /tmp/fdf_test &&   /tmp/fdf_test/fd_benchmarks/run_all_tests_USE_ME.sh
 
 BE WARNED, I CLONE THE LLVM REPO TO CREATE A SUSTAINABLE ENVIRONMENT FOR TESTING, I DO THIS SPECIFICALLY IN /tmp
-so this will be deleted at next shutdown, same goes for macos, not BSD (well, I only played around in QEMU, seems they've got a distinctively different system)
+so this will be deleted at next shutdown, same goes for macos,
+____not BSD (well, I only played around in QEMU, seems they've got a distinctively different system)____
+(it does provide the option to delete this though)
 
 This runs a **comprehensive** suite of internal library+CLI tests as well as benchmarks.
 
-## Cool bits
+## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
 
 ```bash
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 |
+| `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 | #search my whole pc
 | `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
 
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 | `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 | 
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
+
+
+
+######
+#some of my benchmarks. repeatable on your own pc (as above)
+fd count: 12445
+fdf count: 12445
+
+
+Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
+  Time (mean ± σ):      20.6 ms ±   2.9 ms    [User: 39.3 ms, System: 119.3 ms]
+  Range (min … max):    15.5 ms …  25.1 ms    12 runs
+ 
+Benchmark 2: fd -HI --extension 'c' '' '/tmp/llvm-project'
+  Time (mean ± σ):      35.1 ms ±   2.7 ms    [User: 141.0 ms, System: 108.9 ms]
+  Range (min … max):    31.7 ms …  42.5 ms    12 runs
+ 
+Summary
+  fdf -HI --extension 'c' '' '/tmp/llvm-project' ran
+    1.71 ± 0.27 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
+############
+
+fd count: 174329
+fdf count: 174329
+
+Running benchmarks...
+Benchmark 1: fdf '.' '/tmp/llvm-project' -HI
+  Time (mean ± σ):      24.1 ms ±   2.5 ms    [User: 49.3 ms, System: 121.9 ms]
+  Range (min … max):    19.3 ms …  28.3 ms    12 runs
+ 
+Benchmark 2: fd '.' '/tmp/llvm-project' -HI
+  Time (mean ± σ):      36.3 ms ±   3.3 ms    [User: 154.9 ms, System: 108.6 ms]
+  Range (min … max):    31.2 ms …  41.1 ms    12 runs
+ 
+Summary
+  fdf '.' '/tmp/llvm-project' -HI ran
+    1.50 ± 0.21 times faster than fd '.' '/tmp/llvm-project' -HI
+
+
+
+
+
 ```
 
--Speed!
- In every benchmark so far tested, it's ranging from a minimum of 1.2x and a maximum of 2x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
+## Extra bits
 
 -dirent_const_strlen
  a  constant function which gets strlen from a dirent64 in constant time with no branches, only applicable to Linux
@@ -75,6 +118,8 @@ I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.h
 I've found a much more rigorous way of doing some bit tricks via this, there's unstable features included so I thought I'd appreciate the backing
 of validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment.
 
+Some bits MIGHT be broken, the main use case to any user is error free( they'll just pop up more later on, I have too many tests and it's really just that easy to get them in C)
+
 ## WHY?
 
 Well, I found find slow, I didn't know fd existed, I didn't expect some random test project to actually be good.
@@ -92,7 +137,12 @@ Which is partially why I felt the need to rewrite it from libc, it's just the st
 
 I'm curious to see what happens when you filter before allocation, this is something I have partially working in my current crate
 but the implementation details like that is not accessible via CLI. If it proves to be performant, it will eventually be in there.
-Obviously, I'm having to learn a lot to do these things and taking the time to understand, get inspired and implement things...
+Obviously, I'm having to learn a lot to do these things and it takes  TIME to understand, get inspired and implement things...
+
+I do intend to only add features and not break anything, until i can somewhat promise that, then i won't entertain wasting other people's time
+with my nonsense so if anyone felt like adding something, you can!
+
+(notably, there's some obvious things I have not touched in a while and things that are just less interesting, ideally one day someone could do that, not now though)
 
 ## Future plans?
 
@@ -106,39 +156,6 @@ Add Windows... Well, This would take a fundamental rewrite because of architectu
 
 Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)
 ..and exceedingly efficient.
-
-## SHORTSTRINGS(under 8 chars)
-
-SEE BENCHMARKS IN const_str_benchmark.txt for better details and ideally read my benches/dirent_bench.rs
-
-```bash
-
-strlen_by_length/const_time_swar/tiny (1-4)
-                           time:   [961.66 ps 964.31 ps 966.95 ps]
-                         thrpt:  [986.27 MiB/s 988.97 MiB/s 991.69 MiB/s]
-strlen_by_length/libc_strlen/tiny (1-4)
-                          time:   [1.6422 ns 1.6466 ns 1.6511 ns]
-                           thrpt:  [577.60 MiB/s 579.17 MiB/s 580.73 MiB/s]
- strlen_by_length/asm_strlen/tiny (1-4)
-                          time:   [718.41 ps 720.59 ps 722.76 ps]
-                          thrpt:  [1.2886 GiB/s 1.2925 GiB/s 1.2964 GiB/s]
-```
-
-## MAXLENGTHSTRINGS (255)
-
-```bash
-   strlen_by_length/const_time_swar/max length (255)
-                         time:   [963.74 ps 966.35 ps 969.00 ps]
-                         thrpt:  [245.09 GiB/s 245.76 GiB/s 246.42 GiB/s]
-  strlen_by_length/libc_strlen/max length (255) #interesting!
-                         time:   [3.3193 ns 3.3281 ns 3.3368 ns]
-                        thrpt:  [71.172 GiB/s 71.359 GiB/s 71.548 GiB/s]
-  strlen_by_length/asm_strlen/max length (255)
-                        time:   [4.6074 ns 4.6290 ns 4.6513 ns]
-                       thrpt:  [51.058 GiB/s 51.304 GiB/s 51.544 GiB/s]
-
-
-```
 
 ```Rust
 //The code is explained better in the true function definition (this is crate agnostic)
@@ -157,6 +174,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }
 
+```
 
 ## COMPATIBILITY STATE
 
@@ -169,7 +187,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 3.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
 
 4.Works on big endian systems, tested on PPC64 (took a while to get it working)
-
 
 ## Installation
 

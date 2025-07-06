@@ -408,10 +408,16 @@ where
     ///
     ///
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
-    /// the pointer is valid(we need to check )
+    /// the pointer is valid(we need to check bytes in the buffer left first)
     pub unsafe fn getdents_syscall(&mut self) {
         self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
         self.offset = 0;
+    }
+
+    #[inline]
+    /// Check the remaining bytes left in the buffer 
+    pub fn check_remaining_bytes(&self)->usize{
+        self.remaining_bytes as _
     }
 
     #[inline]
@@ -431,7 +437,7 @@ where
 
     #[inline]
     /// Prefetches the start of the buffer to keep the cache warm.
-    pub(crate) fn prefetch_next_buffer(&self) {
+    pub(crate) fn prefetch_next_buffer(&self) {//noop if not met.
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         {
             unsafe {
@@ -453,11 +459,11 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // If we have remaining data in buffer, process it
-            if self.offset < self.remaining_bytes as usize {
+            if self.offset < self.check_remaining_bytes(){
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
-
+                //^ this is a no-op on non x86-64 because no instruction
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
                 let entry = construct_dirent!(self, d); //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
@@ -466,11 +472,11 @@ where
             }
             // prefetch the next buffer content before reading, only applies if no
 
-            self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-linux systems
+            self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non x86-64 because no instructions for it
             // issue a syscall once out of entries
             unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
 
-            if self.remaining_bytes <= 0 {
+            if self.check_remaining_bytes()<= 0 {
                 // If no more entries, return None,
                 return None;
             }

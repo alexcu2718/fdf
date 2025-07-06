@@ -290,7 +290,7 @@ macro_rules! const_from_env {
 
 /// Constructs a `DirEntry<S>` from a `dirent64`/`dirent` pointer for any relevant self type
 /// Needed to be done via macro to avoid issues with duplication/mutability of structs
-macro_rules! construct_dirent {
+macro_rules! construct_dirent_internal {
     ($self:ident, $dirent:ident) => {{
         let (d_type, inode) = unsafe {
             (

@@ -13,10 +13,12 @@ use std::marker::PhantomData; //use readdir on other platforms, this is the stan
 
 /// An iterator over directory entries from readdir (or 64 )via libc
 /// General POSIX compliant directory iterator.
+/// S is a type that implements BytesStorage, which is used to store the path bytes.
+///
+///
+// S, which can take forms  Vec<u8>,Box<[u8]>,Arc<[u8]> or ideally SlimmerBytes (an alias in this crate for a smaller box type)
+//this is only possible on linux/macos unfortunately.
 pub struct DirIter<S>
-//S is a type that implements BytesStorage, which is used to store the path bytes.
-//which can take forms  Vec<u8>,Box<[u8]>,Arc<[u8]> or ideally SlimmerBytes (an alias in this crate for a smaller box type)
-//this is only possible on linux unfortunately.
 where
     S: BytesStorage,
 {
@@ -62,21 +64,28 @@ where
     }
     #[inline]
     /// Reads the next directory entry from the iterator.
-    pub fn read_dir(&mut self) -> Option<*const dirent> {
-        // This function reads the directory entries and populates the iterator.
-        // It is called when the iterator is created or when it needs to be reset.
+    /// This function reads the directory entries and populates the iterator.
+    /// It is called when the iterator is created or when it needs to be reset.
+    pub fn get_next_entry(&mut self) -> Option<*const dirent> {
         let d: *const dirent = unsafe { readdir(self.dir) };
-        // This function reads the directory entries and returns a pointer to the dirent structure.
-        // It is used by the next function to get the next entry in the directory.
+        //we have to check for nulls here because we're not 'buffer climbing', aka readdir has abstracted this interface.
+        //we do 'buffer climb' (word i just made up) in getdents, which is why this equivalent function does not check the null in my
+        //getdents iterator, GO home                                                                                 xd
         if d.is_null() {
             return None;
         }
         Some(d)
     }
+    #[inline]
+    /// A function to construction a DirEntry from the buffer+dirent
+    ///
+    /// This doesn't need unsafe because the pointer is already checked to not be null before it can be used here.
+    pub fn construct_direntry(&mut self, drnt: *const dirent) -> DirEntry<S> {
+        construct_dirent_internal!(self, drnt) //going to write this macro away soon TBD
+    }
 
     #[inline]
-    #[allow(clippy::cast_lossless)]
-    #[allow(clippy::cast_possible_truncation)]
+    ///now private but explanatory documentation.
     ///Constructs a new `DirIter` from a `DirEntry<S>`.
     /// This function is used to create a new iterator over directory entries.
     /// It takes a `DirEntry<S>` which contains the directory path and other metadata.
@@ -84,16 +93,17 @@ where
     /// Utilises libc's `opendir` and `readdir64` for directory reading.
     pub(crate) fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
-        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new();
+        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)
         let base_len = unsafe { path_buffer.init_from_direntry(dir_path) };
-
+        //mutate the buffer to contain the full path, then add a null terminator and record the new length
+        //we use this length to index to get the filename (store full path -> index to get filename)
         Ok(Self {
             dir,
             path_buffer,
             file_name_index: base_len as _,
-            parent_depth: dir_path.depth,
-            error: None,
-            _phantom: PhantomData, //holds storage type
+            parent_depth: dir_path.depth, //inherit depth
+            error: None,                  //set noerrors
+            _phantom: PhantomData,        //holds storage type
         })
     }
 }
@@ -126,13 +136,15 @@ where
         }
 
         loop {
-            let entry = self.read_dir()?; //read the next entry from the directory, this is a pointer to the dirent structure.
+            let entry = self.get_next_entry()?; //read the next entry from the directory, this is a pointer to the dirent structure.
+            //and early return if none
 
             skip_dot_or_dot_dot_entries!(entry, continue); //we provide the continue here to make it explicit.
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
             return Some(
-                construct_dirent!(self, entry), //construct the dirent from the pointer, and the path buffer.
+                self.construct_direntry(entry), //construct the dirent from the pointer, and the path buffer.
+                                                //this is safe because we've already checked if it's null
             );
         }
     }

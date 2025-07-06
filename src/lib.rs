@@ -151,32 +151,30 @@ where
     }
 
     #[inline]
-#[allow(clippy::missing_errors_doc)]
-/// Traverse the directory and return a receiver for the entries.
-pub fn traverse(self) -> Result<Receiver<Vec<DirEntry<S>>>> {
-    let (sender, receiver): (_, Receiver<Vec<DirEntry<S>>>) = unbounded();
+    #[allow(clippy::missing_errors_doc)]
+    /// Traverse the directory and return a receiver for the entries.
+    pub fn traverse(self) -> Result<Receiver<Vec<DirEntry<S>>>> {
+        let (sender, receiver): (_, Receiver<Vec<DirEntry<S>>>) = unbounded();
 
-    // we have to arbitrarily construct a direntry to start the search.
-    let construct_dir = DirEntry::new(&self.root);
-    // check if the directory exists and is traversible
-    // traversible meaning directory/symlink, we follow symlinks as it's the starting filepath
-    // but henceforth we do not follow symlinks unless specified in the config
-    // this is to prevent infinite loops and other issues.
-    match construct_dir {
-        Ok(entry) if entry.is_traversible() => {
-            // spawn the search in a new thread.
-            rayon::spawn(move || {
-                Self::process_directory(&self, entry, &sender);
-            });
+        // we have to arbitrarily construct a direntry to start the search.
+        let construct_dir = DirEntry::new(&self.root);
+        // check if the directory exists and is traversible
+        // traversible meaning directory/symlink, we follow symlinks as it's the starting filepath
+        // but henceforth we do not follow symlinks unless specified in the config
+        // this is to prevent infinite loops and other issues.
+        match construct_dir {
+            Ok(entry) if entry.is_traversible() => {
+                // spawn the search in a new thread.
+                rayon::spawn(move || {
+                    Self::process_directory(&self, entry, &sender);
+                });
 
-
-            //return receiver
-            Ok(receiver)
+                //return receiver
+                Ok(receiver)
+            }
+            _ => Err(DirEntryError::InvalidPath),
         }
-        _ => Err(DirEntryError::InvalidPath),
     }
-}
-
 
     #[inline]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
@@ -226,8 +224,6 @@ pub fn traverse(self) -> Result<Receiver<Vec<DirEntry<S>>>> {
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
     }
-
-    
 }
 
 /// A builder for creating a `Finder` instance with customisable options.
@@ -346,9 +342,8 @@ where
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
             {
                 rfilter.is_none_or(|f| f(rdir))
-                    && rconfig.matches_extension(&rdir.file_name()) 
+                    && rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_path(rdir, rconfig.file_name_only)
-                   
             }
         };
 

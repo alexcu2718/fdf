@@ -30,38 +30,40 @@ use crate::{
 
 #[cfg(target_os = "linux")]
 use crate::{PathBuffer, SyscallBuffer, offset_dirent};
-
 /// A struct representing a directory entry.
 ///
-/// `S` is a storage type (e.g., `Box<[u8]>`, `Arc<[u8]>`, `Vec<u8>`) used to hold the path bytes.
+/// `S` is a storage type (e.g., `Box<[u8]>`, `Arc<[u8]>`, `Vec<u8>`,`SlimmerBytes`) used to hold the path bytes.
+///
+/// Internally:
+/// - The `path` field holds the OS-native path bytes in a thin pointer wrapper around `S`,
+///   optimised for size (~10 bytes on Linux/macOS).
+///
+/// - The `file_type` is stored as a 1-byte enum representing whether it's a file, directory, symlink, etc.
+///
+/// - The `inode` is an 8-byte value (u64) that uniquely identifies the file on disk.
+///   It may be hidden with a `cfg` flag in future for 32-bit systems or space-saving reasons.
+///
+/// - The `depth` field is a single byte indicating how deep the entry is relative to the root directory.
+///   This supports up to 255 levels of nesting.
+///
+/// - The `file_name_index` is a 2-byte offset pointing into the path buffer,
+///   allowing fast slicing to get the file name portion.
+///
+/// - There are 2 bytes free after `file_name_index`; one byte is deliberately left unused
+///   to maintain an efficient memory layout (e.g., to allow `Option<DirEntry>` to stay compact).
+
 #[derive(Clone)]
 pub struct DirEntry<S>
 where
     S: BytesStorage,
 {
-    /// Path to the entry, stored as OS-native bytes.
-    ///
-    /// This is a thin pointer wrapper around the storage `S`, optimized for size (~10 bytes). ( on linux/macos, not tested bsds etc)
     pub(crate) path: OsBytes<S>,
 
-    /// File type (file, directory, symlink, etc.).
-    ///
-    /// Stored as a 1-byte enum.
     pub(crate) file_type: FileType,
 
-    /// Inode number of the file.
-    ///
-    /// 8 bytes, (may be hidden under a cfg flag in future for relevant reasons/32bit systems(if i ever do that.))
     pub(crate) inode: u64,
 
-    /// Depth of the directory entry relative to the root.
-    ///
-    /// Stored as a single byte, supporting up to 255 levels deep.
     pub(crate) depth: u8,
-
-    /// Offset in the path buffer where the file name starts.
-    ///
-    /// This helps quickly extract the file name from the full path.
     pub(crate) file_name_index: u16,
     // 2 bytes free here., we need to leave 1 byte free so we can save on the size of the option/result enum.
     //i'm not sure what's a good use of 1 byte
@@ -163,7 +165,7 @@ where
             return Ok(self);
         }
         //safe because easily fits in capacity (which is absurdly big for our purposes)
-        let full_path = unsafe{self.realpath()?};
+        let full_path = unsafe { self.realpath()? };
         let boxed = Self {
             path: full_path.into(),
             file_type: self.file_type,
@@ -197,7 +199,7 @@ where
             file_type: self.file_type,
             file_name_index: self.file_name_index,
             depth: self.depth as _,
-            _marker: PhantomData::<S>,//we need to hold type information to convert interchangeably between the two.
+            _marker: PhantomData::<S>, //we need to hold type information to convert interchangeably between the two.
         }
     }
 
@@ -394,8 +396,8 @@ where
     ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
     /// one must check before hand if there are suitable bytes left to read.
-    /// 
-    /// 
+    ///
+    ///
     /// the pointer is valid and that we don't read past the end of the buffer.
     /// This is only used in the iterator implementation, so we can safely assume that the pointer
     /// is valid and that we don't read past the end of the buffer.
@@ -408,24 +410,31 @@ where
     /// Send a syscall to request a stream of bytes from the OS (`SYS_getdents64`)
     /// This is a syscall that returns a buffer up to size `LOCAL_PATH_MAX`
     ///
-    ///
+    ///  Internally sets the index of the iterator (offset) to 0.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid(we need to check bytes in the buffer left first)
     pub unsafe fn getdents_syscall(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
+        self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) }; //fix this ugly hack TODO!   
         self.offset = 0;
     }
 
     #[inline]
     /// Check if the buffer has more entries left
     fn has_more_entries_in_buffer(&self) -> bool {
-    self.offset < self.remaining_bytes as _
+        self.offset < self.remaining_bytes as _ //convenience function for API use.
     }
 
     #[inline]
-    /// Check the remaining bytes left in the buffer 
-    pub fn check_remaining_bytes(&self)->bool{
+    /// Check the remaining bytes left in the buffer
+    pub fn check_remaining_bytes(&self) -> bool {
         self.remaining_bytes == 0
+    }
+    #[inline]
+    /// A function to construction a DirEntry from the buffer+dirent
+    ///
+    /// This needs unsafe because we explicitly leave implicit or explicit null pointer checks to the user (low level interface)
+    pub unsafe fn construct_direntry(&mut self, drnt: *const libc::dirent64) -> DirEntry<S> {
+        construct_dirent_internal!(self, drnt) //going to write this macro away soon TODO!
     }
 
     #[inline]
@@ -434,8 +443,11 @@ where
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         {
             if self.offset + 128 < self.remaining_bytes as usize {
+                //basically, if we know there's alot more direntries to get, fetch them into cache.
                 unsafe {
                     use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                    //we're safe to do this as we're only calling it when we know there's a more structs left
+
                     let next_entry = self.buffer.as_ptr().add(self.offset + 64).cast();
                     _mm_prefetch(next_entry, _MM_HINT_T0);
                 }
@@ -445,12 +457,13 @@ where
 
     #[inline]
     /// Prefetches the start of the buffer to keep the cache warm.
-    pub(crate) fn prefetch_next_buffer(&self) {//noop if not met.
+    pub(crate) fn prefetch_next_buffer(&self) {
+        //noop if not met.
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         {
             unsafe {
                 use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-                _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0);
+                _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0); //hit all levels of hierarchy
             }
         }
     }
@@ -467,14 +480,14 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // If we have remaining data in buffer, process it
-            if self.has_more_entries_in_buffer(){
+            if self.has_more_entries_in_buffer() {
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
                 //^ this is a no-op on non x86-64 because no instruction
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
-                let entry = construct_dirent!(self, d); //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
+                let entry = unsafe { self.construct_direntry(d) }; //this is unsafe because we're relying on knowing that the buffer has more entries in it.
 
                 return Some(entry);
             }
@@ -485,6 +498,7 @@ where
             unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
 
             if self.check_remaining_bytes() {
+                //i want to just tidy this up but not sure how.
                 // If no more entries, return None,
                 return None;
             }

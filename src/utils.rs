@@ -27,7 +27,9 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 }
 
 /// Calculates the length of a null-terminated string pointed to by `ptr`,
-/// returning the number of bytes before the null terminator.
+/// Via specialised instructions, AVX2 if available, then SSE2 then libc's strlen
+///
+/// # Returns the number of bytes not including the null terminator.
 ///
 /// # Safety
 /// This function is `unsafe` because it dereferences a raw pointer, it will not work on 0 length strings, they MUST be null-terminated.
@@ -85,7 +87,7 @@ where
 
             let mut offset = 0;
             loop {
-                let chunk = _mm_loadu_si128(ptr.add(offset) as *const __m128i);//same as below but for different instructions
+                let chunk = _mm_loadu_si128(ptr.add(offset) as *const __m128i); //same as below but for different instructions
                 let zeros = _mm_setzero_si128();
                 let cmp = _mm_cmpeq_epi8(chunk, zeros);
                 let mask = _mm_movemask_epi8(cmp) as i32;

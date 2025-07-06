@@ -94,7 +94,7 @@ where
             depth,
             file_type: FileType::from_dtype_fallback(d_type, path), //file type is mapped to a FileType enum, this is used to determine the type of the entry
             file_name_index: base_len,
-            inode, //inode is used to uniquely identify the entry, this is used to avoid duplicates
+            inode, //inode is used to uniquely identify the entry, this is used to avoid duplicates/provider further use cases down the line
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
         }
     }
@@ -130,7 +130,7 @@ where
     }
     #[inline]
     pub unsafe fn realpath(&self) -> crate::Result<&[u8]> {
-        unsafe{self.path.realpath()}
+        unsafe { self.path.realpath() }
     }
 
     #[inline]

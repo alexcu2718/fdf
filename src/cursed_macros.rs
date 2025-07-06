@@ -13,20 +13,20 @@
 ///
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
-///   Example: `offset_ptr!(entry_ptr, d_ino)` -> aliases to `d_fileno` and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
+///   Example: `offset_dirent!(entry_ptr, d_ino)` -> aliases to `d_fileno` and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
 /// - On Linux, `d_reclen` is used to access the record length directly, this is a special case, since it is not aligned like the others.
-///  Example: `offset_ptr!(entry_ptr, d_reclen)` -> returns the record length as usize (internal consistency, be glad it works!)
+///  Example: `offset_dirent!(entry_ptr, d_reclen)` -> returns the record length as usize (internal consistency, be glad it works!)
 /// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
 ///  the other fields are accessed normally, as raw pointers to the field
 /// /// # Usage
 /// ```ignore
 /// let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
-/// let d_name_ptr:*const _ = offset_ptr!(entry_ptr, d_name);
-/// let d_reclen:usize = offset_ptr!(entry_ptr, d_reclen);
+/// let d_name_ptr:*const _ = offset_dirent!(entry_ptr, d_name);
+/// let d_reclen:usize = offset_dirent!(entry_ptr, d_reclen);
 ///
-/// let d_namlen:usize = offset_ptr!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
-/// let d_ino_ptr :u64= offset_ptr!(entry_ptr, d_ino); // This
-macro_rules! offset_ptr {
+/// let d_namlen:usize = offset_dirent!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
+/// let d_ino_ptr :u64= offset_dirent!(entry_ptr, d_ino); // This
+macro_rules! offset_dirent {
     // Special case for `d_reclen`
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
@@ -93,7 +93,6 @@ macro_rules! cstr {
         c_path_buf.cast::<_>()
     }};
     ($bytes:expr,$n:expr) => {{
-
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
@@ -123,15 +122,15 @@ macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]
         unsafe {
-            let d_type = offset_ptr!($entry, d_type);
+            let d_type = offset_dirent!($entry, d_type);
 
             #[cfg(target_os = "linux")]
             {
                 //reclen is always 24 for . and .. on linux,
                 if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN)
-                    && offset_ptr!($entry, d_reclen) == 24
+                    && offset_dirent!($entry, d_reclen) == 24
                 {
-                    let name_ptr = offset_ptr!($entry, d_name) as *const u8;
+                    let name_ptr = offset_dirent!($entry, d_name) as *const u8;
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),
@@ -142,7 +141,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(not(target_os = "linux"))]
             {
                 if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
-                    let name_ptr = offset_ptr!($entry, d_name) as *const u8;
+                    let name_ptr = offset_dirent!($entry, d_name) as *const u8;
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),
@@ -153,110 +152,13 @@ macro_rules! skip_dot_or_dot_dot_entries {
     }};
 }
 
-//SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
-/// initialises a path buffer for syscall operations,
-// appending a slash/null terminator (if it's a directory etc)
-/// returns a tuple containing the length of the path and the `PathBuffer` itself.
-macro_rules! init_path_buffer {
-    ( $dir_path:expr) => {{
-        let mut start_buffer=$crate::PathBuffer::new(); //create a new path buffer, this is a zeroed buffer of size `LOCAL_PATH_MAX
-        let buffer_ptr = start_buffer.as_mut_ptr(); //get the mutable pointer to the buffer
-        let mut base_len=$dir_path.len(); //get the length of the directory path, this is the length of the directory path
-        let needs_slash =  (($dir_path.as_bytes() != b"/") as u8);//check if we need to append a slash(bitmasking it to 0 or 1) (if it's not root, we need a slash)
-        std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, base_len);
-        *buffer_ptr.add(base_len) = (b'/') * needs_slash; //add slash or null terminator appropriately (completely deterministic)
-        base_len += needs_slash as usize; //increment the base_len length by 1 if we added a slash, otherwise it stays the same
-        (base_len,start_buffer)
-    }};
-}
-
-#[allow(clippy::ptr_as_ptr)]
-/// A high-performance, SIMD-accelerated `strlen` for null-terminated strings.
-///
-/// Uses **AVX2 (32-byte vectors)** if available, otherwise **SSE2 (16-byte)**, and falls back to `libc::strlen` if no SIMD is supported.
-///
-/// # Safety
-/// - **`ptr` must be a valid, non-null pointer to a null-terminated string.**
-/// - **Does not check if the string starts with a null terminator** (unlike `libc::strlen`).
-/// - **Uses unaligned loads** (`_mm_loadu_si128`/`_mm256_loadu_si256`), so alignment is not required.
-/// - WILL NOT DETECT THE IF THE NULL TERMINATOR IS MISSING/FIRST BYTE IS NULL.
-/// - **May read beyond the end of the string** until it finds a null terminator
-macro_rules! strlen_asm {
-    ($ptr:expr) => {{
-        #[cfg(all(
-            target_arch = "x86_64",
-            any(target_feature = "avx2", target_feature = "sse2")
-        ))]
-        {
-            // SAFETY: Caller must ensure `ptr` is valid and null-terminated.
-
-            #[cfg(target_feature = "avx2")]
-            {
-                use std::arch::x86_64::{
-                    __m256i,
-                    _mm256_cmpeq_epi8,    // Compare 32 bytes at once
-                    _mm256_loadu_si256,   // Unaligned 32-byte load
-                    _mm256_movemask_epi8, // Bitmask of null matches
-                    _mm256_setzero_si256, // Zero vector
-                };
-
-                let mut offset = 0;
-                loop {
-                    let chunk = _mm256_loadu_si256($ptr.add(offset) as *const __m256i);
-                    let zeros = _mm256_setzero_si256();
-                    let cmp = _mm256_cmpeq_epi8(chunk, zeros);
-                    let mask = _mm256_movemask_epi8(cmp) as i32;
-
-                    if mask != 0 {
-                        break offset + mask.trailing_zeros() as usize;
-                    }
-                    offset += 32; // Process next 32-byte chunk
-                }
-            }
-
-            #[cfg(not(target_feature = "avx2"))]
-            {
-                use std::arch::x86_64::{
-                    __m128i,
-                    _mm_cmpeq_epi8,    // Compare 16 bytes
-                    _mm_loadu_si128,   // Unaligned 16-byte load
-                    _mm_movemask_epi8, // Bitmask of null matches
-                    _mm_setzero_si128, // Zero vector
-                };
-
-                let mut offset = 0;
-                loop {
-                    let chunk = _mm_loadu_si128($ptr.add(offset) as *const __m128i);
-                    let zeros = _mm_setzero_si128();
-                    let cmp = _mm_cmpeq_epi8(chunk, zeros);
-                    let mask = _mm_movemask_epi8(cmp) as i32;
-
-                    if mask != 0 {
-                        break offset + mask.trailing_zeros() as usize;
-                    }
-                    offset += 16; // Process next 16-byte chunk
-                }
-            }
-        }
-
-        #[cfg(not(all(
-            target_arch = "x86_64",
-            any(target_feature = "avx2", target_feature = "sse2")
-        )))]
-        {
-            // Fallback to libc::strlen if no SIMD support
-            libc::strlen($ptr.cast::<_>())
-        }
-    }};
-}
-
-///not intended for public use, will be private when boilerplate is donel
+/// not public.
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
 macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
 
 
-        let d_name = offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
+        let d_name = offset_dirent!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.file_name_index(); //get the base path length, this is the length of the directory path
 
         let name_len = {
@@ -273,7 +175,7 @@ macro_rules! construct_path {
             target_os = "macos"
         ))]
         {
-            offset_ptr!($dirent, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
+            offset_dirent!($dirent, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
         }
 
         #[cfg(not(any(
@@ -284,8 +186,8 @@ macro_rules! construct_path {
             target_os = "dragonfly",
             target_os = "macos"
         )))]
-        {   //use $crate::strlen;
-             strlen_asm!((offset_ptr!($dirent, d_name).cast::<i8>()))
+        {   use $crate::strlen;
+             unsafe{strlen(offset_dirent!($dirent, d_name).cast::<_>())}
             // Fallback for other OSes
         }
             };
@@ -392,8 +294,8 @@ macro_rules! construct_dirent {
     ($self:ident, $dirent:ident) => {{
         let (d_type, inode) = unsafe {
             (
-                *offset_ptr!($dirent, d_type), // get d_type
-                offset_ptr!($dirent, d_ino),   // get inode
+                *offset_dirent!($dirent, d_type), // get d_type
+                offset_dirent!($dirent, d_ino),   // get inode
             )
         };
 
@@ -420,8 +322,8 @@ macro_rules! construct_temp_dirent {
     ($self:ident, $dirent:ident) => {{
         let (d_type, inode) = unsafe {
             (
-                *offset_ptr!($dirent, d_type), // get d_type
-                offset_ptr!($dirent, d_ino),   // get inode
+                *offset_dirent!($dirent, d_type), // get d_type
+                offset_dirent!($dirent, d_ino),   // get inode
             )
         };
 

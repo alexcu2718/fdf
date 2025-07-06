@@ -1,8 +1,8 @@
 #![allow(clippy::cast_possible_wrap)]
 #[allow(unused_imports)]
 use crate::{
-    BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result, SyscallBuffer, cstr,
-    custom_types_result::BytesStorage, offset_ptr,
+    AlignedBuffer, BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
+    SyscallBuffer, cstr, custom_types_result::BytesStorage, offset_dirent,
 };
 use libc::{DIR, closedir, opendir};
 #[cfg(not(target_os = "linux"))]
@@ -73,16 +73,6 @@ where
         }
         Some(d)
     }
-    #[inline]
-    #[allow(dead_code)] //annoying
-    /// Reads the next directory entry without checking for null pointers.
-    /// This function is unsafe because it does not check if the directory pointer is null.
-    /// SAFETY: This function assumes that the directory pointer is valid and not null.
-    pub unsafe fn read_dir_unchecked(&mut self) -> *const dirent {
-        // This function reads the directory entries without checking for null pointers.
-        // It is used internally by the iterator to read the next entry.
-        unsafe { readdir(self.dir) }
-    }
 
     #[inline]
     #[allow(clippy::cast_lossless)]
@@ -94,7 +84,8 @@ where
     /// Utilises libc's `opendir` and `readdir64` for directory reading.
     pub(crate) fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
-        let (base_len, path_buffer) = unsafe { init_path_buffer!(dir_path) }; //0 cost macro to construct the buffer in the way we want.
+        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new();
+        let base_len = unsafe { path_buffer.init_from_direntry(dir_path) };
 
         Ok(Self {
             dir,

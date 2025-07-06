@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #[allow(unused_imports)]
-use crate::{DirEntryError, Result, buffer::ValueType, cstr,find_zero_byte_u64};
+use crate::{DirEntryError, Result, buffer::ValueType, cstr, find_zero_byte_u64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
@@ -44,7 +44,67 @@ pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
 {
-    unsafe { strlen_asm!(ptr) }
+    #[cfg(all(
+        target_arch = "x86_64",
+        any(target_feature = "avx2", target_feature = "sse2")
+    ))]
+    {
+        #[cfg(target_feature = "avx2")]
+        unsafe {
+            use std::arch::x86_64::{
+                __m256i,
+                _mm256_cmpeq_epi8,    // Compare 32 bytes at once
+                _mm256_loadu_si256,   // Unaligned 32-byte load
+                _mm256_movemask_epi8, // Bitmask of null matches
+                _mm256_setzero_si256, // Zero vector
+            };
+
+            let mut offset = 0;
+            loop {
+                let chunk = _mm256_loadu_si256(ptr.add(offset) as *const __m256i); //load the pointer, add offset, cast to simd type
+                let zeros = _mm256_setzero_si256(); //zeroise vector
+                let cmp = _mm256_cmpeq_epi8(chunk, zeros); //compare each byte in the chunk to 0, 32 at a time,
+                let mask = _mm256_movemask_epi8(cmp) as i32; //
+
+                if mask != 0 {
+                    break offset + mask.trailing_zeros() as usize;
+                }
+                offset += 32; // Process next 32-byte chunk
+            }
+        }
+
+        #[cfg(not(target_feature = "avx2"))]
+        unsafe {
+            use std::arch::x86_64::{
+                __m128i,
+                _mm_cmpeq_epi8,    // Compare 16 bytes
+                _mm_loadu_si128,   // Unaligned 16-byte load
+                _mm_movemask_epi8, // Bitmask of null matches
+                _mm_setzero_si128, // Zero vector
+            };
+
+            let mut offset = 0;
+            loop {
+                let chunk = _mm_loadu_si128(ptr.add(offset) as *const __m128i);//same as below but for different instructions
+                let zeros = _mm_setzero_si128();
+                let cmp = _mm_cmpeq_epi8(chunk, zeros);
+                let mask = _mm_movemask_epi8(cmp) as i32;
+
+                if mask != 0 {
+                    break offset + mask.trailing_zeros() as usize;
+                }
+                offset += 16; // Process next 16-byte chunk
+            }
+        }
+    }
+
+    #[cfg(not(all(
+        target_arch = "x86_64",
+        any(target_feature = "avx2", target_feature = "sse2")
+    )))]
+    {
+        unsafe { libc::strlen(ptr.cast::<_>()) }
+    }
 }
 
 #[inline]
@@ -255,7 +315,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // - Maintains the exact position of any null bytes in the name
     //I have changed the definition since the original README, I found a more rigorous backing!
     // We subtract 7 to get the correct offset in the d_name field.
-    let byte_pos = 7 - unsafe{find_zero_byte_u64(candidate_pos)}; // a constant time SWAR function
+    let byte_pos = 7 - unsafe { find_zero_byte_u64(candidate_pos) }; // a constant time SWAR function
     // The final length is calculated as:
     // `reclen - DIRENT_HEADER_START - byte_pos`
     // This gives us the length of the d_name field, excluding the header and the null

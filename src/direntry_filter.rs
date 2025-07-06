@@ -7,7 +7,8 @@
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
 use crate::{
-    BytePath, BytesStorage, PathBuffer, Result, SearchConfig, SyscallBuffer, TempDirent, offset_ptr,
+    AlignedBuffer, BytePath, BytesStorage, PathBuffer, Result, SearchConfig, SyscallBuffer,
+    TempDirent, offset_dirent,
 };
 
 use libc::{close, dirent64};
@@ -58,7 +59,7 @@ where
     #[allow(clippy::missing_safety_doc)]
     pub const unsafe fn next_getdents_read(&mut self) -> *const dirent64 {
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
-        self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+        self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
@@ -175,7 +176,9 @@ where
     ) -> Result<impl Iterator<Item = Self>> {
         let fd = unsafe { self.open_fd()? }; //open the directory and get the file descriptor, this is used to read the directory entries via syscall
 
-        let (path_len, path_buffer) = unsafe { init_path_buffer!(self) }; // (we provide the depth for some quick checks)
+        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new();
+
+        let path_len = unsafe { path_buffer.init_from_direntry(self) };
 
         Ok(DirEntryIteratorFilter {
             fd,

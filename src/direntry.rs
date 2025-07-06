@@ -6,7 +6,7 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
-use crate::{temp_dirent::TempDirent, utils::resolve_inode};
+use crate::{AlignedBuffer, temp_dirent::TempDirent, utils::resolve_inode};
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{utils::close_asm, utils::open_asm};
@@ -29,7 +29,7 @@ use crate::{
 };
 
 #[cfg(target_os = "linux")]
-use crate::{PathBuffer, SyscallBuffer, offset_ptr};
+use crate::{PathBuffer, SyscallBuffer, offset_dirent};
 
 /// A struct representing a directory entry.
 ///
@@ -163,7 +163,7 @@ where
             return Ok(self);
         }
         //safe because easily fits in capacity (which is absurdly big for our purposes)
-        let full_path = self.realpath()?;
+        let full_path = unsafe{self.realpath()?};
         let boxed = Self {
             path: full_path.into(),
             file_type: self.file_type,
@@ -323,16 +323,13 @@ where
     /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
-        //matching type signature of above for consistency
         let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY)
+        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new();
 
-        let (path_len, path_buffer) = unsafe { init_path_buffer!(self) };
-        //using macros because I was learning macros and they help immensely with readability
-        //this is a macro that initialises the path buffer, it returns the length of the
-        //path and the path buffer itself, which is a stack allocated buffer that can hold the
-        //full path of the directory entry, it is used to construct the full path of the
-        //directory entry, it is reused for each entry, so we don't have to allocate to the heap until the final point
-        //i wish to fix this in future versions
+        let path_len = unsafe { path_buffer.init_from_direntry(self) };
+        //calculate new length of the path (if we've added a slash or not)
+        //the path buffer is initialised mutably. This stack buffer is forcibly null terminated and of size 4096 bytes (depending on environment variable
+        //LOCAL_PATH_MAX )
 
         Ok(DirEntryIterator {
             fd,
@@ -402,7 +399,7 @@ where
     /// is valid and that we don't read past the end of the buffer.
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
-        self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+        self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
@@ -411,7 +408,7 @@ where
     ///
     ///
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
-    /// the pointer is valid and that we don't read past the end of the buffer.
+    /// the pointer is valid(we need to check )
     pub unsafe fn getdents_syscall(&mut self) {
         self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
         self.offset = 0;

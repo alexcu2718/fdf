@@ -5,8 +5,8 @@ use crate::DirEntry;
 use crate::DirEntryError;
 use crate::Result;
 use crate::buffer::ValueType;
-use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use crate::memchr_derivations::memrchr;
+use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
 use std::fmt;
 use std::mem::MaybeUninit;
@@ -50,7 +50,7 @@ where
     fn is_absolute(&self) -> bool;
     fn is_relative(&self) -> bool;
     fn to_path(&self) -> PathBuf;
-    fn realpath(&self) -> crate::Result<&[u8]>;
+    unsafe fn realpath(&self) -> crate::Result<&[u8]>;
 }
 
 impl<T> BytePath<T> for T
@@ -290,12 +290,17 @@ where
         memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
     }
 
+
+
     #[inline]
     #[allow(clippy::missing_errors_doc)]
+    /// I AM NOT SURE ON THE CORRECTNESS OF THIS AT CURRENT (WILL DO SOME TESTS HENCE WHY UNSAFE NOT SURE ABOUT MEMORY)
+    /// tests to be written soon.
     ///resolves the path to an absolute path
     /// this is a costly operation, as it requires a syscall to resolve the path.
     /// unless the path is already absolute, in which case its a trivial operation
-    fn realpath(&self) -> crate::Result<&[u8]> {
+    /// This may have issues hen
+    unsafe fn realpath(&self) -> crate::Result<&[u8]> {
         if self.is_absolute() {
             return Ok(self);
         }

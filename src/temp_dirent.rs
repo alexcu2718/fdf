@@ -5,7 +5,7 @@ use crate::BytesStorage;
 use crate::DirEntry;
 use crate::FileType;
 use crate::SearchConfig;
-use crate::offset_ptr;
+use crate::offset_dirent;
 use crate::traits_and_conversions::BytePath;
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
@@ -84,8 +84,8 @@ where
     pub fn new(path: &'a [u8], depth: u8, base_len: u16, dirent: *const dirent64) -> Self {
         let (d_type, inode) = unsafe {
             (
-                *offset_ptr!(dirent, d_type), //get the d_type from the dirent structure, this is the type of the entry
-                offset_ptr!(dirent, d_ino),   //get the inode
+                *offset_dirent!(dirent, d_type), //get the d_type from the dirent structure, this is the type of the entry
+                offset_dirent!(dirent, d_ino),   //get the inode
             )
         };
 
@@ -129,8 +129,8 @@ where
         self.depth as _
     }
     #[inline]
-    pub fn realpath(&self) -> crate::Result<&[u8]> {
-        self.path.realpath()
+    pub unsafe fn realpath(&self) -> crate::Result<&[u8]> {
+        unsafe{self.path.realpath()}
     }
 
     #[inline]

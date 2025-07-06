@@ -393,7 +393,9 @@ where
     #[inline]
     ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
-    /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
+    /// one must check before hand if there are suitable bytes left to read.
+    /// 
+    /// 
     /// the pointer is valid and that we don't read past the end of the buffer.
     /// This is only used in the iterator implementation, so we can safely assume that the pointer
     /// is valid and that we don't read past the end of the buffer.
@@ -415,9 +417,15 @@ where
     }
 
     #[inline]
+    /// Check if the buffer has more entries left
+    fn has_more_entries_in_buffer(&self) -> bool {
+    self.offset < self.remaining_bytes as _
+    }
+
+    #[inline]
     /// Check the remaining bytes left in the buffer 
-    pub fn check_remaining_bytes(&self)->usize{
-        self.remaining_bytes as _
+    pub fn check_remaining_bytes(&self)->bool{
+        self.remaining_bytes == 0
     }
 
     #[inline]
@@ -459,7 +467,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // If we have remaining data in buffer, process it
-            if self.offset < self.check_remaining_bytes(){
+            if self.has_more_entries_in_buffer(){
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
@@ -476,7 +484,7 @@ where
             // issue a syscall once out of entries
             unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
 
-            if self.check_remaining_bytes()<= 0 {
+            if self.check_remaining_bytes() {
                 // If no more entries, return None,
                 return None;
             }

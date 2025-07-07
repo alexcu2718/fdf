@@ -55,6 +55,8 @@ fd count: 12445
 fdf count: 12445
 
 
+##### searching for the extension c in the llvm repo (there might be some c files i guessssss)
+
 Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
   Time (mean ± σ):      20.6 ms ±   2.9 ms    [User: 39.3 ms, System: 119.3 ms]
   Range (min … max):    15.5 ms …  25.1 ms    12 runs
@@ -67,23 +69,28 @@ Summary
   fdf -HI --extension 'c' '' '/tmp/llvm-project' ran
     1.71 ± 0.27 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
 ############
-running ./warm-cache-type-no-pattern.sh
-fd count: 174329
+running ./warm-cache-type-simple-pattern.sh   ###i copied and modified these tests from fd, this is NOT simple for 95% of people.
+ fd count: 174329
 fdf count: 174329
 
-Benchmark 1: fdf '.' '/tmp/llvm-project' -HI
-  Time (mean ± σ):      24.1 ms ±   2.5 ms    [User: 49.3 ms, System: 121.9 ms]
-  Range (min … max):    19.3 ms …  28.3 ms    12 runs
-
-Benchmark 2: fd '.' '/tmp/llvm-project' -HI
-  Time (mean ± σ):      36.3 ms ±   3.3 ms    [User: 154.9 ms, System: 108.6 ms]
-  Range (min … max):    31.2 ms …  41.1 ms    12 runs
+Running benchmarks...
+Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
+  Time (mean ± σ):      23.3 ms ±   3.2 ms    [User: 55.5 ms, System: 122.4 ms]
+  Range (min … max):    16.4 ms …  28.3 ms    12 runs
+ 
+Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
+  Time (mean ± σ):      34.2 ms ±   3.4 ms    [User: 124.2 ms, System: 105.4 ms]
+  Range (min … max):    29.6 ms …  41.9 ms    12 runs
+ 
+Summary
+  fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project' ran
+    1.47 ± 0.25 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
 
 Summary
   fdf '.' '/tmp/llvm-project' -HI ran
     1.50 ± 0.21 times faster than fd '.' '/tmp/llvm-project' -HI
 #####
-running ./warm-cache-type-filtering-executable.sh
+running ./warm-cache-type-filtering-executable.sh   ######## TYPE FILTERING (REQUIRES LSTAT CALLS)
 fd count: 927
 fdf count: 927
 
@@ -216,7 +223,7 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 
 3.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
 
-4.Works on big endian systems, tested on PPC64 (took a while to get it working)
+4.Works on big endian systems, tested on PPC64 (took 20 minutes to compile....)
 
 ## Installation
 

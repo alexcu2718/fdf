@@ -1,7 +1,6 @@
 # fdf
 
-(Jeremy Clarkson voice )
-'Probably the fastest finder you'll find on POSIX for regex/glob matching files`
+'a *very*  fast file finder for POSIX(Linux/MacOs/BSD) for regex/glob matching files with extremely pretty file colours`
 
 **i do have benchmark suites!**
 

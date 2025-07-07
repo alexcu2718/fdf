@@ -140,17 +140,16 @@ Then this beauty of a function!
 //The code is explained better in the true function definition (this is crate agnostic)
 //This is the little-endian implementation, see crate for modified version for big-endian
 // Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
+use fdf::find_zero_byte_u64; // a const SWAR function
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset or raw const!!!!!!!!!!!)
+    let reclen = unsafe { (*dirent).d_reclen as usize }; 
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //endianness fix omitted for brevity.
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
     let candidate_pos = last_word | mask;//^
-    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
-        & !candidate_pos //no branch, see comments for hack
-        & 0x8080_8080_8080_8080;
+    let byte_pos = 7 - unsafe { find_zero_byte_u64(candidate_pos) }; // a constant time SWAR function
 
-    reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+    reclen - DIRENT_HEADER_START - byte_pos
 }
 
 ```

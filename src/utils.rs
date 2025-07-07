@@ -295,7 +295,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
     #[cfg(target_endian = "big")]
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
-    // Special case: When processing the 3rd u64 word (index 2), we need to mask
+    // Special case: When processing the 3rd (final ) word , we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.

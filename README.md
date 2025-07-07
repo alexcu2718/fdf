@@ -35,8 +35,8 @@ This runs a **comprehensive** suite of internal library+CLI tests as well as ben
 
 ## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
 
-
 Testing on my local filesystem (to show on non-toy example)
+
 ```bash
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 | `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 | #search my whole pc
@@ -127,16 +127,29 @@ let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
 (I made it into a separate crate)
 it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>
 
-## NECESSARY DISCLAIMERS (I might have a conscience somewhere)
+Then this beauty of a function!
 
-I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
-Notably I modified it because it's quite old and has a lot of silly dependencies (i removed all of them).
+```Rust
 
-I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161>
-I've found a much more rigorous way of doing some bit tricks via this, there's unstable features included so I thought I'd appreciate the backing
-of validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment.
 
-Some bits MIGHT be broken, the main use case to any user is error free( they'll just pop up more later on, I have too many tests and it's really just that easy to get them in C)
+
+//The code is explained better in the true function definition (this is crate agnostic)
+//This is the little-endian implementation, see crate for modified version for big-endian
+// Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
+pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset or raw const!!!!!!!!!!!)
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
+    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
+    let candidate_pos = last_word | mask;//^
+    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
+        & !candidate_pos //no branch, see comments for hack
+        & 0x8080_8080_8080_8080;
+
+    reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
+}
+
+```
 
 ## WHY?
 
@@ -162,44 +175,36 @@ with my nonsense so if anyone felt like adding something, you can!
 
 (notably, there's some obvious things I have not touched in a while and things that are just less interesting, ideally one day someone could do that, not now though)
 
+## NECESSARY DISCLAIMERS (I might have a conscience somewhere)
+
+I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
+Notably I modified it because it's quite old and has a lot of silly dependencies (i removed all of them).
+
+I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161>
+I've found a much more rigorous way of doing some bit tricks via this, there's unstable features included so I thought I'd appreciate the backing
+of validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment.
+
+Some bits MIGHT be broken, the main use case to any user is error free
+(unfortunately with FFI, they'll just pop up more later on, I have too many tests and it's really just that easy to get them in C)
+
 ## Future plans?
 
 Separation of utilities
 
-Right now, it's a bit monolithic.
+Right now, it's a bit monolithic. Some aspects might deserve their own crate (i dislike the idea of having 500 crates to do 1 specific thing each)
 
-I'd probably just keep the CLI stuff simple
-
-Add some extra metadata filters (because i get a lot of metadata for cheap via specialisation!)
+I'd probably just keep the CLI stuff simple, features to be added are datetime based filtering (could be done quick, I just have rarely used time based filtering and that's why it's slow!) as well as just other things, eg to search for device drivers/etc.
 
 Add POSIX compatibility in general ( illumos/solaris QEMU isn't straight forward, quite esoteric)
 
 Add Windows... Well, This would take a fundamental rewrite because of architectural differences, I might do it. (Who uses the terminal on windows?)
-(It may be interesting to learn the differences actually)
+(It may be interesting to learn the differences actually, omit my cavalier attitude!)
 
-Additional features on my
+Additional features on my compile_time_ls_colours would be nice, I think I want to explore compile time hashmaps more,
+I'm only really scratching the service on metaprogramming and rust's utilities are great (one day I'll try cpp template metaprogramming and become a convert...)
 
 Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)
 ..and exceedingly efficient.
-
-```Rust
-//The code is explained better in the true function definition (this is crate agnostic)
-//This is the little-endian implementation, see crate for modified version for big-endian
-// Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
-pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
-    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset or raw const!!!!!!!!!!!)
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
-    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
-    let candidate_pos = last_word | mask;//^
-    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
-        & !candidate_pos //no branch, see comments for hack
-        & 0x8080_8080_8080_8080;
-
-    reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
-}
-
-```
 
 ## COMPATIBILITY STATE
 

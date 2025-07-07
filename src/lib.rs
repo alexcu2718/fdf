@@ -258,7 +258,7 @@ where
             root: root.as_ref().to_owned(),
             pattern: pattern.as_ref().to_owned(),
             hide_hidden: true,
-            case_insensitive: false,
+            case_insensitive: true,
             keep_dirs: false,
             file_name_only: true,
             extension_match: None,

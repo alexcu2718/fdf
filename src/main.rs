@@ -113,10 +113,10 @@ struct Args {
     #[arg(
         short = 's',
         long = "case-sensitive",
-        default_value_t = false,
+        default_value_t = true,
         help = "Enable case-sensitive matching, defaults to false\n"
     )]
-    case_sensitive: bool,
+    case_insensitive: bool,
     #[arg(
         short = 'j',
         long = "threads",
@@ -245,7 +245,7 @@ fn main() -> Result<(), DirEntryError> {
 
     let mut finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
         .keep_hidden(!args.hidden)
-        .case_insensitive(args.case_sensitive)
+        .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)
         .file_name_only(args.full_path)
         .extension_match(args.extension)

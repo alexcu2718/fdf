@@ -27,13 +27,16 @@ git clone <https://github.com/alexcu2718/fdf>  /tmp/fdf_test &&   /tmp/fdf_test/
 
 BE WARNED, I CLONE THE LLVM REPO TO CREATE A SUSTAINABLE ENVIRONMENT FOR TESTING, I DO THIS SPECIFICALLY IN /tmp
 so this will be deleted at next shutdown, same goes for macos,
-____not BSD (well, I only played around in QEMU, seems they've got a distinctively different system)____
-(it does provide the option to delete this though)
+*not BSD (well, I only played around in QEMU, seems they've got a distinctively different system)*
+
+IT DOES provide the option to delete this though
 
 This runs a **comprehensive** suite of internal library+CLI tests as well as benchmarks.
 
 ## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
 
+
+Testing on my local filesystem (to show on non-toy example)
 ```bash
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 | `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 | #search my whole pc
@@ -41,13 +44,13 @@ This runs a **comprehensive** suite of internal library+CLI tests as well as ben
 
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 | 
+| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 |
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
-
-
 
 ######
 #some of my benchmarks. repeatable on your own pc (as above)
+#
+# REPEATABLE BENCHMARKS (FOUND IN THE *HOW TO TEST* section above)
 fd count: 12445
 fdf count: 12445
 
@@ -55,34 +58,47 @@ fdf count: 12445
 Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
   Time (mean ± σ):      20.6 ms ±   2.9 ms    [User: 39.3 ms, System: 119.3 ms]
   Range (min … max):    15.5 ms …  25.1 ms    12 runs
- 
+
 Benchmark 2: fd -HI --extension 'c' '' '/tmp/llvm-project'
   Time (mean ± σ):      35.1 ms ±   2.7 ms    [User: 141.0 ms, System: 108.9 ms]
   Range (min … max):    31.7 ms …  42.5 ms    12 runs
- 
+
 Summary
   fdf -HI --extension 'c' '' '/tmp/llvm-project' ran
     1.71 ± 0.27 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
 ############
-
+running ./warm-cache-type-no-pattern.sh
 fd count: 174329
 fdf count: 174329
 
-Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI
   Time (mean ± σ):      24.1 ms ±   2.5 ms    [User: 49.3 ms, System: 121.9 ms]
   Range (min … max):    19.3 ms …  28.3 ms    12 runs
- 
+
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI
   Time (mean ± σ):      36.3 ms ±   3.3 ms    [User: 154.9 ms, System: 108.6 ms]
   Range (min … max):    31.2 ms …  41.1 ms    12 runs
- 
+
 Summary
   fdf '.' '/tmp/llvm-project' -HI ran
     1.50 ± 0.21 times faster than fd '.' '/tmp/llvm-project' -HI
+#####
+running ./warm-cache-type-filtering-executable.sh
+fd count: 927
+fdf count: 927
 
+Running benchmarks...
+Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type x
+  Time (mean ± σ):      33.2 ms ±   2.7 ms    [User: 49.6 ms, System: 225.1 ms]
+  Range (min … max):    29.5 ms …  38.0 ms    12 runs
 
+Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type x
+  Time (mean ± σ):      48.7 ms ±   1.6 ms    [User: 159.5 ms, System: 233.2 ms]
+  Range (min … max):    46.6 ms …  51.2 ms    11 runs
 
+Summary
+  fdf '.' '/tmp/llvm-project' -HI --type x ran
+    1.47 ± 0.13 times faster than fd '.' '/tmp/llvm-project' -HI --type x
 
 
 ```
@@ -92,16 +108,18 @@ Summary
 -dirent_const_strlen
  a  constant function which gets strlen from a dirent64 in constant time with no branches, only applicable to Linux
 
--cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, add **null terminator** for FFI use)
+-cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, then add **null terminator** for FFI use)
 
 ```rust
 
 use fdf::cstr;
-let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't it")}; //automatically  create an inline null stack allocated of length PATH_MAX(4096) and add a null pointer
+let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
+//automatically  create an inline null stack allocated of length PATH_MAX(4096) and add a null terminator
 
-let dont_go_over_my_bounds:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5 
+let dont_go_over_my_bounds:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
 //hence why its unsafe!
 let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
+
 
 ```
 
@@ -146,6 +164,10 @@ with my nonsense so if anyone felt like adding something, you can!
 
 ## Future plans?
 
+Separation of utilities
+
+Right now, it's a bit monolithic.
+
 I'd probably just keep the CLI stuff simple
 
 Add some extra metadata filters (because i get a lot of metadata for cheap via specialisation!)
@@ -153,6 +175,9 @@ Add some extra metadata filters (because i get a lot of metadata for cheap via s
 Add POSIX compatibility in general ( illumos/solaris QEMU isn't straight forward, quite esoteric)
 
 Add Windows... Well, This would take a fundamental rewrite because of architectural differences, I might do it. (Who uses the terminal on windows?)
+(It may be interesting to learn the differences actually)
+
+Additional features on my
 
 Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)
 ..and exceedingly efficient.
@@ -162,14 +187,14 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 //This is the little-endian implementation, see crate for modified version for big-endian
 // Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; 
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset or raw const!!!!!!!!!!!)
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
     let candidate_pos = last_word | mask;//^
     let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
         & !candidate_pos //no branch, see comments for hack
-        & 0x8080_8080_8080_8080; 
+        & 0x8080_8080_8080_8080;
 
     reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
 }
@@ -178,7 +203,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 
 ## COMPATIBILITY STATE
 
-1.Working on Linux(MUSL too) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions  
+1.Working on Linux(MUSL too) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions
 
 2.Somehow working on Aarch 64 Linux/Android Debian (basically, it works on my phone via termux!) (( and I didn't need to change anything!))
 
@@ -263,7 +288,7 @@ Options:
 
   -h, --help                   Print help
   -V, --version                Print version
-  
+
 ```
 
 TODO LIST (Maybe):

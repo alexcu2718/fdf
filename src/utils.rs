@@ -68,7 +68,7 @@ where
                 let cmp = _mm256_cmpeq_epi8(chunk, zeros); //compare each byte in the chunk to 0, 32 at a time,
                 let mask = _mm256_movemask_epi8(cmp) as i32; //
 
-                if mask != 0 {
+                if mask != 0 {//chec
                     break offset + mask.trailing_zeros() as usize;
                 }
                 offset += 32; // Process next 32-byte chunk

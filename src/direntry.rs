@@ -156,16 +156,50 @@ where
         }
     }
 
+    /*
+            #[inline]
+        #[allow(clippy::missing_errors_doc)]
+        ///FIXME
+        /// I AM NOT SURE ON THE CORRECTNESS OF THIS AT CURRENT (WILL DO SOME TESTS HENCE WHY UNSAFE NOT SURE ABOUT MEMORY)
+        /// tests to be written soon.(tests are hard to do with currentdir in debug environments!)
+        /// I THINK THIS CREATES A LEAK, WILL REWRITE SOON (ITLL WORK STILL)
+        /// TECHNICALLY I NEED TO CALL `libc::free` and return a boxed results
+        ///resolves the path to an absolute path
+        /// this is a costly operation, as it requires a lot of operations to resolve the path.
+        unsafe fn realpath(&self) -> crate::Result<&[u8]> {
+            //cast byte slice into a *const c_char/i8 pointer with a null terminator THEN pass it to realpath along with a null mut pointer
+            let ptr = unsafe {
+                self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
+            };
+            if ptr.is_null() {
+                //check for null
+                return Err(std::io::Error::last_os_error().into());
+            }
+
+            //we  use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
+            //rely on sse2/glibc strlen to get length
+            Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen(ptr)) })
+        }
+    }
+
+         */
+
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    ///Converts a path to a proper path, if it is not already
-    pub fn as_full_path(self) -> Result<Self> {
-        if self.is_absolute() {
-            //doesnt convert
-            return Ok(self);
+    ///Converts a dirent64 to a proper path, resolving all symlinks, etc,
+    /// there's no way ahead of time to tell if a path has symbolic components.
+    /// Returns an error on invalid path (errors to be filled in later)  (they're actually encoded though)
+    pub fn to_full_path(self) -> Result<Self> {
+        let ptr = unsafe {
+            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut())) //we've created this pointer, we need to be careful
+        };
+        if ptr.is_null() {
+            //check for null
+            return Err(std::io::Error::last_os_error().into());
         }
-        //safe because easily fits in capacity (which is absurdly big for our purposes)
-        let full_path = unsafe { self.realpath()? };
+        let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen(ptr)) }; //get length without null terminator
+        //no ub check here
+
         let boxed = Self {
             path: full_path.into(),
             file_type: self.file_type,
@@ -176,6 +210,7 @@ where
         //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
         //so we subtract the filename length from the total length, probably could've been done more elegantly.
         //TBD? not imperative.
+        unsafe { libc::free(ptr as _) }
 
         Ok(boxed)
     }

@@ -68,7 +68,8 @@ where
                 let cmp = _mm256_cmpeq_epi8(chunk, zeros); //compare each byte in the chunk to 0, 32 at a time,
                 let mask = _mm256_movemask_epi8(cmp) as i32; //
 
-                if mask != 0 {//chec
+                if mask != 0 {
+                    //chec
                     break offset + mask.trailing_zeros() as usize;
                 }
                 offset += 32; // Process next 32-byte chunk
@@ -213,28 +214,27 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
 +--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
 | d_ino  | d_off  | reclen | d_type| padding|        d_name[256]                         |
 | (8B)   | (8B)   | (2B)   | (1B)  | (1B)   | (variable length, null-terminated)         |
-+--------+--------+--------+--------+--------+--------------------------------------------+
-                                  ↑         ↑
-                                  |         +-- padding byte
-                                  +-- d_type byte
-
+------------------------+--------+--------+--------------------------------------------+ |
+|                                  ^         ^                                           |
+|                                 |         +-- padding byte                             |
+|                                    +-- d_type byte                                     |                                                                                        |
 +-----------------------------------------------------------------------------------------+
 | SWAR ALGORITHM VISUALISATION (last 8 bytes being checked)                               |
 +--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
 | Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 |                 |
 |        |        |        |        |        |        |        |        |                 |
-| 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0x00   | 0xNN   | ← null byte found|
+| 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0x00   | 0xNN   |<-  null byte found|
 +--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
-          ↑        ↑        ↑        ↑        ↑        ↑        ↑        ↑
+          ^        ^        ^        ^        ^        ^        ^        ^
           |        |        |        |        |        |        |        |
           +-- Potential padding/d_type        +-- Actual filename bytes --+
 
 BIT TRICK OPERATION:
 1. candidate_pos = last_word | mask
-   [0xNN][0xNN][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] ← original
+   [0xNN][0xNN][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] <- original
    | OR with mask (0x00FFFFFF when needed)
-   ↓
-   [0xFF][0xFF][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] ← masked
+
+   [0xFF][0xFF][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] <- masked
 
 2. zero_bit calculation:
    (candidate_pos - 0x0101010101010101) & ~candidate_pos & 0x8080808080808080
@@ -242,6 +242,7 @@ BIT TRICK OPERATION:
    High bits indicate null bytes: 0x0000000000800000
    ↓
    trailing_zeros() → finds position of first null byte
+   //this compiles to extremely efficient assembly.
 
 *//*
 Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
@@ -286,9 +287,8 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// THE REASON WE DO THIS IS BECAUSE THE RECLEN IS PADDED UP TO 8 BYTES (rounded up to the nearest multiple of 8),
 #[cfg(target_os = "linux")]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; 
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
-    //let reclen_new=unsafe{ const {(*dirent).d_reclen}}; //reclen is the length of the dirent structure, including the d_name field
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     #[cfg(target_endian = "little")]

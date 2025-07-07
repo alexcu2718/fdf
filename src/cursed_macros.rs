@@ -152,7 +152,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
     }};
 }
 
-/// not public.
+/// not public. (this saves on a LOT of code deduplication in an experimental code base(which you can turn into actually impls's etc later on!))
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
 macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
@@ -228,7 +228,6 @@ macro_rules! construct_dirent_internal {
         }
     }};
 }
-
 
 #[macro_export]
 /// Macro to implement `BytesStorage` for types that support `From<&[u8]>`
@@ -312,7 +311,6 @@ macro_rules! const_from_env {
         };
     };
 }
-
 
 /// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
 /// This is used to filter entries without allocating memory on the heap.

@@ -50,7 +50,7 @@ where
     fn is_absolute(&self) -> bool;
     fn is_relative(&self) -> bool;
     fn to_path(&self) -> PathBuf;
-    unsafe fn realpath(&self) -> crate::Result<&[u8]>;
+    // unsafe fn realpath(&self) -> crate::Result<&[u8]>;
 }
 
 impl<T> BytePath<T> for T
@@ -288,30 +288,6 @@ where
     #[allow(clippy::cast_possible_truncation)]
     fn file_name_index(&self) -> u16 {
         memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
-    }
-
-    #[inline]
-    #[allow(clippy::missing_errors_doc)]
-    ///FIXME
-    /// I AM NOT SURE ON THE CORRECTNESS OF THIS AT CURRENT (WILL DO SOME TESTS HENCE WHY UNSAFE NOT SURE ABOUT MEMORY)
-    /// tests to be written soon.(tests are hard to do with currentdir in debug environments!)
-    /// I THINK THIS CREATES A LEAK, WILL REWRITE SOON (ITLL WORK STILL)
-    /// TECHNICALLY I NEED TO CALL `libc::free` and return a boxed results
-    ///resolves the path to an absolute path
-    /// this is a costly operation, as it requires a lot of operations to resolve the path.
-    unsafe fn realpath(&self) -> crate::Result<&[u8]> {
-        //cast byte slice into a *const c_char/i8 pointer with a null terminator THEN pass it to realpath along with a null mut pointer
-        let ptr = unsafe {
-            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
-        };
-        if ptr.is_null() {
-            //check for null
-            return Err(std::io::Error::last_os_error().into());
-        }
-
-        //we  use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
-        //rely on sse2/glibc strlen to get length
-        Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen(ptr)) })
     }
 }
 

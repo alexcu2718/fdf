@@ -81,7 +81,6 @@ Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
 Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
   Time (mean ± σ):      34.2 ms ±   3.4 ms    [User: 124.2 ms, System: 105.4 ms]
   Range (min … max):    29.6 ms …  41.9 ms    12 runs
- 
 Summary
   fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project' ran
     1.47 ± 0.25 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
@@ -107,7 +106,6 @@ Summary
   fdf '.' '/tmp/llvm-project' -HI --type x ran
     1.47 ± 0.13 times faster than fd '.' '/tmp/llvm-project' -HI --type x
 
-
 ```
 
 ## Extra bits
@@ -122,8 +120,8 @@ Summary
 use fdf::cstr;
 let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
 //automatically  create an inline null stack allocated of length PATH_MAX(4096) and add a null terminator
-
-let dont_go_over_my_bounds:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
+let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
+/*explosions*/
 //hence why its unsafe!
 let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
 
@@ -146,7 +144,7 @@ Then this beauty of a function!
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset or raw const!!!!!!!!!!!)
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //endianness fix omitted for brevity.
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
     let candidate_pos = last_word | mask;//^
     let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)

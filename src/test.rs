@@ -126,17 +126,25 @@ mod tests {
 
     #[test]
     fn test_hidden_files() {
-        let temp_dir = std::env::temp_dir();
-        let hidden_file = temp_dir.as_path().join(".hidden");
-        std::fs::write(&hidden_file, "").unwrap();
+        let dir_path = std::env::temp_dir().join("test_hidden");
+        let _ = std::fs::create_dir_all(&dir_path);
 
-        let entry: DirEntry<crate::SlimmerBytes> = DirEntry::new(hidden_file.as_os_str()).unwrap();
-        assert!(entry.is_hidden());
+        // create visible and hidden files
+        let _ = std::fs::File::create(dir_path.join("visible.txt"));
+        let _ = std::fs::File::create(dir_path.join(".hidden"));
 
-        let non_hidden = temp_dir.as_path().join("visible");
-        std::fs::write(&non_hidden, "").unwrap();
-        let entry = DirEntry::<SlimmerBytes>::new(non_hidden.as_os_str()).unwrap();
-        assert!(!entry.is_hidden());
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+
+        let _ = std::fs::remove_dir_all(&dir_path);
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0], ".hidden");
+        assert_eq!(names[1], "visible.txt");
     }
 
     #[test]
@@ -187,7 +195,7 @@ mod tests {
 
         let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
 
-        let file_path = DirEntry::<SlimmerBytes>::new(".")?.as_full_path()?;
+        let file_path = DirEntry::<SlimmerBytes>::new(".")?.to_full_path()?;
 
         let my_path: Box<[u8]> = file_path.as_bytes().into();
 
@@ -426,7 +434,81 @@ mod tests {
     }
 
     #[test]
+    fn test_realpath() {
+        let dir = temp_dir().join("test_dir");
+        let _ = fs::create_dir_all(&dir);
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir)
+            .unwrap()
+            .to_full_path()
+            .unwrap();
+        let iter = DirIter::new(&dir_entry).unwrap();
+        let entries: Vec<_> = iter.collect();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(dir_entry.is_dir());
+        assert_eq!(entries.len(), 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn test_file_types() {
+        let dir_path = temp_dir().join("THROW_AWAY");
+
+        let _ = fs::create_dir_all(&dir_path);
+
+        // Create different file types
+        let _ = File::create(dir_path.join("regular.txt"));
+        let _ = fs::create_dir(dir_path.join("directory"));
+
+        let _ = symlink("regular.txt", dir_path.join("symlink"));
+
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+
+        let mut type_counts = std::collections::HashMap::new();
+        for entry in entries {
+            *type_counts.entry(entry.file_type).or_insert(0) += 1;
+            println!(
+                "File: {}, Type: {:?}",
+                entry.path.as_os_str().to_string_lossy(),
+                entry.file_type
+            );
+        }
+
+        let _ = fs::remove_dir_all(dir_path);
+        assert_eq!(type_counts.get(&FileType::RegularFile).unwrap(), &1);
+        assert_eq!(type_counts.get(&FileType::Directory).unwrap(), &1);
+        assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
+    }
+
+    #[test]
+    fn test_non_recursive_iteration() {
+        let top_dir = std::env::temp_dir().join("test_nested");
+        let sub_dir = top_dir.join("subdir");
+
+        let _ = std::fs::create_dir_all(&sub_dir);
+        let _ = std::fs::File::create(top_dir.join("top_file.txt"));
+        let _ = std::fs::File::create(sub_dir.join("nested_file.txt"));
+
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&top_dir).unwrap();
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+
+        let _ = std::fs::remove_dir_all(&top_dir);
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0], "subdir"); // Directory entry
+        assert_eq!(names[1], "top_file.txt"); // Top-level file
+        // Verify nested file wasn't included
+        assert!(!names.contains(&"nested_file.txt".to_string()));
+    }
+
+    #[test]
+    fn test_file_types_realpath() {
         let dir_path = temp_dir().join("THROW_AWAY");
 
         let _ = fs::create_dir_all(&dir_path);
@@ -479,7 +561,9 @@ mod tests {
 
     #[test]
     fn test_error_handling() {
-        let non_existent = DirEntry::<Arc<[u8]>>::new("/non/existent/path");
+        let non_existent = DirEntry::<Arc<[u8]>>::new(
+            "/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+        );
         assert!(non_existent.is_err());
     }
 }

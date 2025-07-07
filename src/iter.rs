@@ -49,9 +49,10 @@ where
     }
     #[inline]
     //internal function to read the directory entries
-    //this is a private function that reads the directory entries and returns a pointer to the DIR
     //it is used by the new function to initialise the iterator.
-    /// Reads the directory entries and returns a pointer to the DIR structure.
+    /// Returns a either
+    /// Success => mutpointer to the DIR structure.
+    /// Or one of many errors (permissions/etc/ ) that I haven't documented yet. They are handled explicitly however. (essentially my errortype converts from errno)
     pub(crate) fn open_dir(direntry: &DirEntry<S>) -> Result<*mut DIR> {
         let dir = direntry.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
         // This function reads the directory entries and populates the iterator.

@@ -162,7 +162,7 @@ macro_rules! construct_path {
         let base_len= $self.file_name_index(); //get the base path length, this is the length of the directory path
 
         let name_len = {
-         #[cfg(target_os = "linux")]
+          #[cfg(target_os = "linux")]
         {   use $crate::dirent_const_time_strlen;
             dirent_const_time_strlen($dirent) //const time strlen for linux (specialisation)
         }
@@ -187,7 +187,7 @@ macro_rules! construct_path {
             target_os = "macos"
         )))]
         {   use $crate::strlen;
-             unsafe{strlen(offset_dirent!($dirent, d_name).cast::<_>())}
+             strlen(offset_dirent!($dirent, d_name).cast::<i8>())
             // Fallback for other OSes
         }
             };
@@ -202,6 +202,33 @@ macro_rules! construct_path {
 
     }};
 }
+
+//the below 2 macros are needed due to the fact we have 3 types of iterators, this makes it a lot cleaner!
+
+/// Constructs a `DirEntry<S>` from a `dirent64`/`dirent` pointer for any relevant self type
+/// Needed to be done via macro to avoid issues with duplication/mutability of structs
+macro_rules! construct_dirent_internal {
+    ($self:ident, $dirent:ident) => {{
+        let (d_type, inode) = unsafe {
+            (
+                *offset_dirent!($dirent, d_type), // get d_type
+                offset_dirent!($dirent, d_ino),   // get inode
+            )
+        };
+
+        let full_path = unsafe { construct_path!($self, $dirent) };
+        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
+
+        $crate::DirEntry {
+            path: full_path.into(),
+            file_type,
+            inode,
+            depth: $self.parent_depth + 1,
+            file_name_index: $self.file_name_index,
+        }
+    }};
+}
+
 
 #[macro_export]
 /// Macro to implement `BytesStorage` for types that support `From<&[u8]>`
@@ -286,31 +313,6 @@ macro_rules! const_from_env {
     };
 }
 
-//the below 2 macros are needed due to the fact we have 3 types of iterators, this makes it a lot cleaner!
-
-/// Constructs a `DirEntry<S>` from a `dirent64`/`dirent` pointer for any relevant self type
-/// Needed to be done via macro to avoid issues with duplication/mutability of structs
-macro_rules! construct_dirent_internal {
-    ($self:ident, $dirent:ident) => {{
-        let (d_type, inode) = unsafe {
-            (
-                *offset_dirent!($dirent, d_type), // get d_type
-                offset_dirent!($dirent, d_ino),   // get inode
-            )
-        };
-
-        let full_path = unsafe { construct_path!($self, $dirent) };
-        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
-
-        $crate::DirEntry {
-            path: full_path.into(),
-            file_type,
-            inode,
-            depth: $self.parent_depth + 1,
-            file_name_index: $self.file_name_index,
-        }
-    }};
-}
 
 /// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
 /// This is used to filter entries without allocating memory on the heap.

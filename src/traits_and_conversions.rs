@@ -67,16 +67,18 @@ where
         VT: ValueType, // VT==ValueType is u8/i8
     {
         debug_assert!(
-            self.len() < crate::LOCAL_PATH_MAX, //delcared at compile time via env_var or default to 1024
+            self.len() < crate::LOCAL_PATH_MAX, //delcared at compile time via env_var or default to 4096
             "Input too large for buffer"
         );
 
         let c_path_buf = crate::PathBuffer::new().as_mut_ptr();
 
         // copy bytes using copy_nonoverlapping to avoid ub check
+        // // SAFETY: memory regions are non overlapping
         unsafe {
             std::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
             c_path_buf.add(self.len()).write(0); // Null terminate the string
+             // SAFETY: the buffer must have enough capacity.
         }
 
         f(c_path_buf.cast::<_>())
@@ -118,13 +120,16 @@ where
     }
 
     /// Returns the size of the file in bytes.
-    /// If the file size cannot be determined, returns 0.
+    /// If the file size cannot be determined, returns an error
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
     fn size(&self) -> crate::Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
     }
     #[inline]
+    //Open a file descriptor of a file
+     // SAFETY: the filepath must be less than LOCAL_PATH_MAX,
+     // You cannot access the fd after that iterator is dropped, it is *useless* and must be opened again.
     unsafe fn open_fd(&self) -> crate::Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
@@ -210,6 +215,7 @@ where
     fn is_writable(&self) -> bool {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
+        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)
         unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
     }
 
@@ -271,14 +277,14 @@ where
     }
 
     #[inline]
-    ///checks if the path is absolute,
+    ///checks if the path is absolute (starts at root, does not check symlinks)
     fn is_absolute(&self) -> bool {
-        //safe because we know the path is not empty
+        // # Safe because
         unsafe { *self.get_unchecked(0) == b'/' }
     }
 
     #[inline]
-    ///checks if the path is relative,
+    ///checks if the path is relative(aka doesn't start with root)
     fn is_relative(&self) -> bool {
         !self.is_absolute()
     }

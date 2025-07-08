@@ -1,6 +1,5 @@
 #![allow(unused_macros)]
 
-//i didnt want to to use this macro but it saved a LOT of hassle/boilerplate. (vlight depdendency
 //might remove this when less lazy.
 #[allow(clippy::doc_markdown)]
 #[macro_export(local_inner_macros)]
@@ -74,6 +73,8 @@ macro_rules! offset_dirent {
 /// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
 /// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)
 ///
+/// # Safety. 
+///
 /// The first argument should be a byte slice
 /// the second argument is optional as specifies a custom buffer size.
 /// `cstr!(b"/home/sir_galahad", 256)`
@@ -86,8 +87,10 @@ macro_rules! cstr {
         // Create a buffer and make into a pointer
         let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
+        // # Safety memory regions non overlapping and valid for the applicable lifetime
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         // Write a null terminator at the end of the buffer
+        // #Safety. we know we can add a null terminator because we've created a buffer purposely longer than the max path size.
         c_path_buf.add($bytes.len()).write(0);
         //let caller choose cast
         c_path_buf.cast::<_>()

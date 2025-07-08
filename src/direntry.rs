@@ -6,7 +6,7 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
-use crate::{AlignedBuffer, temp_dirent::TempDirent, utils::resolve_inode};
+use crate::{AlignedBuffer, temp_dirent::TempDirent, utils::resolve_inode,LOCAL_PATH_MAX};
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{utils::close_asm, utils::open_asm};
@@ -156,34 +156,6 @@ where
         }
     }
 
-    /*
-            #[inline]
-        #[allow(clippy::missing_errors_doc)]
-        ///FIXME
-        /// I AM NOT SURE ON THE CORRECTNESS OF THIS AT CURRENT (WILL DO SOME TESTS HENCE WHY UNSAFE NOT SURE ABOUT MEMORY)
-        /// tests to be written soon.(tests are hard to do with currentdir in debug environments!)
-        /// I THINK THIS CREATES A LEAK, WILL REWRITE SOON (ITLL WORK STILL)
-        /// TECHNICALLY I NEED TO CALL `libc::free` and return a boxed results
-        ///resolves the path to an absolute path
-        /// this is a costly operation, as it requires a lot of operations to resolve the path.
-        unsafe fn realpath(&self) -> crate::Result<&[u8]> {
-            //cast byte slice into a *const c_char/i8 pointer with a null terminator THEN pass it to realpath along with a null mut pointer
-            let ptr = unsafe {
-                self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
-            };
-            if ptr.is_null() {
-                //check for null
-                return Err(std::io::Error::last_os_error().into());
-            }
-
-            //we  use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
-            //rely on sse2/glibc strlen to get length
-            Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen(ptr)) })
-        }
-    }
-
-         */
-
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Converts a dirent64 to a proper path, resolving all symlinks, etc,
@@ -193,24 +165,27 @@ where
         let ptr = unsafe {
             self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut())) //we've created this pointer, we need to be careful
         };
+          // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
         if ptr.is_null() {
             //check for null
             return Err(std::io::Error::last_os_error().into());
         }
+          // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
         let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen(ptr)) }; //get length without null terminator
-        //no ub check here
+        // we're dereferencing a valid poiinter here, it's fine.
 
         let boxed = Self {
             path: full_path.into(),
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
-            file_name_index: (full_path.len() - self.file_name().len()) as _,
+            file_name_index: full_path.file_name_index() as _,
         }; //we need the length up to the filename INCLUDING
         //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
         //so we subtract the filename length from the total length, probably could've been done more elegantly.
         //TBD? not imperative.
         unsafe { libc::free(ptr as _) }
+        //free the pointer to stop leaking (trivial concern considering how little this is going to be called.)
 
         Ok(boxed)
     }
@@ -256,6 +231,7 @@ where
     #[must_use]
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
+          // SAFETY: filename index < length of path, this will never read over.
         unsafe { self.get_unchecked(self.file_name_index()..) }
     }
 
@@ -295,6 +271,7 @@ where
     #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
+         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
         unsafe { *self.get_unchecked(self.file_name_index()) == b'.' } //we yse the base_len as a way to index to filename immediately, this means
         //we can store a full path and still get the filename without copying.
         //this is safe because we know that the base_len is always less than the length of the path
@@ -305,6 +282,7 @@ where
     pub fn dirname(&self) -> &[u8] {
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
+              // SAFETY: filename index < length of path, this will never read over.
                 .get_unchecked(..self.file_name_index() - 1)
                 .rsplit(|&b| b == b'/')
                 .next()
@@ -313,10 +291,16 @@ where
     }
 
     #[inline]
+    pub fn as_inner(&self)->&S{
+        self.path.as_inner()
+    }
+
+    #[inline]
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
         unsafe { self.get_unchecked(..std::cmp::max(self.file_name_index() - 1, 1)) }
+             // SAFETY: filename index < length of path, this will never read over.
 
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
@@ -361,7 +345,8 @@ where
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let fd = unsafe { self.open_fd()? }; //returns none if not a directory/invalid/null etc.
-        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new();
+        //we m
+        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new();//nulll initialised  (stack) buffer that can axiomatically hold any filepath.
 
         let path_len = unsafe { path_buffer.init_from_direntry(self) };
         //calculate new length of the path (if we've added a slash or not)
@@ -400,7 +385,7 @@ where
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-    _marker: PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
+    pub(crate) _marker: PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
                              //this gets compiled away anyway as its as a zst
 }
 #[cfg(target_os = "linux")]
@@ -455,17 +440,17 @@ where
 
     #[inline]
     /// Check if the buffer has more entries left
-    fn has_more_entries_in_buffer(&self) -> bool {
+    pub const fn has_more_entries_in_buffer(&self) -> bool {
         self.offset < self.remaining_bytes as _ //convenience function for API use.
     }
 
     #[inline]
     /// Check the remaining bytes left in the buffer
-    pub fn check_remaining_bytes(&self) -> bool {
+    pub  const fn is_buffer_empty(&self) -> bool {
         self.remaining_bytes == 0
     }
     #[inline]
-    /// A function to construction a DirEntry from the buffer+dirent
+    /// A function to construction a `DirEntry` from the buffer+dirent
     ///
     /// This needs unsafe because we explicitly leave implicit or explicit null pointer checks to the user (low level interface)
     pub unsafe fn construct_direntry(&mut self, drnt: *const libc::dirent64) -> DirEntry<S> {
@@ -532,7 +517,7 @@ where
             // issue a syscall once out of entries
             unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
 
-            if self.check_remaining_bytes() {
+            if self.is_buffer_empty() {
                 //i want to just tidy this up but not sure how.
                 // If no more entries, return None,
                 return None;

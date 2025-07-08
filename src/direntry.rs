@@ -291,7 +291,7 @@ where
     }
 
     #[inline]
-    pub fn as_inner(&self)->&S{
+    pub const fn as_inner(&self)->&S{
         self.path.as_inner()
     }
 

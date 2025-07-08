@@ -75,60 +75,60 @@ where
 {
     #[inline]
     #[must_use]
-    ///costly check for executables
+    ///Costly check for executables (requires access call)
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
         self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0) }
     }
 
-    ///cost free check for block devices
+    ///cost free check for block devices (does not require a system call)
     #[inline]
     #[must_use]
     pub const fn is_block_device(&self) -> bool {
         self.file_type.is_block_device()
     }
 
-    ///Cost free check for character devices
+    ///Cost free check for character devices  (does not require a system call)
     #[inline]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
         self.file_type.is_char_device()
     }
 
-    ///Cost free check for pipes (FIFOs)
+    ///Cost free check for pipes (FIFOs)  (does not require a system call)
     #[inline]
     #[must_use]
     pub const fn is_pipe(&self) -> bool {
         self.file_type.is_pipe()
     }
 
-    ///Cost free check for sockets
+    ///Cost free check for sockets  (does not require a system call)
     #[inline]
     #[must_use]
     pub const fn is_socket(&self) -> bool {
         self.file_type.is_socket()
     }
 
-    ///Cost free check for regular files
+    ///Cost free check for regular files  (does not require a system call)
     #[inline]
     #[must_use]
     pub const fn is_regular_file(&self) -> bool {
         self.file_type.is_regular_file()
     }
 
-    ///Cost free check for directories
+    ///Cost free check for directories  (does not require a system call)
     #[inline]
     #[must_use]
     pub const fn is_dir(&self) -> bool {
         self.file_type.is_dir()
     }
-    ///cost free check for unknown file types
+    ///cost free check for unknown file types  (does not require a system call)
     #[inline]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
         self.file_type.is_unknown()
     }
-    ///cost free check for symlinks
+    ///cost free check for symlinks  (does not require a system call)
     #[inline]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
@@ -136,8 +136,7 @@ where
     }
     #[inline]
     #[must_use]
-    ///costly check for empty files
-    ///i dont see much use for this function
+    ///Costly check for empty files
     /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
     /// for files, it checks if the size is zero without loading all metadata
     /// for directories, it checks if they have no entries
@@ -202,7 +201,7 @@ where
 
     #[inline]
     #[cfg(target_os = "linux")]
-    pub fn to_temp_dirent(&self) -> TempDirent<S> {
+    pub fn as_temp_dirent(&self) -> TempDirent<S> {
         TempDirent {
             path: self.path.as_bytes(),
             inode: self.inode,
@@ -237,24 +236,18 @@ where
 
     #[inline]
     #[must_use]
-    ///returns the inode number of the file, cost free check
+    /// Returns the inode number of the file, cost free check
     /// this is a unique identifier for the file on the filesystem, it is not the same
     /// as the file name or path, it is a number that identifies the file on the
     /// It should be u32 on BSD's but I use u64 for consistency across platforms
-    pub const fn ino(&self) -> u64 {
+    pub const fn inode(&self) -> u64 {
         self.inode
     }
 
+   
     #[inline]
     #[must_use]
-    ///an internal function apply a function, this will be public probably when I figure out api
-    pub fn filter<F: Fn(&Self) -> bool>(&self, func: F) -> bool {
-        func(self)
-    }
-
-    #[inline]
-    #[must_use]
-    ///returns the length of the base path (eg /home/user/ is 6 '/home/')
+    /// Returns the length of the base path (eg /home/user/ is 6 '/home/')
     pub const fn file_name_index(&self) -> usize {
         self.file_name_index as _
     }
@@ -269,7 +262,7 @@ where
 
     #[inline]
     #[must_use]
-    ///checks if the file is hidden eg .gitignore
+    ///Checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
          // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
         unsafe { *self.get_unchecked(self.file_name_index()) == b'.' } //we yse the base_len as a way to index to filename immediately, this means
@@ -278,7 +271,7 @@ where
     }
     #[inline]
     #[must_use]
-    ///returns the directory name of the file (as bytes) or failing that (/ is problematic) will return the full path,
+    ///Returns the directory name of the file (as bytes) or failing that (/ is problematic) will return the full path,
     pub fn dirname(&self) -> &[u8] {
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
@@ -291,13 +284,14 @@ where
     }
 
     #[inline]
+    ///Retrieves a reference to the inner self (ie `Vec<u8>`, `Arc<[u8]>`)
     pub const fn as_inner(&self)->&S{
         self.path.as_inner()
     }
 
     #[inline]
     #[must_use]
-    ///returns the parent directory of the file (as bytes)
+    ///Returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
         unsafe { self.get_unchecked(..std::cmp::max(self.file_name_index() - 1, 1)) }
              // SAFETY: filename index < length of path, this will never read over.
@@ -339,10 +333,10 @@ where
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.
     /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
-    /// which in theory allows it to be offered tuned parameters, such as a high buffer size (shows performance benefits)
-    ///  you can likely make the stack copies extremely cheap
-    /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
-    /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
+    // which in theory allows it to be offered tuned parameters, such as a high buffer size (shows performance benefits)
+    //  you can likely make the stack copies extremely cheap
+    // EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
+    // but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let fd = unsafe { self.open_fd()? }; //returns none if not a directory/invalid/null etc.
         //we m
@@ -378,15 +372,15 @@ pub struct DirEntryIterator<S>
 where
     S: BytesStorage,
 {
-    pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from(it's completely useless after the iterator is dropped)
-    pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
-    pub(crate) path_buffer: PathBuffer, // buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
-    pub(crate) file_name_index: u16, // base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
-    pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
-    pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
-    pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
+    pub(crate) fd: i32, ///fd, this is the file descriptor of the directory we are reading from(it's completely useless after the iterator is dropped)
+    pub(crate) buffer: SyscallBuffer, /// buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
+    pub(crate) path_buffer: PathBuffer, /// buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
+    pub(crate) file_name_index: u16, /// base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
+    pub(crate) parent_depth: u8, /// depth of the parent directory, this is used to calculate the depth of the child entries
+    pub(crate) offset: usize, /// offset in the buffer, this is used to keep track of where we are in the buffer
+    pub(crate) remaining_bytes: i64, /// remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     pub(crate) _marker: PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
-                             //this gets compiled away anyway as its as a zst
+                         
 }
 #[cfg(target_os = "linux")]
 impl<S> Drop for DirEntryIterator<S>

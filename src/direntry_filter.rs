@@ -154,7 +154,7 @@ where
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
-/// // Iterator for directory entries using getdents syscall with a filter function
+/// Iterator for directory entries using getdents syscall with a filter function
 #[allow(clippy::multiple_inherent_impl)] // this is a separate impl block to avoid confusion with the other iterator
 impl<S> DirEntry<S>
 where

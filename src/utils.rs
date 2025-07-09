@@ -6,9 +6,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 #[cfg(not(target_os = "linux"))]
-use libc::{dirent as dirent64};
+use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
-use libc::{dirent64};
+use libc::dirent64;
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 /// Not in use currently, later.
 #[allow(clippy::missing_errors_doc)] //fixing errors later
@@ -211,12 +211,12 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
 }
 
 #[inline]
-pub(crate) unsafe fn dirent_name_length(drnt:*const dirent64)->usize{
-
-     let name_len = {
-          #[cfg(target_os = "linux")]
-        {   use crate::dirent_const_time_strlen;
-            unsafe{dirent_const_time_strlen(drnt)} //const time strlen for linux (specialisation)
+pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
+    let name_len = {
+        #[cfg(target_os = "linux")]
+        {
+            use crate::dirent_const_time_strlen;
+            unsafe { dirent_const_time_strlen(drnt) } //const time strlen for linux (specialisation)
         }
 
         #[cfg(any(
@@ -231,38 +231,35 @@ pub(crate) unsafe fn dirent_name_length(drnt:*const dirent64)->usize{
         }
 
         #[cfg(not(any(
-           target_os = "linux",
+            target_os = "linux",
             target_os = "freebsd",
             target_os = "openbsd",
             target_os = "netbsd",
             target_os = "dragonfly",
             target_os = "macos"
         )))]
-        {   use crate::strlen;
-             strlen(offset_dirent!(drnt, d_name).cast::<i8>())
+        {
+            use crate::strlen;
+            strlen(offset_dirent!(drnt, d_name).cast::<i8>())
             // Fallback for other OSes
         }
-            };
-        name_len
-
-
-
-
+    };
+    name_len
 }
 
 #[inline]
-pub (crate) unsafe  fn construct_path(
+pub(crate) unsafe fn construct_path(
     path_buffer: &mut PathBuffer,
     base_len: usize,
     drnt: *const dirent64,
 ) -> &[u8] {
-    let d_name = unsafe{offset_dirent!(drnt,d_name)};
-    let name_len =unsafe {dirent_name_length(drnt)};
-    
-    let buffer =unsafe{ &mut path_buffer.get_unchecked_mut(base_len..)};
-    unsafe{std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len)};
-    
-    unsafe{&path_buffer.get_unchecked(..base_len + name_len)}
+    let d_name = unsafe { offset_dirent!(drnt, d_name) };
+    let name_len = unsafe { dirent_name_length(drnt) };
+
+    let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) };
+    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) };
+
+    unsafe { path_buffer.get_unchecked(..base_len + name_len) }
 }
 
 /*
@@ -346,7 +343,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// THE REASON WE DO THIS IS BECAUSE THE RECLEN IS PADDED UP TO 8 BYTES (rounded up to the nearest multiple of 8),
 #[cfg(target_os = "linux")]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; 
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word

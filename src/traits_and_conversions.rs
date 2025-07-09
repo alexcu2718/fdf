@@ -395,11 +395,11 @@ pub trait DirentConstructor<S: BytesStorage> {
     
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
         let base_len = self.file_name_index();
-        let full_path = unsafe{crate::utils::construct_path(
+        let full_path = crate::utils::construct_path(
             self.path_buffer(),
             base_len,
             drnt
-        )};
+        );
 
         let dtype=unsafe{offset_dirent!(drnt,d_type) as u8};
         let inode=unsafe{offset_dirent!(drnt,d_ino)};

@@ -248,7 +248,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
 }
 
 #[inline]
-pub(crate) unsafe fn construct_path(
+pub(crate) fn construct_path(
     path_buffer: &mut PathBuffer,
     base_len: usize,
     drnt: *const dirent64,

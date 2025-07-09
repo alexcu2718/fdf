@@ -161,10 +161,11 @@ where
     /// there's no way ahead of time to tell if a path has symbolic components.
     /// Returns an error on invalid path (errors to be filled in later)  (they're actually encoded though)
     pub fn to_full_path(self) -> Result<Self> {
+               // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
         let ptr = unsafe {
             self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut())) //we've created this pointer, we need to be careful
         };
-          // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
+
         if ptr.is_null() {
             //check for null
             return Err(std::io::Error::last_os_error().into());
@@ -403,8 +404,7 @@ impl<S> DirEntryIterator<S>
 where
     S: BytesStorage,
 {
-    /// Returns the index of the file name in the path, so we can get the file name from the path instantly
-
+  
     #[inline]
     ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
@@ -503,7 +503,7 @@ where
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
                 let entry = unsafe { self.construct_direntry(d) }; //this is unsafe because we're relying on knowing that the buffer has more entries in it.
-
+                
                 return Some(entry);
             }
             // prefetch the next buffer content before reading, only applies if no

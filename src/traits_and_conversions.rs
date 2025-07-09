@@ -386,22 +386,27 @@ where
     }
 }
 
-
-pub trait DirentConstructor<S: BytesStorage> {
+///A constructor for making accessing the buffer, filename indexes, depths of the parent path while inside the iterator.
+/// More documentation TBD
+#[allow(clippy::cast_possible_truncation)]//no truncation issue
+pub(crate) trait DirentConstructor<S: BytesStorage> {
     // Required accessors
     fn path_buffer(&mut self) -> &mut PathBuffer;
-    fn file_name_index(&self) -> usize;
+    fn file_index(&self) -> usize;
+       
+
     fn parent_depth(&self) -> u8;
     
+    #[inline]
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
-        let base_len = self.file_name_index();
+        let base_len = self.file_index();
         let full_path = crate::utils::construct_path(
             self.path_buffer(),
             base_len,
             drnt
         );
 
-        let dtype=unsafe{offset_dirent!(drnt,d_type) as u8};
+        let dtype=unsafe{offset_dirent!(drnt,d_type)};
         let inode=unsafe{offset_dirent!(drnt,d_ino)};
         
         DirEntry {
@@ -420,31 +425,40 @@ pub trait DirentConstructor<S: BytesStorage> {
 }
 
 
-#[cfg(target_os = "linux")]
-impl<S: BytesStorage> DirentConstructor<S> for DirEntryIterator<S> {
+impl<S: BytesStorage> DirentConstructor<S> for DirIter<S> {
+       
+    #[inline]
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
     }
-    
-    fn file_name_index(&self) -> usize {
+       
+    #[inline]
+    fn file_index(&self) -> usize {
         self.file_name_index as usize
     }
-    
+       
+    #[inline]
     fn parent_depth(&self) -> u8 {
         self.parent_depth
     }
 }
 
 
-impl<S: BytesStorage> DirentConstructor<S> for DirIter<S> {
+
+#[cfg(target_os = "linux")]
+impl<S: BytesStorage> DirentConstructor<S> for DirEntryIterator<S> {
+       
+    #[inline]
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
     }
-    
-    fn file_name_index(&self) -> usize {
+       
+    #[inline]
+    fn file_index(&self) -> usize {
         self.file_name_index as usize
     }
-    
+       
+    #[inline]
     fn parent_depth(&self) -> u8 {
         self.parent_depth
     }

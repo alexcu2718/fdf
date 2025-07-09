@@ -44,7 +44,7 @@ macro_rules! offset_dirent {
 
     ($entry_ptr:expr,d_name) => {{
 
-         &raw const (*$entry_ptr).d_name as *const u8 //we have to have this as pointer because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
+         (&raw const (*$entry_ptr).d_name).cast::<u8>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
     }};
     ($entry_ptr:expr, d_ino) => {{
         #[cfg(any(
@@ -66,7 +66,7 @@ macro_rules! offset_dirent {
         )))]
         {
             // SAFETY: Caller must ensure pointer is valid
-             (*$entry_ptr).d_ino  as u64
+             (*$entry_ptr).d_ino 
         }
     }};
 

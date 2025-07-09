@@ -73,7 +73,7 @@ where
                 let mask = _mm256_movemask_epi8(cmp) as i32; //
 
                 if mask != 0 {
-                    //chec
+                    //find the 
                     break offset + mask.trailing_zeros() as usize;
                 }
                 offset += 32; // Process next 32-byte chunk
@@ -97,7 +97,7 @@ where
                 let cmp = _mm_cmpeq_epi8(chunk, zeros);
                 let mask = _mm_movemask_epi8(cmp) as i32;
 
-                if mask != 0 {
+                if mask != 0 {//U
                     break offset + mask.trailing_zeros() as usize;
                 }
                 offset += 16; // Process next 16-byte chunk
@@ -110,7 +110,7 @@ where
         any(target_feature = "avx2", target_feature = "sse2")
     )))]
     {
-        unsafe { libc::strlen(ptr.cast::<_>()) }
+        unsafe { libc::strlen(ptr.cast::<_>()) } //not we inventing the wheel
     }
 }
 
@@ -123,8 +123,8 @@ where
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
-    let filename: *const u8 = unsafe { cstr!(bytepath) };
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+    let filename: *const u8 = unsafe { cstr!(bytepath) }; //get the pointer. this isafe because we know bytepath is less than `LOCAL_PATH_MAX`
+    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;//easier lay out
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;
@@ -211,8 +211,13 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
 }
 
 #[inline]
+#[allow(clippy::missing_const_for_fn)]
+///a utility function for breaking down the config spaghetti that is platform specific optimisations
+/// i wanted to make this const and separate the function
+/// because only strlen isn't constant here :(
+/// 
 pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
-    let name_len = {
+  
         #[cfg(target_os = "linux")]
         {
             use crate::dirent_const_time_strlen;
@@ -242,23 +247,24 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
             unsafe{ libc::strlen(offset_dirent!(drnt, d_name).cast::<i8>())}
             // Fallback for other OSes
         }
-    };
-    name_len
+    
+    
 }
 
 #[inline]
+///  constructs a path convenience (just a utility function to save verbosity)
 pub(crate) fn construct_path(
     path_buffer: &mut PathBuffer,
     base_len: usize,
     drnt: *const dirent64,
 ) -> &[u8] {
-    let d_name = unsafe { offset_dirent!(drnt, d_name) };
-    let name_len = unsafe { dirent_name_length(drnt) };
+    let d_name = unsafe { offset_dirent!(drnt, d_name) };// #SAFETY the drnt must be non null
+    let name_len = unsafe { dirent_name_length(drnt) }; // #SAFETY the drnt must be non null!!!! 
 
-    let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) };
-    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) };
+    let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
+    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned 
 
-    unsafe { path_buffer.get_unchecked(..base_len + name_len) }
+    unsafe { path_buffer.get_unchecked(..base_len + name_len) }//the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
 }
 
 /*

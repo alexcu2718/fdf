@@ -1,4 +1,7 @@
+//THIS IS A VERY SKETCHY EXPERIMENTAL OFFSHOOT, DONT PAY TOO MUCH ATTENTION.
+
 #![cfg(target_os = "linux")]
+#![allow(clippy::missing_safety_doc)]
 #![allow(clippy::single_char_lifetime_names)]
 // THIS IS PRETTY MUCH A CARBON COPY OF `direntry.rs`
 // THE ONLY DIFFERENCE IS THAT IT ALLOWS YOU TO FILTER THE ENTRIES BY A FUNCTION.
@@ -249,7 +252,7 @@ impl<S: BytesStorage> DirentConstructor<S> for DirEntryIteratorFilter<'_,S> {
         &mut self.path_buffer
     }
     
-    fn file_name_index(&self) -> usize {
+    fn file_index(&self) -> usize {
         self.file_name_index as usize
     }
     

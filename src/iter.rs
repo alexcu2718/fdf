@@ -13,7 +13,7 @@ use std::marker::PhantomData; //use readdir on other platforms, this is the stan
 
 /// An iterator over directory entries from readdir (or 64 )via libc
 /// General POSIX compliant directory iterator.
-/// S is a type that implements BytesStorage, which is used to store the path bytes.
+/// S is a type that implements `BytesStorage`, which is used to store the path bytes.
 ///
 ///
 // S, which can take forms  Vec<u8>,Box<[u8]>,Arc<[u8]> or ideally SlimmerBytes (an alias in this crate for a smaller box type)
@@ -67,7 +67,7 @@ where
         Some(d)
     }
     #[inline]
-    /// A function to construction a DirEntry from the buffer+dirent
+    /// A function to construction a `DirEntry` from the buffer+dirent
     ///
     /// This doesn't need unsafe because the pointer is already checked to not be null before it can be used here.
     pub fn construct_direntry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
@@ -81,6 +81,7 @@ where
     /// It takes a `DirEntry<S>` which contains the directory path and other metadata.
     /// It initialises the iterator by opening the directory and preparing the path buffer.
     /// Utilises libc's `opendir` and `readdir64` for directory reading.
+    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
         let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)

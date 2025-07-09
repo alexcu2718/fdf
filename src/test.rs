@@ -225,7 +225,7 @@ mod tests {
 
         // Test directory entry
 
-        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?;
+        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?.to_full_path().unwrap();
 
         let canonical_path = temp_dir.canonicalize()?;
 

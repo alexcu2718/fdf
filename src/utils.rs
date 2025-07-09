@@ -1,14 +1,14 @@
 #![allow(dead_code)]
+#![allow(unused_imports)]
 use crate::PathBuffer;
-#[allow(unused_imports)]
 use crate::{DirEntryError, Result, buffer::ValueType, cstr, find_zero_byte_u64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 #[cfg(not(target_os = "linux"))]
-use libc::{dirent, readdir};
+use libc::{dirent as dirent64};
 #[cfg(target_os = "linux")]
-use libc::{dirent64 as dirent64};
+use libc::{dirent64};
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 /// Not in use currently, later.
 #[allow(clippy::missing_errors_doc)] //fixing errors later

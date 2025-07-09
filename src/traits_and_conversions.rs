@@ -8,6 +8,7 @@ use crate::PathBuffer;
 use crate::Result;
 use crate::FileType;
 use crate::buffer::ValueType;
+#[cfg(target_os = "linux")]
 use crate::direntry::DirEntryIterator;
 use crate::memchr_derivations::memrchr;
 
@@ -419,7 +420,7 @@ pub trait DirentConstructor<S: BytesStorage> {
 }
 
 
-
+#[cfg(target_os = "linux")]
 impl<S: BytesStorage> DirentConstructor<S> for DirEntryIterator<S> {
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer

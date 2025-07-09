@@ -1,10 +1,14 @@
 #![allow(dead_code)]
+use crate::PathBuffer;
 #[allow(unused_imports)]
 use crate::{DirEntryError, Result, buffer::ValueType, cstr, find_zero_byte_u64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
-
+#[cfg(not(target_os = "linux"))]
+use libc::{dirent, readdir};
+#[cfg(target_os = "linux")]
+use libc::{dirent64 as dirent64};
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 /// Not in use currently, later.
 #[allow(clippy::missing_errors_doc)] //fixing errors later
@@ -204,6 +208,61 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
         target_os = "dragonfly"
     ))]
     return libcstat.st_ino as u64; // FreeBSD uses u32 for st_ino, so we cast it to u64
+}
+
+#[inline]
+pub(crate) unsafe fn dirent_name_length(drnt:*const dirent64)->usize{
+
+     let name_len = {
+          #[cfg(target_os = "linux")]
+        {   use crate::dirent_const_time_strlen;
+            unsafe{dirent_const_time_strlen(drnt)} //const time strlen for linux (specialisation)
+        }
+
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly",
+            target_os = "macos"
+        ))]
+        {
+            offset_dirent!(drnt, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
+        }
+
+        #[cfg(not(any(
+           target_os = "linux",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly",
+            target_os = "macos"
+        )))]
+        {   use crate::strlen;
+             strlen(offset_dirent!(drnt, d_name).cast::<i8>())
+            // Fallback for other OSes
+        }
+            };
+        name_len
+
+
+
+
+}
+
+#[inline]
+pub (crate) unsafe  fn construct_path(
+    path_buffer: &mut PathBuffer,
+    base_len: usize,
+    drnt: *const dirent64,
+) -> &[u8] {
+    let d_name = unsafe{offset_dirent!(drnt,d_name)};
+    let name_len =unsafe {dirent_name_length(drnt)};
+    
+    let buffer =unsafe{ &mut path_buffer.get_unchecked_mut(base_len..)};
+    unsafe{std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len)};
+    
+    unsafe{&path_buffer.get_unchecked(..base_len + name_len)}
 }
 
 /*

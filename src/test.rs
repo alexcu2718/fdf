@@ -510,7 +510,7 @@ mod tests {
     #[test]
     fn test_file_types_realpath() {
         let dir_path = temp_dir().join("THROW_AWAY");
-
+        let _ = fs::remove_dir_all(&dir_path);
         let _ = fs::create_dir_all(&dir_path);
 
         // Create different file types
@@ -532,10 +532,10 @@ mod tests {
             );
         }
 
-        let _ = fs::remove_dir_all(dir_path);
         assert_eq!(type_counts.get(&FileType::RegularFile).unwrap(), &1);
         assert_eq!(type_counts.get(&FileType::Directory).unwrap(), &1);
         assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
+          let _ = fs::remove_dir_all(dir_path);
     }
 
     #[test]

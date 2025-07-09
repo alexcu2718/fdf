@@ -6,7 +6,7 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
-use crate::{AlignedBuffer, temp_dirent::TempDirent, utils::resolve_inode,LOCAL_PATH_MAX};
+use crate::{AlignedBuffer, temp_dirent::TempDirent, utils::resolve_inode,LOCAL_PATH_MAX,traits_and_conversions::DirentConstructor};
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{utils::close_asm, utils::open_asm};
@@ -396,16 +396,15 @@ where
         //unsafe { close_asm(self.fd) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
+
+
 #[cfg(target_os = "linux")]
 impl<S> DirEntryIterator<S>
 where
     S: BytesStorage,
 {
     /// Returns the index of the file name in the path, so we can get the file name from the path instantly
-    #[inline]
-    pub const fn file_name_index(&self) -> usize {
-        self.file_name_index as _
-    }
+
     #[inline]
     ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
@@ -448,7 +447,9 @@ where
     ///
     /// This needs unsafe because we explicitly leave implicit or explicit null pointer checks to the user (low level interface)
     pub unsafe fn construct_direntry(&mut self, drnt: *const libc::dirent64) -> DirEntry<S> {
-        construct_dirent_internal!(self, drnt) //going to write this macro away soon TODO!
+        use crate::traits_and_conversions::DirentConstructor;
+
+        unsafe{self.construct_entry(drnt)}
     }
 
     #[inline]

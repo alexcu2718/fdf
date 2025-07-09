@@ -3,9 +3,14 @@
 use crate::BytesStorage;
 use crate::DirEntry;
 use crate::DirEntryError;
+use crate::DirIter;
+use crate::PathBuffer;
 use crate::Result;
+use crate::FileType;
 use crate::buffer::ValueType;
+use crate::direntry::DirEntryIterator;
 use crate::memchr_derivations::memrchr;
+
 use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
 use std::fmt;
@@ -15,6 +20,10 @@ use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+#[cfg(not(target_os = "linux"))]
+use libc::{dirent as dirent64};
+#[cfg(target_os = "linux")]
+use libc::{dirent64};
 
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
 pub trait BytePath<T>
@@ -375,3 +384,69 @@ where
             .finish()
     }
 }
+
+
+pub trait DirentConstructor<S: BytesStorage> {
+    // Required accessors
+    fn path_buffer(&mut self) -> &mut PathBuffer;
+    fn file_name_index(&self) -> usize;
+    fn parent_depth(&self) -> u8;
+    
+    unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
+        let base_len = self.file_name_index();
+        let full_path = unsafe{crate::utils::construct_path(
+            self.path_buffer(),
+            base_len,
+            drnt
+        )};
+
+        let dtype=unsafe{offset_dirent!(drnt,d_type) as u8};
+        let inode=unsafe{offset_dirent!(drnt,d_ino)};
+        
+        DirEntry {
+            path: full_path.into(),
+            file_type: FileType::from_dtype_fallback(dtype, full_path),
+            inode,
+            depth: self.parent_depth() + 1,
+            file_name_index: base_len as _,
+        }
+    }
+
+
+        
+    
+
+}
+
+
+
+impl<S: BytesStorage> DirentConstructor<S> for DirEntryIterator<S> {
+    fn path_buffer(&mut self) -> &mut PathBuffer {
+        &mut self.path_buffer
+    }
+    
+    fn file_name_index(&self) -> usize {
+        self.file_name_index as usize
+    }
+    
+    fn parent_depth(&self) -> u8 {
+        self.parent_depth
+    }
+}
+
+
+impl<S: BytesStorage> DirentConstructor<S> for DirIter<S> {
+    fn path_buffer(&mut self) -> &mut PathBuffer {
+        &mut self.path_buffer
+    }
+    
+    fn file_name_index(&self) -> usize {
+        self.file_name_index as usize
+    }
+    
+    fn parent_depth(&self) -> u8 {
+        self.parent_depth
+    }
+}
+
+

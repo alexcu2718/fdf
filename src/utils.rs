@@ -227,7 +227,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
             target_os = "macos"
         ))]
         {
-            offset_dirent!(drnt, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
+            unsafe{offset_dirent!(drnt, d_namlen)} //specialisation for BSD and macOS, where d_namlen is available
         }
 
         #[cfg(not(any(
@@ -239,8 +239,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
             target_os = "macos"
         )))]
         {
-            use crate::strlen;
-            strlen(offset_dirent!(drnt, d_name).cast::<i8>())
+            unsafe{ libc::strlen(offset_dirent!(drnt, d_name).cast::<i8>())}
             // Fallback for other OSes
         }
     };

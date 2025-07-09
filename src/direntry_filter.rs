@@ -1,6 +1,7 @@
 //THIS IS A VERY SKETCHY EXPERIMENTAL OFFSHOOT, DONT PAY TOO MUCH ATTENTION.
 
 #![cfg(target_os = "linux")]
+#![allow(dead_code)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::single_char_lifetime_names)]
 // THIS IS PRETTY MUCH A CARBON COPY OF `direntry.rs`
@@ -55,7 +56,7 @@ use libc::{close, dirent64};
 /// the provided filter function. It avoids unnecessary heap allocations by using a temporary
 /// `TempDirent` struct to hold the entry data, which is then converted to a `DirEntry` when needed.
 /// The iterator is designed to be efficient and to work with any type that implements the `BytesStorage` trait.
-pub struct DirEntryIteratorFilter<'a, S>
+pub (crate) struct DirEntryIteratorFilter<'a, S>
 where
     S: BytesStorage,
 {

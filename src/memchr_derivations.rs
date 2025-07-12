@@ -380,17 +380,15 @@ pub(crate) const fn repeat_u64(byte: u8) -> u64 {
     u64::from_ne_bytes([byte; size_of::<u64>()])
 }
 
-const LO_USIZE: usize = repeat_u8(0x01);
+pub(crate) const LO_USIZE: usize = repeat_u8(0x01);
 
-const HI_USIZE: usize = repeat_u8(0x80);
-const LO_U64: u64 = repeat_u64(0x01);
+pub(crate) const HI_USIZE: usize = repeat_u8(0x80);
+pub(crate) const LO_U64: u64 = repeat_u64(0x01);
 
-const HI_U64: u64 = repeat_u64(0x80);
+pub(crate) const HI_U64: u64 = repeat_u64(0x80);
 
 /// Returns the index (0..=7) of the first zero byte in a `u64` word.
 ///
-/// This uses a branchless, bitwise technique that identifies zero bytes
-/// by subtracting `0x01` from each byte and masking out non-zero bytes.
 ///
 /// The computation:
 /// - `x.wrapping_sub(LO_U64)`: subtracts 1 from each byte
@@ -400,14 +398,15 @@ const HI_U64: u64 = repeat_u64(0x80);
 /// The resulting word will have high bits set only for zero bytes in `x`.
 /// We then use `trailing_zeros() >> 3` to get the byte index (0-based).
 ///
-/// # Safety:  It must contain a null terminator but not at the first index
+/// # Safety: the u64 needs to be properly aligned and in proper platform endian specific  format.
+/// 
 /// Returns:
 /// - The byte index of the first zero byte in `x`
 #[inline]
-pub const unsafe fn find_zero_byte_u64(x: u64) -> usize {
+pub const  fn find_zero_byte_u64(x: u64) -> usize {
     //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
     let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
-
+    //lsb is at 0 regaredless of endianness
     (zero_bit.trailing_zeros() >> 3) as usize
     //>> 3 converts from bit position to byte index (divides by 8)
 }

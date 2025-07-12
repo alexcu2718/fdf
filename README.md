@@ -147,7 +147,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //endianness fix omitted for brevity.
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
     let candidate_pos = last_word | mask;//^
-    let byte_pos = 7 - unsafe { find_zero_byte_u64(candidate_pos) }; // a constant time SWAR function
+    let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // a constant time SWAR function
 
     reclen - DIRENT_HEADER_START - byte_pos
 }

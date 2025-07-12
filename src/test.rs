@@ -455,61 +455,61 @@ mod tests {
      #[test]
     fn no_zero_byte() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 1]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 8);
+        assert_eq!( find_zero_byte_u64(value) , 8);
     }
 
     #[test]
     fn first_byte_zero() {
         let value = u64::from_le_bytes([0, 1, 1, 1, 1, 1, 1, 1]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 0);
+        assert_eq!(find_zero_byte_u64(value) , 0);
     }
 
     #[test]
     fn last_byte_zero() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 0]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 7);
+        assert_eq!( find_zero_byte_u64(value) , 7);
     }
 
     #[test]
     fn middle_byte_zero() {
         let value = u64::from_le_bytes([1, 1, 1, 0, 1, 1, 1, 1]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 3);
+        assert_eq!(find_zero_byte_u64(value) , 3);
     }
 
     #[test]
     fn multiple_zeros_returns_first() {
         let value = u64::from_le_bytes([0, 1, 0, 1, 0, 1, 0, 1]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 0);
+        assert_eq!( find_zero_byte_u64(value) , 0);
     }
 
     #[test]
     fn all_bytes_zero() {
         let value = u64::from_le_bytes([0; 8]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 0);
+        assert_eq!(find_zero_byte_u64(value) , 0);
     }
 
     #[test]
     fn single_zero_in_high_bytes() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 0, 1]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 6);
+        assert_eq!( find_zero_byte_u64(value),6);
     }
 
     #[test]
     fn adjacent_zeros() {
         let value = u64::from_le_bytes([1, 1, 0, 0, 1, 1, 1, 1]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 2);
+        assert_eq!(  find_zero_byte_u64(value), 2);
     }
 
     #[test]
     fn zeros_in_lower_half() {
         let value = u64::from_le_bytes([0, 0, 0, 0, 1, 1, 1, 1]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 0);
+        assert_eq!(find_zero_byte_u64(value) , 0);
     }
 
     #[test]
     fn zeros_in_upper_half() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 0, 0, 0, 0]);
-        assert_eq!(unsafe { find_zero_byte_u64(value) }, 4);
+        assert_eq!(find_zero_byte_u64(value) , 4);
     }
 
 

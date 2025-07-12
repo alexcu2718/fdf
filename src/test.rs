@@ -10,6 +10,7 @@ mod tests {
     use std::os::unix::fs::symlink;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use crate::memchr_derivations::find_zero_byte_u64;
 
     #[repr(C)]
     #[allow(dead_code)] //only relevant for linux
@@ -451,9 +452,71 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+     #[test]
+    fn no_zero_byte() {
+        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 1]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 8);
+    }
+
+    #[test]
+    fn first_byte_zero() {
+        let value = u64::from_le_bytes([0, 1, 1, 1, 1, 1, 1, 1]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 0);
+    }
+
+    #[test]
+    fn last_byte_zero() {
+        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 0]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 7);
+    }
+
+    #[test]
+    fn middle_byte_zero() {
+        let value = u64::from_le_bytes([1, 1, 1, 0, 1, 1, 1, 1]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 3);
+    }
+
+    #[test]
+    fn multiple_zeros_returns_first() {
+        let value = u64::from_le_bytes([0, 1, 0, 1, 0, 1, 0, 1]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 0);
+    }
+
+    #[test]
+    fn all_bytes_zero() {
+        let value = u64::from_le_bytes([0; 8]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 0);
+    }
+
+    #[test]
+    fn single_zero_in_high_bytes() {
+        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 0, 1]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 6);
+    }
+
+    #[test]
+    fn adjacent_zeros() {
+        let value = u64::from_le_bytes([1, 1, 0, 0, 1, 1, 1, 1]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 2);
+    }
+
+    #[test]
+    fn zeros_in_lower_half() {
+        let value = u64::from_le_bytes([0, 0, 0, 0, 1, 1, 1, 1]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 0);
+    }
+
+    #[test]
+    fn zeros_in_upper_half() {
+        let value = u64::from_le_bytes([1, 1, 1, 1, 0, 0, 0, 0]);
+        assert_eq!(unsafe { find_zero_byte_u64(value) }, 4);
+    }
+
+
+    
     #[test]
     fn test_file_types() {
-        let dir_path = temp_dir().join("THROW_AWAY");
+        let dir_path = temp_dir().join("THROW_AWAY_THIS");
 
         let _ = fs::create_dir_all(&dir_path);
 
@@ -463,7 +526,7 @@ mod tests {
 
         let _ = symlink("regular.txt", dir_path.join("symlink"));
 
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).expect("if this errors then it's probably a permission issue related to sandboxing");
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
 
         let mut type_counts = std::collections::HashMap::new();

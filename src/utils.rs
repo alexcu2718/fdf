@@ -244,7 +244,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "macos"
     )))]
     {
-        unsafe { libc::strlen(offset_dirent!(drnt, d_name).cast::<i8>()) }
+        unsafe { libc::strlen(offset_dirent!(drnt, d_name).cast::<_>()) }
         // Fallback for other OSes
     }
 }

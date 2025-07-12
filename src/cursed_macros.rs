@@ -41,6 +41,11 @@ macro_rules! offset_dirent {
     //probably not as it would be inconsistent with the rest of the macro
     // Handle inode number field with aliasing for BSD systems
     //you can use d_ino or d_fileno (preferentially d_ino for cross-compatbility!)
+
+    ($entry_ptr:expr,d_name) => {{
+
+         (&raw const (*$entry_ptr).d_name).cast::<u8>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
+    }};
     ($entry_ptr:expr, d_ino) => {{
         #[cfg(any(
             target_os = "freebsd",
@@ -50,7 +55,7 @@ macro_rules! offset_dirent {
         ))]
         {
             // SAFETY: Caller must ensure pointer is valid
-            &raw const (*$entry_ptr).d_fileno as u64
+             (*$entry_ptr).d_fileno as u64
         }
 
         #[cfg(not(any(
@@ -61,12 +66,12 @@ macro_rules! offset_dirent {
         )))]
         {
             // SAFETY: Caller must ensure pointer is valid
-            &raw const (*$entry_ptr).d_ino  as u64
+             (*$entry_ptr).d_ino 
         }
     }};
 
     // General case for all other fields
-    ($entry_ptr:expr, $field:ident) => {{ &raw const (*$entry_ptr).$field }};
+    ($entry_ptr:expr, $field:ident) => {{ (*$entry_ptr).$field }};
 }
 
 #[macro_export(local_inner_macros)]
@@ -130,7 +135,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(target_os = "linux")]
             {
                 //reclen is always 24 for . and .. on linux,
-                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN)
+                if (d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN)
                     && offset_dirent!($entry, d_reclen) == 24
                 {
                     let name_ptr = offset_dirent!($entry, d_name) as *const u8;
@@ -143,7 +148,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
 
             #[cfg(not(target_os = "linux"))]
             {
-                if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
+                if d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN {
                     let name_ptr = offset_dirent!($entry, d_name) as *const u8;
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
@@ -155,82 +160,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
     }};
 }
 
-/// not public. (this saves on a LOT of code deduplication in an experimental code base(which you can turn into actually impls's etc later on!))
-/// Constructs a path from the base path and the name pointer, returning a  slice of the full path
-macro_rules! construct_path {
-    ($self:ident, $dirent:ident) => {{
 
-
-        let d_name = offset_dirent!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
-        let base_len= $self.file_name_index(); //get the base path length, this is the length of the directory path
-
-        let name_len = {
-          #[cfg(target_os = "linux")]
-        {   use $crate::dirent_const_time_strlen;
-            dirent_const_time_strlen($dirent) //const time strlen for linux (specialisation)
-        }
-
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly",
-            target_os = "macos"
-        ))]
-        {
-            offset_dirent!($dirent, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
-        }
-
-        #[cfg(not(any(
-           target_os = "linux",
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly",
-            target_os = "macos"
-        )))]
-        {   use $crate::strlen;
-             strlen(offset_dirent!($dirent, d_name).cast::<i8>())
-            // Fallback for other OSes
-        }
-            };
-
-
-
-
-        std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,
-        );
-
-       $self.path_buffer.get_unchecked(..base_len+name_len)
-
-    }};
-}
-
-//the below 2 macros are needed due to the fact we have 3 types of iterators, this makes it a lot cleaner!
-
-/// Constructs a `DirEntry<S>` from a `dirent64`/`dirent` pointer for any relevant self type
-/// Needed to be done via macro to avoid issues with duplication/mutability of structs
-macro_rules! construct_dirent_internal {
-    ($self:ident, $dirent:ident) => {{
-        let (d_type, inode) = unsafe {
-            (
-                *offset_dirent!($dirent, d_type), // get d_type
-                offset_dirent!($dirent, d_ino),   // get inode
-            )
-        };
-
-        let full_path = unsafe { construct_path!($self, $dirent) };
-        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
-
-        $crate::DirEntry {
-            path: full_path.into(),
-            file_type,
-            inode,
-            depth: $self.parent_depth + 1,
-            file_name_index: $self.file_name_index,
-        }
-    }};
-}
 
 #[macro_export]
 /// Macro to implement `BytesStorage` for types that support `From<&[u8]>`
@@ -315,31 +245,3 @@ macro_rules! const_from_env {
     };
 }
 
-/// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
-/// This is used to filter entries without allocating memory on the heap.
-/// It is a temporary structure that is used to filter entries before they are converted to `DirEntry<S>`.
-/// Needed to be done via macro to avoid issues with duplication/mutability of structs
-///
-//not used YET
-macro_rules! construct_temp_dirent {
-    ($self:ident, $dirent:ident) => {{
-        let (d_type, inode) = unsafe {
-            (
-                *offset_dirent!($dirent, d_type), // get d_type
-                offset_dirent!($dirent, d_ino),   // get inode
-            )
-        };
-
-        let full_path = unsafe { construct_path!($self, $dirent) };
-        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
-
-        $crate::TempDirent {
-            path: full_path,
-            file_type,
-            inode,
-            depth: $self.parent_depth + 1,
-            file_name_index: $self.file_name_index,
-            _marker: std::marker::PhantomData,
-        }
-    }};
-}

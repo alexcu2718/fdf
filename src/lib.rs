@@ -71,8 +71,7 @@ mod iter;
 pub(crate) use iter::DirIter;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod direntry_filter;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-pub use direntry_filter::DirEntryIteratorFilter;
+
 
 mod buffer;
 mod test;

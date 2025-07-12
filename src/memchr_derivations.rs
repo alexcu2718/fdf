@@ -1,5 +1,6 @@
 #![allow(clippy::host_endian_bytes)]
 #![allow(clippy::ptr_as_ptr)]
+#![allow(clippy::items_after_statements)]
 // I was reading through the std library for random silly things and I found this , https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161
 // this essentially provides a more rigorous foundation to my SWAR technique.
 //the original definition is below the copy pasted code above.
@@ -387,7 +388,6 @@ const LO_U64: u64 = repeat_u64(0x01);
 const HI_U64: u64 = repeat_u64(0x80);
 
 /// Returns the index (0..=7) of the first zero byte in a `u64` word.
-/// IT MUST CONTAIN A NULL TERMINATOR(hence why unsafe)
 ///
 /// This uses a branchless, bitwise technique that identifies zero bytes
 /// by subtracting `0x01` from each byte and masking out non-zero bytes.
@@ -400,6 +400,7 @@ const HI_U64: u64 = repeat_u64(0x80);
 /// The resulting word will have high bits set only for zero bytes in `x`.
 /// We then use `trailing_zeros() >> 3` to get the byte index (0-based).
 ///
+/// # Safety:  It must contain a null terminator but not at the first index
 /// Returns:
 /// - The byte index of the first zero byte in `x`
 #[inline]

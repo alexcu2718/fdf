@@ -84,7 +84,7 @@ where
     pub fn new(path: &'a [u8], depth: u8, base_len: u16, dirent: *const dirent64) -> Self {
         let (d_type, inode) = unsafe {
             (
-                *offset_dirent!(dirent, d_type), //get the d_type from the dirent structure, this is the type of the entry
+                offset_dirent!(dirent, d_type), //get the d_type from the dirent structure, this is the type of the entry
                 offset_dirent!(dirent, d_ino),   //get the inode
             )
         };

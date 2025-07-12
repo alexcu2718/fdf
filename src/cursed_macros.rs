@@ -90,24 +90,27 @@ macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
         // Create a buffer and make into a pointer
-        let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
+        let mut c_path_buf = $crate::PathBuffer::new();
+        
+        let temp_buf=c_path_buf.as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
         // # Safety memory regions non overlapping and valid for the applicable lifetime
-        std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
+        std::ptr::copy_nonoverlapping($bytes.as_ptr(), temp_buf, $bytes.len());
         // Write a null terminator at the end of the buffer
         // #Safety. we know we can add a null terminator because we've created a buffer purposely longer than the max path size.
-        c_path_buf.add($bytes.len()).write(0);
+        temp_buf.add($bytes.len()).write(0);
         //let caller choose cast
-        c_path_buf.cast::<_>()
+        temp_buf.cast::<_>()
     }};
     ($bytes:expr,$n:expr) => {{
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
-        let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
+        let mut c_path_buf = $crate::AlignedBuffer::<u8, $n>::new();
+        let temp_buf=c_path_buf.as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
-        std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
-        c_path_buf.add($bytes.len()).write(0);
+        std::ptr::copy_nonoverlapping($bytes.as_ptr(), temp_buf, $bytes.len());
+        temp_buf.add($bytes.len()).write(0);
 
-        c_path_buf.cast::<_>()
+        temp_buf.cast::<_>()
     }};
 }
 

@@ -81,17 +81,18 @@ where
             "Input too large for buffer"
         );
 
-        let c_path_buf = crate::PathBuffer::new().as_mut_ptr();
+        let mut c_path_buf = crate::PathBuffer::new();
+        let temp_buf=c_path_buf.as_mut_ptr();
 
         // copy bytes using copy_nonoverlapping to avoid ub check
         // // SAFETY: memory regions are non overlapping
         unsafe {
-            std::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
-            c_path_buf.add(self.len()).write(0); // Null terminate the string
+            std::ptr::copy_nonoverlapping(self.as_ptr(), temp_buf, self.len());
+            temp_buf.add(self.len()).write(0); // Null terminate the string
              // SAFETY: the buffer must have enough capacity.
         }
 
-        f(c_path_buf.cast::<_>())
+        f(temp_buf.cast::<_>())
     }
 
     /// Returns the extension of the file as a byte slice, if it exists.
@@ -167,7 +168,8 @@ where
     /// More specialised errors are on the TODO list.
     fn get_stat(&self) -> crate::Result<stat> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
-        let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
+        let new_buf=stat_buf.as_mut_ptr();
+        let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, new_buf) });
 
         if res == 0 {
             Ok(unsafe { stat_buf.assume_init() })

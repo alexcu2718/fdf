@@ -392,9 +392,7 @@ where
 pub(crate) trait DirentConstructor<S: BytesStorage> {
     // Required accessors
     fn path_buffer(&mut self) -> &mut PathBuffer;
-    fn file_index(&self) -> usize;
-       
-
+    fn file_index(&self) -> usize;//modify name a bit so we dont get collisions.
     fn parent_depth(&self) -> u8;
     
     #[inline]
@@ -465,3 +463,9 @@ impl<S: BytesStorage> DirentConstructor<S> for DirEntryIterator<S> {
 }
 
 
+/* 
+struct FileStat{
+
+    pub(crate) stat:libc::statx
+}
+    */

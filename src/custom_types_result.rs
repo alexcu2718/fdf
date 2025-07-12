@@ -70,7 +70,7 @@ impl<S: BytesStorage> OsBytes<S> {
 
     ///Returns a reference to the inner type (Vec/Arc/etc)
     #[inline]
-    pub (crate) const fn as_inner(&self)->&S{
+    pub(crate) const fn as_inner(&self) -> &S {
         &self.bytes
     }
 

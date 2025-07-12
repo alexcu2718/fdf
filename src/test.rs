@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
+    use crate::memchr_derivations::find_zero_byte_u64;
     use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
     use std::env::temp_dir;
@@ -10,7 +11,6 @@ mod tests {
     use std::os::unix::fs::symlink;
     use std::path::PathBuf;
     use std::sync::Arc;
-    use crate::memchr_derivations::find_zero_byte_u64;
 
     #[repr(C)]
     #[allow(dead_code)] //only relevant for linux
@@ -210,7 +210,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    #[cfg(not(target_os="macos"))]//enable this test on macos and see why ive disabled it. **** stupid
+    #[cfg(not(target_os = "macos"))] //enable this test on macos and see why ive disabled it. **** stupid
     fn test_from_bytes() -> Result<(), Box<dyn std::error::Error>> {
         //this is a mess of code but works lol to demonstrate infallibility(or idealllllllyyyyyyyyy...(ik its not))
         // Create a unique temp directory for this test
@@ -227,7 +227,9 @@ mod tests {
 
         // Test directory entry
 
-        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?.to_full_path().unwrap();
+        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?
+            .to_full_path()
+            .unwrap();
 
         let canonical_path = temp_dir.canonicalize()?;
 
@@ -452,68 +454,66 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-     #[test]
+    #[test]
     fn no_zero_byte() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 1]);
-        assert_eq!( find_zero_byte_u64(value) , 8);
+        assert_eq!(find_zero_byte_u64(value), 8);
     }
 
     #[test]
     fn first_byte_zero() {
         let value = u64::from_le_bytes([0, 1, 1, 1, 1, 1, 1, 1]);
-        assert_eq!(find_zero_byte_u64(value) , 0);
+        assert_eq!(find_zero_byte_u64(value), 0);
     }
 
     #[test]
     fn last_byte_zero() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 0]);
-        assert_eq!( find_zero_byte_u64(value) , 7);
+        assert_eq!(find_zero_byte_u64(value), 7);
     }
 
     #[test]
     fn middle_byte_zero() {
         let value = u64::from_le_bytes([1, 1, 1, 0, 1, 1, 1, 1]);
-        assert_eq!(find_zero_byte_u64(value) , 3);
+        assert_eq!(find_zero_byte_u64(value), 3);
     }
 
     #[test]
     fn multiple_zeros_returns_first() {
         let value = u64::from_le_bytes([0, 1, 0, 1, 0, 1, 0, 1]);
-        assert_eq!( find_zero_byte_u64(value) , 0);
+        assert_eq!(find_zero_byte_u64(value), 0);
     }
 
     #[test]
     fn all_bytes_zero() {
         let value = u64::from_le_bytes([0; 8]);
-        assert_eq!(find_zero_byte_u64(value) , 0);
+        assert_eq!(find_zero_byte_u64(value), 0);
     }
 
     #[test]
     fn single_zero_in_high_bytes() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 0, 1]);
-        assert_eq!( find_zero_byte_u64(value),6);
+        assert_eq!(find_zero_byte_u64(value), 6);
     }
 
     #[test]
     fn adjacent_zeros() {
         let value = u64::from_le_bytes([1, 1, 0, 0, 1, 1, 1, 1]);
-        assert_eq!(  find_zero_byte_u64(value), 2);
+        assert_eq!(find_zero_byte_u64(value), 2);
     }
 
     #[test]
     fn zeros_in_lower_half() {
         let value = u64::from_le_bytes([0, 0, 0, 0, 1, 1, 1, 1]);
-        assert_eq!(find_zero_byte_u64(value) , 0);
+        assert_eq!(find_zero_byte_u64(value), 0);
     }
 
     #[test]
     fn zeros_in_upper_half() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 0, 0, 0, 0]);
-        assert_eq!(find_zero_byte_u64(value) , 4);
+        assert_eq!(find_zero_byte_u64(value), 4);
     }
 
-
-    
     #[test]
     fn test_file_types() {
         let dir_path = temp_dir().join("THROW_AWAY_THIS");
@@ -526,7 +526,8 @@ mod tests {
 
         let _ = symlink("regular.txt", dir_path.join("symlink"));
 
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).expect("if this errors then it's probably a permission issue related to sandboxing");
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path)
+            .expect("if this errors then it's probably a permission issue related to sandboxing");
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
 
         let mut type_counts = std::collections::HashMap::new();
@@ -599,7 +600,7 @@ mod tests {
         assert_eq!(type_counts.get(&FileType::RegularFile).unwrap(), &1);
         assert_eq!(type_counts.get(&FileType::Directory).unwrap(), &1);
         assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
-          let _ = fs::remove_dir_all(dir_path);
+        let _ = fs::remove_dir_all(dir_path);
     }
 
     #[test]

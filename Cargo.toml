@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.5.2"
+version = "0.5.3"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"
@@ -13,8 +13,8 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
     
 
 [dependencies]
-clap = { version = "4.5.31", features = ["derive"] }
-clap_complete = "4.5.46"
+clap = { version = "4.5.41", features = ["derive"] }
+clap_complete = "4.5.55"
 compile_time_ls_colours = "0.4.1"
 libc = "0.2.170"
 rayon = "1.10.0"

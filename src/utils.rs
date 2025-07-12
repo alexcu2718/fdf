@@ -73,7 +73,7 @@ where
                 let mask = _mm256_movemask_epi8(cmp) as i32; //
 
                 if mask != 0 {
-                    //find the 
+                    //find the
                     break offset + mask.trailing_zeros() as usize;
                 }
                 offset += 32; // Process next 32-byte chunk
@@ -97,7 +97,8 @@ where
                 let cmp = _mm_cmpeq_epi8(chunk, zeros);
                 let mask = _mm_movemask_epi8(cmp) as i32;
 
-                if mask != 0 {//U
+                if mask != 0 {
+                    //U
                     break offset + mask.trailing_zeros() as usize;
                 }
                 offset += 16; // Process next 16-byte chunk
@@ -124,7 +125,7 @@ where
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
     let filename: *const u8 = unsafe { cstr!(bytepath) }; //get the pointer. this isafe because we know bytepath is less than `LOCAL_PATH_MAX`
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;//easier lay out
+    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK; //easier lay out
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;
@@ -215,40 +216,37 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
 ///a utility function for breaking down the config spaghetti that is platform specific optimisations
 /// i wanted to make this const and separate the function
 /// because only strlen isn't constant here :(
-/// 
+///
 pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
-  
-        #[cfg(target_os = "linux")]
-        {
-            use crate::dirent_const_time_strlen;
-            unsafe { dirent_const_time_strlen(drnt) } //const time strlen for linux (specialisation)
-        }
+    #[cfg(target_os = "linux")]
+    {
+        use crate::dirent_const_time_strlen;
+        unsafe { dirent_const_time_strlen(drnt) } //const time strlen for linux (specialisation)
+    }
 
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly",
-            target_os = "macos"
-        ))]
-        {
-            unsafe{offset_dirent!(drnt, d_namlen)} //specialisation for BSD and macOS, where d_namlen is available
-        }
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly",
+        target_os = "macos"
+    ))]
+    {
+        unsafe { offset_dirent!(drnt, d_namlen) } //specialisation for BSD and macOS, where d_namlen is available
+    }
 
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly",
-            target_os = "macos"
-        )))]
-        {
-            unsafe{ libc::strlen(offset_dirent!(drnt, d_name).cast::<i8>())}
-            // Fallback for other OSes
-        }
-    
-    
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly",
+        target_os = "macos"
+    )))]
+    {
+        unsafe { libc::strlen(offset_dirent!(drnt, d_name).cast::<i8>()) }
+        // Fallback for other OSes
+    }
 }
 
 #[inline]
@@ -258,13 +256,13 @@ pub(crate) fn construct_path(
     base_len: usize,
     drnt: *const dirent64,
 ) -> &[u8] {
-    let d_name = unsafe { offset_dirent!(drnt, d_name) };// #SAFETY the drnt must be non null
+    let d_name = unsafe { offset_dirent!(drnt, d_name) }; // #SAFETY the drnt must be non null
     let name_len = unsafe { dirent_name_length(drnt) }; // #SAFETY the drnt must be non null!!!! 
 
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
     unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned 
 
-    unsafe { path_buffer.get_unchecked(..base_len + name_len) }//the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
+    unsafe { path_buffer.get_unchecked(..base_len + name_len) } //the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
 }
 
 /*
@@ -378,7 +376,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // - Maintains the exact position of any null bytes in the name
     //I have changed the definition since the original README, I found a more rigorous backing!
     // We subtract 7 to get the correct offset in the d_name field.
-    let byte_pos = 7 - find_zero_byte_u64(candidate_pos) ; // a constant time SWAR function
+    let byte_pos = 7 - find_zero_byte_u64(candidate_pos); // a constant time SWAR function
     // The final length is calculated as:
     // `reclen - DIRENT_HEADER_START - byte_pos`
     // This gives us the length of the d_name field, excluding the header and the null

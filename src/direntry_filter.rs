@@ -10,9 +10,9 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
-use crate::{traits_and_conversions::DirentConstructor,LOCAL_PATH_MAX,
-    AlignedBuffer, BytePath, BytesStorage, PathBuffer, Result, SearchConfig, SyscallBuffer,
-    TempDirent, offset_dirent,
+use crate::{
+    AlignedBuffer, BytePath, BytesStorage, LOCAL_PATH_MAX, PathBuffer, Result, SearchConfig,
+    SyscallBuffer, TempDirent, offset_dirent, traits_and_conversions::DirentConstructor,
 };
 
 /// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
@@ -26,12 +26,12 @@ macro_rules! construct_temp_dirent {
         let (d_type, inode) = unsafe {
             (
                 offset_dirent!($dirent, d_type), // get d_type
-                offset_dirent!($dirent, d_ino),   // get inode
+                offset_dirent!($dirent, d_ino),  // get inode
             )
         };
-        let base_len=$self.file_name_index();
+        let base_len = $self.file_name_index();
 
-        let full_path =$crate::utils::construct_path( &mut $self.path_buffer,base_len,$dirent) ;
+        let full_path = $crate::utils::construct_path(&mut $self.path_buffer, base_len, $dirent);
         let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
 
         $crate::TempDirent {
@@ -45,9 +45,6 @@ macro_rules! construct_temp_dirent {
     }};
 }
 
-
-
-
 use libc::{close, dirent64};
 
 /// An iterator that filters directory entries based on a provided filter function.
@@ -56,7 +53,7 @@ use libc::{close, dirent64};
 /// the provided filter function. It avoids unnecessary heap allocations by using a temporary
 /// `TempDirent` struct to hold the entry data, which is then converted to a `DirEntry` when needed.
 /// The iterator is designed to be efficient and to work with any type that implements the `BytesStorage` trait.
-pub (crate) struct DirEntryIteratorFilter<'a, S>
+pub(crate) struct DirEntryIteratorFilter<'a, S>
 where
     S: BytesStorage,
 {
@@ -108,17 +105,13 @@ where
         self.offset = 0;
     }
 
-      #[inline]
+    #[inline]
     /// A function to construction a `DirEntry` from the buffer+dirent
     ///
     /// This needs unsafe because we explicitly leave implicit or explicit null pointer checks to the user (low level interface)
     pub unsafe fn construct_direntry(&mut self, drnt: *const libc::dirent64) -> DirEntry<S> {
-   
-
-        unsafe{self.construct_entry(drnt)}
+        unsafe { self.construct_entry(drnt) }
     }
-
-
 
     #[inline]
     /// Prefetches the next likely entry in the buffer to keep the cache warm.
@@ -202,10 +195,8 @@ where
     }
 }
 
-
-
 ///////////////////////////////////////////////////////////////////////////////////////
-/// 
+///
 /// Iterator for directory entries using getdents syscall with a filter function
 #[allow(clippy::multiple_inherent_impl)] // this is a separate impl block to avoid confusion with the other iterator
 impl<S> DirEntry<S>
@@ -246,17 +237,15 @@ where
     }
 }
 
-
-
-impl<S: BytesStorage> DirentConstructor<S> for DirEntryIteratorFilter<'_,S> {
+impl<S: BytesStorage> DirentConstructor<S> for DirEntryIteratorFilter<'_, S> {
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
     }
-    
+
     fn file_index(&self) -> usize {
         self.file_name_index as usize
     }
-    
+
     fn parent_depth(&self) -> u8 {
         self.parent_depth
     }

@@ -388,10 +388,10 @@ pub(crate) const LO_U64: u64 = repeat_u64(0x01);
 pub(crate) const HI_U64: u64 = repeat_u64(0x80);
 
 /// Returns the index (0..=7) of the first zero byte in a `u64` word.
-/// 
+///
 ///
 /// the u64 needs to be properly aligned and in proper platform endian specific  format.
-/// 
+///
 /// The computation:
 /// - `x.wrapping_sub(LO_U64)`: subtracts 1 from each byte
 /// - `& !x`: clears bits where x had 1s (preserves potential zero bytes)
@@ -403,7 +403,7 @@ pub(crate) const HI_U64: u64 = repeat_u64(0x80);
 /// Returns:
 /// - The byte index of the first zero byte in `x`
 #[inline]
-pub const  fn find_zero_byte_u64(x: u64) -> usize {
+pub const fn find_zero_byte_u64(x: u64) -> usize {
     //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
     let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
     //lsb is at 0 regaredless of endianness
@@ -412,7 +412,7 @@ pub const  fn find_zero_byte_u64(x: u64) -> usize {
 }
 
 /// Returns `true` if `x` contains any zero byte.
-/// 
+///
 ///  
 /// COPY PASTED FROM STDLIB INTERNALS.
 ///
@@ -427,9 +427,9 @@ pub const fn contains_zero_byte(x: usize) -> bool {
 }
 
 /// Returns the last index matching the byte `x` in `text`.
-/// 
-/// 
-/// 
+///
+///
+///
 /// This is directly copy pasted from the internal library with some modifications to make it work for me
 /// there were no unstable features so I thought I'll skip a dependency and add this.
 ///

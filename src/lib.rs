@@ -72,7 +72,6 @@ pub(crate) use iter::DirIter;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod direntry_filter;
 
-
 mod buffer;
 mod test;
 pub(crate) use buffer::AlignedBuffer;

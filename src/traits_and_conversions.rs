@@ -4,14 +4,18 @@ use crate::BytesStorage;
 use crate::DirEntry;
 use crate::DirEntryError;
 use crate::DirIter;
+use crate::FileType;
 use crate::PathBuffer;
 use crate::Result;
-use crate::FileType;
 use crate::buffer::ValueType;
 #[cfg(target_os = "linux")]
 use crate::direntry::DirEntryIterator;
 use crate::memchr_derivations::memrchr;
 
+#[cfg(not(target_os = "linux"))]
+use libc::dirent as dirent64;
+#[cfg(target_os = "linux")]
+use libc::dirent64;
 use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
 use std::fmt;
@@ -21,10 +25,6 @@ use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-#[cfg(not(target_os = "linux"))]
-use libc::{dirent as dirent64};
-#[cfg(target_os = "linux")]
-use libc::{dirent64};
 
 ///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
 pub trait BytePath<T>
@@ -82,14 +82,14 @@ where
         );
 
         let mut c_path_buf = crate::PathBuffer::new();
-        let temp_buf=c_path_buf.as_mut_ptr();
+        let temp_buf = c_path_buf.as_mut_ptr();
 
         // copy bytes using copy_nonoverlapping to avoid ub check
         // // SAFETY: memory regions are non overlapping
         unsafe {
             std::ptr::copy_nonoverlapping(self.as_ptr(), temp_buf, self.len());
             temp_buf.add(self.len()).write(0); // Null terminate the string
-             // SAFETY: the buffer must have enough capacity.
+            // SAFETY: the buffer must have enough capacity.
         }
 
         f(temp_buf.cast::<_>())
@@ -139,8 +139,8 @@ where
     }
     #[inline]
     //Open a file descriptor of a file
-     // SAFETY: the filepath must be less than LOCAL_PATH_MAX,
-     // You cannot access the fd after that iterator is dropped, it is *useless* and must be opened again.
+    // SAFETY: the filepath must be less than LOCAL_PATH_MAX,
+    // You cannot access the fd after that iterator is dropped, it is *useless* and must be opened again.
     unsafe fn open_fd(&self) -> crate::Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
@@ -168,7 +168,7 @@ where
     /// More specialised errors are on the TODO list.
     fn get_stat(&self) -> crate::Result<stat> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
-        let new_buf=stat_buf.as_mut_ptr();
+        let new_buf = stat_buf.as_mut_ptr();
         let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, new_buf) });
 
         if res == 0 {
@@ -390,25 +390,21 @@ where
 
 ///A constructor for making accessing the buffer, filename indexes, depths of the parent path while inside the iterator.
 /// More documentation TBD
-#[allow(clippy::cast_possible_truncation)]//no truncation issue
+#[allow(clippy::cast_possible_truncation)] //no truncation issue
 pub(crate) trait DirentConstructor<S: BytesStorage> {
     // Required accessors
     fn path_buffer(&mut self) -> &mut PathBuffer;
-    fn file_index(&self) -> usize;//modify name a bit so we dont get collisions.
+    fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
     fn parent_depth(&self) -> u8;
-    
+
     #[inline]
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
         let base_len = self.file_index();
-        let full_path = crate::utils::construct_path(
-            self.path_buffer(),
-            base_len,
-            drnt
-        );
+        let full_path = crate::utils::construct_path(self.path_buffer(), base_len, drnt);
 
-        let dtype=unsafe{offset_dirent!(drnt,d_type)};
-        let inode=unsafe{offset_dirent!(drnt,d_ino)};
-        
+        let dtype = unsafe { offset_dirent!(drnt, d_type) };
+        let inode = unsafe { offset_dirent!(drnt, d_ino) };
+
         DirEntry {
             path: full_path.into(),
             file_type: FileType::from_dtype_fallback(dtype, full_path),
@@ -417,55 +413,44 @@ pub(crate) trait DirentConstructor<S: BytesStorage> {
             file_name_index: base_len as _,
         }
     }
-
-
-        
-    
-
 }
 
-
 impl<S: BytesStorage> DirentConstructor<S> for DirIter<S> {
-       
     #[inline]
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
     }
-       
+
     #[inline]
     fn file_index(&self) -> usize {
         self.file_name_index as usize
     }
-       
+
     #[inline]
     fn parent_depth(&self) -> u8 {
         self.parent_depth
     }
 }
-
-
 
 #[cfg(target_os = "linux")]
 impl<S: BytesStorage> DirentConstructor<S> for DirEntryIterator<S> {
-       
     #[inline]
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
     }
-       
+
     #[inline]
     fn file_index(&self) -> usize {
         self.file_name_index as usize
     }
-       
+
     #[inline]
     fn parent_depth(&self) -> u8 {
         self.parent_depth
     }
 }
 
-
-/* 
+/*
 struct FileStat{
 
     pub(crate) stat:libc::statx

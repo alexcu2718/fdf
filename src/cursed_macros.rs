@@ -66,7 +66,7 @@ macro_rules! offset_dirent {
         )))]
         {
             // SAFETY: Caller must ensure pointer is valid
-             (*$entry_ptr).d_ino 
+             (*$entry_ptr).d_ino
         }
     }};
 
@@ -78,7 +78,7 @@ macro_rules! offset_dirent {
 /// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
 /// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)
 ///
-/// # Safety. 
+/// # Safety.
 ///
 /// The first argument should be a byte slice
 /// the second argument is optional as specifies a custom buffer size.
@@ -91,7 +91,7 @@ macro_rules! cstr {
         // Debug assert to check test builds for unexpected conditions
         // Create a buffer and make into a pointer
         let mut c_path_buf = $crate::PathBuffer::new();
-        
+
         let temp_buf=c_path_buf.as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
         // # Safety memory regions non overlapping and valid for the applicable lifetime
@@ -162,8 +162,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
         }
     }};
 }
-
-
 
 #[macro_export]
 /// Macro to implement `BytesStorage` for types that support `From<&[u8]>`
@@ -247,4 +245,3 @@ macro_rules! const_from_env {
         };
     };
 }
-

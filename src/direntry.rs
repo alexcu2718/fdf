@@ -6,7 +6,10 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
-use crate::{AlignedBuffer, temp_dirent::TempDirent, utils::resolve_inode,LOCAL_PATH_MAX,traits_and_conversions::DirentConstructor};
+use crate::{
+    AlignedBuffer, LOCAL_PATH_MAX, temp_dirent::TempDirent,
+    traits_and_conversions::DirentConstructor, utils::resolve_inode,
+};
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{utils::close_asm, utils::open_asm};
@@ -161,7 +164,7 @@ where
     /// there's no way ahead of time to tell if a path has symbolic components.
     /// Returns an error on invalid path (errors to be filled in later)  (they're actually encoded though)
     pub fn to_full_path(self) -> Result<Self> {
-               // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
+        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
         let ptr = unsafe {
             self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut())) //we've created this pointer, we need to be careful
         };
@@ -170,7 +173,7 @@ where
             //check for null
             return Err(std::io::Error::last_os_error().into());
         }
-          // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
+        // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
         let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen(ptr)) }; //get length without null terminator
         // we're dereferencing a valid poiinter here, it's fine.
 
@@ -231,7 +234,7 @@ where
     #[must_use]
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
-          // SAFETY: filename index < length of path, this will never read over.
+        // SAFETY: filename index < length of path, this will never read over.
         unsafe { self.get_unchecked(self.file_name_index()..) }
     }
 
@@ -245,7 +248,6 @@ where
         self.inode
     }
 
-   
     #[inline]
     #[must_use]
     /// Returns the length of the base path (eg /home/user/ is 6 '/home/')
@@ -265,7 +267,7 @@ where
     #[must_use]
     ///Checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
-         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
+        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
         unsafe { *self.get_unchecked(self.file_name_index()) == b'.' } //we yse the base_len as a way to index to filename immediately, this means
         //we can store a full path and still get the filename without copying.
         //this is safe because we know that the base_len is always less than the length of the path
@@ -276,7 +278,7 @@ where
     pub fn dirname(&self) -> &[u8] {
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
-              // SAFETY: filename index < length of path, this will never read over.
+                // SAFETY: filename index < length of path, this will never read over.
                 .get_unchecked(..self.file_name_index() - 1)
                 .rsplit(|&b| b == b'/')
                 .next()
@@ -286,7 +288,7 @@ where
 
     #[inline]
     ///Retrieves a reference to the inner self (ie `Vec<u8>`, `Arc<[u8]>`)
-    pub const fn as_inner(&self)->&S{
+    pub const fn as_inner(&self) -> &S {
         self.path.as_inner()
     }
 
@@ -295,7 +297,7 @@ where
     ///Returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
         unsafe { self.get_unchecked(..std::cmp::max(self.file_name_index() - 1, 1)) }
-             // SAFETY: filename index < length of path, this will never read over.
+        // SAFETY: filename index < length of path, this will never read over.
 
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way.
@@ -341,7 +343,7 @@ where
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         let fd = unsafe { self.open_fd()? }; //returns none if not a directory/invalid/null etc.
         //we m
-        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new();//nulll initialised  (stack) buffer that can axiomatically hold any filepath.
+        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
 
         let path_len = unsafe { path_buffer.init_from_direntry(self) };
         //calculate new length of the path (if we've added a slash or not)
@@ -373,15 +375,21 @@ pub struct DirEntryIterator<S>
 where
     S: BytesStorage,
 {
-    pub(crate) fd: i32, ///fd, this is the file descriptor of the directory we are reading from(it's completely useless after the iterator is dropped)
-    pub(crate) buffer: SyscallBuffer, /// buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
-    pub(crate) path_buffer: PathBuffer, /// buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
-    pub(crate) file_name_index: u16, /// base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
-    pub(crate) parent_depth: u8, /// depth of the parent directory, this is used to calculate the depth of the child entries
-    pub(crate) offset: usize, /// offset in the buffer, this is used to keep track of where we are in the buffer
-    pub(crate) remaining_bytes: i64, /// remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
+    pub(crate) fd: i32,
+    ///fd, this is the file descriptor of the directory we are reading from(it's completely useless after the iterator is dropped)
+    pub(crate) buffer: SyscallBuffer,
+    /// buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
+    pub(crate) path_buffer: PathBuffer,
+    /// buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
+    pub(crate) file_name_index: u16,
+    /// base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
+    pub(crate) parent_depth: u8,
+    /// depth of the parent directory, this is used to calculate the depth of the child entries
+    pub(crate) offset: usize,
+    /// offset in the buffer, this is used to keep track of where we are in the buffer
+    pub(crate) remaining_bytes: i64,
+    /// remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     pub(crate) _marker: PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
-                         
 }
 #[cfg(target_os = "linux")]
 impl<S> Drop for DirEntryIterator<S>
@@ -398,13 +406,11 @@ where
     }
 }
 
-
 #[cfg(target_os = "linux")]
 impl<S> DirEntryIterator<S>
 where
     S: BytesStorage,
 {
-  
     #[inline]
     ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
@@ -439,7 +445,7 @@ where
 
     #[inline]
     /// Check the remaining bytes left in the buffer
-    pub  const fn is_buffer_empty(&self) -> bool {
+    pub const fn is_buffer_empty(&self) -> bool {
         self.remaining_bytes == 0
     }
     #[inline]
@@ -449,7 +455,7 @@ where
     pub unsafe fn construct_direntry(&mut self, drnt: *const libc::dirent64) -> DirEntry<S> {
         use crate::traits_and_conversions::DirentConstructor;
 
-        unsafe{self.construct_entry(drnt)}
+        unsafe { self.construct_entry(drnt) }
     }
 
     #[inline]
@@ -503,7 +509,7 @@ where
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
                 let entry = unsafe { self.construct_direntry(d) }; //this is unsafe because we're relying on knowing that the buffer has more entries in it.
-                
+
                 return Some(entry);
             }
             // prefetch the next buffer content before reading, only applies if no

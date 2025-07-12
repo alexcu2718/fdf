@@ -2,13 +2,14 @@
 #[allow(unused_imports)]
 use crate::{
     AlignedBuffer, BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
-    SyscallBuffer, cstr, custom_types_result::BytesStorage, offset_dirent,traits_and_conversions::DirentConstructor
+    SyscallBuffer, cstr, custom_types_result::BytesStorage, offset_dirent,
+    traits_and_conversions::DirentConstructor,
 };
 use libc::{DIR, closedir, opendir};
 #[cfg(not(target_os = "linux"))]
 use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
-use libc::{dirent64 as dirent64, readdir64 as readdir}; //use readdir64 on linux
+use libc::{dirent64, readdir64 as readdir}; //use readdir64 on linux
 use std::marker::PhantomData; //use readdir on other platforms, this is the standard POSIX function
 
 /// An iterator over directory entries from readdir (or 64 )via libc
@@ -22,10 +23,10 @@ pub struct DirIter<S>
 where
     S: BytesStorage,
 {
-    pub(crate)dir: *mut DIR,
-    pub(crate)path_buffer: PathBuffer,
+    pub(crate) dir: *mut DIR,
+    pub(crate) path_buffer: PathBuffer,
     pub(crate) file_name_index: u16, //mainly used for indexing tricks, to trivially find the filename(avoid recalculation)
-    pub (crate) parent_depth: u8, //if youve got directories bigger than 255 levels deep, you should probably rethink your life choices.
+    pub(crate) parent_depth: u8, //if youve got directories bigger than 255 levels deep, you should probably rethink your life choices.
     pub(crate) error: Option<Error>,
     pub(crate) _phantom: PhantomData<S>, //this justholds the type information for later, this compiles away due to being zero sized.
 }
@@ -34,8 +35,6 @@ impl<S> DirIter<S>
 where
     S: BytesStorage,
 {
-    
-    
     #[inline]
     //internal function to read the directory entries
     //it is used by the new function to initialise the iterator.
@@ -71,7 +70,7 @@ where
     ///
     /// This doesn't need unsafe because the pointer is already checked to not be null before it can be used here.
     pub fn construct_direntry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
-        unsafe{self.construct_entry(drnt)}
+        unsafe { self.construct_entry(drnt) }
     }
 
     #[inline]
@@ -151,4 +150,3 @@ where
         }
     }
 }
-

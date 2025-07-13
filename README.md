@@ -1,6 +1,7 @@
-# fdf
+# fdf - High-Performance POSIX File Finder
 
-'a *very*  fast file finder for POSIX(Linux/MacOs/BSD) for regex/glob matching files with extremely pretty file colours`
+ **Experimental** tool for regex/glob matching with colorized output.
+Not production-ready: API unstable, renaming pending. Use with caution.
 
 **i do have benchmark suites!**
 
@@ -54,7 +55,7 @@ fd count: 12445
 fdf count: 12445
 
 
-##### searching for the extension c in the llvm repo (there might be some c files i guessssss)
+##### searching for the extension c in the llvm repo 
 
 Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
   Time (mean ± σ):      20.6 ms ±   2.9 ms    [User: 39.3 ms, System: 119.3 ms]
@@ -68,7 +69,7 @@ Summary
   fdf -HI --extension 'c' '' '/tmp/llvm-project' ran
     1.71 ± 0.27 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
 ############
-running ./warm-cache-type-simple-pattern.sh   ###i copied and modified these tests from fd, this is NOT simple for 95% of people.
+running ./warm-cache-type-simple-pattern.sh  
  fd count: 174329
 fdf count: 174329
 
@@ -131,7 +132,7 @@ let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
 (I made it into a separate crate)
 it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>
 
-Then this beauty of a function!
+Then this function, really nice way to avoid branch misses during dirent parsing (a really hot loop)
 
 ```Rust
 

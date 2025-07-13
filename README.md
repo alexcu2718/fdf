@@ -201,8 +201,8 @@ I'd probably just keep the CLI stuff simple, features to be added are datetime b
 
 Add POSIX compatibility in general ( illumos/solaris QEMU isn't straight forward, quite esoteric)
 
-Add Windows... Well, This would take a fundamental rewrite because of architectural differences, I might do it. (Who uses the terminal on windows?)
-(It may be interesting to learn the differences actually, omit my cavalier attitude!)
+Add Windows... Well, This would take a fundamental rewrite because of architectural differences, I might do it.
+(It may be interesting to learn the differences actually)
 
 Additional features on my compile_time_ls_colours would be nice, I think I want to explore compile time hashmaps more,
 I'm only really scratching the service on metaprogramming and rust's utilities are great (one day I'll try cpp template metaprogramming and become a convert...)

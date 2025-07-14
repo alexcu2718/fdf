@@ -1,7 +1,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use fdf::strlen as asm_strlen;
-
+use fdf::find_zero_byte_u64;
 use std::hint::black_box;
 
 #[inline(always)]
@@ -19,16 +19,23 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
 
     let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
 
+
     let candidate_pos = last_word | mask;
-
-    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is zero
-        & !candidate_pos//ensures only bytes that were zero retain the underflowed high bit.
-        & 0x8080_8080_8080_8080; //  0x8080_8080_8080_8080 -->This masks out the high bit of each byte, so we can find the first zero byte
-
-    let byte_pos = 7 - (zero_bit.trailing_zeros() >> 3) as usize;
-
+    // The resulting value (`candidate_pos`) has:
+    // - Original name bytes preserved
+    // - Non-name bytes forced to 0xFF (guaranteed non-zero)
+    // - Maintains the exact position of any null bytes in the name
+    //I have changed the definition since the original README, I found a more rigorous backing!
+    // We subtract 7 to get the correct offset in the d_name field.
+    let byte_pos = 7 - find_zero_byte_u64(candidate_pos); // a constant time SWAR function
+    // The final length is calculated as:
+    // `reclen - DIRENT_HEADER_START - byte_pos`
+    // This gives us the length of the d_name field, excluding the header and the null
+    // byte position.
     reclen - DIRENT_HEADER_START - byte_pos
 }
+
+
 
 #[repr(C, align(8))]
 pub struct LibcDirent64 {

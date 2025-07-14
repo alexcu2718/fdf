@@ -22,8 +22,9 @@ Rather that I'm just working on this project for myself because I really wanted 
 happens when you optimally write hardware specific code( and how to write it!)
 
 ## How to test
-
+```bash
 git clone <https://github.com/alexcu2718/fdf>  /tmp/fdf_test &&   /tmp/fdf_test/fd_benchmarks/run_all_tests_USE_ME.sh
+```
 
 BE WARNED, I CLONE THE LLVM REPO TO CREATE A SUSTAINABLE ENVIRONMENT FOR TESTING, I DO THIS SPECIFICALLY IN /tmp
 so this will be deleted at next shutdown, same goes for macos,

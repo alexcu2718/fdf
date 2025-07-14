@@ -1,13 +1,13 @@
 # fdf - High-Performance POSIX File Finder
 
- **Experimental** tool for regex/glob matching with colorized output.
+ **An Experimental** faster alternative to `fd`/`find` tool for regex/glob matching, with colourised output.
 Not production-ready: API unstable, renaming pending. Use with caution.
 
 **i do have benchmark suites!**
 
 ## INTRO
 
-NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
+NOT IN A STATE FOR USE/CONTRIBUTION.
 
 I have to change the name first and make the API actually coherent (I haven't tried using it as a crate yet)
 

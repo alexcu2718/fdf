@@ -1,7 +1,9 @@
 # fdf - High-Performance POSIX File Finder
 
- **An Experimental** faster alternative to `fd`/`find` tool for regex/glob matching, with colourised output.
+ **An Experimental**  alternative to `fd`/`find` tool for regex/glob matching, with colourised output.
 Not production-ready: API unstable, renaming pending. Use with caution.
+
+(Mostly this is done as a project to learn C+assembly, somehow just got bigger)
 
 **i do have benchmark suites!**
 

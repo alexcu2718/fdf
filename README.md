@@ -219,11 +219,11 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 
 2. Aarch 64 Linux/Android Debian 
 
-2.Macos  64bit  (Tested on Sonoma)
+3.Macos  64bit  (Tested on Sonoma)
 
-3.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
+4.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
 
-4.Works on big endian systems, tested on Ubuntu PPC64 (took 20 minutes to compile....)
+5.Works on big endian systems, tested on Ubuntu PPC64 (took 20 minutes to compile....)
 
 ## Installation
 

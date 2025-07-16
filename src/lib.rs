@@ -175,6 +175,7 @@ where
     }
 
     #[inline]
+    #[cfg(target_os="linux")]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
@@ -222,7 +223,59 @@ where
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
     }
+
+    #[inline]
+    #[cfg(not(target_os="linux"))]
+    #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
+    fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
+        let config = &self.search_config;
+
+        let should_send =
+            config.keep_dirs && (self.custom_filter)(config, &dir, self.filter) && dir.depth() != 0;
+
+        if self.search_config.depth.is_some_and(|d| dir.depth >= d) {
+            if should_send {
+                let _ = sender.send(vec![dir]);
+            } //have to put into a vec, this doesnt matter because this only happens when we depth limit
+
+            return; // stop processing this directory if depth limit is reached
+        }
+
+        match dir.readdir() {
+            Ok(entries) => {
+                // Store only directories for parallel recursive call
+
+                let (dirs, files): (Vec<_>, Vec<_>) = entries
+                    .filter(|e| !config.hide_hidden || !e.is_hidden())
+                    .partition(|x| x.is_dir() || config.follow_symlinks && x.is_symlink());
+
+                dirs.into_par_iter().for_each(|dir| {
+                    Self::process_directory(self, dir, sender);
+                });
+
+                // Process files without intermediate Vec
+                let matched_files: Vec<_> = files
+                    .into_iter()
+                    .filter(|entry| (self.custom_filter)(config, entry, self.filter))
+                    .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately
+                    .collect(); //by doing it this way we reduce channel contention and avoid an intermediate vec, which is more efficient!
+
+                if !matched_files.is_empty() {
+                    let _ = sender.send(matched_files);
+                }
+            }
+            Err(
+                DirEntryError::Success
+                | DirEntryError::TemporarilyUnavailable
+                | DirEntryError::AccessDenied(_)
+                | DirEntryError::InvalidPath,
+            ) => {}
+            Err(e) => eprintln!("Unexpected error: {e}"),
+        }
+    }
 }
+
+
 
 /// A builder for creating a `Finder` instance with customisable options.
 ///

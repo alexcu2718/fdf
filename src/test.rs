@@ -83,6 +83,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os="linux")]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
@@ -112,6 +113,51 @@ mod tests {
         );
 
         let entries_clone2: Vec<_> = dir_entry.getdents().unwrap().collect();
+
+        let _ = std::fs::remove_dir_all(&dir_path);
+        for entry in entries_clone2 {
+            assert_eq!(entry.depth(), 1);
+            assert_eq!(
+                entry.file_name_index() as usize,
+                dir_path.as_os_str().len() + 1
+            );
+        }
+
+        //let _=std::fs::File::
+    }
+
+
+        #[test]
+    #[cfg(not(target_os="linux"))]
+    fn test_read_dir() {
+        let temp_dir = std::env::temp_dir();
+        let dir_path = temp_dir.as_path().join("testdir");
+        let _ = std::fs::create_dir(&dir_path);
+        //throwing the error because of the directory already exists
+
+        std::fs::write(dir_path.join("file1.txt"), "test1").unwrap();
+        std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
+        let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
+
+        let dir_entry: DirEntry<Vec<u8>> = DirEntry::new(dir_path.as_os_str()).unwrap();
+        let entries = dir_entry.readdir().unwrap();
+        let entries_clone: Vec<_> = dir_entry.readdir().unwrap().collect();
+
+        let mut names: Vec<_> = entries.map(|e| e.file_name().to_vec()).collect();
+
+        assert_eq!(entries_clone.len(), 3);
+
+        names.sort();
+        assert_eq!(
+            names,
+            vec![
+                b"file1.txt".to_vec(),
+                b"file2.txt".to_vec(),
+                b"subdir".to_vec()
+            ]
+        );
+        //yeah this test code is half arsed, but it's comprehensive,.
+        let entries_clone2: Vec<_> = dir_entry.readdir().unwrap().collect();
 
         let _ = std::fs::remove_dir_all(&dir_path);
         for entry in entries_clone2 {
@@ -247,7 +293,7 @@ mod tests {
         );
 
         // iteration
-        let mut entries = dir_entry.getdents()?.into_iter().collect::<Vec<_>>();
+        let mut entries = dir_entry.readdir()?.into_iter().collect::<Vec<_>>();
 
         assert!(
             !entries.is_empty(),

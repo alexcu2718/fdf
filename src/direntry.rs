@@ -361,12 +361,7 @@ where
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
-    #[cfg(not(target_os = "linux"))]
-    #[inline] //back up because we cant use getdents on non linux systems, so we use readdir instead
-    #[allow(clippy::missing_errors_doc)]
-    pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
-        DirIter::new(self)
-    }
+   
 }
 
 #[cfg(target_os = "linux")]

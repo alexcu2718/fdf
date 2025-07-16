@@ -3,7 +3,9 @@
  **An Experimental**  alternative to `fd`/`find` tool for regex/glob matching, with colourised output.
  
 Not production-ready: API unstable, renaming pending. 
-NOT IN A STATE FOR CONTRIBUTION (It works, it just hasn't got the feature set I'd like yet, see copious tests!)
+NOT IN A STATE FOR CONTRIBUTION
+
+(It works, it just hasn't got the feature set I'd like yet, see copious tests!)
 
 (Mostly this is done as a project to learn C+assembly, somehow just got bigger)
 
@@ -111,13 +113,13 @@ Summary
 -dirent_const_strlen
  a  constant function which gets strlen from a dirent64 in constant time with no branches, only applicable to Linux
 
--cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, then add **null terminator** for FFI use)
+-cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, then add a **null terminator** for FFI use)
 
 ```rust
 
 use fdf::cstr;
 let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
-//automatically  create an inline null stack allocated of length PATH_MAX(4096)
+//automatically  create an inline null-terminated stack allocated buffer of length PATH_MAX(4096)
 //and add a null terminator
 let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
 /*explosions*/

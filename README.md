@@ -3,18 +3,13 @@
  **An Experimental**  alternative to `fd`/`find` tool for regex/glob matching, with colourised output.
  
 Not production-ready: API unstable, renaming pending. 
-
-Use with caution.
+NOT IN A STATE FOR CONTRIBUTION (It works, it just hasn't got the feature set I'd like yet, see copious tests!)
 
 (Mostly this is done as a project to learn C+assembly, somehow just got bigger)
 
 **i do have benchmark suites!**
 
-## INTRO
-
-NOT IN A STATE FOR USE/CONTRIBUTION.
-
-I have to change the name first and make the API actually coherent (I haven't tried using it as a crate yet)
+## Important Notes
 
 As I fix and improve certain features, I will make it open to contributions.
 
@@ -32,10 +27,9 @@ git clone https://github.com/alexcu2718/fdf /tmp/fdf_test  &&   /tmp/fdf_test/fd
 ```
 
 BE WARNED, I CLONE THE LLVM REPO TO CREATE A SUSTAINABLE ENVIRONMENT FOR TESTING, I DO THIS SPECIFICALLY IN /tmp
-so this will be deleted at next shutdown, same goes for macos,
+so this will be deleted at next shutdown, same goes for macos (Provides option to delete afterwards)
 *not BSD (well, I only played around in QEMU, seems they've got a distinctively different system)*
 
-IT DOES provide the option to delete this though
 
 This runs a **comprehensive** suite of internal library+CLI tests as well as benchmarks.
 
@@ -59,8 +53,6 @@ Testing on my local filesystem (to show on non-toy example)
 # REPEATABLE BENCHMARKS (FOUND IN THE *HOW TO TEST* section above)
 fd count: 12445
 fdf count: 12445
-
-
 ##### searching for the extension c in the llvm repo 
 
 Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
@@ -125,7 +117,8 @@ Summary
 
 use fdf::cstr;
 let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
-//automatically  create an inline null stack allocated of length PATH_MAX(4096) and add a null terminator
+//automatically  create an inline null stack allocated of length PATH_MAX(4096)
+//and add a null terminator
 let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
 /*explosions*/
 //hence why its unsafe!
@@ -147,11 +140,12 @@ Then this function, really nice way to avoid branch misses during dirent parsing
 //The code is explained better in the true function definition (this is crate agnostic)
 //This is the little-endian implementation, see crate for modified version for big-endian
 // Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
-use fdf::find_zero_byte_u64; // a const SWAR function
+use fdf::find_zero_byte_u64; // a const SWAR function (SIMD within a register, so no architecture dependence.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; 
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //endianness fix omitted for brevity.
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
+    //endianness fix omitted for brevity. check source
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
     let candidate_pos = last_word | mask;//^
     let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // a constant time SWAR function
@@ -169,10 +163,13 @@ Then finally, the reward is a tool I can use for the rest of my life to find stu
 
 Mostly though, I just enjoy learning.
 
-To put it in perspective, I did not know any C before I started this project, I noticed that every type of file finding tool will inevitably rely on some kind of iterator that will heap allocate regardless of whether or not it's a match, we're talking a hella lot of random allocations which I suspect may be a big bottleneck.
+To put it in perspective, I did not know any C before I started this project, I noticed that every type of file finding tool will inevitably rely on some kind of iterator that will heap allocate regardless of whether or not it's a match,
+
+So we're talking a lot of random allocations which I suspect may be a big bottleneck. (I think arenas just might be the best option, simplicity and complexity trade off)
 
 Even though my project in it's current state is faster, I've got some experiments to try filtering before allocating
 Unfortunately, you have to have to allocate heap space for directories in stdlib (because they're necessary for the next call)
+(The same would probably go here)
 
 Which is partially why I felt the need to rewrite it from libc, it's just the standard library was too high level.
 
@@ -180,28 +177,28 @@ I'm curious to see what happens when you filter before allocation, this is somet
 but the implementation details like that is not accessible via CLI. If it proves to be performant, it will eventually be in there.
 Obviously, I'm having to learn a lot to do these things and it takes  TIME to understand, get inspired and implement things...
 
-I do intend to only add features and not break anything, until i can somewhat promise that, then i won't entertain wasting other people's time
-with my nonsense so if anyone felt like adding something, you can!
+I do intend to only add features and not break anything, until i can somewhat promise that, then i won't entertain wasting other people's time but eventually
+ if anyone felt like adding something, they can!
 
 (notably, there's some obvious things I have not touched in a while and things that are just less interesting, ideally one day someone could do that, not now though)
 
 ## NECESSARY DISCLAIMERS (I might have a conscience somewhere)
 
 I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
-Notably I modified it because it's quite old and has a lot of silly dependencies (i removed all of them).
+Notably I modified it because it's quite old and has dependencies I was able to remove
 
 I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161>
-I've found a much more rigorous way of doing some bit tricks via this, there's unstable features included so I thought I'd appreciate the backing
-of validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment.
+I've found a much more rigorous way of doing some bit tricks via this,
 
-Some bits MIGHT be broken, the main use case to any user is error free
-(unfortunately with FFI, they'll just pop up more later on, I have too many tests and it's really just that easy to get them in C)
+I enjoy relying on  validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment
+
 
 ## Future plans?
 
 Separation of utilities
 
-Right now, it's a bit monolithic. Some aspects might deserve their own crate (i dislike the idea of having 500 crates to do 1 specific thing each)
+Right now, it's a bit monolithic. Some aspects might deserve their own crate (i dislike the idea of having 500 crates to do 1 specific thing each)    
+(Although, writing FFI like this for multiple different POSIX systems with distinct pecularities will tend to be a lot of code)
 
 I'd probably just keep the CLI stuff simple, features to be added are datetime based filtering (could be done quick, I just have rarely used time based filtering and that's why it's slow!) as well as just other things, eg to search for device drivers/etc.
 
@@ -218,15 +215,15 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 
 ## COMPATIBILITY STATE
 
-1.Working on Linux(MUSL too) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions
+1.Working on Linux(glibc dynamic linking/MUSL static linking) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions
 
-2.Somehow working on Aarch 64 Linux/Android Debian (basically, it works on my phone via termux!) (( and I didn't need to change anything!))
+2. Aarch 64 Linux/Android Debian 
 
 2.Macos  64bit  (Tested on Sonoma)
 
 3.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
 
-4.Works on big endian systems, tested on PPC64 (took 20 minutes to compile....)
+4.Works on big endian systems, tested on Ubuntu PPC64 (took 20 minutes to compile....)
 
 ## Installation
 
@@ -312,17 +309,19 @@ TODO LIST (Maybe):
    <https://github.com/microsoft/edit/tree/main/src/arena>
 
 -- io_uring for Batched Syscalls: e.g., batched open/read operations.
-   This will be extremely challenging. Unfortunately uring lacks the op code required for getdents, however
-   other op codes are available, but this would require a LOT of work, it also would require an async runtime
-   Which inevitably means tokio, which means most of my work in avoiding dependencies goes down the bin
+   This will be extremely challenging.
+   
+   Unfortunately uring lacks the op code required for getdents-- however
+   other op codes are available, but this would require a LOT of work,
+   
+   it also would require an async runtime->
+   Which inevitably means tokio->
+  which means most of my work in avoiding dependencies goes down the bin
    (I'm already unhappy being reliant on rayon but that's on the list to remove.)
 
--- String Interning: Trivial for ASCII, but efficient Unicode handling is an entirely different beast.
-   (although, creating an enum at compile time of common filepaths on your pc and doing some manipulations sounds cool+cursed)
-
--- I might continue developing my compile time hashmap for LS_COLORS, it's got a good general use case and the macro use is pretty fun!
+-- I might continue developing my compile time hashmap for LS_COLORS and make an easier way to do these maps, it's got a good general use case and the macro use is pretty fun!
    However I do have a separate commit at <https://github.com/alexcu2718/compile_time_ls_colours/tree/no_phf_build>
-   Which has no dependencies, although it's REALLY shit to do without doing a HELLA lot of byte manipulation yourself.
+   Which has no dependencies, although it's annoying to do without doing a HELLA lot of byte manipulation yourself.
    (also, it's runtime statically initialised, not as cool!)
 
 -- Threading Without Rayon: My attempts have come close, but aren’t quite there yet.

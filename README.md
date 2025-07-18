@@ -89,7 +89,7 @@ Summary
   fdf '.' '/tmp/llvm-project' -HI ran
     1.50 ± 0.21 times faster than fd '.' '/tmp/llvm-project' -HI
 #####
-running ./warm-cache-type-filtering-executable.sh   ######## TYPE FILTERING (REQUIRES LSTAT CALLS)
+running ./warm-cache-type-filtering-executable.sh   
 fd count: 927
 fdf count: 927
 
@@ -110,21 +110,25 @@ Summary
 
 ## Extra bits
 
--dirent_const_strlen
- a  constant function which gets strlen from a dirent64 in constant time with no branches, only applicable to Linux
-
 -cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, then add a **null terminator** for FFI use)
 
 ```rust
 
+
 use fdf::cstr;
 let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
-//automatically  create an inline null-terminated stack allocated buffer of length PATH_MAX(4096)
-//and add a null terminator
+//automatically  create an inline null-terminated stack allocated buffer of length LOCAL_PATH_MAX(4096)
+//this is actually default to 4096 but setting eg `export LOCAL_PATH_MAX=13000 && cargo b -r -q ` will recompile  with LOCAL_PATH_MAX as 13000.
+
+//this is a self explanatory one!
 let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
 /*explosions*/
 //hence why its unsafe!
 let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
+
+let oh_it_doesnt_need_literals:&[u8]=b".";
+let dot_as_pointer:*const u8 =unsafe{ cstr!(oh_it_doesnt_need_literals)};
+
 
 
 ```
@@ -189,8 +193,10 @@ I do intend to only add features and not break anything, until i can somewhat pr
 I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
 Notably I modified it because it's quite old and has dependencies I was able to remove
 
+(I have emailed and received approval from the author above)
+
 I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161>
-I've found a much more rigorous way of doing some bit tricks via this,
+I've found a much more rigorous way of doing some bit tricks via this
 
 I enjoy relying on  validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment
 
@@ -219,7 +225,7 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 
 1.Working on Linux(glibc dynamic linking/MUSL static linking) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions
 
-2. Aarch 64 Linux/Android Debian 
+2.Aarch 64 Linux/Android Debian 
 
 3.Macos  64bit  (Tested on Sonoma)
 
@@ -241,10 +247,9 @@ cp target/release/fdf ~/.local/bin/
 Usage
 Arguments
 PATTERN: Regular expression pattern to search for
-PATH: Directory to search (defaults to root /)
+PATH: Directory to search (defaults to current directory )
 Basic Examples
-# Find all files containing "config" in the current directory and subdirectories (case-insensitive and excluding directories+hidden files)
-fdf config -c
+
 
 # Find all JPG files in the home directory (excluding hidden files)
 fdf . ~ -E jpg
@@ -262,14 +267,13 @@ Arguments:
 
 
 Options:
-  -E, --extension <EXTENSION>  filters based on extension, eg -E .txt or -E txt
-
+  -E, --extension <EXTENSION>  filters based on extension, eg -E .txt or -E txt (case insensititive)
   -H, --hidden                 Shows hidden files eg .gitignore or .bashrc, defaults to off
 
   -s, --case-sensitive         Enable case-sensitive matching, defaults to false
 
   -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads
-                                [default: NUM_CORES]
+                                [default: 12]
   -a, --absolute-path          Show absolute paths of results, defaults to false
 
   -I, --include-dirs           Include directories, defaults to off
@@ -278,7 +282,7 @@ Options:
 
   -g, --glob                   Use a glob pattern,defaults to off
 
-  -n, --max-results <TOP_N>    Retrieves the first N results (not ordered!)
+  -n, --max-results <TOP_N>    Retrieves the first eg 10 results, '.cache' / -n 10
 
   -d, --depth <DEPTH>          Retrieves only traverse to x depth
 

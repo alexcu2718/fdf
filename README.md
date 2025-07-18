@@ -118,7 +118,8 @@ Summary
 use fdf::cstr;
 let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
 //automatically  create an inline null-terminated stack allocated buffer of length LOCAL_PATH_MAX(4096)
-//this is actually default to 4096 but setting eg `export LOCAL_PATH_MAX=13000 && cargo b -r -q ` will recompile  with LOCAL_PATH_MAX as 13000.
+//this is actually default to 4096
+//but setting eg `export LOCAL_PATH_MAX=13000 && cargo b -r -q ` will recompile  with LOCAL_PATH_MAX as 13000.
 
 //this is a self explanatory one!
 let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
@@ -126,6 +127,8 @@ let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH be
 //hence why its unsafe!
 let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
 
+//previous cstr! macros i've seen only worked on literals, which got fixed in rust 1.77+ (via the c"....." (c prefix on literals auto adds a null terminator))
+// https://docs.rs/rustix/latest/rustix/macro.cstr.html, this is an example of what i've specifically tried to generalise.
 let oh_it_doesnt_need_literals:&[u8]=b".";
 let dot_as_pointer:*const u8 =unsafe{ cstr!(oh_it_doesnt_need_literals)};
 

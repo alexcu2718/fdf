@@ -26,8 +26,6 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let file_name = "parent_TEST.txt";
         let file_path = temp_dir.as_path().join(file_name);
-      
-
 
         let _ = std::fs::File::create(&file_path);
 
@@ -189,7 +187,7 @@ mod tests {
 
         let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
 
-        let file_path = DirEntry::<SlimmerBytes>::new(".")?.as_full_path()?;
+        let file_path = DirEntry::<SlimmerBytes>::new(".")?.to_full_path()?;
 
         let my_path: Box<[u8]> = file_path.as_bytes().into();
 

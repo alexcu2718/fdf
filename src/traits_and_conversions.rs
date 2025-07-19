@@ -50,7 +50,7 @@ where
     fn is_absolute(&self) -> bool;
     fn is_relative(&self) -> bool;
     fn to_path(&self) -> PathBuf;
-    fn realpath(&self) -> crate::Result<&[u8]>;
+  
 }
 
 impl<T> BytePath<T> for T
@@ -290,28 +290,7 @@ where
         memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
     }
 
-    #[inline]
-    #[allow(clippy::missing_errors_doc)]
-    ///resolves the path to an absolute path
-    /// this is a costly operation, as it requires a syscall to resolve the path.
-    /// unless the path is already absolute, in which case its a trivial operation
-    fn realpath(&self) -> crate::Result<&[u8]> {
-        if self.is_absolute() {
-            return Ok(self);
-        }
-        //cast byte slice into a *const c_char/i8 pointer with a null terminator THEN pass it to realpath along with a null mut pointer
-        let ptr = unsafe {
-            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut()))
-        };
-        if ptr.is_null() {
-            //check for null
-            return Err(std::io::Error::last_os_error().into());
-        }
-
-        //we  use `std::ptr::slice_from_raw_parts`` to  avoid a UB check (trivial but we're leaving safety to user :)))))))))))
-        //rely on sse2/glibc strlen to get length
-        Ok(unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen(ptr)) })
-    }
+    
 }
 
 impl<S> fmt::Display for DirEntry<S>

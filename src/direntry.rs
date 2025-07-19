@@ -156,28 +156,44 @@ where
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    ///Converts a path to a proper path, if it is not already
-    pub fn as_full_path(self) -> Result<Self> {
-        if self.is_absolute() {
-            //doesnt convert
-            return Ok(self);
+    ///Converts a dirent64 to a proper path, resolving all symlinks, etc,
+    /// there's no way ahead of time to tell if a path has symbolic components.
+    /// Returns an error on invalid path (errors to be filled in later)  (they're actually encoded though)
+    pub fn to_full_path(self) -> Result<Self> {
+        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
+        let ptr = unsafe {
+            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut())) //we've created this pointer, we need to be careful
+        };
+
+        if ptr.is_null() {
+            //check for null
+            return Err(std::io::Error::last_os_error().into());
         }
-        //safe because easily fits in capacity (which is absurdly big for our purposes)
-        let full_path = self.realpath()?;
+        // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
+        let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) }; //get length without null terminator
+        // we're dereferencing a valid poiinter here, it's fine.
+        //alignment is trivial, we use `libc::strlen` because it's probably the most optimal for possibly long paths
+        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out
+
         let boxed = Self {
             path: full_path.into(),
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
-            file_name_index: (full_path.len() - self.file_name().len()) as _,
+            file_name_index: full_path.file_name_index() as _,
         }; //we need the length up to the filename INCLUDING
         //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
         //so we subtract the filename length from the total length, probably could've been done more elegantly.
         //TBD? not imperative.
+        unsafe { libc::free(ptr as _) }
+        //free the pointer to stop leaking (trivial concern considering how little this is going to be called.)
 
         Ok(boxed)
     }
 
+
+
+    
     #[inline]
     #[allow(clippy::missing_const_for_fn)]
     //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned,

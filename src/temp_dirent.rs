@@ -128,10 +128,7 @@ where
     pub const fn depth(&self) -> usize {
         self.depth as _
     }
-    #[inline]
-    pub fn realpath(&self) -> crate::Result<&[u8]> {
-        self.path.realpath()
-    }
+ 
 
     #[inline]
     pub fn matches_path(&self, file_name_only: bool, cfg: &SearchConfig) -> bool {

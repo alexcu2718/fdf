@@ -413,7 +413,7 @@ const HI_U64:u64=repeat_u64(0x80);
 /// Returns:
 /// - The byte index of the first zero byte in `x` 
 #[inline]
-pub const unsafe fn find_zero_byte_u64(x: u64) -> usize {
+pub const  fn find_zero_byte_u64(x: u64) -> usize {
     //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
     let zero_bit=x.wrapping_sub(LO_U64) & !x & HI_U64 ;
     

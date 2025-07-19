@@ -1,10 +1,43 @@
 #![cfg(target_os = "linux")]
 #![allow(clippy::single_char_lifetime_names)]
+
+
+
 // THIS IS PRETTY MUCH A CARBON COPY OF `direntry.rs`
 // THE ONLY DIFFERENCE IS THAT IT ALLOWS YOU TO FILTER THE ENTRIES BY A FUNCTION.
 // THIS IS USEFUL IF YOU WANT TO AVOID UNNECESSARY HEAP ALLOCATIONS FOR NON-DIRECTORIES(BIG PERFORMANCE IMPACT) AND
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
+
+
+/// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
+/// This is used to filter entries without allocating memory on the heap.
+/// It is a temporary structure that is used to filter entries before they are converted to `DirEntry<S>`.
+/// Needed to be done via macro to avoid issues with duplication/mutability of structs
+///
+//not used YET
+macro_rules! construct_temp_dirent {
+    ($self:ident, $dirent:ident) => {{
+        let (d_type, inode) = unsafe {
+            (
+                *offset_ptr!($dirent, d_type), // get d_type
+                offset_ptr!($dirent, d_ino),   // get inode
+            )
+        };
+
+        let full_path = unsafe { construct_path!($self, $dirent) };
+        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
+
+        $crate::TempDirent {
+            path: full_path,
+            file_type,
+            inode,
+            depth: $self.parent_depth + 1,
+            file_name_index: $self.file_name_index,
+            _marker: std::marker::PhantomData,
+        }
+    }};
+}
 use crate::direntry::DirEntry;
 use crate::{
     BytePath, BytesStorage, PathBuffer, Result, SearchConfig, SyscallBuffer, TempDirent, offset_ptr,

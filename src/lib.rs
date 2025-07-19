@@ -173,7 +173,7 @@ where
             _ => Err(DirEntryError::InvalidPath),
         }
     }
-
+    //linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
     #[inline]
     #[cfg(target_os = "linux")]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
@@ -223,7 +223,7 @@ where
             Err(e) => eprintln!("Unexpected error: {e}"),
         }
     }
-
+    //non linux version
     #[inline]
     #[cfg(not(target_os = "linux"))]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result

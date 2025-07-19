@@ -6,7 +6,7 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
-use crate::{temp_dirent::TempDirent, utils::resolve_inode};
+use crate::{temp_dirent::TempDirent, utils::resolve_inode,AlignedBuffer,LOCAL_PATH_MAX};
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{utils::close_asm, utils::open_asm};
@@ -359,12 +359,7 @@ where
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
-    #[cfg(not(target_os = "linux"))]
-    #[inline] //back up because we cant use getdents on non linux systems, so we use readdir instead
-    #[allow(clippy::missing_errors_doc)]
-    pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
-        DirIter::new(self)
-    }
+  
 }
 
 #[cfg(target_os = "linux")]

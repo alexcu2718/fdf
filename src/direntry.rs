@@ -429,7 +429,7 @@ where
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid(we need to check bytes in the buffer left first)
     pub unsafe fn getdents_syscall(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) }; //fix this ugly hack TODO!
+        self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) }; //fix this ugly hack TODO!
         self.offset = 0;
     }
 

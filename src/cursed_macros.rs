@@ -12,8 +12,8 @@
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
 ///   Example: `offset_dirent!(entry_ptr, d_ino)` -> aliases to `d_fileno` and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
-/// - On Linux, `d_reclen` is used to access the record length directly, this is a special case, since it is not aligned like the others.
-///  Example: `offset_dirent!(entry_ptr, d_reclen)` -> returns the record length as usize (internal consistency, be glad it works!)
+/// - On Linux, `d_reclen` is used to access the record length directly, 
+///  Example: `offset_dirent!(entry_ptr, d_reclen)` 
 /// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
 ///  the other fields are accessed normally, as raw pointers to the field
 /// /// # Usage

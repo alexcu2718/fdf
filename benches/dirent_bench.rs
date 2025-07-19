@@ -1,7 +1,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
-use fdf::strlen as asm_strlen;
 use fdf::find_zero_byte_u64;
+use fdf::strlen as asm_strlen;
 use std::hint::black_box;
 
 #[inline(always)]
@@ -19,7 +19,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
 
     let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
 
-
     let candidate_pos = last_word | mask;
     // The resulting value (`candidate_pos`) has:
     // - Original name bytes preserved
@@ -34,8 +33,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     // byte position.
     reclen - DIRENT_HEADER_START - byte_pos
 }
-
-
 
 #[repr(C, align(8))]
 pub struct LibcDirent64 {

@@ -175,7 +175,7 @@ where
     }
 
     #[inline]
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
@@ -225,7 +225,7 @@ where
     }
 
     #[inline]
-    #[cfg(not(target_os="linux"))]
+    #[cfg(not(target_os = "linux"))]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
@@ -274,8 +274,6 @@ where
         }
     }
 }
-
-
 
 /// A builder for creating a `Finder` instance with customisable options.
 ///

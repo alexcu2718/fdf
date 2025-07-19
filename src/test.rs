@@ -83,7 +83,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
@@ -126,9 +126,8 @@ mod tests {
         //let _=std::fs::File::
     }
 
-
-        #[test]
-    #[cfg(not(target_os="linux"))]
+    #[test]
+    #[cfg(not(target_os = "linux"))]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");

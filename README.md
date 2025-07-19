@@ -1,15 +1,17 @@
-# fdf
+# fdf - High-Performance POSIX File Finder
 
-(Jeremy Clarkson voice )
-'Probably the fastest finder you'll find on POSIX for regex/glob matching files`
+ **An Experimental**  alternative to `fd`/`find` tool for regex/glob matching, with colourised output.
+
+Not production-ready: API unstable, renaming pending.
+NOT IN A STATE FOR CONTRIBUTION
+
+(It works, it just hasn't got the feature set I'd like yet, see copious tests!)
+
+(Mostly this is done as a project to learn C+assembly, somehow just got bigger)
 
 **i do have benchmark suites!**
 
-## INTRO
-
-NOT IN A STATE FOR USE/CONTRIBUTION, YE HAVE BEEN WARNED!
-
-I have to change the name first and make the API actually coherent (I haven't tried using it as a crate yet)
+## Important Notes
 
 As I fix and improve certain features, I will make it open to contributions.
 
@@ -23,42 +25,115 @@ happens when you optimally write hardware specific code( and how to write it!)
 
 ## How to test
 
-git clone <https://github.com/alexcu2718/fdf> && ./fdf/fd_benchmarks/run_all_tests_USE_ME.sh
+```bash
+git clone https://github.com/alexcu2718/fdf /tmp/fdf_test  &&   /tmp/fdf_test/fd_benchmarks/run_all_tests_USE_ME.sh
+```
 
 BE WARNED, I CLONE THE LLVM REPO TO CREATE A SUSTAINABLE ENVIRONMENT FOR TESTING, I DO THIS SPECIFICALLY IN /tmp
-so this will be deleted at next shutdown, same goes for macos, not BSD (well, I only played around in QEMU, seems they've got a distinctively different system)
+so this will be deleted at next shutdown, same goes for macos (Provides option to delete afterwards)
+*not BSD (well, I only played around in QEMU, seems they've got a distinctively different system)*
+
 
 This runs a **comprehensive** suite of internal library+CLI tests as well as benchmarks.
 
-## Cool bits
+## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
+
+Testing on my local filesystem (to show on non-toy example)
 
 ```bash
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 |
+| `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 | #search my whole pc
 | `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
 
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 | 
+| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 |
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
+
+######
+#some of my benchmarks. repeatable on your own pc (as above)
+#
+# REPEATABLE BENCHMARKS (FOUND IN THE *HOW TO TEST* section above)
+fd count: 12445
+fdf count: 12445
+##### searching for the extension c in the llvm repo 
+
+Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
+  Time (mean ± σ):      20.6 ms ±   2.9 ms    [User: 39.3 ms, System: 119.3 ms]
+  Range (min … max):    15.5 ms …  25.1 ms    12 runs
+
+Benchmark 2: fd -HI --extension 'c' '' '/tmp/llvm-project'
+  Time (mean ± σ):      35.1 ms ±   2.7 ms    [User: 141.0 ms, System: 108.9 ms]
+  Range (min … max):    31.7 ms …  42.5 ms    12 runs
+
+Summary
+  fdf -HI --extension 'c' '' '/tmp/llvm-project' ran
+    1.71 ± 0.27 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
+############
+running ./warm-cache-type-simple-pattern.sh  
+ fd count: 174329
+fdf count: 174329
+
+Running benchmarks...
+Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
+  Time (mean ± σ):      23.3 ms ±   3.2 ms    [User: 55.5 ms, System: 122.4 ms]
+  Range (min … max):    16.4 ms …  28.3 ms    12 runs
+ 
+Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
+  Time (mean ± σ):      34.2 ms ±   3.4 ms    [User: 124.2 ms, System: 105.4 ms]
+  Range (min … max):    29.6 ms …  41.9 ms    12 runs
+Summary
+  fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project' ran
+    1.47 ± 0.25 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
+
+Summary
+  fdf '.' '/tmp/llvm-project' -HI ran
+    1.50 ± 0.21 times faster than fd '.' '/tmp/llvm-project' -HI
+#####
+running ./warm-cache-type-filtering-executable.sh   
+fd count: 927
+fdf count: 927
+
+Running benchmarks...
+Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type x
+  Time (mean ± σ):      33.2 ms ±   2.7 ms    [User: 49.6 ms, System: 225.1 ms]
+  Range (min … max):    29.5 ms …  38.0 ms    12 runs
+
+Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type x
+  Time (mean ± σ):      48.7 ms ±   1.6 ms    [User: 159.5 ms, System: 233.2 ms]
+  Range (min … max):    46.6 ms …  51.2 ms    11 runs
+
+Summary
+  fdf '.' '/tmp/llvm-project' -HI --type x ran
+    1.47 ± 0.13 times faster than fd '.' '/tmp/llvm-project' -HI --type x
+
 ```
 
--Speed!
- In every benchmark so far tested, it's ranging from a minimum of 1.2x and a maximum of 2x as fast~~ (really approximating here) as fast for regex/glob feature sets, check the benchmark!
+## Extra bits
 
--dirent_const_strlen
- a  constant function which gets strlen from a dirent64 in constant time with no branches, only applicable to Linux
-
--cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, add **null terminator** for FFI use)
+-cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, then add a **null terminator** for FFI use)
 
 ```rust
 
-use fdf::cstr;
-let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't it")}; //automatically  create an inline null stack allocated of length PATH_MAX(4096) and add a null pointer
 
-let dont_go_over_my_bounds:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5 
+use fdf::cstr;
+let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
+//automatically  create an inline null-terminated stack allocated buffer of length LOCAL_PATH_MAX(4096)
+//this is actually default to 4096
+//but setting eg `export LOCAL_PATH_MAX=13000 && cargo b -r -q ` will recompile  with LOCAL_PATH_MAX as 13000.
+
+//this is a self explanatory one!
+let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
+/*explosions*/
 //hence why its unsafe!
 let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
+
+//previous cstr! macros i've seen only worked on literals, which got fixed in rust 1.77+ (via the c"....." (c prefix on literals auto adds a null terminator))
+// https://docs.rs/rustix/latest/rustix/macro.cstr.html, this is an example of what i've specifically tried to generalise.
+let oh_it_doesnt_need_literals:&[u8]=b".";
+let dot_as_pointer:*const u8 =unsafe{ cstr!(oh_it_doesnt_need_literals)};
+
+
 
 ```
 
@@ -66,14 +141,29 @@ let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
 (I made it into a separate crate)
 it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>
 
-## NECESSARY DISCLAIMERS (I might have a conscience somewhere)
+Then this function, really nice way to avoid branch misses during dirent parsing (a really hot loop)
 
-I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
-Notably I modified it because it's quite old and has a lot of silly dependencies (i removed all of them).
+```Rust
 
-I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161>
-I've found a much more rigorous way of doing some bit tricks via this, there's unstable features included so I thought I'd appreciate the backing
-of validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment.
+
+
+//The code is explained better in the true function definition (this is crate agnostic)
+//This is the little-endian implementation, see crate for modified version for big-endian
+// Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
+use fdf::find_zero_byte_u64; // a const SWAR function (SIMD within a register, so no architecture dependence.
+pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+    let reclen = unsafe { (*dirent).d_reclen as usize }; 
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
+    //endianness fix omitted for brevity. check source
+    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
+    let candidate_pos = last_word | mask;//^
+    let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // a constant time SWAR function
+
+    reclen - DIRENT_HEADER_START - byte_pos
+}
+
+```
 
 ## WHY?
 
@@ -83,93 +173,68 @@ Then finally, the reward is a tool I can use for the rest of my life to find stu
 
 Mostly though, I just enjoy learning.
 
-To put it in perspective, I did not know any C before I started this project, I noticed that every type of file finding tool will inevitably rely on some kind of iterator that will heap allocate regardless of whether or not it's a match, we're talking a hella lot of random allocations which I suspect may be a big bottleneck.
+To put it in perspective, I did not know any C before I started this project, I noticed that every type of file finding tool will inevitably rely on some kind of iterator that will heap allocate regardless of whether or not it's a match,
+
+So we're talking a lot of random allocations which I suspect may be a big bottleneck. (I think arenas just might be the best option, simplicity and complexity trade off)
 
 Even though my project in it's current state is faster, I've got some experiments to try filtering before allocating
 Unfortunately, you have to have to allocate heap space for directories in stdlib (because they're necessary for the next call)
+(The same would probably go here)
 
 Which is partially why I felt the need to rewrite it from libc, it's just the standard library was too high level.
 
 I'm curious to see what happens when you filter before allocation, this is something I have partially working in my current crate
 but the implementation details like that is not accessible via CLI. If it proves to be performant, it will eventually be in there.
-Obviously, I'm having to learn a lot to do these things and taking the time to understand, get inspired and implement things...
+Obviously, I'm having to learn a lot to do these things and it takes  TIME to understand, get inspired and implement things...
+
+I do intend to only add features and not break anything, until i can somewhat promise that, then i won't entertain wasting other people's time but eventually
+ if anyone felt like adding something, they can!
+
+(notably, there's some obvious things I have not touched in a while and things that are just less interesting, ideally one day someone could do that, not now though)
+
+## NECESSARY DISCLAIMERS (I might have a conscience somewhere)
+
+I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
+Notably I modified it because it's quite old and has dependencies I was able to remove
+
+(I have emailed and received approval from the author above)
+
+I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161>
+I've found a much more rigorous way of doing some bit tricks via this
+
+I enjoy relying on  validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required to make the assessment
 
 ## Future plans?
 
-I'd probably just keep the CLI stuff simple
+Separation of utilities
 
-Add some extra metadata filters (because i get a lot of metadata for cheap via specialisation!)
+Right now, it's a bit monolithic. Some aspects might deserve their own crate (i dislike the idea of having 500 crates to do 1 specific thing each)    
+(Although, writing FFI like this for multiple different POSIX systems with distinct pecularities will tend to be a lot of code)
+
+I'd probably just keep the CLI stuff simple, features to be added are datetime based filtering (could be done quick, I just have rarely used time based filtering and that's why it's slow!) as well as just other things, eg to search for device drivers/etc.
 
 Add POSIX compatibility in general ( illumos/solaris QEMU isn't straight forward, quite esoteric)
 
-Add Windows... Well, This would take a fundamental rewrite because of architectural differences, I might do it. (Who uses the terminal on windows?)
+Add Windows... Well, This would take a fundamental rewrite because of architectural differences, I might do it.
+(It may be interesting to learn the differences actually)
+
+Additional features on my compile_time_ls_colours would be nice, I think I want to explore compile time hashmaps more,
+I'm only really scratching the service on metaprogramming and rust's utilities are great (one day I'll try cpp template metaprogramming and become a convert...)
 
 Fundamentally I want to develop something that's simple to use (doing --help shouldnt give you the bible)
 ..and exceedingly efficient.
 
-## SHORTSTRINGS(under 8 chars)
-
-SEE BENCHMARKS IN const_str_benchmark.txt for better details and ideally read my benches/dirent_bench.rs
-
-```bash
-
-strlen_by_length/const_time_swar/tiny (1-4)
-                           time:   [961.66 ps 964.31 ps 966.95 ps]
-                         thrpt:  [986.27 MiB/s 988.97 MiB/s 991.69 MiB/s]
-strlen_by_length/libc_strlen/tiny (1-4)
-                          time:   [1.6422 ns 1.6466 ns 1.6511 ns]
-                           thrpt:  [577.60 MiB/s 579.17 MiB/s 580.73 MiB/s]
- strlen_by_length/asm_strlen/tiny (1-4)
-                          time:   [718.41 ps 720.59 ps 722.76 ps]
-                          thrpt:  [1.2886 GiB/s 1.2925 GiB/s 1.2964 GiB/s]
-```
-
-## MAXLENGTHSTRINGS (255)
-
-```bash
-   strlen_by_length/const_time_swar/max length (255)
-                         time:   [963.74 ps 966.35 ps 969.00 ps]
-                         thrpt:  [245.09 GiB/s 245.76 GiB/s 246.42 GiB/s]
-  strlen_by_length/libc_strlen/max length (255) #interesting!
-                         time:   [3.3193 ns 3.3281 ns 3.3368 ns]
-                        thrpt:  [71.172 GiB/s 71.359 GiB/s 71.548 GiB/s]
-  strlen_by_length/asm_strlen/max length (255)
-                        time:   [4.6074 ns 4.6290 ns 4.6513 ns]
-                       thrpt:  [51.058 GiB/s 51.304 GiB/s 51.544 GiB/s]
-
-
-```
-
-```Rust
-//The code is explained better in the true function definition (this is crate agnostic)
-//This is the little-endian implementation, see crate for modified version for big-endian
-// Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
-pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; 
-    let reclen = unsafe { (*dirent).d_reclen as usize }; //(do not access it via byte_offset or raw const!!!!!!!!!!!)
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
-    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
-    let candidate_pos = last_word | mask;//^
-    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)
-        & !candidate_pos //no branch, see comments for hack
-        & 0x8080_8080_8080_8080; 
-
-    reclen - DIRENT_HEADER_START - (7 - (zero_bit.trailing_zeros() >> 3) as usize)
-}
-
-
 ## COMPATIBILITY STATE
 
-1.Working on Linux(MUSL too) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions  
+1.Working on Linux(glibc dynamic linking/MUSL static linking) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions
 
-2.Somehow working on Aarch 64 Linux/Android Debian (basically, it works on my phone via termux!) (( and I didn't need to change anything!))
+2.Aarch 64 Linux/Android Debian 
 
-2.Macos  64bit  (Tested on Sonoma)
+3.Macos  64bit  (Tested on Sonoma)
 
-3.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
+4.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
 
-4.Works on big endian systems, tested on PPC64 (took a while to get it working)
-
+5.Works on big endian systems, tested on Ubuntu PPC64 (took 20 minutes to compile....)
 
 ## Installation
 
@@ -185,10 +250,9 @@ cp target/release/fdf ~/.local/bin/
 Usage
 Arguments
 PATTERN: Regular expression pattern to search for
-PATH: Directory to search (defaults to root /)
+PATH: Directory to search (defaults to current directory )
 Basic Examples
-# Find all files containing "config" in the current directory and subdirectories (case-insensitive and excluding directories+hidden files)
-fdf config -c
+
 
 # Find all JPG files in the home directory (excluding hidden files)
 fdf . ~ -E jpg
@@ -206,14 +270,13 @@ Arguments:
 
 
 Options:
-  -E, --extension <EXTENSION>  filters based on extension, eg -E .txt or -E txt
-
+  -E, --extension <EXTENSION>  filters based on extension, eg -E .txt or -E txt (case insensititive)
   -H, --hidden                 Shows hidden files eg .gitignore or .bashrc, defaults to off
 
   -s, --case-sensitive         Enable case-sensitive matching, defaults to false
 
   -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads
-                                [default: NUM_CORES]
+                                [default: 12]
   -a, --absolute-path          Show absolute paths of results, defaults to false
 
   -I, --include-dirs           Include directories, defaults to off
@@ -222,7 +285,7 @@ Options:
 
   -g, --glob                   Use a glob pattern,defaults to off
 
-  -n, --max-results <TOP_N>    Retrieves the first N results (not ordered!)
+  -n, --max-results <TOP_N>    Retrieves the first eg 10 results, '.cache' / -n 10
 
   -d, --depth <DEPTH>          Retrieves only traverse to x depth
 
@@ -246,7 +309,7 @@ Options:
 
   -h, --help                   Print help
   -V, --version                Print version
-  
+
 ```
 
 TODO LIST (Maybe):
@@ -255,17 +318,19 @@ TODO LIST (Maybe):
    <https://github.com/microsoft/edit/tree/main/src/arena>
 
 -- io_uring for Batched Syscalls: e.g., batched open/read operations.
-   This will be extremely challenging. Unfortunately uring lacks the op code required for getdents, however
-   other op codes are available, but this would require a LOT of work, it also would require an async runtime
-   Which inevitably means tokio, which means most of my work in avoiding dependencies goes down the bin
+   This will be extremely challenging.
+
+   Unfortunately uring lacks the op code required for getdents-- however
+   other op codes are available, but this would require a LOT of work,
+
+   it also would require an async runtime->
+   Which inevitably means tokio->
+  which means most of my work in avoiding dependencies goes down the bin
    (I'm already unhappy being reliant on rayon but that's on the list to remove.)
 
--- String Interning: Trivial for ASCII, but efficient Unicode handling is an entirely different beast.
-   (although, creating an enum at compile time of common filepaths on your pc and doing some manipulations sounds cool+cursed)
-
--- I might continue developing my compile time hashmap for LS_COLORS, it's got a good general use case and the macro use is pretty fun!
+-- I might continue developing my compile time hashmap for LS_COLORS and make an easier way to do these maps, it's got a good general use case and the macro use is pretty fun!
    However I do have a separate commit at <https://github.com/alexcu2718/compile_time_ls_colours/tree/no_phf_build>
-   Which has no dependencies, although it's REALLY shit to do without doing a HELLA lot of byte manipulation yourself.
+   Which has no dependencies, although it's annoying to do without doing a HELLA lot of byte manipulation yourself.
    (also, it's runtime statically initialised, not as cool!)
 
 -- Threading Without Rayon: My attempts have come close, but aren’t quite there yet.

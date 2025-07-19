@@ -174,8 +174,10 @@ where
             return Err(std::io::Error::last_os_error().into());
         }
         // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
-        let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), crate::strlen(ptr)) }; //get length without null terminator
+        let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) }; //get length without null terminator
         // we're dereferencing a valid poiinter here, it's fine.
+        //alignment is trivial, we use `libc::strlen` because it's probably the most optimal for possibly long paths
+        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out
 
         let boxed = Self {
             path: full_path.into(),
@@ -361,7 +363,6 @@ where
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
-   
 }
 
 #[cfg(target_os = "linux")]
@@ -428,7 +429,7 @@ where
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid(we need to check bytes in the buffer left first)
     pub unsafe fn getdents_syscall(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) }; //fix this ugly hack TODO!   
+        self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) }; //fix this ugly hack TODO!
         self.offset = 0;
     }
 

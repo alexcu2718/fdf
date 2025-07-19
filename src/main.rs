@@ -7,6 +7,7 @@
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
+#![allow(clippy::redundant_closure_for_method_calls)]
 #![allow(clippy::macro_metavars_in_unsafe)]
 #![allow(clippy::shadow_unrelated)]
 #![allow(clippy::print_stderr)]
@@ -59,11 +60,12 @@
 use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
+use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 use std::path::Path;
 use std::str;
-const START_PREFIX: &str = "/";
+
 mod printer;
 use printer::write_paths_coloured;
 mod type_config;
@@ -89,21 +91,12 @@ struct Args {
     pattern: Option<String>,
     #[arg(
         value_name = "PATH",
-        help = format!("Path to search (defaults to {START_PREFIX})\nUse -c to do current directory\n"),
+        help = format!("Path to search (defaults to current working directory )\n"),
         value_hint=ValueHint::DirPath,
         required=false,
         index=2
     )]
     directory: Option<OsString>,
-    #[arg(
-        short = 'c',
-        long = "current-directory",
-        conflicts_with = "directory",
-        help = "Uses the current directory to load\n",
-        default_value = "false"
-    )]
-    current_directory: bool,
-
     #[arg(
         short = 'E',
         long = "extension",
@@ -120,10 +113,10 @@ struct Args {
     #[arg(
         short = 's',
         long = "case-sensitive",
-        default_value_t = false,
+        default_value_t = true,
         help = "Enable case-sensitive matching, defaults to false\n"
     )]
-    case_sensitive: bool,
+    case_insensitive: bool,
     #[arg(
         short = 'j',
         long = "threads",
@@ -171,14 +164,14 @@ struct Args {
     #[arg(
         short = 'd',
         long = "depth",
-        help = "Retrieves only traverse to x depth"
+        help = "Retrieves only traverse to x depth\n"
     )]
     depth: Option<u8>,
     #[arg(
         long = "generate",
         action = ArgAction::Set,
         value_parser = value_parser!(Shell),
-        help = "Generate shell completions"
+        help = "Generate shell completions\n"
     )]
     generate: Option<Shell>,
 
@@ -186,7 +179,7 @@ struct Args {
         short = 't',
         long = "type",
         required = false,
-        help = format!("Select type of files (can use multiple times), available options are:\n{}", FILE_TYPES),
+        help = format!("Select type of files (can use multiple times).\n Available options are:\n{}", FILE_TYPES),
         value_delimiter = ',',
         num_args = 1..,
     )]
@@ -219,17 +212,15 @@ fn main() -> Result<(), DirEntryError> {
         .num_threads(args.thread_num)
         .build_global()
         .map_err(DirEntryError::RayonError)?;
-    let path = resolve_directory(args.current_directory, args.directory, args.absolute_path);
+
+    let path = resolve_directory(args.directory, args.absolute_path);
 
     if let Some(generator) = args.generate {
         let mut cmd = Args::command();
-        let cmd_clone = cmd.clone();
-        generate(
-            generator,
-            &mut cmd,
-            cmd_clone.get_name().to_owned(),
-            &mut stdout(),
-        );
+        let bin_name = cmd.get_name().to_owned();
+        cmd.set_bin_name("fdf");
+
+        generate(generator, &mut cmd, bin_name, &mut stdout());
         return Ok(());
     }
 
@@ -247,9 +238,14 @@ fn main() -> Result<(), DirEntryError> {
         process_glob_regex(&start_pattern, args.glob)
     };
 
+    if args.depth.is_some_and(|d| d == 0) {
+        eprintln!("Error: Depth cannot be 0. Exiting.");
+        std::process::exit(1);
+    }
+
     let mut finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
         .keep_hidden(!args.hidden)
-        .case_insensitive(args.case_sensitive)
+        .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)
         .file_name_only(args.full_path)
         .extension_match(args.extension)
@@ -269,49 +265,30 @@ fn main() -> Result<(), DirEntryError> {
 
 #[allow(clippy::must_use_candidate)]
 ///simple function to resolve the directory to use.
-fn resolve_directory(
-    args_cd: bool,
-    args_directory: Option<OsString>,
-    canonicalise: bool,
-) -> OsString {
-    let dot_pattern = ".";
-    if args_cd {
-        std::env::current_dir().map_or_else(
-            |_| dot_pattern.into(),
-            |path_res| {
-                let path = if canonicalise {
-                    path_res.canonicalize().unwrap_or(path_res)
-                } else {
-                    path_res
-                };
-                path.as_os_str().to_owned()
-            },
-        )
-    } else {
-        let dir_to_use = args_directory.unwrap_or_else(|| START_PREFIX.into());
-        let path_check = Path::new(&dir_to_use);
+fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> OsString {
+    let dir_to_use = args_directory.unwrap_or_else(|| generate_start_prefix());
+    let path_check = Path::new(&dir_to_use);
 
-        if !path_check.is_dir() {
-            eprintln!("{} is not a directory", dir_to_use.to_string_lossy());
-            std::process::exit(1);
-        }
+    if !path_check.is_dir() && !path_check.is_symlink() {
+        eprintln!("{} is not a directory", dir_to_use.to_string_lossy());
+        std::process::exit(1);
+    }
 
-        if canonicalise {
-            match path_check.canonicalize() {
-                //stupid yank spelling.
-                Ok(canonical_path) => canonical_path.into_os_string(),
-                Err(e) => {
-                    eprintln!(
-                        "Failed to canonicalise path {} {}",
-                        path_check.to_string_lossy(),
-                        e
-                    );
-                    std::process::exit(1);
-                }
+    if canonicalise {
+        match path_check.canonicalize() {
+            //stupid yank spelling.
+            Ok(canonical_path) => canonical_path.into_os_string(),
+            Err(e) => {
+                eprintln!(
+                    "Failed to canonicalise path {} {}",
+                    path_check.to_string_lossy(),
+                    e
+                );
+                std::process::exit(1);
             }
-        } else {
-            dir_to_use
         }
+    } else {
+        dir_to_use
     }
 }
 
@@ -324,4 +301,12 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
         eprintln!("This can't be processed as a glob pattern");
         std::process::exit(1)
     })
+}
+
+fn generate_start_prefix() -> OsString {
+    env::current_dir()
+        .ok()
+        .map(|p| p.into_os_string())
+        .or_else(|| env::var_os("HOME"))
+        .unwrap_or_else(|| OsString::from("."))
 }

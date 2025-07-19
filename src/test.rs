@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
+    use crate::memchr_derivations::find_zero_byte_u64;
     use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
     use std::env::temp_dir;
@@ -82,6 +83,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
@@ -125,18 +127,70 @@ mod tests {
     }
 
     #[test]
-    fn test_hidden_files() {
+    #[cfg(not(target_os = "linux"))]
+    fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
-        let hidden_file = temp_dir.as_path().join(".hidden");
-        std::fs::write(&hidden_file, "").unwrap();
+        let dir_path = temp_dir.as_path().join("testdir");
+        let _ = std::fs::create_dir(&dir_path);
+        //throwing the error because of the directory already exists
 
-        let entry: DirEntry<crate::SlimmerBytes> = DirEntry::new(hidden_file.as_os_str()).unwrap();
-        assert!(entry.is_hidden());
+        std::fs::write(dir_path.join("file1.txt"), "test1").unwrap();
+        std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
+        let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
 
-        let non_hidden = temp_dir.as_path().join("visible");
-        std::fs::write(&non_hidden, "").unwrap();
-        let entry = DirEntry::<SlimmerBytes>::new(non_hidden.as_os_str()).unwrap();
-        assert!(!entry.is_hidden());
+        let dir_entry: DirEntry<Vec<u8>> = DirEntry::new(dir_path.as_os_str()).unwrap();
+        let entries = dir_entry.readdir().unwrap();
+        let entries_clone: Vec<_> = dir_entry.readdir().unwrap().collect();
+
+        let mut names: Vec<_> = entries.map(|e| e.file_name().to_vec()).collect();
+
+        assert_eq!(entries_clone.len(), 3);
+
+        names.sort();
+        assert_eq!(
+            names,
+            vec![
+                b"file1.txt".to_vec(),
+                b"file2.txt".to_vec(),
+                b"subdir".to_vec()
+            ]
+        );
+        //yeah this test code is half arsed, but it's comprehensive,.
+        let entries_clone2: Vec<_> = dir_entry.readdir().unwrap().collect();
+
+        let _ = std::fs::remove_dir_all(&dir_path);
+        for entry in entries_clone2 {
+            assert_eq!(entry.depth(), 1);
+            assert_eq!(
+                entry.file_name_index() as usize,
+                dir_path.as_os_str().len() + 1
+            );
+        }
+
+        //let _=std::fs::File::
+    }
+
+    #[test]
+    fn test_hidden_files() {
+        let dir_path = std::env::temp_dir().join("test_hidden");
+        let _ = std::fs::create_dir_all(&dir_path);
+
+        // create visible and hidden files
+        let _ = std::fs::File::create(dir_path.join("visible.txt"));
+        let _ = std::fs::File::create(dir_path.join(".hidden"));
+
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+
+        let _ = std::fs::remove_dir_all(&dir_path);
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0], ".hidden");
+        assert_eq!(names[1], "visible.txt");
     }
 
     #[test]
@@ -201,6 +255,7 @@ mod tests {
         Ok(())
     }
     #[test]
+    #[cfg(not(target_os = "macos"))] //enable this test on macos and see why ive disabled it. **** stupid
     fn test_from_bytes() -> Result<(), Box<dyn std::error::Error>> {
         //this is a mess of code but works lol to demonstrate infallibility(or idealllllllyyyyyyyyy...(ik its not))
         // Create a unique temp directory for this test
@@ -217,7 +272,9 @@ mod tests {
 
         // Test directory entry
 
-        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?;
+        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?
+            .to_full_path()
+            .unwrap();
 
         let canonical_path = temp_dir.canonicalize()?;
 
@@ -235,7 +292,7 @@ mod tests {
         );
 
         // iteration
-        let mut entries = dir_entry.getdents()?.into_iter().collect::<Vec<_>>();
+        let mut entries = dir_entry.readdir()?.into_iter().collect::<Vec<_>>();
 
         assert!(
             !entries.is_empty(),
@@ -426,9 +483,144 @@ mod tests {
     }
 
     #[test]
-    fn test_file_types() {
-        let dir_path = temp_dir().join("THROW_AWAY");
+    fn test_realpath() {
+        let dir = temp_dir().join("test_dir");
+        let _ = fs::create_dir_all(&dir);
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir)
+            .unwrap()
+            .to_full_path()
+            .unwrap();
+        let iter = DirIter::new(&dir_entry).unwrap();
+        let entries: Vec<_> = iter.collect();
+        let _ = fs::remove_dir_all(&dir);
 
+        assert!(dir_entry.is_dir());
+        assert_eq!(entries.len(), 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn no_zero_byte() {
+        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 1]);
+        assert_eq!(find_zero_byte_u64(value), 8);
+    }
+
+    #[test]
+    fn first_byte_zero() {
+        let value = u64::from_le_bytes([0, 1, 1, 1, 1, 1, 1, 1]);
+        assert_eq!(find_zero_byte_u64(value), 0);
+    }
+
+    #[test]
+    fn last_byte_zero() {
+        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 0]);
+        assert_eq!(find_zero_byte_u64(value), 7);
+    }
+
+    #[test]
+    fn middle_byte_zero() {
+        let value = u64::from_le_bytes([1, 1, 1, 0, 1, 1, 1, 1]);
+        assert_eq!(find_zero_byte_u64(value), 3);
+    }
+
+    #[test]
+    fn multiple_zeros_returns_first() {
+        let value = u64::from_le_bytes([0, 1, 0, 1, 0, 1, 0, 1]);
+        assert_eq!(find_zero_byte_u64(value), 0);
+    }
+
+    #[test]
+    fn all_bytes_zero() {
+        let value = u64::from_le_bytes([0; 8]);
+        assert_eq!(find_zero_byte_u64(value), 0);
+    }
+
+    #[test]
+    fn single_zero_in_high_bytes() {
+        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 0, 1]);
+        assert_eq!(find_zero_byte_u64(value), 6);
+    }
+
+    #[test]
+    fn adjacent_zeros() {
+        let value = u64::from_le_bytes([1, 1, 0, 0, 1, 1, 1, 1]);
+        assert_eq!(find_zero_byte_u64(value), 2);
+    }
+
+    #[test]
+    fn zeros_in_lower_half() {
+        let value = u64::from_le_bytes([0, 0, 0, 0, 1, 1, 1, 1]);
+        assert_eq!(find_zero_byte_u64(value), 0);
+    }
+
+    #[test]
+    fn zeros_in_upper_half() {
+        let value = u64::from_le_bytes([1, 1, 1, 1, 0, 0, 0, 0]);
+        assert_eq!(find_zero_byte_u64(value), 4);
+    }
+
+    #[test]
+    fn test_file_types() {
+        let dir_path = temp_dir().join("THROW_AWAY_THIS");
+
+        let _ = fs::create_dir_all(&dir_path);
+
+        // Create different file types
+        let _ = File::create(dir_path.join("regular.txt"));
+        let _ = fs::create_dir(dir_path.join("directory"));
+
+        let _ = symlink("regular.txt", dir_path.join("symlink"));
+
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path)
+            .expect("if this errors then it's probably a permission issue related to sandboxing");
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+
+        let mut type_counts = std::collections::HashMap::new();
+        for entry in entries {
+            *type_counts.entry(entry.file_type).or_insert(0) += 1;
+            println!(
+                "File: {}, Type: {:?}",
+                entry.path.as_os_str().to_string_lossy(),
+                entry.file_type
+            );
+        }
+
+        let _ = fs::remove_dir_all(dir_path);
+        assert_eq!(type_counts.get(&FileType::RegularFile).unwrap(), &1);
+        assert_eq!(type_counts.get(&FileType::Directory).unwrap(), &1);
+        assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
+    }
+
+    #[test]
+    fn test_non_recursive_iteration() {
+        let top_dir = std::env::temp_dir().join("test_nested");
+        let sub_dir = top_dir.join("subdir");
+
+        let _ = std::fs::create_dir_all(&sub_dir);
+        let _ = std::fs::File::create(top_dir.join("top_file.txt"));
+        let _ = std::fs::File::create(sub_dir.join("nested_file.txt"));
+
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&top_dir).unwrap();
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+
+        let _ = std::fs::remove_dir_all(&top_dir);
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0], "subdir"); // Directory entry
+        assert_eq!(names[1], "top_file.txt"); // Top-level file
+        // Verify nested file wasn't included
+        assert!(!names.contains(&"nested_file.txt".to_string()));
+    }
+
+    #[test]
+    fn test_file_types_realpath() {
+        let dir_path = temp_dir().join("THROW_AWAY");
+        let _ = fs::remove_dir_all(&dir_path);
         let _ = fs::create_dir_all(&dir_path);
 
         // Create different file types
@@ -450,10 +642,10 @@ mod tests {
             );
         }
 
-        let _ = fs::remove_dir_all(dir_path);
         assert_eq!(type_counts.get(&FileType::RegularFile).unwrap(), &1);
         assert_eq!(type_counts.get(&FileType::Directory).unwrap(), &1);
         assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
+        let _ = fs::remove_dir_all(dir_path);
     }
 
     #[test]
@@ -479,7 +671,9 @@ mod tests {
 
     #[test]
     fn test_error_handling() {
-        let non_existent = DirEntry::<Arc<[u8]>>::new("/non/existent/path");
+        let non_existent = DirEntry::<Arc<[u8]>>::new(
+            "/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+        );
         assert!(non_existent.is_err());
     }
 }

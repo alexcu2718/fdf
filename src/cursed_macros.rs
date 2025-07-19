@@ -154,22 +154,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
         }
     }};
 }
-//SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
-/// initialises a path buffer for syscall operations,
-// appending a slash/null terminator (if it's a directory etc)
-/// returns a tuple containing the length of the path and the `PathBuffer` itself.
-macro_rules! init_path_buffer {
-    ( $dir_path:expr) => {{
-        let mut start_buffer=$crate::PathBuffer::new(); //create a new path buffer, this is a zeroed buffer of size `LOCAL_PATH_MAX
-        let buffer_ptr = start_buffer.as_mut_ptr(); //get the mutable pointer to the buffer
-        let mut base_len=$dir_path.len(); //get the length of the directory path, this is the length of the directory path
-        let needs_slash =  (($dir_path.as_bytes() != b"/") as u8);//check if we need to append a slash(bitmasking it to 0 or 1) (if it's not root, we need a slash)
-        std::ptr::copy_nonoverlapping($dir_path.as_ptr(), buffer_ptr, base_len);
-        *buffer_ptr.add(base_len) = (b'/') * needs_slash; //add slash or null terminator appropriately (completely deterministic)
-        base_len += needs_slash as usize; //increment the base_len length by 1 if we added a slash, otherwise it stays the same
-        (base_len,start_buffer)
-    }};
-}
+
 
 #[macro_export]
 /// Macro to implement `BytesStorage` for types that support `From<&[u8]>`

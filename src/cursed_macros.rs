@@ -170,129 +170,14 @@ macro_rules! init_path_buffer {
     }};
 }
 
-#[allow(clippy::ptr_as_ptr)]
-/// A high-performance, SIMD-accelerated `strlen` for null-terminated strings.
-///
-/// Uses **AVX2 (32-byte vectors)** if available, otherwise **SSE2 (16-byte)**, and falls back to `libc::strlen` if no SIMD is supported.
-///
-/// # Safety
-/// - **`ptr` must be a valid, non-null pointer to a null-terminated string.**
-/// - **Does not check if the string starts with a null terminator** (unlike `libc::strlen`).
-/// - **Uses unaligned loads** (`_mm_loadu_si128`/`_mm256_loadu_si256`), so alignment is not required.
-/// - WILL NOT DETECT THE IF THE NULL TERMINATOR IS MISSING/FIRST BYTE IS NULL.
-/// - **May read beyond the end of the string** until it finds a null terminator
-macro_rules! strlen_asm {
-    ($ptr:expr) => {{
-        #[cfg(all(
-            target_arch = "x86_64",
-            any(target_feature = "avx2", target_feature = "sse2")
-        ))]
-        {
-            // SAFETY: Caller must ensure `ptr` is valid and null-terminated.
-
-            #[cfg(target_feature = "avx2")]
-            {
-                use std::arch::x86_64::{
-                    __m256i,
-                    _mm256_cmpeq_epi8,    // Compare 32 bytes at once
-                    _mm256_loadu_si256,   // Unaligned 32-byte load
-                    _mm256_movemask_epi8, // Bitmask of null matches
-                    _mm256_setzero_si256, // Zero vector
-                };
-
-                let mut offset = 0;
-                loop {
-                    let chunk = _mm256_loadu_si256($ptr.add(offset) as *const __m256i);
-                    let zeros = _mm256_setzero_si256();
-                    let cmp = _mm256_cmpeq_epi8(chunk, zeros);
-                    let mask = _mm256_movemask_epi8(cmp) as i32;
-
-                    if mask != 0 {
-                        break offset + mask.trailing_zeros() as usize;
-                    }
-                    offset += 32; // Process next 32-byte chunk
-                }
-            }
-
-            #[cfg(not(target_feature = "avx2"))]
-            {
-                use std::arch::x86_64::{
-                    __m128i,
-                    _mm_cmpeq_epi8,    // Compare 16 bytes
-                    _mm_loadu_si128,   // Unaligned 16-byte load
-                    _mm_movemask_epi8, // Bitmask of null matches
-                    _mm_setzero_si128, // Zero vector
-                };
-
-                let mut offset = 0;
-                loop {
-                    let chunk = _mm_loadu_si128($ptr.add(offset) as *const __m128i);
-                    let zeros = _mm_setzero_si128();
-                    let cmp = _mm_cmpeq_epi8(chunk, zeros);
-                    let mask = _mm_movemask_epi8(cmp) as i32;
-
-                    if mask != 0 {
-                        break offset + mask.trailing_zeros() as usize;
-                    }
-                    offset += 16; // Process next 16-byte chunk
-                }
-            }
-        }
-
-        #[cfg(not(all(
-            target_arch = "x86_64",
-            any(target_feature = "avx2", target_feature = "sse2")
-        )))]
-        {
-            // Fallback to libc::strlen if no SIMD support
-            libc::strlen($ptr.cast::<_>())
-        }
-    }};
-}
 
 ///not intended for public use, will be private when boilerplate is donel
 /// Constructs a path from the base path and the name pointer, returning a  slice of the full path
 macro_rules! construct_path {
     ($self:ident, $dirent:ident) => {{
-
-
         let d_name = offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
         let base_len= $self.file_name_index(); //get the base path length, this is the length of the directory path
-
-        let name_len = {
-         #[cfg(target_os = "linux")]
-        {   use $crate::dirent_const_time_strlen;
-            dirent_const_time_strlen($dirent) //const time strlen for linux (specialisation)
-        }
-
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly",
-            target_os = "macos"
-        ))]
-        {
-            offset_ptr!($dirent, d_namlen) //specialisation for BSD and macOS, where d_namlen is available
-        }
-
-        #[cfg(not(any(
-           target_os = "linux",
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly",
-            target_os = "macos"
-        )))]
-        {   //use $crate::strlen;
-             strlen_asm!((offset_ptr!($dirent, d_name).cast::<i8>()))
-            // Fallback for other OSes
-        }
-            };
-
-
-
-
+        let name_len = $crate::utils::dirent_name_length($dirent);
         std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,
         );
 

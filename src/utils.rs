@@ -2,6 +2,10 @@
 #[allow(unused_imports)]
 use crate::{DirEntryError, Result, buffer::ValueType, cstr,find_zero_byte_u64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(not(target_os = "linux"))]
+use libc::dirent as dirent64;
+#[cfg(target_os = "linux")]
+use libc::dirent64;
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 
@@ -27,7 +31,9 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 }
 
 /// Calculates the length of a null-terminated string pointed to by `ptr`,
-/// returning the number of bytes before the null terminator.
+/// Via specialised instructions, AVX2 if available, then SSE2 then libc's strlen
+///
+/// # Returns the number of bytes not including the null terminator.
 ///
 /// # Safety
 /// This function is `unsafe` because it dereferences a raw pointer, it will not work on 0 length strings, they MUST be null-terminated.
@@ -44,7 +50,69 @@ pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
 {
-    unsafe { strlen_asm!(ptr) }
+    #[cfg(all(
+        target_arch = "x86_64",
+        any(target_feature = "avx2", target_feature = "sse2")
+    ))]
+    {
+        #[cfg(target_feature = "avx2")]
+        unsafe {
+            use std::arch::x86_64::{
+                __m256i,
+                _mm256_cmpeq_epi8,    // Compare 32 bytes at once
+                _mm256_loadu_si256,   // Unaligned 32-byte load
+                _mm256_movemask_epi8, // Bitmask of null matches
+                _mm256_setzero_si256, // Zero vector
+            };
+
+            let mut offset = 0;
+            loop {
+                let chunk = _mm256_loadu_si256(ptr.add(offset) as *const __m256i); //load the pointer, add offset, cast to simd type
+                let zeros = _mm256_setzero_si256(); //zeroise vector
+                let cmp = _mm256_cmpeq_epi8(chunk, zeros); //compare each byte in the chunk to 0, 32 at a time,
+                let mask = _mm256_movemask_epi8(cmp) as i32; //
+
+                if mask != 0 {
+                    //find the
+                    break offset + mask.trailing_zeros() as usize;
+                }
+                offset += 32; // Process next 32-byte chunk
+            }
+        }
+
+        #[cfg(not(target_feature = "avx2"))]
+        unsafe {
+            use std::arch::x86_64::{
+                __m128i,
+                _mm_cmpeq_epi8,    // Compare 16 bytes
+                _mm_loadu_si128,   // Unaligned 16-byte load
+                _mm_movemask_epi8, // Bitmask of null matches
+                _mm_setzero_si128, // Zero vector
+            };
+
+            let mut offset = 0;
+            loop {
+                let chunk = _mm_loadu_si128(ptr.add(offset) as *const __m128i); //same as below but for different instructions
+                let zeros = _mm_setzero_si128();
+                let cmp = _mm_cmpeq_epi8(chunk, zeros);
+                let mask = _mm_movemask_epi8(cmp) as i32;
+
+                if mask != 0 {
+                    //U
+                    break offset + mask.trailing_zeros() as usize;
+                }
+                offset += 16; // Process next 16-byte chunk
+            }
+        }
+    }
+
+    #[cfg(not(all(
+        target_arch = "x86_64",
+        any(target_feature = "avx2", target_feature = "sse2")
+    )))]
+    {
+        unsafe { libc::strlen(ptr.cast::<_>()) } //not we inventing the wheel
+    }
 }
 
 #[inline]
@@ -141,6 +209,45 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
         target_os = "dragonfly"
     ))]
     return libcstat.st_ino as u64; // FreeBSD uses u32 for st_ino, so we cast it to u64
+}
+
+
+#[inline]
+#[allow(clippy::missing_const_for_fn)]
+///a utility function for breaking down the config spaghetti that is platform specific optimisations
+/// i wanted to make this const and separate the function
+/// because only strlen isn't constant here :(
+///
+pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        use crate::dirent_const_time_strlen;
+        unsafe { dirent_const_time_strlen(drnt) } //const time strlen for linux (specialisation)
+    }
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly",
+        target_os = "macos"
+    ))]
+    {
+        unsafe { offset_dirent!(drnt, d_namlen) } //specialisation for BSD and macOS, where d_namlen is available
+    }
+
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly",
+        target_os = "macos"
+    )))]
+    {
+        unsafe { libc::strlen(offset_dirent!(drnt, d_name).cast::<_>()) }
+        // Fallback for other OSes
+    }
 }
 
 /*
@@ -262,3 +369,5 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // byte position.
     reclen - DIRENT_HEADER_START - byte_pos
 }
+
+

@@ -3,10 +3,17 @@
 use crate::BytesStorage;
 use crate::DirEntry;
 use crate::DirEntryError;
+use crate::FileType;
+use crate::PathBuffer;
 use crate::Result;
 use crate::buffer::ValueType;
-use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use crate::memchr_derivations::memrchr;
+use crate::offset_dirent;
+#[cfg(not(target_os = "linux"))]
+use libc::dirent as dirent64;
+#[cfg(target_os = "linux")]
+use libc::dirent64;
+use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
 use std::fmt;
 use std::mem::MaybeUninit;
@@ -50,7 +57,6 @@ where
     fn is_absolute(&self) -> bool;
     fn is_relative(&self) -> bool;
     fn to_path(&self) -> PathBuf;
-  
 }
 
 impl<T> BytePath<T> for T
@@ -289,8 +295,6 @@ where
     fn file_name_index(&self) -> u16 {
         memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
     }
-
-    
 }
 
 impl<S> fmt::Display for DirEntry<S>
@@ -369,5 +373,67 @@ where
             .field("file_name_index", &self.file_name_index)
             .field("inode", &self.inode)
             .finish()
+    }
+}
+
+///A constructor for making accessing the buffer, filename indexes, depths of the parent path while inside the iterator.
+/// More documentation TBD
+#[allow(clippy::cast_possible_truncation)] //no truncation issue
+pub trait DirentConstructor<S: BytesStorage> {
+    // Required accessors
+    fn path_buffer(&mut self) -> &mut PathBuffer;
+    fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
+    fn parent_depth(&self) -> u8;
+
+    #[inline]
+    unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
+        let base_len = self.file_index();
+        let full_path = crate::utils::construct_path(self.path_buffer(), base_len, drnt);
+
+        let dtype = unsafe { offset_dirent!(drnt, d_type) };
+        let inode = unsafe { offset_dirent!(drnt, d_ino) };
+
+        DirEntry {
+            path: full_path.into(),
+            file_type: FileType::from_dtype_fallback(dtype, full_path),
+            inode,
+            depth: self.parent_depth() + 1,
+            file_name_index: base_len as _,
+        }
+    }
+}
+
+impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
+    #[inline]
+    fn path_buffer(&mut self) -> &mut PathBuffer {
+        &mut self.path_buffer
+    }
+
+    #[inline]
+    fn file_index(&self) -> usize {
+        self.file_name_index as usize
+    }
+
+    #[inline]
+    fn parent_depth(&self) -> u8 {
+        self.parent_depth
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl<S: BytesStorage> DirentConstructor<S> for crate::direntry::DirEntryIterator<S> {
+    #[inline]
+    fn path_buffer(&mut self) -> &mut crate::PathBuffer {
+        &mut self.path_buffer
+    }
+
+    #[inline]
+    fn file_index(&self) -> usize {
+        self.file_name_index as usize
+    }
+
+    #[inline]
+    fn parent_depth(&self) -> u8 {
+        self.parent_depth
     }
 }

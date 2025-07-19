@@ -29,7 +29,7 @@ use crate::{
 };
 
 #[cfg(target_os = "linux")]
-use crate::{PathBuffer, SyscallBuffer, offset_ptr};
+use crate::{PathBuffer, SyscallBuffer, offset_dirent};
 
 /// A struct representing a directory entry.
 ///
@@ -191,9 +191,6 @@ where
         Ok(boxed)
     }
 
-
-
-    
     #[inline]
     #[allow(clippy::missing_const_for_fn)]
     //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned,
@@ -341,8 +338,9 @@ where
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
         //matching type signature of above for consistency
         let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY)
+        let mut path_buffer = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
 
-        let (path_len, path_buffer) = unsafe { init_path_buffer!(self) };
+        let path_len = unsafe { path_buffer.init_from_direntry(self) };
         //using macros because I was learning macros and they help immensely with readability
         //this is a macro that initialises the path buffer, it returns the length of the
         //path and the path buffer itself, which is a stack allocated buffer that can hold the
@@ -404,11 +402,6 @@ impl<S> DirEntryIterator<S>
 where
     S: BytesStorage,
 {
-    /// Returns the index of the file name in the path, so we can get the file name from the path instantly
-    #[inline]
-    pub const fn file_name_index(&self) -> usize {
-        self.file_name_index as _
-    }
     #[inline]
     ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
@@ -418,7 +411,7 @@ where
     /// is valid and that we don't read past the end of the buffer.
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
-        self.offset += unsafe { offset_ptr!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+        self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
@@ -473,13 +466,15 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.offset < self.remaining_bytes as usize {
+                use crate::traits_and_conversions::DirentConstructor;
+
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
-                let entry = construct_dirent!(self, d); //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
+                let entry = unsafe { self.construct_entry(d) }; //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
 
                 return Some(entry);
             }

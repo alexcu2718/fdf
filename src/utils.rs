@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 #[allow(unused_imports)]
-use crate::{DirEntryError, Result, buffer::ValueType, cstr,find_zero_byte_u64};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::{DirEntryError, Result, buffer::ValueType, cstr, find_zero_byte_u64};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 
@@ -211,6 +211,21 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
     return libcstat.st_ino as u64; // FreeBSD uses u32 for st_ino, so we cast it to u64
 }
 
+#[inline]
+///  constructs a path convenience (just a utility function to save verbosity)
+pub(crate) fn construct_path(
+    path_buffer: &mut crate::PathBuffer,
+    base_len: usize,
+    drnt: *const dirent64,
+) -> &[u8] {
+    let d_name = unsafe { crate::offset_dirent!(drnt, d_name).cast() }; // #SAFETY the drnt must be non null
+    let name_len = unsafe { dirent_name_length(drnt) }; // #SAFETY the drnt must be non null!!!! 
+
+    let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
+    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned 
+
+    unsafe { path_buffer.get_unchecked(..base_len + name_len) } //the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
+}
 
 #[inline]
 #[allow(clippy::missing_const_for_fn)]
@@ -369,5 +384,3 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // byte position.
     reclen - DIRENT_HEADER_START - byte_pos
 }
-
-

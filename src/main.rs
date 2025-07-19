@@ -134,7 +134,7 @@ struct Args {
     #[arg(
         short = 'a',
         long = "absolute-path",
-        help = "Show absolute paths of results, defaults to false\n",
+        help = "Show absolute paths of results, defaults to false\n"
     )]
     absolute_path: bool,
 
@@ -197,7 +197,7 @@ struct Args {
         long = "full-path",
         required = false,
         default_value_t = false,
-        help = "Use a full path for regex matching, default to false\n",
+        help = "Use a full path for regex matching, default to false\n"
     )]
     full_path: bool,
 

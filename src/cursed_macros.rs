@@ -1,7 +1,5 @@
 #![allow(unused_macros)]
 
-//i didnt want to to use this macro but it saved a LOT of hassle/boilerplate. (vlight depdendency
-//might remove this when less lazy.
 #[allow(clippy::doc_markdown)]
 #[macro_export(local_inner_macros)]
 ///A helper macro to safely access dirent(64 on linux)'s
@@ -13,20 +11,20 @@
 ///
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
-///   Example: `offset_ptr!(entry_ptr, d_ino)` -> aliases to `d_fileno` and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
+///   Example: `offset_dirent!(entry_ptr, d_ino)` -> aliases to `d_fileno` and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
 /// - On Linux, `d_reclen` is used to access the record length directly, this is a special case, since it is not aligned like the others.
-///  Example: `offset_ptr!(entry_ptr, d_reclen)` -> returns the record length as usize (internal consistency, be glad it works!)
+///  Example: `offset_dirent!(entry_ptr, d_reclen)` -> returns the record length as usize (internal consistency, be glad it works!)
 /// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
 ///  the other fields are accessed normally, as raw pointers to the field
 /// /// # Usage
 /// ```ignore
 /// let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
-/// let d_name_ptr:*const _ = offset_ptr!(entry_ptr, d_name);
-/// let d_reclen:usize = offset_ptr!(entry_ptr, d_reclen);
+/// let d_name_ptr:*const _ = offset_dirent!(entry_ptr, d_name);
+/// let d_reclen:usize = offset_dirent!(entry_ptr, d_reclen);
 ///
-/// let d_namlen:usize = offset_ptr!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
-/// let d_ino_ptr :u64= offset_ptr!(entry_ptr, d_ino); // This
-macro_rules! offset_ptr {
+/// let d_namlen:usize = offset_dirent!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
+/// let d_ino_ptr :u64= offset_dirent!(entry_ptr, d_ino); // This
+macro_rules! offset_dirent {
     // Special case for `d_reclen`
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
@@ -42,6 +40,11 @@ macro_rules! offset_ptr {
     //probably not as it would be inconsistent with the rest of the macro
     // Handle inode number field with aliasing for BSD systems
     //you can use d_ino or d_fileno (preferentially d_ino for cross-compatbility!)
+
+    ($entry_ptr:expr,d_name) => {{
+
+         (&raw const (*$entry_ptr).d_name).cast::<u8>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
+    }};
     ($entry_ptr:expr, d_ino) => {{
         #[cfg(any(
             target_os = "freebsd",
@@ -51,7 +54,7 @@ macro_rules! offset_ptr {
         ))]
         {
             // SAFETY: Caller must ensure pointer is valid
-            &raw const (*$entry_ptr).d_fileno as u64
+             (*$entry_ptr).d_fileno as u64
         }
 
         #[cfg(not(any(
@@ -62,12 +65,12 @@ macro_rules! offset_ptr {
         )))]
         {
             // SAFETY: Caller must ensure pointer is valid
-            &raw const (*$entry_ptr).d_ino  as u64
+             (*$entry_ptr).d_ino
         }
     }};
 
     // General case for all other fields
-    ($entry_ptr:expr, $field:ident) => {{ &raw const (*$entry_ptr).$field }};
+    ($entry_ptr:expr, $field:ident) => {{ (*$entry_ptr).$field }};
 }
 
 #[macro_export(local_inner_macros)]
@@ -93,7 +96,6 @@ macro_rules! cstr {
         c_path_buf.cast::<_>()
     }};
     ($bytes:expr,$n:expr) => {{
-
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
@@ -123,15 +125,15 @@ macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]
         unsafe {
-            let d_type = offset_ptr!($entry, d_type);
+            let d_type = offset_dirent!($entry, d_type);
 
             #[cfg(target_os = "linux")]
             {
                 //reclen is always 24 for . and .. on linux,
-                if (*d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN)
-                    && offset_ptr!($entry, d_reclen) == 24
+                if (d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN)
+                    && offset_dirent!($entry, d_reclen) == 24
                 {
-                    let name_ptr = offset_ptr!($entry, d_name) as *const u8;
+                    let name_ptr = offset_dirent!($entry, d_name) as *const u8;
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),
@@ -141,8 +143,8 @@ macro_rules! skip_dot_or_dot_dot_entries {
 
             #[cfg(not(target_os = "linux"))]
             {
-                if *d_type == libc::DT_DIR || *d_type == libc::DT_UNKNOWN {
-                    let name_ptr = offset_ptr!($entry, d_name) as *const u8;
+                if d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN {
+                    let name_ptr = offset_dirent!($entry, d_name) as *const u8;
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),
@@ -152,7 +154,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
         }
     }};
 }
-
 //SADLY ALTHOUGH THE TWO MACROS BELOW LOOK SIMILAR, THEY CANNOT BE USED EQUIVALENTLY
 /// initialises a path buffer for syscall operations,
 // appending a slash/null terminator (if it's a directory etc)
@@ -167,22 +168,6 @@ macro_rules! init_path_buffer {
         *buffer_ptr.add(base_len) = (b'/') * needs_slash; //add slash or null terminator appropriately (completely deterministic)
         base_len += needs_slash as usize; //increment the base_len length by 1 if we added a slash, otherwise it stays the same
         (base_len,start_buffer)
-    }};
-}
-
-
-///not intended for public use, will be private when boilerplate is donel
-/// Constructs a path from the base path and the name pointer, returning a  slice of the full path
-macro_rules! construct_path {
-    ($self:ident, $dirent:ident) => {{
-        let d_name = offset_ptr!($dirent, d_name) as *const u8;//cast as we need to use it as a pointer (it's in bytes now which is what we want)
-        let base_len= $self.file_name_index(); //get the base path length, this is the length of the directory path
-        let name_len = $crate::utils::dirent_name_length($dirent);
-        std::ptr::copy_nonoverlapping(d_name,$self.path_buffer.as_mut_ptr().add(base_len),name_len,
-        );
-
-       $self.path_buffer.get_unchecked(..base_len+name_len)
-
     }};
 }
 
@@ -268,30 +253,3 @@ macro_rules! const_from_env {
         };
     };
 }
-
-//the below 2 macros are needed due to the fact we have 3 types of iterators, this makes it a lot cleaner!
-
-/// Constructs a `DirEntry<S>` from a `dirent64`/`dirent` pointer for any relevant self type
-/// Needed to be done via macro to avoid issues with duplication/mutability of structs
-macro_rules! construct_dirent {
-    ($self:ident, $dirent:ident) => {{
-        let (d_type, inode) = unsafe {
-            (
-                *offset_ptr!($dirent, d_type), // get d_type
-                offset_ptr!($dirent, d_ino),   // get inode
-            )
-        };
-
-        let full_path = unsafe { construct_path!($self, $dirent) };
-        let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
-
-        $crate::DirEntry {
-            path: full_path.into(),
-            file_type,
-            inode,
-            depth: $self.parent_depth + 1,
-            file_name_index: $self.file_name_index,
-        }
-    }};
-}
-

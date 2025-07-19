@@ -69,18 +69,13 @@ pub use temp_dirent::TempDirent;
 //crate imports
 mod iter;
 pub(crate) use iter::DirIter;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-mod direntry_filter;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-pub use direntry_filter::DirEntryIteratorFilter;
 
 mod buffer;
 mod test;
 pub(crate) use buffer::AlignedBuffer;
 
-
 mod memchr_derivations;
-pub use memchr_derivations::{contains_zero_byte,memrchr,find_zero_byte_u64};
+pub use memchr_derivations::{contains_zero_byte, find_zero_byte_u64, memrchr};
 mod direntry;
 pub use direntry::DirEntry;
 

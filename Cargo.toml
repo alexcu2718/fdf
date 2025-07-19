@@ -1,13 +1,13 @@
 [package]
 name = "fdf"
-version = "0.5.5"
+version = "0.5.6"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"
 description = "A fast, multi-threaded filesystem search tool with regex/glob support and extremely pretty colours!"
 documentation = "https://docs.rs/fdf"
 repository = "https://github.com/alexcu2718/fdf"
-keywords = ["search", "filesystem", "parallel", "regex", "cli"]
+keywords = ["search", "filesystem", "glob", "regex", "cli"]
 categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
@@ -28,17 +28,18 @@ mimalloc = "0.1.43"
 
 
 [dev-dependencies]
-criterion = { version = "0.6.0", features = ["cargo_bench_support", "real_blackbox"] }
+criterion = { version = "0.6.0", features = [
+  "cargo_bench_support",
+  "real_blackbox",
+] }
 
 [profile.release]
 opt-level = 3
 debug = false
-strip=true
+strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
-
-
 
 
 [[bench]]

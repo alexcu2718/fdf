@@ -2,7 +2,7 @@
 
  **An Experimental**  alternative to `fd`/`find` tool for regex/glob matching, with colourised output.
  
-Not production-ready: API unstable, renaming pending. 
+Not production-ready: API unstable, renaming pending(before a 1.0)
 NOT IN A STATE FOR CONTRIBUTION
 
 (It works, it just hasn't got the feature set I'd like yet, see copious tests!)
@@ -24,6 +24,7 @@ Rather that I'm just working on this project for myself because I really wanted 
 happens when you optimally write hardware specific code( and how to write it!)
 
 ## How to test
+
 ```bash
 git clone https://github.com/alexcu2718/fdf /tmp/fdf_test  &&   /tmp/fdf_test/fd_benchmarks/run_all_tests_USE_ME.sh
 ```
@@ -122,7 +123,7 @@ let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't
 //but setting eg `export LOCAL_PATH_MAX=13000 && cargo b -r -q ` will recompile  with LOCAL_PATH_MAX as 13000.
 
 //this is a self explanatory one!
-let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5
+let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5 bytes
 /*explosions*/
 //hence why its unsafe!
 let this_is_fine_though:*const u8= unsafe{cstr!("hellohellohellohello",100)};
@@ -142,7 +143,7 @@ it's defined in another github repo of mine at <https://github.com/alexcu2718/co
 
 Then this function, really nice way to avoid branch misses during dirent parsing (a really hot loop)
 
-```Rust
+```rust
 
 
 
@@ -319,10 +320,10 @@ TODO LIST (Maybe):
 
 -- io_uring for Batched Syscalls: e.g., batched open/read operations.
    This will be extremely challenging.
-   
+
    Unfortunately uring lacks the op code required for getdents-- however
    other op codes are available, but this would require a LOT of work,
-   
+
    it also would require an async runtime->
    Which inevitably means tokio->
   which means most of my work in avoiding dependencies goes down the bin

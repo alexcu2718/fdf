@@ -1,14 +1,14 @@
 #![allow(dead_code)]
-#![allow(unused_imports)]
-use crate::PathBuffer;
+#[allow(unused_imports)]
 use crate::{DirEntryError, Result, buffer::ValueType, cstr, find_zero_byte_u64};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-const DOT_PATTERN: &str = ".";
-const START_PREFIX: &str = "/";
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+const DOT_PATTERN: &str = ".";
+const START_PREFIX: &str = "/";
+
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 /// Not in use currently, later.
 #[allow(clippy::missing_errors_doc)] //fixing errors later
@@ -124,8 +124,8 @@ where
 /// Returns -1 on error.
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
-    let filename: *const u8 = unsafe { cstr!(bytepath) }; //get the pointer. this isafe because we know bytepath is less than `LOCAL_PATH_MAX`
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK; //easier lay out
+    let filename: *const u8 = unsafe { cstr!(bytepath) };
+    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;
@@ -212,6 +212,22 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
 }
 
 #[inline]
+///  constructs a path convenience (just a utility function to save verbosity)
+pub(crate) fn construct_path(
+    path_buffer: &mut crate::PathBuffer,
+    base_len: usize,
+    drnt: *const dirent64,
+) -> &[u8] {
+    let d_name = unsafe { crate::offset_dirent!(drnt, d_name).cast() }; // #SAFETY the drnt must be non null
+    let name_len = unsafe { dirent_name_length(drnt) }; // #SAFETY the drnt must be non null!!!! 
+
+    let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
+    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned 
+
+    unsafe { path_buffer.get_unchecked(..base_len + name_len) } //the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
+}
+
+#[inline]
 #[allow(clippy::missing_const_for_fn)]
 ///a utility function for breaking down the config spaghetti that is platform specific optimisations
 /// i wanted to make this const and separate the function
@@ -249,22 +265,6 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     }
 }
 
-#[inline]
-///  constructs a path convenience (just a utility function to save verbosity)
-pub(crate) fn construct_path(
-    path_buffer: &mut PathBuffer,
-    base_len: usize,
-    drnt: *const dirent64,
-) -> &[u8] {
-    let d_name = unsafe { offset_dirent!(drnt, d_name) }; // #SAFETY the drnt must be non null
-    let name_len = unsafe { dirent_name_length(drnt) }; // #SAFETY the drnt must be non null!!!! 
-
-    let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
-    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned 
-
-    unsafe { path_buffer.get_unchecked(..base_len + name_len) } //the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
-}
-
 /*
 
 
@@ -273,27 +273,28 @@ pub(crate) fn construct_path(
 +--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
 | d_ino  | d_off  | reclen | d_type| padding|        d_name[256]                         |
 | (8B)   | (8B)   | (2B)   | (1B)  | (1B)   | (variable length, null-terminated)         |
-------------------------+--------+--------+--------------------------------------------+ |
-|                                  ^         ^                                           |
-|                                 |         +-- padding byte                             |
-|                                    +-- d_type byte                                     |                                                                                        |
++--------+--------+--------+--------+--------+--------------------------------------------+
+                                  ↑         ↑
+                                  |         +-- padding byte
+                                  +-- d_type byte
+
 +-----------------------------------------------------------------------------------------+
 | SWAR ALGORITHM VISUALISATION (last 8 bytes being checked)                               |
 +--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
 | Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 |                 |
 |        |        |        |        |        |        |        |        |                 |
-| 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0x00   | 0xNN   |<-  null byte found|
+| 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0x00   | 0xNN   | ← null byte found|
 +--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
-          ^        ^        ^        ^        ^        ^        ^        ^
+          ↑        ↑        ↑        ↑        ↑        ↑        ↑        ↑
           |        |        |        |        |        |        |        |
           +-- Potential padding/d_type        +-- Actual filename bytes --+
 
 BIT TRICK OPERATION:
 1. candidate_pos = last_word | mask
-   [0xNN][0xNN][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] <- original
+   [0xNN][0xNN][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] ← original
    | OR with mask (0x00FFFFFF when needed)
-
-   [0xFF][0xFF][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] <- masked
+   ↓
+   [0xFF][0xFF][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] ← masked
 
 2. zero_bit calculation:
    (candidate_pos - 0x0101010101010101) & ~candidate_pos & 0x8080808080808080
@@ -301,7 +302,6 @@ BIT TRICK OPERATION:
    High bits indicate null bytes: 0x0000000000800000
    ↓
    trailing_zeros() → finds position of first null byte
-   //this compiles to extremely efficient assembly.
 
 *//*
 Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
@@ -346,15 +346,16 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// THE REASON WE DO THIS IS BECAUSE THE RECLEN IS PADDED UP TO 8 BYTES (rounded up to the nearest multiple of 8),
 #[cfg(target_os = "linux")]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
+    //let reclen_new=unsafe{ const {(*dirent).d_reclen}}; //reclen is the length of the dirent structure, including the d_name field
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     #[cfg(target_endian = "little")]
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
     #[cfg(target_endian = "big")]
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
-    // Special case: When processing the 3rd (final ) word , we need to mask
+    // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.

@@ -1,6 +1,5 @@
 #![allow(unused_macros)]
 
-//might remove this when less lazy.
 #[allow(clippy::doc_markdown)]
 #[macro_export(local_inner_macros)]
 ///A helper macro to safely access dirent(64 on linux)'s
@@ -78,8 +77,6 @@ macro_rules! offset_dirent {
 /// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
 /// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)
 ///
-/// # Safety.
-///
 /// The first argument should be a byte slice
 /// the second argument is optional as specifies a custom buffer size.
 /// `cstr!(b"/home/sir_galahad", 256)`
@@ -90,27 +87,22 @@ macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
         // Create a buffer and make into a pointer
-        let mut c_path_buf = $crate::PathBuffer::new();
-
-        let temp_buf=c_path_buf.as_mut_ptr();
+        let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
-        // # Safety memory regions non overlapping and valid for the applicable lifetime
-        std::ptr::copy_nonoverlapping($bytes.as_ptr(), temp_buf, $bytes.len());
+        std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         // Write a null terminator at the end of the buffer
-        // #Safety. we know we can add a null terminator because we've created a buffer purposely longer than the max path size.
-        temp_buf.add($bytes.len()).write(0);
+        c_path_buf.add($bytes.len()).write(0);
         //let caller choose cast
-        temp_buf.cast::<_>()
+        c_path_buf.cast::<_>()
     }};
     ($bytes:expr,$n:expr) => {{
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
-        let mut c_path_buf = $crate::AlignedBuffer::<u8, $n>::new();
-        let temp_buf=c_path_buf.as_mut_ptr();
+        let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
-        std::ptr::copy_nonoverlapping($bytes.as_ptr(), temp_buf, $bytes.len());
-        temp_buf.add($bytes.len()).write(0);
+        std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
+        c_path_buf.add($bytes.len()).write(0);
 
-        temp_buf.cast::<_>()
+        c_path_buf.cast::<_>()
     }};
 }
 
@@ -162,6 +154,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
         }
     }};
 }
+
 
 #[macro_export]
 /// Macro to implement `BytesStorage` for types that support `From<&[u8]>`

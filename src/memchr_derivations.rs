@@ -1,17 +1,14 @@
-#![allow(clippy::host_endian_bytes)]
-#![allow(clippy::ptr_as_ptr)]
-#![allow(clippy::items_after_statements)]
 // I was reading through the std library for random silly things and I found this , https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161
 // this essentially provides a more rigorous foundation to my SWAR technique.
 //the original definition is below the copy pasted code above.
 
 //I really prefer having some strong foundation to rely on, so I'll use it and say stuff it to pride. Make it easy for people to verify.
 
-//copy pasting code here, will probably add something in the readme about it.
-//
-//I have not (yet, this comment maybe wrong)
-// I might do it, depends on use case.
-//ive rewritten memchr to not rely on nightly too, so i can use without any deps
+///copy pasting code here, will probably add something in the readme about it.
+///
+///I have not (yet, this comment maybe wrong)
+/// I might do it, depends on use case.
+// ive rewritten memchr to not rely on nightly too, so i can use without any deps
 
 /*
 
@@ -319,6 +316,10 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
 */
 
+
+
+
+
 /*
 
 #[cfg(target_os = "linux")]
@@ -371,26 +372,29 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 }
 
 */
-
+#[inline]
 pub(crate) const fn repeat_u8(x: u8) -> usize {
     usize::from_ne_bytes([x; size_of::<usize>()])
 }
 
+#[inline]
 pub(crate) const fn repeat_u64(byte: u8) -> u64 {
     u64::from_ne_bytes([byte; size_of::<u64>()])
 }
 
-pub(crate) const LO_USIZE: usize = repeat_u8(0x01);
+const LO_USIZE: usize = repeat_u8(0x01);
 
-pub(crate) const HI_USIZE: usize = repeat_u8(0x80);
-pub(crate) const LO_U64: u64 = repeat_u64(0x01);
+const HI_USIZE: usize = repeat_u8(0x80);
+const LO_U64: u64 = repeat_u64(0x01);
 
-pub(crate) const HI_U64: u64 = repeat_u64(0x80);
+const HI_U64: u64 = repeat_u64(0x80);
 
-/// Returns the index (0..=7) of the first zero byte in a `u64` word.
+/// Returns the index (0..=7) of the first zero byte** in a `u64` word.
+/// IT MUST CONTAIN A NULL TERMINATOR
 ///
+/// This uses a branchless, bitwise technique that identifies zero bytes
+/// by subtracting `0x01` from each byte and masking out non-zero bytes.
 ///
-/// the u64 needs to be properly aligned and in proper platform endian specific  format.
 ///
 /// The computation:
 /// - `x.wrapping_sub(LO_U64)`: subtracts 1 from each byte
@@ -406,30 +410,31 @@ pub(crate) const HI_U64: u64 = repeat_u64(0x80);
 pub const fn find_zero_byte_u64(x: u64) -> usize {
     //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
     let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
-    //lsb is at 0 regaredless of endianness
+
     (zero_bit.trailing_zeros() >> 3) as usize
     //>> 3 converts from bit position to byte index (divides by 8)
 }
 
 /// Returns `true` if `x` contains any zero byte.
-///
-///  
 /// COPY PASTED FROM STDLIB INTERNALS.
 ///
+
 /// From *Matters Computational*, J. Arndt:
+
 ///
+
 /// "The idea is to subtract one from each of the bytes and then look for
+
 /// bytes where the borrow propagated all the way to the most significant
+
 /// bit."
+
 #[inline]
 pub const fn contains_zero_byte(x: usize) -> bool {
     x.wrapping_sub(LO_USIZE) & !x & HI_USIZE != 0
 }
 
 /// Returns the last index matching the byte `x` in `text`.
-///
-///
-///
 /// This is directly copy pasted from the internal library with some modifications to make it work for me
 /// there were no unstable features so I thought I'll skip a dependency and add this.
 ///

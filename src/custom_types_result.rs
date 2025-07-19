@@ -14,6 +14,7 @@ const_from_env!(
     LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096"
 ); //set to PATH_MAX, but allow trivial customisation!
 
+//4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 const_from_env!(
     /// The size of the buffer used for directory entries, set to 4115 by default, but can be customised via environment variable.
     /// size of IO block
@@ -66,12 +67,6 @@ impl<S: BytesStorage> OsBytes<S> {
         Self {
             bytes: S::from_slice(bytes),
         }
-    }
-
-    ///Returns a reference to the inner type (Vec/Arc/etc)
-    #[inline]
-    pub(crate) const fn as_inner(&self) -> &S {
-        &self.bytes
     }
 
     #[inline]

@@ -1,4 +1,3 @@
-use crate::{BytesStorage, DirEntry};
 use std::mem::MaybeUninit;
 use std::ops::{Index, IndexMut};
 use std::slice::SliceIndex;
@@ -103,33 +102,6 @@ where
         unsafe { libc::syscall(libc::SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
     }
 
-    #[inline]
-    /// Initialises the buffer with the given path, appending a slash if needed.
-    ///
-    /// Returns the new base length after writing into the buffer.
-    ///
-    /// # Safety
-    /// Assumes `self` is zeroed and sized at least `LOCAL_PATH_MAX`.
-    pub(crate) unsafe fn init_from_direntry<S>(&mut self, dir_path: &DirEntry<S>) -> usize
-    where
-        S: BytesStorage,
-    {
-        let buffer_ptr = self.as_mut_ptr(); // get the mutable pointer to the buffer
-
-        let mut base_len = dir_path.len(); // get length of directory path
-        let needs_slash = (dir_path.as_bytes() != b"/") as u8; // check if we need to append a slash
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(dir_path.as_ptr(), buffer_ptr.cast(), base_len); // copy path
-            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash; // add slash if needed
-        } //cast into byte types
-
-        base_len += needs_slash as usize; // update length if slash added
-
-        base_len
-    }
-
-    /// not used yet, used for testing libc dynamic linking problems(it's something i want to look into)
     /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'.
@@ -139,7 +111,7 @@ where
     #[allow(clippy::inline_asm_x86_intel_syntax)]
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     #[allow(dead_code)]
-    pub(crate) unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
+    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         use std::arch::asm;
         let output;
         unsafe {
@@ -166,6 +138,32 @@ where
         R: SliceIndex<[T]>,
     {
         unsafe { self.as_slice().get_unchecked(range) }
+    }
+
+    #[inline]
+    /// Initialises the buffer with the given path, appending a slash if needed.
+    ///
+    /// Returns the new base length after writing into the buffer.
+    ///
+    /// # Safety
+    /// Assumes `self` is zeroed and sized at least `LOCAL_PATH_MAX`.
+    pub(crate) unsafe fn init_from_direntry<S>(&mut self, dir_path: &crate::DirEntry<S>) -> usize
+    where
+        S: crate::BytesStorage,
+    {
+        let buffer_ptr = self.as_mut_ptr(); // get the mutable pointer to the buffer
+
+        let mut base_len = dir_path.len(); // get length of directory path
+        let needs_slash = (dir_path.as_bytes() != b"/") as u8; // check if we need to append a slash
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(dir_path.as_ptr(), buffer_ptr.cast(), base_len); // copy path
+            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash; // add slash if needed
+        } //cast into byte types
+
+        base_len += needs_slash as usize; // update length if slash added
+
+        base_len
     }
 
     /// # Safety

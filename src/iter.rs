@@ -1,8 +1,8 @@
 #![allow(clippy::cast_possible_wrap)]
 #[allow(unused_imports)]
 use crate::{
-    AlignedBuffer, BytePath, DirEntry, DirEntryError as Error, FileType, PathBuffer, Result,
-    SyscallBuffer, cstr, custom_types_result::BytesStorage, offset_dirent,
+    AlignedBuffer, BytePath, DirEntry, DirEntryError as Error, FileType, LOCAL_PATH_MAX,
+    PathBuffer, Result, SyscallBuffer, cstr, custom_types_result::BytesStorage,
     traits_and_conversions::DirentConstructor,
 };
 use libc::{DIR, closedir, opendir};
@@ -83,7 +83,7 @@ where
     #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
-        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)
+        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)
         let base_len = unsafe { path_buffer.init_from_direntry(dir_path) };
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)

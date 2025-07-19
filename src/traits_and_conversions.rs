@@ -3,15 +3,12 @@
 use crate::BytesStorage;
 use crate::DirEntry;
 use crate::DirEntryError;
-use crate::DirIter;
 use crate::FileType;
 use crate::PathBuffer;
 use crate::Result;
 use crate::buffer::ValueType;
-#[cfg(target_os = "linux")]
-use crate::direntry::DirEntryIterator;
 use crate::memchr_derivations::memrchr;
-
+use crate::offset_dirent;
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
@@ -60,7 +57,6 @@ where
     fn is_absolute(&self) -> bool;
     fn is_relative(&self) -> bool;
     fn to_path(&self) -> PathBuf;
-    // unsafe fn realpath(&self) -> crate::Result<&[u8]>;
 }
 
 impl<T> BytePath<T> for T
@@ -77,22 +73,19 @@ where
         VT: ValueType, // VT==ValueType is u8/i8
     {
         debug_assert!(
-            self.len() < crate::LOCAL_PATH_MAX, //delcared at compile time via env_var or default to 4096
+            self.len() < crate::LOCAL_PATH_MAX, //delcared at compile time via env_var or default to 1024
             "Input too large for buffer"
         );
 
-        let mut c_path_buf = crate::PathBuffer::new();
-        let temp_buf = c_path_buf.as_mut_ptr();
+        let c_path_buf = crate::PathBuffer::new().as_mut_ptr();
 
         // copy bytes using copy_nonoverlapping to avoid ub check
-        // // SAFETY: memory regions are non overlapping
         unsafe {
-            std::ptr::copy_nonoverlapping(self.as_ptr(), temp_buf, self.len());
-            temp_buf.add(self.len()).write(0); // Null terminate the string
-            // SAFETY: the buffer must have enough capacity.
+            std::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
+            c_path_buf.add(self.len()).write(0); // Null terminate the string
         }
 
-        f(temp_buf.cast::<_>())
+        f(c_path_buf.cast::<_>())
     }
 
     /// Returns the extension of the file as a byte slice, if it exists.
@@ -131,16 +124,13 @@ where
     }
 
     /// Returns the size of the file in bytes.
-    /// If the file size cannot be determined, returns an error
+    /// If the file size cannot be determined, returns 0.
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
     fn size(&self) -> crate::Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
     }
     #[inline]
-    //Open a file descriptor of a file
-    // SAFETY: the filepath must be less than LOCAL_PATH_MAX,
-    // You cannot access the fd after that iterator is dropped, it is *useless* and must be opened again.
     unsafe fn open_fd(&self) -> crate::Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
@@ -168,8 +158,7 @@ where
     /// More specialised errors are on the TODO list.
     fn get_stat(&self) -> crate::Result<stat> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
-        let new_buf = stat_buf.as_mut_ptr();
-        let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, new_buf) });
+        let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
 
         if res == 0 {
             Ok(unsafe { stat_buf.assume_init() })
@@ -227,7 +216,6 @@ where
     fn is_writable(&self) -> bool {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
-        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)
         unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
     }
 
@@ -289,14 +277,14 @@ where
     }
 
     #[inline]
-    ///checks if the path is absolute (starts at root, does not check symlinks)
+    ///checks if the path is absolute,
     fn is_absolute(&self) -> bool {
-        // # Safe because
+        //safe because we know the path is not empty
         unsafe { *self.get_unchecked(0) == b'/' }
     }
 
     #[inline]
-    ///checks if the path is relative(aka doesn't start with root)
+    ///checks if the path is relative,
     fn is_relative(&self) -> bool {
         !self.is_absolute()
     }
@@ -391,7 +379,7 @@ where
 ///A constructor for making accessing the buffer, filename indexes, depths of the parent path while inside the iterator.
 /// More documentation TBD
 #[allow(clippy::cast_possible_truncation)] //no truncation issue
-pub(crate) trait DirentConstructor<S: BytesStorage> {
+pub trait DirentConstructor<S: BytesStorage> {
     // Required accessors
     fn path_buffer(&mut self) -> &mut PathBuffer;
     fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
@@ -415,7 +403,7 @@ pub(crate) trait DirentConstructor<S: BytesStorage> {
     }
 }
 
-impl<S: BytesStorage> DirentConstructor<S> for DirIter<S> {
+impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
     #[inline]
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
@@ -433,9 +421,9 @@ impl<S: BytesStorage> DirentConstructor<S> for DirIter<S> {
 }
 
 #[cfg(target_os = "linux")]
-impl<S: BytesStorage> DirentConstructor<S> for DirEntryIterator<S> {
+impl<S: BytesStorage> DirentConstructor<S> for crate::direntry::DirEntryIterator<S> {
     #[inline]
-    fn path_buffer(&mut self) -> &mut PathBuffer {
+    fn path_buffer(&mut self) -> &mut crate::PathBuffer {
         &mut self.path_buffer
     }
 
@@ -449,10 +437,3 @@ impl<S: BytesStorage> DirentConstructor<S> for DirEntryIterator<S> {
         self.parent_depth
     }
 }
-
-/*
-struct FileStat{
-
-    pub(crate) stat:libc::statx
-}
-    */

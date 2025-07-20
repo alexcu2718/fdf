@@ -74,7 +74,7 @@ mod direntry_filter;
 
 mod buffer;
 mod test;
-pub(crate) use buffer::AlignedBuffer;
+pub use buffer::AlignedBuffer;
 
 mod memchr_derivations;
 pub use memchr_derivations::{contains_zero_byte, find_zero_byte_u64, memrchr};

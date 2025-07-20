@@ -87,7 +87,9 @@ macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
         // Create a buffer and make into a pointer
-        let c_path_buf = $crate::PathBuffer::new().as_mut_ptr();
+        let mut c_path_buf_start = $crate::PathBuffer::new();
+        let c_path_buf=c_path_buf_start.as_mut_ptr();
+
         // Copy the bytes into the buffer and append a null terminator
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         // Write a null terminator at the end of the buffer
@@ -97,7 +99,8 @@ macro_rules! cstr {
     }};
     ($bytes:expr,$n:expr) => {{
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
-        let c_path_buf = $crate::AlignedBuffer::<u8, $n>::new().as_mut_ptr();
+        let mut c_path_buf_start = $crate::PathBuffer::new();
+        let c_path_buf=c_path_buf_start.as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         c_path_buf.add($bytes.len()).write(0);

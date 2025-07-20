@@ -77,7 +77,9 @@ where
             "Input too large for buffer"
         );
 
-        let c_path_buf = crate::PathBuffer::new().as_mut_ptr();
+        let mut c_path_buf_start = crate::PathBuffer::new();
+        
+        let c_path_buf=c_path_buf_start.as_mut_ptr();
 
         // copy bytes using copy_nonoverlapping to avoid ub check
         unsafe {

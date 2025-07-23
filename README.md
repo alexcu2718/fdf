@@ -116,8 +116,8 @@ Summary
 
 use fdf::cstr;
 let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
-//automatically  create an inline null-terminated stack allocated buffer of length LOCAL_PATH_MAX(4096)
-//this is actually default to 4096
+//automatically  create an inline null-terminated stack allocated buffer of length LOCAL_PATH_MAX
+//this is actually default to 4096, but is an environment variable that can be played with at compile time.
 //but setting eg `export LOCAL_PATH_MAX=13000 && cargo b -r -q ` 
 //will recompile  with LOCAL_PATH_MAX as 13000.
 

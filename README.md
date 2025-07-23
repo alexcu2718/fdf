@@ -150,7 +150,7 @@ Then this function, really nice way to avoid branch misses during dirent parsing
 //This is the little-endian implementation, see crate for modified version for big-endian
 // Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
 use fdf::find_zero_byte_u64; // a const SWAR function 
-//(SIMD within a register, so no architecture dependence.
+//(SIMD within a register, so no architecture dependence)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; 

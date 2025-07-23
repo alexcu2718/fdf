@@ -232,7 +232,7 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 
 3.Macos  64bit  (Tested on Sonoma)
 
-4.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd.)
+4.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd. I'm not testing every edgecase!)
 
 5.Works on big endian systems, tested on Ubuntu PPC64 (took 20 minutes to compile....)
 

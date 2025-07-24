@@ -106,12 +106,14 @@ where
     /// this is only to be called when using syscalls in the getdents interface
     /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'.
     /// At the end of the day, the only way to bypass glibc's quirks is to use inline assembly.
+    /// 
+    /// TODO! write an implementation for all aarch64
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::inline_asm_x86_intel_syntax)]
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     #[allow(dead_code)]
-    pub unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
+    pub(crate) unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         use std::arch::asm;
         let output;
         unsafe {

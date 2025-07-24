@@ -337,16 +337,11 @@ where
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
         //matching type signature of above for consistency
-        let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY)
+        let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
         let mut path_buffer = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
 
         let path_len = unsafe { path_buffer.init_from_direntry(self) };
-        //using macros because I was learning macros and they help immensely with readability
-        //this is a macro that initialises the path buffer, it returns the length of the
-        //path and the path buffer itself, which is a stack allocated buffer that can hold the
-        //full path of the directory entry, it is used to construct the full path of the
-        //directory entry, it is reused for each entry, so we don't have to allocate to the heap until the final point
-        //i wish to fix this in future versions
+        //TODO! make this more ergonomic
 
         Ok(DirEntryIterator {
             fd,

@@ -1,7 +1,8 @@
 // I was reading through the std library for random silly things and I found this , https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161
 // this essentially provides a more rigorous foundation to my SWAR technique.
 //the original definition is below the copy pasted code above.
-
+#![allow(clippy::all)]
+#![allow(warnings)]
 //I really prefer having some strong foundation to rely on, so I'll use it and say stuff it to pride. Make it easy for people to verify.
 
 ///copy pasting code here, will probably add something in the readme about it.

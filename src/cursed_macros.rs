@@ -111,7 +111,6 @@ macro_rules! cstr {
 
 #[doc(hidden)]
 #[allow(clippy::too_long_first_doc_paragraph)]
-/// NOT INTENDED FOR PUBLIC USE, WILL BE PRIVATE SOON.
 /// A macro to skip . and .. entries when traversing a directory.
 ///
 /// ## Usage
@@ -136,7 +135,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 if (d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN)
                     && offset_dirent!($entry, d_reclen) == 24
                 {
-                    let name_ptr = offset_dirent!($entry, d_name) as *const u8;
+                    let name_ptr = offset_dirent!($entry, d_name);
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),
@@ -147,7 +146,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(not(target_os = "linux"))]
             {
                 if d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN {
-                    let name_ptr = offset_dirent!($entry, d_name) as *const u8;
+                    let name_ptr = offset_dirent!($entry, d_name);
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),

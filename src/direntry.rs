@@ -430,10 +430,15 @@ where
             }
         }
     }
+    #[inline]
+    /// Checks if the buffer is empty
+    pub const fn is_buffer_empty(&self)->bool{
+        self.offset <self.remaining_bytes as _
+    }
 
     #[inline]
     /// Prefetches the start of the buffer to keep the cache warm.
-    pub(crate) fn prefetch_next_buffer(&self) {
+    pub(crate)  fn prefetch_next_buffer(&self) {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         {
             unsafe {
@@ -441,6 +446,12 @@ where
                 _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0);
             }
         }
+    }
+
+    #[inline]
+    /// Checks if we're at end of directory
+    pub const fn is_end_of_directory(&self)->bool{
+        self.remaining_bytes <= 0
     }
 }
 
@@ -453,10 +464,10 @@ where
     #[inline]
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
+        use crate::traits_and_conversions::DirentConstructor;
         loop {
             // If we have remaining data in buffer, process it
-            if self.offset < self.remaining_bytes as usize {
-                use crate::traits_and_conversions::DirentConstructor;
+            if self.is_buffer_empty() {
 
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
@@ -474,7 +485,7 @@ where
             // issue a syscall once out of entries
             unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
 
-            if self.remaining_bytes <= 0 {
+            if self.is_end_of_directory(){
                 // If no more entries, return None,
                 return None;
             }

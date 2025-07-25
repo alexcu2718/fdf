@@ -203,7 +203,7 @@ where
 
     #[inline]
     #[cfg(target_os = "linux")]
-    pub fn to_temp_dirent(&self) -> TempDirent<S> {
+    pub fn to_temp_dirent(&self) -> TempDirent<'_,S> {
         TempDirent {
             path: self.path.as_bytes(),
             inode: self.inode,

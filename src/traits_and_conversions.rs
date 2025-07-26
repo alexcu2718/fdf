@@ -54,8 +54,6 @@ where
     fn as_str(&self) -> crate::Result<&str>;
     unsafe fn as_str_unchecked(&self) -> &str;
     fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>;
-    fn is_absolute(&self) -> bool;
-    fn is_relative(&self) -> bool;
     fn to_path(&self) -> PathBuf;
 }
 
@@ -114,7 +112,7 @@ where
     /// This is a simple conversion that does not check if the path is valid.
     fn to_path(&self) -> PathBuf {
         // Convert the byte slice to a PathBuf
-        PathBuf::from(self.as_os_str())
+        self.as_os_str().into()
     }
 
     /// Checks if the file matches the given extension.
@@ -126,7 +124,7 @@ where
     }
 
     /// Returns the size of the file in bytes.
-    /// If the file size cannot be determined, returns 0.
+    /// If the file size cannot be determined, returns `InvalidStat`
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
     fn size(&self) -> crate::Result<u64> {
@@ -278,18 +276,7 @@ where
         String::from_utf8_lossy(self)
     }
 
-    #[inline]
-    ///checks if the path is absolute,
-    fn is_absolute(&self) -> bool {
-        //safe because we know the path is not empty
-        unsafe { *self.get_unchecked(0) == b'/' }
-    }
-
-    #[inline]
-    ///checks if the path is relative,
-    fn is_relative(&self) -> bool {
-        !self.is_absolute()
-    }
+   
 
     /// Get the length of the basename of a path (up to and including the last '/')
     #[inline]

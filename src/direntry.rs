@@ -9,7 +9,7 @@
 use crate::{temp_dirent::TempDirent, utils::resolve_inode,AlignedBuffer,LOCAL_PATH_MAX};
 #[allow(unused_imports)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-use crate::{utils::close_asm, utils::open_asm};
+use crate::{close_asm, open_asm};
 
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};

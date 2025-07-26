@@ -102,6 +102,10 @@ mod utils;
 #[cfg(target_os = "linux")]
 pub use utils::dirent_const_time_strlen;
 pub use utils::{strlen, unix_time_to_system_time};
+#[cfg(target_os = "linux")]
+mod syscalls;
+#[cfg(target_os = "linux")] //direct syscalls are linux only
+pub use syscalls::{open_asm,close_asm};
 
 mod glob;
 pub use glob::glob_to_regex;

@@ -1,10 +1,9 @@
 use crate::traits_and_conversions::BytePath;
 use crate::{DirEntry, DirEntryError, Result, custom_types_result::BytesStorage};
 use regex::bytes::{Regex, RegexBuilder};
-use std::sync::Arc;
 
 #[derive(Clone, Debug)]
-#[allow(clippy::struct_excessive_bools)] //shutup
+#[allow(clippy::struct_excessive_bools)] //shutup:
 /// This struct holds the configuration for searching directories.
 ///
 ///
@@ -20,7 +19,7 @@ pub struct SearchConfig {
     ///if true, then we hide hidden files (those starting with a dot)
     pub(crate) keep_dirs: bool,
     ///if true, then we keep directories in the results, otherwise we only return non-directory files
-    pub(crate) extension_match: Option<Arc<[u8]>>,
+    pub(crate) extension_match: Option<Box<[u8]>>,
     ///if this is Some, then we match against the extension of the file otherwise accept (if none)
     pub(crate) file_name_only: bool,
     ///if true, then we only match against the file name, otherwise we match against the full path when regexing
@@ -39,7 +38,7 @@ impl SearchConfig {
         case_insensitive: bool,
         keep_dirs: bool,
         file_name_only: bool,
-        extension_match: Option<Arc<[u8]>>,
+        extension_match: Option<Box<[u8]>>,
         depth: Option<u8>,
         follow_symlinks: bool,
     ) -> Result<Self> {

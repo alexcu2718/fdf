@@ -57,7 +57,6 @@
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
-    sync::Arc,
     //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
@@ -291,7 +290,7 @@ where
     pub(crate) case_insensitive: bool,
     pub(crate) keep_dirs: bool,
     pub(crate) file_name_only: bool,
-    pub(crate) extension_match: Option<Arc<[u8]>>,
+    pub(crate) extension_match: Option<Box<[u8]>>,
     pub(crate) max_depth: Option<u8>,
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter<S>>,

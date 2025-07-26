@@ -9,7 +9,7 @@ mod tests {
     use std::fs::File;
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::symlink;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
     #[repr(C)]
@@ -647,6 +647,45 @@ mod tests {
         assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
         let _ = fs::remove_dir_all(dir_path);
     }
+    
+    #[cfg(target_os="linux")]
+    #[test]
+    fn  test_root_linux(){ //essentially i had a VERY hard to diagnose issue regarding a segfault searching SPECIFICALLY
+        //only from root dir (so not applicable to mac, altho ive never used mac fulltime, i am too poor for that)
+        use crate::Finder;
+        let start_path:&[u8]=b"/";
+        let pattern:&str=".";
+
+        let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str(), &pattern).keep_hidden(true).keep_dirs(true).build();
+
+
+        let result=finder.traverse().unwrap().into_iter();
+
+        let collected:Vec<_>=result.collect();
+
+
+        assert!(collected.len()>3);
+        //a fairly arbitirary assert, this is to make sure that the result isnt no-opped away.
+        //(basically  trying to avoid the same segfault issue seen previously....)
+
+    
+
+
+
+
+
+
+        
+
+
+
+
+
+
+
+
+    }
+
 
     #[test]
     fn test_path_construction() {
@@ -671,8 +710,11 @@ mod tests {
 
     #[test]
     fn test_error_handling() {
+        let use_path:&[u8]=            b"/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
+        let std_path=Path::new(use_path.as_os_str());
+        assert!(!std_path.exists());
         let non_existent = DirEntry::<Arc<[u8]>>::new(
-            "/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+            use_path.as_os_str()
         );
         assert!(non_existent.is_err());
     }

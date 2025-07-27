@@ -45,7 +45,6 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 }
 
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-
 /// Opens a directory using `openat` syscall via assembly
 /// 
 /// ARM64 uses `openat` instead of `open` for better path resolution.
@@ -91,8 +90,13 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     target_os = "linux",
     not(any(target_arch = "x86_64", target_arch = "aarch64"))
 ))]
-/// Opens a directory using libc's open function. Backup function for non-x86_64 and non-aarch64 architectures.
-/// Returns -1 on error.
+/// Opens a directory using `libc::open`
+/// 
+/// # Safety
+/// - Requires byte path to be a valid directory
+///
+/// # Returns
+/// File descriptor on success, -1 on error
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     libc::open(
         cstr!(bytepath),
@@ -121,7 +125,10 @@ pub unsafe fn close_asm(fd: i32) {
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 /// Close directory using direct assembly instructions
-///
+/// # Safety
+/// - Takes ownership of the file descriptor
+/// - Invalidates fd after call (even on error)
+/// - No error checking - intentional for performance
 pub unsafe fn close_asm(fd: i32) {
     use std::arch::asm;
     let _: isize;
@@ -139,7 +146,6 @@ pub unsafe fn close_asm(fd: i32) {
 
 
 #[inline]
-#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 /// Closes file descriptor using direct syscall
 /// 
@@ -172,7 +178,7 @@ pub unsafe fn close_asm(fd: i32) {
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-/// Reads directory entries using `getdents64` syscall (no libc) for x86_64
+/// Reads directory entries using `getdents64` syscall (no libc) for x86_64/aarm64 (failing that, libc)
 ///
 /// # Arguments
 /// - `fd`: Open directory file descriptor

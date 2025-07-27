@@ -417,7 +417,6 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 }
 
 /// Returns `true` if `x` contains any zero byte.
-/// COPY PASTED FROM STDLIB INTERNALS.
 ///
 
 /// From *Matters Computational*, J. Arndt:
@@ -429,6 +428,8 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 /// bytes where the borrow propagated all the way to the most significant
 
 /// bit."
+/// 
+/// COPY PASTED FROM STDLIB INTERNALS.
 
 #[inline]
 pub const fn contains_zero_byte(x: usize) -> bool {

@@ -275,11 +275,8 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// WORKING ON BIG-ENDIAN AND LITTLE ENDIAN SYSTEMS (linux)
 ///
 /// # SAFETY
-/// This function is `unsafe` because...read it
 /// The caller must uphold the following invariants:
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
-///  `SWAR` (SIMD Within A Register/bit trick hackery) is used to find the first null byte in the `d_name` field of a `libc::dirent64` structure.
-/// THE REASON WE DO THIS IS BECAUSE THE RECLEN IS PADDED UP TO 8 BYTES (rounded up to the nearest multiple of 8),
 #[cfg(target_os = "linux")]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
@@ -288,7 +285,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     #[cfg(target_endian = "little")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //go to the last word in the struct.
     #[cfg(target_endian = "big")]
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
     // Special case: When processing the 3rd u64 word (index 2), we need to mask

@@ -428,7 +428,7 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 /// bytes where the borrow propagated all the way to the most significant
 
 /// bit."
-/// 
+///
 /// COPY PASTED FROM STDLIB INTERNALS.
 
 #[inline]

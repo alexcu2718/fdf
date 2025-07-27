@@ -6,7 +6,7 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 #[allow(unused_imports)]
-use crate::{temp_dirent::TempDirent, utils::resolve_inode,AlignedBuffer,LOCAL_PATH_MAX};
+use crate::{AlignedBuffer, LOCAL_PATH_MAX, temp_dirent::TempDirent, utils::resolve_inode};
 #[allow(unused_imports)]
 #[cfg(target_os = "linux")]
 use crate::{close_asm, open_asm};
@@ -203,7 +203,7 @@ where
 
     #[inline]
     #[cfg(target_os = "linux")]
-    pub fn to_temp_dirent(&self) -> TempDirent<'_,S> {
+    pub fn to_temp_dirent(&self) -> TempDirent<'_, S> {
         TempDirent {
             path: self.path.as_bytes(),
             inode: self.inode,
@@ -354,7 +354,6 @@ where
             _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
-  
 }
 
 #[cfg(target_os = "linux")]
@@ -432,13 +431,13 @@ where
     }
     #[inline]
     /// Checks if the buffer is empty
-    pub const fn is_buffer_empty(&self)->bool{
-        self.offset <self.remaining_bytes as _
+    pub const fn is_buffer_empty(&self) -> bool {
+        self.offset < self.remaining_bytes as _
     }
 
     #[inline]
     /// Prefetches the start of the buffer to keep the cache warm.
-    pub(crate)  fn prefetch_next_buffer(&self) {
+    pub(crate) fn prefetch_next_buffer(&self) {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         {
             unsafe {
@@ -450,7 +449,7 @@ where
 
     #[inline]
     /// Checks if we're at end of directory
-    pub const fn is_end_of_directory(&self)->bool{
+    pub const fn is_end_of_directory(&self) -> bool {
         self.remaining_bytes <= 0
     }
 }
@@ -468,7 +467,6 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.is_buffer_empty() {
-
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
@@ -485,7 +483,7 @@ where
             // issue a syscall once out of entries
             unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
 
-            if self.is_end_of_directory(){
+            if self.is_end_of_directory() {
                 // If no more entries, return None,
                 return None;
             }

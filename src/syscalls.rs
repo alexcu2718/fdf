@@ -6,7 +6,7 @@
 // x86_64-specific implementation
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 /// Opens a directory using direct syscall via assembly
-/// 
+///
 /// Uses the `open` syscall with flags optimized for directory scanning:
 /// - `O_CLOEXEC`: Close on exec (security)
 /// - `O_DIRECTORY`: Fail if not a directory (safety)
@@ -15,14 +15,14 @@
 ///
 /// # Safety
 /// - Requires byte path to be a valid directory
-/// 
+///
 /// # Returns
 /// - File descriptor (positive integer) on success
 /// - -1 on error (check errno for details)
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
     // Create null-terminated C string from byte slice
-    let filename:*const u8 = unsafe { cstr!(bytepath) };
+    let filename: *const u8 = unsafe { cstr!(bytepath) };
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
@@ -46,7 +46,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 /// Opens a directory using `openat` syscall via assembly
-/// 
+///
 /// ARM64 uses `openat` instead of `open` for better path resolution.
 /// Uses `AT_FDCWD` to indicate relative to current working directory.
 ///
@@ -64,7 +64,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
     let filename: *const u8 = cstr!(bytepath);
-    
+
     // aarch64 doesn't have open, we need to use openat for this.
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const MODE: i32 = libc::O_RDONLY; // Required even if unused in directory open
@@ -84,14 +84,13 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     fd
 }
 
-
 #[inline]
 #[cfg(all(
     target_os = "linux",
     not(any(target_arch = "x86_64", target_arch = "aarch64"))
 ))]
 /// Opens a directory using `libc::open`
-/// 
+///
 /// # Safety
 /// - Requires byte path to be a valid directory
 ///
@@ -104,15 +103,13 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     )
 }
 
-
-
 #[inline]
 #[cfg(all(
     target_os = "linux",
     not(any(target_arch = "x86_64", target_arch = "aarch64"))
 ))]
 /// Closes file descriptor using direct syscall
-/// 
+///
 /// # Safety
 /// - Takes ownership of the file descriptor
 /// - Invalidates fd after call (even on error)
@@ -144,15 +141,14 @@ pub unsafe fn close_asm(fd: i32) {
     };
 }
 
-
 #[inline]
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 /// Closes file descriptor using direct syscall
-/// 
+///
 /// Follows ARM64 syscall conventions:
 /// - Syscall number in x8
 /// - First argument in x0
-/// 
+///
 /// # Safety
 /// - Takes ownership of the file descriptor
 /// - Invalidates fd after call (even on error)
@@ -172,13 +168,10 @@ pub unsafe fn close_asm(fd: i32) {
     }
 }
 
-
-
-
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-/// Reads directory entries using `getdents64` syscall (no libc) for x86_64/aarm64 (failing that, libc)
+/// Reads directory entries using `getdents64` syscall (no libc) for `x86_64/aarm64` (failing that, libc)
 ///
 /// # Arguments
 /// - `fd`: Open directory file descriptor
@@ -194,27 +187,24 @@ pub unsafe fn close_asm(fd: i32) {
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd:i32,buffer_ptr:*const T,buffer_size:usize)->i64{
-            use std::arch::asm;
-        let output;
-        unsafe {
-            asm!(
-                "syscall",
-                inout("rax") libc::SYS_getdents64  => output,
-                in("rdi") fd,
-                in("rsi") buffer_ptr,
-                in("rdx") buffer_size,
-                out("rcx") _,  // syscall clobbers rcx
-                out("r11") _,  // syscall clobbers r11
-                options(nostack, preserves_flags)
-            )
-        };
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize) -> i64 {
+    use std::arch::asm;
+    let output;
+    unsafe {
+        asm!(
+            "syscall",
+            inout("rax") libc::SYS_getdents64  => output,
+            in("rdi") fd,
+            in("rsi") buffer_ptr,
+            in("rdx") buffer_size,
+            out("rcx") _,  // syscall clobbers rcx
+            out("r11") _,  // syscall clobbers r11
+            options(nostack, preserves_flags)
+        )
+    };
 
-        output
-    }
-
-
-
+    output
+}
 
 #[inline]
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
@@ -254,8 +244,6 @@ pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize)
     ret
 }
 
-
-
 #[inline]
 #[cfg(all(
     target_os = "linux",
@@ -276,6 +264,6 @@ pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize)
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize)->i64{
-    unsafe{libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size)}
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize) -> i64 {
+    unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
 }

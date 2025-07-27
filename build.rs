@@ -10,7 +10,5 @@ fn main() {
     let num_threads =
         thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
 
-  
-        println!("cargo:rustc-env=CPU_COUNT={num_threads}");
-    
+    println!("cargo:rustc-env=CPU_COUNT={num_threads}");
 }

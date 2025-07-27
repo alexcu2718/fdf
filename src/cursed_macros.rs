@@ -12,8 +12,8 @@
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
 ///   Example: `offset_dirent!(entry_ptr, d_ino)` -> aliases to `d_fileno` and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
-/// - On Linux, `d_reclen` is used to access the record length directly, 
-///  Example: `offset_dirent!(entry_ptr, d_reclen)` 
+/// - On Linux, `d_reclen` is used to access the record length directly,
+///  Example: `offset_dirent!(entry_ptr, d_reclen)`
 /// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
 ///  the other fields are accessed normally, as raw pointers to the field
 /// /// # Usage
@@ -88,7 +88,7 @@ macro_rules! cstr {
         // Debug assert to check test builds for unexpected conditions
         // Create a buffer and make into a pointer
         let mut c_path_buf_start = $crate::PathBuffer::new();
-        let c_path_buf=c_path_buf_start.as_mut_ptr();
+        let c_path_buf = c_path_buf_start.as_mut_ptr();
 
         // Copy the bytes into the buffer and append a null terminator
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
@@ -100,7 +100,7 @@ macro_rules! cstr {
     ($bytes:expr,$n:expr) => {{
         // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
         let mut c_path_buf_start = $crate::PathBuffer::new();
-        let c_path_buf=c_path_buf_start.as_mut_ptr();
+        let c_path_buf = c_path_buf_start.as_mut_ptr();
         // Copy the bytes into the buffer and append a null terminator
         std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         c_path_buf.add($bytes.len()).write(0);
@@ -156,7 +156,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
         }
     }};
 }
-
 
 #[macro_export]
 /// Macro to implement `BytesStorage` for types that support `From<&[u8]>`

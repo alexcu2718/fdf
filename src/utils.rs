@@ -115,7 +115,6 @@ where
     }
 }
 
-
 //internal convenients functions for min/max
 pub(crate) const fn const_min(a: usize, b: usize) -> usize {
     if a < b { a } else { b }

@@ -76,8 +76,8 @@ where
         );
 
         let mut c_path_buf_start = crate::PathBuffer::new();
-        
-        let c_path_buf=c_path_buf_start.as_mut_ptr();
+
+        let c_path_buf = c_path_buf_start.as_mut_ptr();
 
         // copy bytes using copy_nonoverlapping to avoid ub check
         unsafe {
@@ -275,8 +275,6 @@ where
     fn to_string_lossy(&self) -> std::borrow::Cow<'_, str> {
         String::from_utf8_lossy(self)
     }
-
-   
 
     /// Get the length of the basename of a path (up to and including the last '/')
     #[inline]

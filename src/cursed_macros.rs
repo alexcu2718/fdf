@@ -23,7 +23,7 @@
 /// let d_reclen:usize = offset_dirent!(entry_ptr, d_reclen);
 ///
 /// let d_namlen:usize = offset_dirent!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
-/// let d_ino_ptr :u64= offset_dirent!(entry_ptr, d_ino); // This
+/// let d_ino :u64= offset_dirent!(entry_ptr, d_ino); // This
 macro_rules! offset_dirent {
     // Special case for `d_reclen`
     ($entry_ptr:expr, d_reclen) => {{

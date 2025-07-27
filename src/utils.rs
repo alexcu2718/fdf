@@ -115,69 +115,6 @@ where
     }
 }
 
-#[inline]
-#[allow(clippy::items_after_statements)]
-#[allow(clippy::cast_possible_truncation)] //stupid
-#[allow(clippy::inline_asm_x86_intel_syntax)]
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-/// Opens a directory using an assembly implementation of open(i'm probably going to learn some bindgen and have some experiments) and returns the file descriptor.
-/// Returns -1 on error.
-pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    use std::arch::asm;
-    let filename: *const u8 = unsafe { cstr!(bytepath) };
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
-    const SYSCALL_NUM: i32 = libc::SYS_open as _;
-
-    let fd: i32;
-    unsafe {
-        asm!(
-            "syscall",
-            inout("rax") SYSCALL_NUM => fd,
-            in("rdi") filename,
-            in("rsi") FLAGS,
-            in("rdx") libc::O_RDONLY,
-            out("rcx") _, out("r11") _,
-            options(nostack, preserves_flags)
-        )
-    };
-    fd
-}
-
-#[inline]
-#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-/// Opens a directory using libc's open function. Backup function for non-x86_64 architectures.
-/// Returns -1 on error.
-pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    unsafe {
-        libc::open(
-            cstr!(bytepath),
-            libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY,
-        )
-    }
-}
-
-#[inline]
-#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-pub unsafe fn close_asm(fd: i32) {
-    unsafe { libc::close(fd) };
-}
-
-#[inline]
-#[allow(clippy::inline_asm_x86_intel_syntax)]
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-pub unsafe fn close_asm(fd: i32) {
-    use std::arch::asm;
-    let _: isize;
-    unsafe {
-        asm!(
-            "syscall",
-            inout("rax") libc::SYS_close => _,
-            in("rdi") fd,
-            out("rcx") _, out("r11") _,
-            options(nostack, preserves_flags, nomem)
-        )
-    };
-}
 
 //internal convenients functions for min/max
 pub(crate) const fn const_min(a: usize, b: usize) -> usize {

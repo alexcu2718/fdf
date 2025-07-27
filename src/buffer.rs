@@ -114,22 +114,7 @@ where
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     #[allow(dead_code)]
     pub(crate) unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
-        use std::arch::asm;
-        let output;
-        unsafe {
-            asm!(
-                "syscall",
-                inout("rax") libc::SYS_getdents64  => output,
-                in("rdi") fd,
-                in("rsi") self.as_mut_ptr(),
-                in("rdx") SIZE,
-                out("rcx") _,  // syscall clobbers rcx
-                out("r11") _,  // syscall clobbers r11
-                options(nostack, preserves_flags)
-            )
-        };
-
-        output
+        unsafe{crate::syscalls::getdents_asm(fd,self.as_mut_ptr(),SIZE)}
     }
 
     /// # Safety

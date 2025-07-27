@@ -71,6 +71,12 @@ pub(crate) use iter::DirIter;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod direntry_filter;
 
+
+#[cfg(target_os = "linux")]
+mod syscalls;
+#[cfg(target_os = "linux")]
+pub use syscalls::{open_asm,close_asm,getdents_asm};
+
 mod buffer;
 mod test;
 pub use buffer::AlignedBuffer;

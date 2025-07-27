@@ -37,14 +37,18 @@ macro_rules! offset_dirent {
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_namlen as usize // access field directly as it is not aligned like the others
     }};//should this backup to a function call for platforms without d_namlen? TODO
-    //probably not as it would be inconsistent with the rest of the macro
-    // Handle inode number field with aliasing for BSD systems
-    //you can use d_ino or d_fileno (preferentially d_ino for cross-compatbility!)
 
+
+    ($entry_ptr:expr, d_off) => {{
+        // SAFETY: Caller must ensure pointer is valid
+        (*$entry_ptr).d_off   
+    }};
     ($entry_ptr:expr,d_name) => {{
 
          (&raw const (*$entry_ptr).d_name).cast::<u8>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
     }};
+      // Handle inode number field with aliasing for BSD systems
+    //you can use d_ino or d_fileno (preferentially d_ino for cross-compatbility!)
     ($entry_ptr:expr, d_ino) => {{
         #[cfg(any(
             target_os = "freebsd",
@@ -70,6 +74,7 @@ macro_rules! offset_dirent {
     }};
 
     // General case for all other fields
+    //which shouldn't really have any use case
     ($entry_ptr:expr, $field:ident) => {{ (*$entry_ptr).$field }};
 }
 

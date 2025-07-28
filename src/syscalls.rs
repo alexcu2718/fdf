@@ -7,7 +7,6 @@ use crate::ValueType;
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 // x86_64-specific implementation
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 /// Opens a directory using direct syscall via assembly
 ///
 /// Uses the `open` syscall with flags optimized for directory scanning:

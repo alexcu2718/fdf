@@ -1,3 +1,6 @@
+
+use crate::ValueType;
+
 #[inline]
 #[allow(clippy::items_after_statements)]
 #[allow(clippy::cast_possible_truncation)] //stupid
@@ -187,7 +190,9 @@ pub unsafe fn close_asm(fd: i32) {
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize) -> i64 {
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize) -> i64
+where T:ValueType //i8/u8
+{
     use std::arch::asm;
     let output;
     unsafe {
@@ -224,7 +229,9 @@ pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize)
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize) -> i64 {
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize) -> i64
+where T:ValueType //i8/u8
+{
     use std::arch::asm;
     let ret: i64;
     unsafe {
@@ -264,6 +271,10 @@ pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize)
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize) -> i64 {
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *const T, buffer_size: usize) -> i64
+
+where T:ValueType //i8/u8
+
+{
     unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
 }

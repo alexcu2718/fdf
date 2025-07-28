@@ -78,7 +78,7 @@ pub use syscalls::{close_asm, getdents_asm, open_asm};
 
 mod buffer;
 mod test;
-pub use buffer::AlignedBuffer;
+pub use buffer::{AlignedBuffer,ValueType};
 
 mod memchr_derivations;
 pub use memchr_derivations::{contains_zero_byte, find_zero_byte_u64, memrchr};

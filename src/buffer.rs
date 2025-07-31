@@ -99,7 +99,7 @@ where
     #[inline]
     #[cfg(target_os = "linux")]
     pub(crate) unsafe fn getdents64_internal(&mut self, fd: i32) -> i64 {
-        unsafe { libc::syscall(libc::SYS_getdents64, fd, self.as_mut_ptr(), SIZE) }
+        unsafe { Self::getdents64_asm(self,fd) }
     }
 
     /// # Safety
@@ -107,11 +107,10 @@ where
     /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'.
     /// At the end of the day, the only way to bypass glibc's quirks is to use inline assembly.
     ///
-    /// TODO! write an implementation for all aarch64
+    /// TODO! write an implementation for RISC-V
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::inline_asm_x86_intel_syntax)]
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[cfg(all(target_os = "linux"))]
     #[allow(dead_code)]
     pub(crate) unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         unsafe { crate::syscalls::getdents_asm(fd, self.as_mut_ptr(), SIZE) }

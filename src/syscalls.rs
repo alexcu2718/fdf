@@ -65,7 +65,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 /// File descriptor on success, -1 on error
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
-    let filename: *const u8 = cstr!(bytepath);
+    let filename: *const u8 = unsafe{cstr!(bytepath)};
 
     // aarch64 doesn't have open, we need to use openat for this.
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
@@ -99,10 +99,11 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 /// # Returns
 /// File descriptor on success, -1 on error
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    libc::open(
+    unsafe{libc::open(
         cstr!(bytepath),
         libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY,
     )
+}
 }
 
 #[inline]

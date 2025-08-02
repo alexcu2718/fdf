@@ -5,8 +5,9 @@ source "new_prelude.sh"
 echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET."
 echo "Note: Benchmarking relative directory searches (../)"
 
-# Setup output directories
-OUTPUT_DIR="$PWD/bench_results"
+
+
+OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
 # Testing with relative parent directory (..) as search root

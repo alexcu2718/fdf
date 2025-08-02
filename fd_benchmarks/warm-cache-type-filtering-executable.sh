@@ -7,7 +7,8 @@ echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET."
 echo "Note: Hyperfine may show small discrepancies due to benchmarking overhead."
 
 # Setup output directories
-OUTPUT_DIR="($dirname $(which fdf))/bench_results"
+
+OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
 # Command definitions

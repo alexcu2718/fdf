@@ -46,6 +46,8 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     fd
 }
 
+
+#[inline]
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 /// Opens a directory using `openat` syscall via assembly
 ///

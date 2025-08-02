@@ -3,7 +3,6 @@
 source "prelude.sh"
 source "new_prelude.sh"
 
-# Setup output directories
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 

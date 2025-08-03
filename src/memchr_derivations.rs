@@ -321,58 +321,6 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
 
 
-/*
-
-#[cfg(target_os = "linux")]
-pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
-    let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
-    //let reclen_new=unsafe{ const {(*dirent).d_reclen}}; //reclen is the length of the dirent structure, including the d_name field
-    // Calculate find the  start of the d_name field
-    //  Access the last 8 bytes(word) of the dirent structure as a u64 word
-    #[cfg(target_endian = "little")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
-    #[cfg(target_endian = "big")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
-    // Special case: When processing the 3rd u64 word (index 2), we need to mask
-    // the non-name bytes (d_type and padding) to avoid false null detection.
-    //  Access the last 8 bytes(word) of the dirent structure as a u64 word
-    // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
-    // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
-    // Special handling for 24-byte records (common case):
-    // Mask out non-name bytes (d_type and padding) that could cause false null detection
-    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
-    // The mask is applied to the last word to isolate the relevant bytes.
-    // The last word is masked to isolate the relevant bytes,
-    //we're bit manipulating the last word (a byte/u64) to find the first null byte
-    //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
-    // Combine the word with our mask to ensure:
-    // - Original name bytes remain unchanged
-    // - Non-name bytes are set to 0xFF (guaranteed non-zero)
-    let candidate_pos = last_word | mask;
-    // The resulting value (`candidate_pos`) has:
-    // - Original name bytes preserved
-    // - Non-name bytes forced to 0xFF (guaranteed non-zero)
-    // - Maintains the exact position of any null bytes in the name
-    //  Subtract 0x0101... from each byte (underflows if byte was 0)
-    //  AND with inverse to isolate underflowed bits
-    //  Mask high bits to find first zero byte
-    let zero_bit = candidate_pos.wrapping_sub(0x0101_0101_0101_0101)// 0x0101_0101_0101_0101 -> underflows the high bit if a byte is zero
-        & !candidate_pos//ensures only bytes that were zero retain the underflowed high bit.
-        & 0x8080_8080_8080_8080; //  0x8080_8080_8080_8080 -->This masks out the high bit of each byte, so we can find the first zero byte
-    // The trailing zeros of the zero_bit gives us the position of the first zero byte.
-    // We divide by 8 to convert the bit position to a byte position..
-    // We subtract 7 to get the correct offset in the d_name field.
-    //>> 3 converts from bit position to byte index (divides by 8)
-    let byte_pos = 7 - (zero_bit.trailing_zeros() >> 3) as usize;
-    // The final length is calculated as:
-    // `reclen - DIRENT_HEADER_START - byte_pos`
-    // This gives us the length of the d_name field, excluding the header and the null
-    // byte position.
-    reclen - DIRENT_HEADER_START - byte_pos
-}
-
-*/
 #[inline]
 pub(crate) const fn repeat_u8(x: u8) -> usize {
     usize::from_ne_bytes([x; size_of::<usize>()])

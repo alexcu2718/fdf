@@ -81,7 +81,7 @@ mod test;
 pub use buffer::{AlignedBuffer,ValueType};
 
 mod memchr_derivations;
-pub use memchr_derivations::{contains_zero_byte, find_zero_byte_u64, memrchr};
+pub use memchr_derivations::{contains_zero_byte, find_zero_byte_u64, memrchr,find_char_in_word};
 mod direntry;
 pub use direntry::DirEntry;
 

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
-    use crate::memchr_derivations::find_zero_byte_u64;
+    use crate::memchr_derivations::{find_zero_byte_u64,find_char_in_word};
     use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
     use std::env::temp_dir;
@@ -11,6 +11,7 @@ mod tests {
     use std::os::unix::fs::symlink;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
+  
 
     #[repr(C)]
     #[allow(dead_code)] //only relevant for linux
@@ -126,13 +127,20 @@ mod tests {
         //let _=std::fs::File::
     }
 
+       #[test]
+    fn test_find_dot_u64() {
+        let x = *b"123.4567";
+        assert_eq!(find_char_in_word(b'.',x), Some(3));
+        
+    } 
+    
     #[test]
     #[cfg(not(target_os = "linux"))]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
         let _ = std::fs::create_dir(&dir_path);
-        //throwing the error because of the directory already exists
+        //throwing the error because who cares if the directory already exists
 
         std::fs::write(dir_path.join("file1.txt"), "test1").unwrap();
         std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
@@ -169,6 +177,52 @@ mod tests {
 
         //let _=std::fs::File::
     }
+
+        #[test]
+    fn test_find_char_in_u8_not_found() {
+        let x = b"12345678";
+        assert_eq!(find_char_in_word(b'.', *x), None);
+        assert_eq!(find_char_in_word(0, *x), None);
+    }
+
+      #[test]
+    fn test_find_char_basic() {
+        let data = b"12.45678";
+        assert_eq!(find_char_in_word(b'.', *data), Some(2));
+    }
+
+    #[test]
+    fn test_find_char_first_position() {
+        let data = b".1245678";
+        assert_eq!(find_char_in_word(b'.', *data), Some(0));
+    }
+
+    #[test]
+    fn test_find_char_last_position() {
+        let data  = b"6124567.";
+        assert_eq!(find_char_in_word(b'.', *data), Some(7));
+    }
+
+    #[test]
+    fn test_find_char_not_found() {
+    
+        let data = [b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8'];
+        assert_eq!(find_char_in_word(b'.', data), None);
+        assert_eq!(find_char_in_word(0, data), None);
+    }
+
+    #[test]
+    fn test_find_special_chars() {
+    
+        let data = [b' ', b'\t', b'\n', b'\0', b'-', b'_', b'~', b'@'];
+        assert_eq!(find_char_in_word(b' ', data), Some(0));
+        assert_eq!(find_char_in_word(b'\0', data), Some(3));
+        assert_eq!(find_char_in_word(b'@', data), Some(7));
+        assert_eq!(find_char_in_word(b'.', data), None);
+    }
+
+
+
 
     #[test]
     fn test_hidden_files() {

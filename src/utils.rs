@@ -149,13 +149,14 @@ pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
 
 #[inline]
 ///  constructs a path convenience (just a utility function to save verbosity)
+/// this internal function relies on the pointer to the `dirent64` being non-null
 pub(crate) fn construct_path(
     path_buffer: &mut crate::PathBuffer,
     base_len: usize,
     drnt: *const dirent64,
 ) -> &[u8] {
-    let d_name = unsafe { crate::offset_dirent!(drnt, d_name).cast() }; // #SAFETY the drnt must be non null
-    let name_len = unsafe { dirent_name_length(drnt) }; // #SAFETY the drnt must be non null!!!! 
+    let d_name = unsafe { crate::offset_dirent!(drnt, d_name).cast() }; 
+    let name_len = unsafe { dirent_name_length(drnt) }; 
 
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
     unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned 
@@ -219,10 +220,10 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
 +--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
 | Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 |                 |
 |        |        |        |        |        |        |        |        |                 |
-| 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0x00   | 0xNN   | ← null byte found|
+| 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0x00   | 0xNN   |<- null byte found|
 +--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
-          ↑        ↑        ↑        ↑        ↑        ↑        ↑        ↑
-          |        |        |        |        |        |        |        |
+          ^     ^        ^        ^        ^        ^        ^        ^
+          |     |        |        |        |        |        |        |
           +-- Potential padding/d_type        +-- Actual filename bytes --+
 
 BIT TRICK OPERATION:
@@ -253,8 +254,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 ///
 /// This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
 /// It's probably the most efficient way to calculate the length
-/// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null bytes.
-/// It needs to be used on  a VALID `libc::dirent64` pointer, and it assumes that the `d_name` field is null-terminated.
+/// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null(kernel guaranteed)
 ///
 /// This is my own implementation of a constant-time strlen for dirents, which is an extremely common operation(probably one of THE hottest functions in this library
 /// and ignore/fd etc. So this is a big win!)
@@ -266,11 +266,9 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 ///
 /// Main idea:
 /// - We read the last 8 bytes of the `d_name` field, which is guaranteed to be null-terminated by the kernel.
-/// This is based on the observation that `d_name` is always null-terminated by the kernel,
 ///  so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks,
-/// we can locate the null terminator with a single 64-bit read and mask, assuming alignment and endianness.
+/// we can locate the null terminator with a single 64-bit read and mask
 ///                    
-/// Combining all these tricks, i made this beautiful thing!
 ///
 /// WORKING ON BIG-ENDIAN AND LITTLE ENDIAN SYSTEMS (linux)
 ///
@@ -281,13 +279,14 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
-    //let reclen_new=unsafe{ const {(*dirent).d_reclen}}; //reclen is the length of the dirent structure, including the d_name field
     // Calculate find the  start of the d_name field
-    //  Access the last 8 bytes(word) of the dirent structure as a u64 word
+    //  Access the last 8 bytes(word) of the dirent structure as a u64 
     #[cfg(target_endian = "little")]
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //go to the last word in the struct.
+    //this is safe because the reclen is the size of the struct, therefore indexing into it like this is ALWAYS in bounds.
     #[cfg(target_endian = "big")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if on big-endian
+    //TODO! this could probably be optimised, testing anything on bigendian is a fucking pain because it takes an ungodly time to compile.
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word

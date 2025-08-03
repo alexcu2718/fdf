@@ -111,6 +111,8 @@ Summary
 
 -cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, then add a **null terminator** for FFI use)
 
+-find_char_in_word: Find the first occurrence of a byte in a 64-bit word (Using SWAR(SIMD within a register))
+
 ```rust
 
 
@@ -152,6 +154,7 @@ Then this function, really nice way to avoid branch misses during dirent parsing
 use fdf::find_zero_byte_u64; // a const SWAR function 
 //(SIMD within a register, so no architecture dependence)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
+    //the only true unsafe action here is dereferencing the pointer, that MUST be checked before hand
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; 
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
@@ -161,6 +164,9 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // no branch SWAR
     reclen - DIRENT_HEADER_START - byte_pos
 }
+
+
+
 
 ```
 

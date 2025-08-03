@@ -421,14 +421,14 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 /// Finds the first occurrence of a byte in a 64-bit word.
 ///
 /// This uses a branchless, bitwise technique to locate the first instance of 
-/// the target byte `c` in the 64-bit value `x`. The operation works by:
+/// the target byte `c` in the 64-bit value `str`. The operation works by:
 ///
 /// 1. XORing each byte with the target value (resulting in 0 for matches)
 /// 2. Applying a zero-byte detection algorithm to find matches
 /// 3. Converting the bit position to a byte index
 ///
 /// # The Computation
-/// - `x ^ repeat_u64(c)`: Creates a value where matching bytes become 0
+/// - `str ^ repeat_u64(c)`: Creates a value where matching bytes become 0
 /// - `.wrapping_sub(LO_U64)`: Subtracts 1 from each byte (wrapping)
 /// - `& !xor_result`: Clears bits where the XOR result had 1s
 /// - `& HI_U64`: Isolates the high bit of each byte
@@ -456,7 +456,7 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 ///
 /// # Parameters
 /// - `c`: The byte to search for (0-255)
-/// - `x`: The word ( a [u8;8] ) to search in (64 bit specific)
+/// - `str`: The word ( a [u8;8] ) to search in (64 bit specific)
 ///
 /// # Returns
 /// - `Some(usize)`: Index (0-7) of the first occurrence

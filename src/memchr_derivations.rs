@@ -411,10 +411,9 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 /// - `None`: If the byte is not found
 pub const fn find_char_in_word(c: u8, str: [u8;8]) -> Option<usize> {
     // XOR with the target character will be 0 for matching bytes
-     #[cfg(target_endian = "little")]
-    let char_array=u64::from_ne_bytes(str);
-     #[cfg(target_endian = "big")]
-    let char_array=u64::from_ne_bytes(str).to_le(); //TODO! rewrite this logic for bigendian properly.
+     //#[cfg(target_endian = "little")]
+    let char_array=u64::from_le_bytes(str);
+
     let xor_result = char_array ^ repeat_u64(c);
     
     // Find zero bytes in the XOR result 

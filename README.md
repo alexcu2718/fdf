@@ -33,7 +33,6 @@ BSD systems may differ, based on limited QEMU testing.
 
 This executes a comprehensive suite of internal library, CLI tests, and benchmarks.
 
-
 ## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
 
 Testing on my local filesystem (to show on non-toy example)

@@ -321,7 +321,7 @@ where
     /// Returns an iterator over the directory entries using `readdir64` as opposed to `getdents`, this uses a higher level api
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    pub fn readdir(&self) -> Result<impl Iterator<Item = Self> + '_> {
+    pub fn readdir(&self) -> Result<impl Iterator<Item = Self>> {
         DirIter::new(self)
     }
     #[inline]
@@ -335,7 +335,7 @@ where
     ///  you can likely make the stack copies extremely cheap
     /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
     /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
-    pub fn getdents(&self) -> Result<impl Iterator<Item = Self> + '_> {
+    pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         //matching type signature of above for consistency
         let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
         let mut path_buffer = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
@@ -431,7 +431,7 @@ where
     }
     #[inline]
     /// Checks if the buffer is empty
-    pub const fn is_buffer_empty(&self) -> bool {
+    pub const fn is_buffer_not_empty(&self) -> bool {
         self.offset < self.remaining_bytes as _
     }
 
@@ -466,7 +466,7 @@ where
         use crate::traits_and_conversions::DirentConstructor;
         loop {
             // If we have remaining data in buffer, process it
-            if self.is_buffer_empty() {
+            if self.is_buffer_not_empty() {
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */

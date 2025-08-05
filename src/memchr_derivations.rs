@@ -404,15 +404,15 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 ///
 /// # Parameters
 /// - `c`: The byte to search for (0-255)
-/// - `str`: The word ( a [u8;8] ) to search in (64 bit specific)
+/// - `bytestr`: The word ( a [u8;8] ) to search in (64 bit specific)
 ///
 /// # Returns
 /// - `Some(usize)`: Index (0-7) of the first occurrence
 /// - `None`: If the byte is not found
-pub const fn find_char_in_word(c: u8, str: [u8;8]) -> Option<usize> {
+pub const fn find_char_in_word(c: u8, bytestr: [u8;8]) -> Option<usize> {
     // XOR with the target character will be 0 for matching bytes
      //#[cfg(target_endian = "little")]
-    let char_array=u64::from_le_bytes(str);
+    let char_array=u64::from_le_bytes(bytestr);
 
     let xor_result = char_array ^ repeat_u64(c);
     

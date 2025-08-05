@@ -110,8 +110,7 @@ where
     /// TODO! write an implementation for RISC-V
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
-    #[cfg(all(target_os = "linux"))]
-    #[allow(dead_code)]
+    #[cfg(target_os = "linux")]
     pub(crate) unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         unsafe { crate::syscalls::getdents_asm(fd, self.as_mut_ptr(), SIZE) }
     }
@@ -133,6 +132,7 @@ where
     ///
     /// # Safety
     /// Assumes `self` is zeroed and sized at least `LOCAL_PATH_MAX`.
+    // TODO! this is REALLY unergonomic, need to make it clearer
     pub(crate) unsafe fn init_from_direntry<S>(&mut self, dir_path: &crate::DirEntry<S>) -> usize
     where
         S: crate::BytesStorage,
@@ -144,7 +144,7 @@ where
 
         unsafe {
             std::ptr::copy_nonoverlapping(dir_path.as_ptr(), buffer_ptr.cast(), base_len); // copy path
-            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash; // add slash if needed
+            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash; // add slash if needed  (this avoids a branch )
         } //cast into byte types
 
         base_len += needs_slash as usize; // update length if slash added

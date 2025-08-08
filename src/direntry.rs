@@ -5,6 +5,7 @@
 #![allow(clippy::integer_division)] //i know my division is safe.
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
+//TODO! get rid of these unused imports warnings, they really don't matter but they do confuse anyone trying to understand unsafe festival.
 #[allow(unused_imports)]
 use crate::{AlignedBuffer, LOCAL_PATH_MAX, temp_dirent::TempDirent, utils::resolve_inode};
 #[allow(unused_imports)]
@@ -34,7 +35,7 @@ use crate::{PathBuffer, SyscallBuffer, offset_dirent};
 /// A struct representing a directory entry.
 ///
 /// `S` is a storage type (e.g., `Box<[u8]>`, `Arc<[u8]>`, `Vec<u8>`) used to hold the path bytes.
-#[derive(Clone)]
+#[derive(Clone)] //could probably implement a more specialised clone.
 pub struct DirEntry<S>
 where
     S: BytesStorage,
@@ -64,7 +65,7 @@ where
     /// This helps quickly extract the file name from the full path.
     pub(crate) file_name_index: u16,
     // 2 bytes free here., we need to leave 1 byte free so we can save on the size of the option/result enum.
-    //i'm not sure what's a good use of 1 byte
+    //i'm not sure what's a good use of 1 byte (maybe is_root? Would help simplify edge cases but wouldn't be applicable on macos)
 }
 
 impl<S> DirEntry<S>
@@ -148,6 +149,7 @@ where
             }
             FileType::Directory => {
                 self.readdir() //if we can read the directory, we check if it has no entries
+                    //technically we could do this with a stat/lstat call. investigate this TODO!
                     .is_ok_and(|mut entries| entries.next().is_none())
             }
             _ => false,
@@ -173,10 +175,10 @@ where
         let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) }; //get length without null terminator
         // we're dereferencing a valid poiinter here, it's fine.
         //alignment is trivial, we use `libc::strlen` because it's probably the most optimal for possibly long paths
-        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out
+        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out why(curiosity, not pragmatism!)
 
         let boxed = Self {
-            path: full_path.into(),
+            path: full_path.into(), //we're heap allocating here
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
@@ -196,7 +198,7 @@ where
     //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned,
     //so in my case, because it's 10 bytes, we're looking for an 8 byte reference, so it doesnt work
     #[must_use]
-    ///Cost free conversion to bytes (because it is already is bytes)
+    ///Cost free conversion to bytes (because it is already is bytes) 
     pub fn as_bytes(&self) -> &[u8] {
         self
     }
@@ -238,6 +240,8 @@ where
     #[inline]
     #[must_use]
     ///returns the inode number of the file, cost free check
+    /// 
+    /// 
     /// this is a unique identifier for the file on the filesystem, it is not the same
     /// as the file name or path, it is a number that identifies the file on the
     /// It should be u32 on BSD's but I use u64 for consistency across platforms
@@ -247,7 +251,7 @@ where
 
     #[inline]
     #[must_use]
-    ///an internal function apply a function, this will be public probably when I figure out api
+    ///Applies a filter condition
     pub fn filter<F: Fn(&Self) -> bool>(&self, func: F) -> bool {
         func(self)
     }
@@ -295,7 +299,7 @@ where
         unsafe { self.get_unchecked(..std::cmp::max(self.file_name_index() - 1, 1)) }
 
         //we need to be careful if it's root,im not a fan of this method but eh.
-        //theres probably a more elegant way.
+        //theres probably a more elegant way. TODO!
     }
 
     #[inline]
@@ -331,10 +335,11 @@ where
     /// This function is a low-level syscall wrapper that reads directory entries.
     /// It returns an iterator that yields `DirEntry` objects.
     /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
-    /// which in theory allows it to be offered tuned parameters, such as a high buffer size (shows performance benefits)
-    ///  you can likely make the stack copies extremely cheap
-    /// EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
-    /// but in actuality, i should/might parameterise this to allow that, i mean its trivial, its about 10 lines in total.
+    //which in theory allows it to be offered tuned parameters, such as a high buffer size (shows performance benefits)
+    //  you can likely make the stack copies extremely cheap
+    // EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
+    // (Could get the block size via an lstat call, blk size is not reliable however (well, on Linux)
+    //this is because the blk size does NOT accurately reflect the size of the directory(aka, removing files does not *necessarily* )
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
         //matching type signature of above for consistency
         let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
@@ -355,6 +360,21 @@ where
         })
     }
 }
+
+/*
+// also see reference https://github.com/golang/go/issues/64597, to test this TODO!
+
+libc source code for reference on blk size.
+  size_t allocation = default_allocation;
+#ifdef _STATBUF_ST_BLKSIZE
+  /* Increase allocation if requested, but not if the value appears to
+     be bogus.  */
+  if (statp != NULL)
+    allocation = MIN (MAX ((size_t) statp->st_blksize, default_allocation),
+		      MAX_DIR_BUFFER_SIZE);
+#endif
+
+*/
 
 #[cfg(target_os = "linux")]
 ///Iterator for directory entries using getdents syscall
@@ -382,7 +402,7 @@ where
     /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
     #[inline]
     fn drop(&mut self) {
-        unsafe { close(self.fd) };
+        unsafe { close(self.fd) }; //this doesn't return an error code anyway, fuggedaboutit
         //unsafe { close_asm(self.fd) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
@@ -396,16 +416,18 @@ where
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
-    /// This is only used in the iterator implementation, so we can safely assume that the pointer
-    /// is valid and that we don't read past the end of the buffer.
+    /// 
+    /// 
+    // This is only used in the iterator implementation, so we can safely assume that the pointer
+    // is valid and that we don't read past the end of the buffer.
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
         self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
-    /// Checks the remaining bytes in the buffer, and resets the offset to 0.
-    /// This is a syscall that returns the number of bytes left to read.
+
+    /// This is a syscall that fills the buffer (stack allocated)
     ///
     ///
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
@@ -467,6 +489,7 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.is_buffer_not_empty() {
+                //we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
@@ -481,7 +504,7 @@ where
 
             self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-linux systems
             // issue a syscall once out of entries
-            unsafe { self.getdents_syscall() }; //get the remaining bytes in the buffer, this is a syscall that returns the number of bytes left to read
+            unsafe { self.getdents_syscall() }; //fill up the buffer again once out  of loop
 
             if self.is_end_of_directory() {
                 // If no more entries, return None,

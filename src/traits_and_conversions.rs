@@ -89,7 +89,7 @@ where
     }
 
     /// Returns the extension of the file as a byte slice, if it exists.
-    /// If the file has contains no returns `None`.
+    /// If the file has no '.' returns `None`.
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
         memrchr(b'.', self).map(|pos| &self[pos + 1..])
@@ -134,14 +134,12 @@ where
     unsafe fn open_fd(&self) -> crate::Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
+        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
         self.as_cstr_ptr(|ptr| {
             let fd = unsafe {
                 libc::open(
                     ptr,
-                    libc::O_RDONLY,
-                    libc::O_NONBLOCK,
-                    libc::O_DIRECTORY,
-                    libc::O_CLOEXEC,
+                    FLAGS
                 )
             };
 
@@ -223,7 +221,7 @@ where
     #[allow(clippy::missing_errors_doc)]
     ///returns the std definition of metadata for easy validation/whatever purposes.
     fn metadata(&self) -> crate::Result<std::fs::Metadata> {
-        std::fs::metadata(self.as_os_str()).map_err(|_| crate::DirEntryError::MetadataError)
+        std::fs::metadata(self.as_os_str()).map_err(|_| crate::DirEntryError::MetadataError) //TODO! provide a more specialised error
     }
 
     #[inline]
@@ -365,7 +363,7 @@ where
 
 ///A constructor for making accessing the buffer, filename indexes, depths of the parent path while inside the iterator.
 /// More documentation TBD
-#[allow(clippy::cast_possible_truncation)] //no truncation issue
+#[allow(clippy::cast_possible_truncation)] //no truncation issue (reclen is always under u16, casting to and  from a usize is lossless)
 pub trait DirentConstructor<S: BytesStorage> {
     // Required accessors
     fn path_buffer(&mut self) -> &mut PathBuffer;

@@ -14,13 +14,12 @@ mod tests {
   
 
     #[repr(C)]
-    #[allow(dead_code)] //only relevant for linux
     pub struct Dirent64 {
         d_ino: u64,
         d_off: u64,
         d_reclen: u16,
         d_type: u8,
-        d_name: [u8; 256], // typical max length
+        d_name: [u8; 256], // from definition in linux, this is really hacked in order to show my fancy-schmancy SWAR works.
     }
 
     #[test]

@@ -11,14 +11,14 @@ pub type Result<T> = std::result::Result<T, DirEntryError>;
 
 const_from_env!(
     /// The maximum length of a local path, set to 4096 by default, but can be customised via environment variable.
-    LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "4096"
+    LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", libc::PATH_MAX
 ); //set to PATH_MAX, but allow trivial customisation!
 
 //4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 const_from_env!(
     /// The size of the buffer used for directory entries, set to 4115 by default, but can be customised via environment variable.
     /// size of IO block
-    BUFFER_SIZE:usize="BUFFER_SIZE","4115"
+    BUFFER_SIZE:usize="BUFFER_SIZE",std::mem::offset_of!(libc::dirent, d_name) + libc::PATH_MAX as usize
 );
 //basically this is the should allow getdents to grab a lot of entries in one go
 
@@ -74,6 +74,7 @@ impl<S: BytesStorage> OsBytes<S> {
     #[allow(clippy::missing_const_for_fn)]
     /// Returns a reference to the underlying bytes.
     pub fn as_bytes(&self) -> &[u8] {
+        debug_assert!(self.bytes.len()<LOCAL_PATH_MAX);
         &self.bytes
     }
 

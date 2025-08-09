@@ -186,7 +186,7 @@ macro_rules! impl_bytes_storage {
 /// Example usage:
 /// ```
 /// use fdf::const_from_env;
-/// const_from_env!(MYVAR: usize = "NYVAR", "6969");
+/// const_from_env!(MYVAR: usize = "NYVAR", 6969);
 /// assert_eq!(MYVAR, 6969); //6969 is the default value if the environment variable NYVAR is not set
 /// ```
 /// /// This macro allows you to define a constant that can be set via an environment variable at compile time.`
@@ -201,7 +201,7 @@ macro_rules! impl_bytes_storage {
 /// const_from_env!(
 ///     /// Maximum path length for local filesystem operations
 ///     /// Default: 4096 (typical Linux PATH_MAX)
-///     LOCAL_PATH_MAX: usize = "`LOCAL_PATH_MAX`", "4096"
+///     LOCAL_PATH_MAX: usize = "`LOCAL_PATH_MAX`", 4096
 /// );
 ///
 /// assert_eq!(LOCAL_PATH_MAX, 4096);
@@ -217,30 +217,33 @@ macro_rules! const_from_env {
     ($(#[$meta:meta])* $name:ident: $t:ty = $env:expr, $default:expr) => {
         $(#[$meta])*
         pub const $name: $t = {
-            // Manual parsing for primitive types
-            const fn parse_env<const N: usize>(s: &[u8]) -> $t {
+            // A helper const function to parse a string into a number.
+            // This is used only when an environment variable is found.
+            const fn parse_env(s: &str) -> $t {
+                let mut n: $t = 0;
+                let s_bytes = s.as_bytes();
                 let mut i = 0;
-                let mut n = 0;
 
-                while i < s.len() {
-                    let b = s[i];
+                while i < s_bytes.len() {
+                    let b = s_bytes[i];
                     match b {
                         b'0'..=b'9' => {
                             n = n * 10 + (b - b'0') as $t;
                         }
-                        _ => panic!(concat!("Invalid ", stringify!($t), " value")),
+                        _ => panic!(concat!("Invalid numeric value in environment variable: ", stringify!($env))),
                     }
                     i += 1;
                 }
                 n
             }
 
-            // Handle the env var
-            const VAL: &str = match option_env!($env) {
-                Some(val) => val,
-                None => $default,
-            };
-            parse_env::<{ VAL.len() }>(VAL.as_bytes())
+            // Check if the environment variable is set.
+            match option_env!($env) {
+                // If it's set, parse the string value.
+                Some(val) => parse_env(val),
+                // If not, use the default expression directly.
+                None => $default as _,
+            }
         };
     };
 }

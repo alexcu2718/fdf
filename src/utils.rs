@@ -155,7 +155,7 @@ pub(crate) fn construct_path(
     base_len: usize,
     drnt: *const dirent64,
 ) -> &[u8] {
-    let d_name = unsafe { crate::offset_dirent!(drnt, d_name).cast() }; 
+    let d_name = unsafe { crate::offset_dirent!(drnt, d_name) }; 
     let name_len = unsafe { dirent_name_length(drnt) }; 
 
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
@@ -202,45 +202,8 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     }
 }
 
+
 /*
-
-
-+-----------------------------------------------------------------------------------------+
-| dirent64 STRUCTURE LAYOUT (Little-Endian)                                               |
-+--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
-| d_ino  | d_off  | reclen | d_type| padding|        d_name[256]                         |
-| (8B)   | (8B)   | (2B)   | (1B)  | (1B)   | (variable length, null-terminated)         |
-+--------+--------+--------+--------+--------+--------------------------------------------+
-                                  ↑         ↑
-                                  |         +-- padding byte
-                                  +-- d_type byte
-
-+-----------------------------------------------------------------------------------------+
-| SWAR ALGORITHM VISUALISATION (last 8 bytes being checked)                               |
-+--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
-| Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 |                 |
-|        |        |        |        |        |        |        |        |                 |
-| 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0xNN   | 0x00   | 0xNN   |<- null byte found|
-+--------+--------+--------+--------+--------+--------+--------+--------+-----------------+
-          ^     ^        ^        ^        ^        ^        ^        ^
-          |     |        |        |        |        |        |        |
-          +-- Potential padding/d_type        +-- Actual filename bytes --+
-
-BIT TRICK OPERATION:
-1. candidate_pos = last_word | mask
-   [0xNN][0xNN][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] ← original
-   | OR with mask (0x00FFFFFF when needed)
-   ↓
-   [0xFF][0xFF][0xNN][0xNN][0xNN][0xNN][0x00][0xNN] ← masked
-
-2. zero_bit calculation:
-   (candidate_pos - 0x0101010101010101) & ~candidate_pos & 0x8080808080808080
-   ↓
-   High bits indicate null bytes: 0x0000000000800000
-   ↓
-   trailing_zeros() → finds position of first null byte
-
-*//*
 Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// (c) [Alexander Curtis .
 /// My Cat Diavolo is cute.

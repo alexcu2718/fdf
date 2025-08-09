@@ -117,10 +117,7 @@ Summary
 
 use fdf::cstr;
 let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
-//automatically  create an inline null-terminated stack allocated buffer of length LOCAL_PATH_MAX
-//this is actually default to 4096, but is an environment variable that can be played with at compile time.
-//but setting eg `export LOCAL_PATH_MAX=13000 && cargo b -r -q ` 
-//will recompile  with LOCAL_PATH_MAX as 13000.
+//automatically  create an inline null-terminated stack allocated buffer of length LOCAL_PATH_MAX (4096/1096 depending on Linux/Non Linux)
 
 //this is a self explanatory one!
 let leave_me_alone:*const u8=unsafe{cstr!("hello_mate",5)}; //this will CRASH because you've only told to stack allocate for 5 bytes
@@ -138,7 +135,6 @@ let dot_as_pointer:*const u8 =unsafe{ cstr!(oh_it_doesnt_need_literals)};
 ```
 
 -A black magic macro that can colour filepaths based on a compile time perfect hashmap
-(I made it into a separate crate)
 it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>
 
 Then this function, really nice way to avoid branch misses during dirent parsing (a really hot loop)
@@ -149,14 +145,14 @@ Then this function, really nice way to avoid branch misses during dirent parsing
 
 //The code is explained better in the true function definition (this is crate agnostic)
 //This is the little-endian implementation, see crate for modified version for big-endian
-// Only used on Linux systems, OpenBSD/macos systems store the name length trivially.
+// Only used on Linux systems, OpenBSD/macos systems store the name length trivially (no clue on Windows because reading the API is AWFUL)
 use fdf::find_zero_byte_u64; // a const SWAR function 
 //(SIMD within a register, so no architecture dependence)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     //the only true unsafe action here is dereferencing the pointer, that MUST be checked before hand
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; 
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) };
+    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //reclen is always multiple of 8 so alignment is guaranteed (unaligned reads are expensive!)
     //endianness fix omitted for brevity. check source
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
     let candidate_pos = last_word | mask;//^

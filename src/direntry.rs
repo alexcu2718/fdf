@@ -416,8 +416,6 @@ where
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
-    /// 
-    /// 
     // This is only used in the iterator implementation, so we can safely assume that the pointer
     // is valid and that we don't read past the end of the buffer.
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
@@ -426,13 +424,8 @@ where
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]
-
-    /// This is a syscall that fills the buffer (stack allocated)
-    ///
-    ///
-    /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
-    /// the pointer is valid and that we don't read past the end of the buffer.
-    pub unsafe fn getdents_syscall(&mut self) {
+    /// This is a syscall that fills the buffer (stack allocated) and resets the internal offset counter to 0.
+        pub unsafe fn getdents_syscall(&mut self) {
         self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
         self.offset = 0;
     }

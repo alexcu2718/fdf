@@ -1,6 +1,6 @@
-use std::mem::MaybeUninit;
-use std::ops::{Index, IndexMut};
-use std::slice::SliceIndex;
+use core::mem::MaybeUninit;
+use core::ops::{Index, IndexMut};
+use core::slice::SliceIndex;
 mod sealed {
     pub trait Sealed {}
     impl Sealed for i8 {}

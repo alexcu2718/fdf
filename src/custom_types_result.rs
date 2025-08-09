@@ -3,7 +3,7 @@ use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use slimmer_box::SlimmerBox;
 use std::ffi::OsStr;
-use std::ops::Deref;
+use core::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 ///Generic result type for directory entry operations
@@ -23,7 +23,7 @@ const_from_env!(
 //basically this is the should allow getdents to grab a lot of entries in one go
 
 pub(crate) type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
-#[allow(dead_code)]
+#[allow(dead_code)] //this should be only linux only (because of getdents )
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
 ///  a trait that all storage types must implement (for our main types) (so the user can use their own types if they want)

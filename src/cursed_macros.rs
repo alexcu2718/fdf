@@ -82,15 +82,14 @@ macro_rules! offset_dirent {
 /// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
 /// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)
 ///
-/// The first argument should be a byte slice
-/// the second argument is optional as specifies a custom buffer size.
-/// `cstr!(b"/home/sir_galahad", 256)`
+/// The argument should be a byte slice that c omes from a filesystem (so it's automatically under the stack size)
+
 /// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
-/// or eg `libc::open(cstr!(b"/", 256),libc::O_RDONLY)`
-/// This macro takes a byte slice and returns a pointer to a null-terminated C-style string.
+/// This macro takes a byte slice and returns a pointer to a null-terminated C-style string(either const i8/u8)
 macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
+        core::debug_assert!($bytes.len()<$crate::LOCAL_PATH_MAX);
         // Create a buffer and make into a pointer
         let mut c_path_buf_start = $crate::PathBuffer::new();
         let c_path_buf = c_path_buf_start.as_mut_ptr();
@@ -102,16 +101,8 @@ macro_rules! cstr {
         //let caller choose cast
         c_path_buf.cast::<_>()
     }};
-    ($bytes:expr,$n:expr) => {{
-        // create an uninitialised u8 slice and grab the pointer mutably  and make into a pointer
-        let mut c_path_buf_start = $crate::PathBuffer::new();
-        let c_path_buf = c_path_buf_start.as_mut_ptr();
-        // Copy the bytes into the buffer and append a null terminator
-        std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
-        c_path_buf.add($bytes.len()).write(0);
-
-        c_path_buf.cast::<_>()
-    }};
+   
+    
 }
 
 #[doc(hidden)]
@@ -197,7 +188,6 @@ macro_rules! impl_bytes_storage {
 /// ```
 /// use fdf::const_from_env;
 ///
-/// // Creates a constant with documentation
 /// const_from_env!(
 ///     /// Maximum path length for local filesystem operations
 ///     /// Default: 4096 (typical Linux PATH_MAX)
@@ -241,7 +231,7 @@ macro_rules! const_from_env {
             match option_env!($env) {
                 // If it's set, parse the string value.
                 Some(val) => parse_env(val),
-                // If not, use the default expression directly.
+                // If not, use the default
                 None => $default as _,
             }
         };

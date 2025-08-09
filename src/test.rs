@@ -4,6 +4,7 @@ mod tests {
     use crate::memchr_derivations::{find_zero_byte_u64,find_char_in_word};
     use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
+    use core::ffi::c_str;
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
@@ -717,11 +718,26 @@ mod tests {
 
         let result = finder.traverse().unwrap().into_iter();
 
+
+
+
         let collected: Vec<_> = result.collect();
 
         assert!(collected.len() > 3);
         //a fairly arbitirary assert, this is to make sure that the result isnt no-opped away.
         //(basically  trying to avoid the same segfault issue seen previously....)
+    }
+
+
+    #[test]
+    fn test_cstr(){
+        
+
+
+        let test_bytes=b"randopath";
+        let c_str_test:*const u8=unsafe{cstr!(test_bytes)};
+        assert!(!c_str_test.is_null(),"this should never return a null pointer if it's under {}",crate::LOCAL_PATH_MAX)
+        //well, it'll not pass the test anyway.
     }
 
     #[test]

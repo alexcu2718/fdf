@@ -13,9 +13,13 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 ## Important Notes
 
-Contributions will be considered once features are stabilised and improved. This remains a hobby project requiring significant development.
+Contributions will be considered once features are stabilised and improved. This remains a learning/hobby project requiring significant development.
 
-The implemented subset performs well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself.
+(Although if someone really wants to contribute, go nuts!)
+
+The implemented subset performs well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and learning how to program at a low level.
+
+*NO WINDOWS SUPPORT, THIS WILL BE DONE IN TIME*
 
 ## How to test
 
@@ -31,7 +35,7 @@ Testing on my local filesystem (to show on non-toy example)
 
 ```bash
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf .  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 | #search my whole pc
+| `fdf ''  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 | #search for symlinks
 | `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
 
 
@@ -43,11 +47,11 @@ Testing on my local filesystem (to show on non-toy example)
 
 ```
 
- **Full Benchmarks:** [View on GitHub](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
+ **Full Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
 ## Extra bits
 
--cstr! :a macro  use a byte slice as a pointer (automatically initialise memory, then add a **null terminator** for FFI use)
+-cstr! :a macro  use a byte slice as a pointer (automatically initialise memory(no heap use), then add a **null terminator** for FFI use)
 
 -find_char_in_word: Find the first occurrence of a byte in a 64-bit word (Using SWAR(SIMD within a register))
 
@@ -86,25 +90,20 @@ Then finally, the reward is a tool I can use for the rest of my life to find stu
 
 Mostly though, I just enjoy learning.
 
-To put it in perspective, I did not know any C before I started this project, I noticed that every type of file finding tool will inevitably rely on some kind of iterator that will heap allocate regardless of whether or not it's a match,
-
-So we're talking a lot of random allocations which I suspect may be a big bottleneck. (I think arenas just might be the best option, simplicity and complexity trade off)
+To put it in perspective, I did not know any C before I started this project, so there are rough ABI bits.
 
 Even though my project in it's current state is faster, I've got some experiments to try filtering before allocating.
 
-Unfortunately, you have to have to allocate heap space for directories in stdlib (because they're necessary for the next call)
-(The same would probably go here)
-
-Which is partially why I felt the need to rewrite it from libc, it's just the standard library was too high level.
+Rust's std::fs has some notable inefficiencies in how it works, notably a lot more heap allocation than I'd like so rewriting from libc was the ideal way to bypass this(and learn!)
 
 I'm curious to see what happens when you filter before allocation, this is something I have partially working in my current crate
 but the implementation details like that is not accessible via CLI. If it proves to be performant, it will eventually be in there.
 Obviously, I'm having to learn a lot to do these things and it takes  TIME to understand, get inspired and implement things...
 
-I do intend to only add features and not break anything, until i can somewhat promise that, then i won't entertain wasting other people's time but eventually
+I do intend to only add features and not break anything, until I can somewhat promise that, then i won't entertain wasting other people's time but eventually
  if anyone felt like adding something, they can!
 
-(notably, there's some obvious things I have not touched in a while and things that are just less interesting, ideally one day someone could do that, not now though)
+(notably, there's some obvious things I have not touched in a while(datetime filters) and things that are just less interesting, ideally one day someone could do that, not now though)
 
 ## NECESSARY DISCLAIMERS (I might have a conscience somewhere)
 

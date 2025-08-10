@@ -149,8 +149,7 @@ where
             }
             FileType::Directory => {
                 self.readdir() //if we can read the directory, we check if it has no entries
-                    //technically we could do this with a stat/lstat call. investigate this TODO!
-                    .is_ok_and(|mut entries| entries.next().is_none())
+                    .is_ok_and(|mut entries| entries.next().is_none()) //i use readdir here to make code more concise.
             }
             _ => false,
         }
@@ -162,7 +161,7 @@ where
     /// there's no way ahead of time to tell if a path has symbolic components.
     /// Returns an error on invalid path (errors to be filled in later)  (they're actually encoded though)
     pub fn to_full_path(self) -> Result<Self> {
-        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096)  (PATH_MAX but can be setup via envvar for testing)
+        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
         let ptr = unsafe {
             self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut())) //we've created this pointer, we need to be careful
         };
@@ -172,8 +171,8 @@ where
             return Err(std::io::Error::last_os_error().into());
         }
         // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
-        let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) }; //get length without null terminator
-        // we're dereferencing a valid poiinter here, it's fine.
+        let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) }; //get length without null terminator (no ub check, this is why i do it this way)
+        // we're dereferencing a valid pointer here, it's fine.
         //alignment is trivial, we use `libc::strlen` because it's probably the most optimal for possibly long paths
         // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out why(curiosity, not pragmatism!)
 
@@ -188,7 +187,7 @@ where
         //so we subtract the filename length from the total length, probably could've been done more elegantly.
         //TBD? not imperative.
         unsafe { libc::free(ptr as _) }
-        //free the pointer to stop leaking (trivial concern considering how little this is going to be called.)
+        //free the pointer to stop leaking
 
         Ok(boxed)
     }
@@ -284,7 +283,7 @@ where
     ///returns the directory name of the file (as bytes) or failing that (/ is problematic) will return the full path,
     pub fn dirname(&self) -> &[u8] {
         unsafe {
-            self //this is why we store the baseline, to check this and is hidden as babove, its very useful and cheap
+            self //this is why we store the baseline, to check this and is hidden as above, its very useful and cheap
                 .get_unchecked(..self.file_name_index() - 1)
                 .rsplit(|&b| b == b'/')
                 .next()
@@ -362,6 +361,8 @@ where
 }
 
 /*
+interesting when testing blk size of via stat calls on my own pc, none had an IO block>4096
+
 // also see reference https://github.com/golang/go/issues/64597, to test this TODO!
 
 libc source code for reference on blk size.
@@ -485,7 +486,7 @@ where
                 //we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
-                self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache */
+                self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache this is a no-op on non-x86_64*/
 
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
@@ -493,9 +494,9 @@ where
 
                 return Some(entry);
             }
-            // prefetch the next buffer content before reading, only applies if no
+            // prefetch the next buffer content before reading
 
-            self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-linux systems
+            self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-x86_64
             // issue a syscall once out of entries
             unsafe { self.getdents_syscall() }; //fill up the buffer again once out  of loop
 

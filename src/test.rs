@@ -4,7 +4,6 @@ mod tests {
     use crate::memchr_derivations::{find_char_in_word, find_zero_byte_u64};
     use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
-    use core::ffi::c_str;
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;

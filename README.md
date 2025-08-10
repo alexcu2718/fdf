@@ -1,11 +1,7 @@
-# fdf - High-Performance POSIX File Finder
+# fdf – High-Performance POSIX File Finder
 
- **An Experimental**  alternative to `fd`/`find` tool for regex/glob matching, with colourised output.
-
-This project is not production-ready, with an unstable API and a planned renaming before version 1.0. It is not currently open for contributions(will be).
-
-The tool is functional but lacks the full feature set intended, as evidenced by extensive testing.
-It primarily serves as a learning project in advanced Rust, C and assembly, which has grown beyond initial expectations.
+**fdf** is an experimental, high-performance alternative to [`fd`](https://github.com/sharkdp/fd) and `find`, optimised for **regex** and **glob** matching with colourised output.  
+Originally a learning project in **advanced Rust**, **C**, and **assembly**, it has evolved into a competitive, benchmarked tool for fast filesystem search.
 
 Easily installed via:
 
@@ -27,10 +23,6 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 git clone https://github.com/alexcu2718/fdf /tmp/fdf_test  &&   /tmp/fdf_test/fd_benchmarks/run_all_tests_USE_ME.sh
 ```
 
-Note: The test suite clones the LLVM repository to /tmp for a sustainable testing environment,
-which is deleted on shutdown for Linux and macOS (with an option to delete afterward).
-BSD systems may differ, based on limited QEMU testing.
-
 This executes a comprehensive suite of internal library, CLI tests, and benchmarks.
 
 ## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
@@ -47,64 +39,11 @@ Testing on my local filesystem (to show on non-toy example)
 | `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 |
 | `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
 
-######
-#some of my benchmarks. repeatable on your own pc (as above)
-#
-# REPEATABLE BENCHMARKS (FOUND IN THE *HOW TO TEST* section above)
-fd count: 12445
-fdf count: 12445
-##### searching for the extension c in the llvm repo 
 
-Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
-  Time (mean ± σ):      20.6 ms ±   2.9 ms    [User: 39.3 ms, System: 119.3 ms]
-  Range (min … max):    15.5 ms …  25.1 ms    12 runs
-
-Benchmark 2: fd -HI --extension 'c' '' '/tmp/llvm-project'
-  Time (mean ± σ):      35.1 ms ±   2.7 ms    [User: 141.0 ms, System: 108.9 ms]
-  Range (min … max):    31.7 ms …  42.5 ms    12 runs
-
-Summary
-  fdf -HI --extension 'c' '' '/tmp/llvm-project' ran
-    1.71 ± 0.27 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
-############
-running ./warm-cache-type-simple-pattern.sh  
- fd count: 174329
-fdf count: 174329
-
-Running benchmarks...
-Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
-  Time (mean ± σ):      23.3 ms ±   3.2 ms    [User: 55.5 ms, System: 122.4 ms]
-  Range (min … max):    16.4 ms …  28.3 ms    12 runs
- 
-Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
-  Time (mean ± σ):      34.2 ms ±   3.4 ms    [User: 124.2 ms, System: 105.4 ms]
-  Range (min … max):    29.6 ms …  41.9 ms    12 runs
-Summary
-  fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project' ran
-    1.47 ± 0.25 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
-
-Summary
-  fdf '.' '/tmp/llvm-project' -HI ran
-    1.50 ± 0.21 times faster than fd '.' '/tmp/llvm-project' -HI
-#####
-running ./warm-cache-type-filtering-executable.sh   
-fd count: 927
-fdf count: 927
-
-Running benchmarks...
-Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type x
-  Time (mean ± σ):      33.2 ms ±   2.7 ms    [User: 49.6 ms, System: 225.1 ms]
-  Range (min … max):    29.5 ms …  38.0 ms    12 runs
-
-Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type x
-  Time (mean ± σ):      48.7 ms ±   1.6 ms    [User: 159.5 ms, System: 233.2 ms]
-  Range (min … max):    46.6 ms …  51.2 ms    11 runs
-
-Summary
-  fdf '.' '/tmp/llvm-project' -HI --type x ran
-    1.47 ± 0.13 times faster than fd '.' '/tmp/llvm-project' -HI --type x
 
 ```
+
+ **Full Benchmarks:** [View on GitHub](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
 ## Extra bits
 
@@ -112,31 +51,12 @@ Summary
 
 -find_char_in_word: Find the first occurrence of a byte in a 64-bit word (Using SWAR(SIMD within a register))
 
-```rust
-
-
-use fdf::cstr;
-let who_is_that_pointer_over_there:*const u8=unsafe{cstr!("i'm too cheeky aren't i")};
-//automatically  create an inline null-terminated stack allocated buffer of length LOCAL_PATH_MAX (4096/1096 depending on Linux/Non Linux)
-
-//previous cstr! macros i've seen only worked on literals, which got fixed in rust 1.77+ (via the c"....." (c prefix on literals auto adds a null terminator))
-// https://docs.rs/rustix/latest/rustix/macro.cstr.html, this is an example of what i've specifically tried to generalise.
-let oh_it_doesnt_need_literals:&[u8]=b".";
-let dot_as_pointer:*const u8 =unsafe{ cstr!(oh_it_doesnt_need_literals)};
-
-let test_crash=b".".repeat(10000);
-let this_is_will_crash:*const u8=unsafe{cstr!(test_crash)}; //because 10000> LOCAL_PATH_MAC
-
-```
-
 -A black magic macro that can colour filepaths based on a compile time perfect hashmap
 it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>
 
 Then this function, really nice way to avoid branch misses during dirent parsing (a really hot loop)
 
 ```rust
-
-
 
 //The code is explained better in the true function definition (this is crate agnostic)
 //This is the little-endian implementation, see crate for modified version for big-endian
@@ -154,8 +74,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // no branch SWAR
     reclen - DIRENT_HEADER_START - byte_pos
 }
-
-
 
 
 ```

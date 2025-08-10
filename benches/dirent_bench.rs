@@ -1,6 +1,5 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
-use fdf::find_zero_byte_u64;
 use fdf::strlen as asm_strlen;
 use std::hint::black_box;
 
@@ -9,7 +8,6 @@ use std::hint::black_box;
 pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(LibcDirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
-    //let reclen_new=unsafe{ const {(*dirent).d_reclen}}; //reclen is the length of the dirent structure, including the d_name field
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     #[cfg(target_endian = "little")]
@@ -20,19 +18,32 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
 
     let candidate_pos = last_word | mask;
-    // The resulting value (`candidate_pos`) has:
-    // - Original name bytes preserved
-    // - Non-name bytes forced to 0xFF (guaranteed non-zero)
-    // - Maintains the exact position of any null bytes in the name
-    //I have changed the definition since the original README, I found a more rigorous backing!
-    // We subtract 7 to get the correct offset in the d_name field.
-    let byte_pos = 7 - find_zero_byte_u64(candidate_pos); // a constant time SWAR function
-    // The final length is calculated as:
-    // `reclen - DIRENT_HEADER_START - byte_pos`
-    // This gives us the length of the d_name field, excluding the header and the null
-    // byte position.
+
+    let byte_pos = 7 - find_zero_byte_u64(candidate_pos); 
+    
     reclen - DIRENT_HEADER_START - byte_pos
 }
+
+
+//repeated definitions (because i had to make find_zero_byte_u64 private)
+#[inline]
+pub(crate) const fn repeat_u64(byte: u8) -> u64 {
+    u64::from_ne_bytes([byte; size_of::<u64>()])
+}
+
+const LO_U64: u64 = repeat_u64(0x01);
+
+const HI_U64: u64 = repeat_u64(0x80);
+
+#[inline]
+pub(crate) const  fn find_zero_byte_u64(x: u64) -> usize {
+    //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
+    let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
+
+    (zero_bit.trailing_zeros() >> 3) as usize
+    //>> 3 converts from bit position to byte index (divides by 8)
+}
+
 
 #[repr(C, align(8))]
 pub struct LibcDirent64 {

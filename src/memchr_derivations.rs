@@ -335,7 +335,6 @@ const LO_U64: u64 = repeat_u64(0x01);
 const HI_U64: u64 = repeat_u64(0x80);
 
 /// Returns the index (0..=7) of the first zero byte** in a `u64` word.
-/// IT MUST CONTAIN A NULL TERMINATOR
 ///
 /// This uses a branchless, bitwise technique that identifies zero bytes
 /// by subtracting `0x01` from each byte and masking out non-zero bytes.
@@ -352,7 +351,7 @@ const HI_U64: u64 = repeat_u64(0x80);
 /// Returns:
 /// - The byte index of the first zero byte in `x`
 #[inline]
-pub const fn find_zero_byte_u64(x: u64) -> usize {
+pub(crate) const  fn find_zero_byte_u64(x: u64) -> usize {
     //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
     let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
 

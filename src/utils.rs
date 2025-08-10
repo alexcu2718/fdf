@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #[allow(unused_imports)]
-use crate::{DirEntryError, Result, buffer::ValueType, cstr, find_zero_byte_u64};
+use crate::{DirEntryError, Result, buffer::ValueType, cstr, memchr_derivations::find_zero_byte_u64};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]

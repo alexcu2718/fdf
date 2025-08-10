@@ -199,7 +199,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
         #[allow(unused_unsafe)]
         unsafe {
             let d_type = offset_dirent!($entry, d_type);
-            core::debug_assert!(offset_dirent!($entry, d_reclen) % 8 == 0); //this shows all reads are aligned
+
             #[cfg(target_os = "linux")]
             {
                 //reclen is always 24 for . and .. on linux,

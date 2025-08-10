@@ -113,16 +113,6 @@ macro_rules! offset_dirent {
 ///
 /// # Examples
 ///
-/// Basic usage with libc functions:
-/// ```
-/// # use fdf::cstr;
-/// let path:*const i8 = unsafe{ cstr!(b"/etc/passwd")};
-/// unsafe {
-///     let fd = libc::open(path, libc::O_RDONLY);
-///     assert!(fd >= 0);
-///     libc::close(fd);
-/// }
-/// ```
 ///
 /// Works with different pointer types:
 /// ```

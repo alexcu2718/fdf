@@ -13,7 +13,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
   
-
+    #[allow(dead_code)]
     #[repr(C)]
     pub struct Dirent64 {
         d_ino: u64,

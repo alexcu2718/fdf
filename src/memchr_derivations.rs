@@ -441,6 +441,7 @@ pub const fn contains_zero_byte(x: usize) -> bool {
 }
 
 /// Returns the last index matching the byte `x` in `text`.
+///
 /// This is directly copy pasted from the internal library with some modifications to make it work for me
 /// there were no unstable features so I thought I'll skip a dependency and add this.
 ///

@@ -1,9 +1,9 @@
 use crate::const_from_env;
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
+use core::ops::Deref;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use slimmer_box::SlimmerBox;
 use std::ffi::OsStr;
-use core::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 ///Generic result type for directory entry operations
@@ -74,7 +74,7 @@ impl<S: BytesStorage> OsBytes<S> {
     #[allow(clippy::missing_const_for_fn)]
     /// Returns a reference to the underlying bytes.
     pub fn as_bytes(&self) -> &[u8] {
-        debug_assert!(self.bytes.len()<LOCAL_PATH_MAX);
+        debug_assert!(self.bytes.len() < LOCAL_PATH_MAX);
         &self.bytes
     }
 

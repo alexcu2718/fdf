@@ -41,7 +41,7 @@ macro_rules! offset_dirent {
 
     ($entry_ptr:expr, d_off) => {{
         // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_off   
+        (*$entry_ptr).d_off
     }};
     ($entry_ptr:expr,d_name) => {{
 
@@ -89,7 +89,7 @@ macro_rules! offset_dirent {
 macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
-        core::debug_assert!($bytes.len()<$crate::LOCAL_PATH_MAX);
+        core::debug_assert!($bytes.len() < $crate::LOCAL_PATH_MAX);
         // Create a buffer and make into a pointer
         let mut c_path_buf_start = $crate::PathBuffer::new();
         let c_path_buf = c_path_buf_start.as_mut_ptr();
@@ -101,8 +101,6 @@ macro_rules! cstr {
         //let caller choose cast
         c_path_buf.cast::<_>()
     }};
-   
-    
 }
 
 #[doc(hidden)]

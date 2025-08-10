@@ -99,7 +99,7 @@ where
     #[inline]
     #[cfg(target_os = "linux")]
     pub(crate) unsafe fn getdents64_internal(&mut self, fd: i32) -> i64 {
-        unsafe { Self::getdents64_asm(self,fd) }
+        unsafe { Self::getdents64_asm(self, fd) }
     }
 
     /// # Safety

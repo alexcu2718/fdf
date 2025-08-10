@@ -155,8 +155,8 @@ pub(crate) fn construct_path(
     base_len: usize,
     drnt: *const dirent64,
 ) -> &[u8] {
-    let d_name = unsafe { crate::offset_dirent!(drnt, d_name) }; 
-    let name_len = unsafe { dirent_name_length(drnt) }; 
+    let d_name = unsafe { crate::offset_dirent!(drnt, d_name) };
+    let name_len = unsafe { dirent_name_length(drnt) };
 
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
     unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned 
@@ -202,7 +202,6 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     }
 }
 
-
 /*
 Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// (c) [Alexander Curtis .
@@ -243,7 +242,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
     // Calculate find the  start of the d_name field
-    //  Access the last 8 bytes(word) of the dirent structure as a u64 
+    //  Access the last 8 bytes(word) of the dirent structure as a u64
     #[cfg(target_endian = "little")]
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //go to the last word in the struct.
     //this is safe because the reclen is the size of the struct, therefore indexing into it like this is ALWAYS in bounds.

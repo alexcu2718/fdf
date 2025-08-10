@@ -136,12 +136,7 @@ where
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
         const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
         self.as_cstr_ptr(|ptr| {
-            let fd = unsafe {
-                libc::open(
-                    ptr,
-                    FLAGS
-                )
-            };
+            let fd = unsafe { libc::open(ptr, FLAGS) };
 
             if fd < 0 {
                 Err(std::io::Error::last_os_error().into())

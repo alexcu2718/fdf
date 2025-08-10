@@ -43,7 +43,6 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     fd
 }
 
-
 #[inline]
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 /// Opens a directory using `openat` syscall via assembly
@@ -64,7 +63,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 /// File descriptor on success, -1 on error
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
-    let filename: *const u8 = unsafe{cstr!(bytepath)};
+    let filename: *const u8 = unsafe { cstr!(bytepath) };
 
     // aarch64 doesn't have open, we need to use openat for this.
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
@@ -75,10 +74,10 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     asm!(
         "svc 0",
         in("x0") libc::AT_FDCWD,          // dirfd = AT_FDCWD
-        in("x1") filename,          
-        in("x2") FLAGS,           
-        in("x3") MODE,              
-        in("x8") SYSCALL_OPENAT,    
+        in("x1") filename,
+        in("x2") FLAGS,
+        in("x3") MODE,
+        in("x8") SYSCALL_OPENAT,
         lateout("x0") fd,           // return value (we can)
         options(nostack)
     );
@@ -99,11 +98,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 /// File descriptor on success, -1 on error
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
-    unsafe{libc::open(
-        cstr!(bytepath),
-        FLAGS
-    )
-}
+    unsafe { libc::open(cstr!(bytepath), FLAGS) }
 }
 
 #[inline]
@@ -190,7 +185,8 @@ pub unsafe fn close_asm(fd: i32) {
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
 pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
-where T:ValueType //i8/u8
+where
+    T: ValueType, //i8/u8
 {
     use std::arch::asm;
     let output;
@@ -198,7 +194,7 @@ where T:ValueType //i8/u8
         asm!(
             "syscall",
             inout("rax") libc::SYS_getdents64  => output,
-            in("rdi") fd, //i'd put comments but these are pretty trivial 
+            in("rdi") fd, //i'd put comments but these are pretty trivial
             in("rsi") buffer_ptr,
             in("rdx") buffer_size,
             out("rcx") _,  // syscall clobbers rcx
@@ -229,7 +225,8 @@ where T:ValueType //i8/u8
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
 pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
-where T:ValueType //i8/u8
+where
+    T: ValueType, //i8/u8
 {
     use std::arch::asm;
     let ret: i64;
@@ -269,9 +266,8 @@ where T:ValueType //i8/u8
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
 pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
-
-where T:ValueType //i8/u8
-
+where
+    T: ValueType, //i8/u8
 {
     unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
 }

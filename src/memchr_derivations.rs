@@ -317,10 +317,6 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
 */
 
-
-
-
-
 #[inline]
 pub(crate) const fn repeat_u8(x: u8) -> usize {
     usize::from_ne_bytes([x; size_of::<usize>()])
@@ -364,11 +360,10 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
     //>> 3 converts from bit position to byte index (divides by 8)
 }
 
-
 #[inline]
 /// Finds the first occurrence of a byte in a 64-bit word.
 ///
-/// This uses a branchless, bitwise technique to locate the first instance of 
+/// This uses a branchless, bitwise technique to locate the first instance of
 /// the target byte `c` in the 64-bit value `str`. The operation works by:
 ///
 /// 1. XORing each byte with the target value (resulting in 0 for matches)
@@ -409,16 +404,16 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 /// # Returns
 /// - `Some(usize)`: Index (0-7) of the first occurrence
 /// - `None`: If the byte is not found
-pub const fn find_char_in_word(c: u8, bytestr: [u8;8]) -> Option<usize> {
+pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     // XOR with the target character will be 0 for matching bytes
-     //#[cfg(target_endian = "little")]
-    let char_array=u64::from_le_bytes(bytestr);
+    //#[cfg(target_endian = "little")]
+    let char_array = u64::from_le_bytes(bytestr);
 
     let xor_result = char_array ^ repeat_u64(c);
-    
-    // Find zero bytes in the XOR result 
+
+    // Find zero bytes in the XOR result
     let matches = (xor_result.wrapping_sub(LO_U64)) & !xor_result & HI_U64;
-    
+
     if matches != 0 {
         Some((matches.trailing_zeros() >> 3) as usize)
     } else {

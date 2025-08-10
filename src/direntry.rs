@@ -198,7 +198,7 @@ where
     //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned,
     //so in my case, because it's 10 bytes, we're looking for an 8 byte reference, so it doesnt work
     #[must_use]
-    ///Cost free conversion to bytes (because it is already is bytes) 
+    ///Cost free conversion to bytes (because it is already is bytes)
     pub fn as_bytes(&self) -> &[u8] {
         self
     }
@@ -240,8 +240,8 @@ where
     #[inline]
     #[must_use]
     ///returns the inode number of the file, cost free check
-    /// 
-    /// 
+    ///
+    ///
     /// this is a unique identifier for the file on the filesystem, it is not the same
     /// as the file name or path, it is a number that identifies the file on the
     /// It should be u32 on BSD's but I use u64 for consistency across platforms
@@ -371,7 +371,7 @@ libc source code for reference on blk size.
      be bogus.  */
   if (statp != NULL)
     allocation = MIN (MAX ((size_t) statp->st_blksize, default_allocation),
-		      MAX_DIR_BUFFER_SIZE);
+              MAX_DIR_BUFFER_SIZE);
 #endif
 
 */
@@ -425,7 +425,7 @@ where
     }
     #[inline]
     /// This is a syscall that fills the buffer (stack allocated) and resets the internal offset counter to 0.
-        pub unsafe fn getdents_syscall(&mut self) {
+    pub unsafe fn getdents_syscall(&mut self) {
         self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
         self.offset = 0;
     }

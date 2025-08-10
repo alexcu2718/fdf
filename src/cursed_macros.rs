@@ -78,14 +78,62 @@ macro_rules! offset_dirent {
     ($entry_ptr:expr, $field:ident) => {{ (*$entry_ptr).$field }};
 }
 
-#[macro_export(local_inner_macros)]
-/// A macro to create a C-style *str pointer from a byte slice(does not allocate!)
+#[macro_export]
+/// A macro to create a C-style *str pointer from a byte slice (does not allocate!)
 /// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)
 ///
-/// The argument should be a byte slice that c omes from a filesystem (so it's automatically under the stack size)
-
-/// so eg `libc::open(cstr!(b"/"),libc::O_RDONLY)`
-/// This macro takes a byte slice and returns a pointer to a null-terminated C-style string(either const i8/u8)
+/// # Examples
+///
+/// Basic usage with libc functions:
+/// ```
+/// # use fdf::cstr;
+/// let path:*const i8 = unsafe{ cstr!(b"/etc/passwd")};
+/// unsafe {
+///     let fd = libc::open(path, libc::O_RDONLY);
+///     assert!(fd >= 0);
+///     libc::close(fd);
+/// }
+/// ```
+///
+/// Works with different pointer types:
+/// ```
+/// # use fdf::cstr;
+/// let as_i8 = unsafe{ cstr!(b"hello")} as *const i8;
+/// let as_u8 = unsafe{cstr!(b"world")} as *const u8;
+/// unsafe {
+///     assert_eq!(*as_i8.offset(0), b'h' as i8);
+///     assert_eq!(*as_u8.offset(0), b'w' as u8);
+/// }
+/// ```
+///
+/// Proper null termination:
+/// ```
+/// # use fdf::cstr;
+/// let s:*const u8 = unsafe{cstr!(b"test")};
+/// unsafe {
+///     assert_eq!(*s.offset(0), b't' );
+///     assert_eq!(*s.offset(1), b'e' );
+///     assert_eq!(*s.offset(2), b's' );
+///     assert_eq!(*s.offset(3), b't' );
+///     assert_eq!(*s.offset(4), 0);
+/// }
+/// ```
+///
+/// Empty string case:
+/// ```
+/// # use fdf::cstr;
+/// let empty:*const u8 = unsafe{cstr!(b"")};
+/// unsafe {
+///     assert_eq!(*empty.offset(0), 0);
+/// }
+/// ```
+///
+/// The macro will panic in debug mode if the input exceeds LOCAL_PATH_MAX: (Simplified example)
+/// ```should_panic
+/// # use fdf::cstr;
+/// let long_string = [b'a'; 5000];
+/// let will_crash:*const u8 = unsafe{cstr!(&long_string)}; // will crash yay!
+/// ```
 macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
@@ -122,7 +170,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
         #[allow(unused_unsafe)]
         unsafe {
             let d_type = offset_dirent!($entry, d_type);
-
+            core::debug_assert!(offset_dirent!($entry, d_reclen) % 8 == 0); //this shows all reads are aligned
             #[cfg(target_os = "linux")]
             {
                 //reclen is always 24 for . and .. on linux,

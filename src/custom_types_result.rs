@@ -22,7 +22,7 @@ const_from_env!(
 );
 //basically this is the should allow getdents to grab a lot of entries in one go
 
-pub(crate) type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
+pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
 #[allow(dead_code)] //this should be only linux only (because of getdents )
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 

@@ -95,7 +95,8 @@ pub use custom_types_result::{
     SlimmerBytes,
 };
 
-pub(crate) use custom_types_result::{PathBuffer, SyscallBuffer};
+pub(crate) use custom_types_result:: SyscallBuffer;
+pub use custom_types_result::PathBuffer;
 
 mod traits_and_conversions;
 pub use traits_and_conversions::BytePath;

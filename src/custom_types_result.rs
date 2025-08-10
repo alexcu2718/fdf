@@ -37,11 +37,11 @@ pub trait BytesStorage: Deref<Target = [u8]> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 impl BytesStorage for SlimmerBox<[u8], u16> {
     /// # Safety
-    /// The input must have a length less than `u16::MAX` (GUARANTEED AS RECLEN IS U16)
+    /// The input must have a length less than `LOCAL_PATH_MAX`
     #[inline]
     fn from_slice(bytes: &[u8]) -> Self {
         debug_assert!(
-            bytes.len() < u16::MAX as usize,
+            bytes.len() < crate::LOCAL_PATH_MAX,
             "Input bytes length exceeds u16::MAX"
         );
         unsafe { Self::new_unchecked(bytes) }

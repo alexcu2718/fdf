@@ -44,7 +44,8 @@ macro_rules! offset_dirent {
         (*$entry_ptr).d_off
     }};
     ($entry_ptr:expr,d_name) => {{
-
+        //see reference https://github.com/rust-lang/rust/blob/8712e4567551a2714efa66dac204ec7137bc5605/library/std/src/sys/fs/unix.rs#L740
+        //explanation also copypasted below.
          (&raw const (*$entry_ptr).d_name).cast::<u8>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
     }};
       // Handle inode number field with aliasing for BSD systems
@@ -77,6 +78,34 @@ macro_rules! offset_dirent {
     //which shouldn't really have any use case
     ($entry_ptr:expr, $field:ident) => {{ (*$entry_ptr).$field }};
 }
+
+/*
+
+   // The dirent64 struct is a weird imaginary thing that isn't ever supposed
+                // to be worked with by value. Its trailing d_name field is declared
+                // variously as [c_char; 256] or [c_char; 1] on different systems but
+                // either way that size is meaningless; only the offset of d_name is
+                // meaningful. The dirent64 pointers that libc returns from readdir64 are
+                // allowed to point to allocations smaller _or_ LARGER than implied by the
+                // definition of the struct.
+                //
+                // As such, we need to be even more careful with dirent64 than if its
+                // contents were "simply" partially initialized data.
+                //
+                // Like for uninitialized contents, converting entry_ptr to `&dirent64`
+                // would not be legal. However, we can use `&raw const (*entry_ptr).d_name`
+                // to refer the fields individually, because that operation is equivalent
+                // to `byte_offset` and thus does not require the full extent of `*entry_ptr`
+                // to be in bounds of the same allocation, only the offset of the field
+                // being referenced.
+
+                // d_name is guaranteed to be null-terminated.
+                let name = CStr::from_ptr((&raw const (*entry_ptr).d_name).cast());
+                let name_bytes = name.to_bytes();
+                if name_bytes == b"." || name_bytes == b".." {
+                    continue;
+                }
+*/
 
 #[macro_export]
 /// A macro to create a C-style *str pointer from a byte slice (does not allocate!)

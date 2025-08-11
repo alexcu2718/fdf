@@ -147,7 +147,7 @@ macro_rules! offset_dirent {
 /// }
 /// ```
 ///
-/// The macro will panic in debug mode if the input exceeds LOCAL_PATH_MAX: (Simplified example)
+/// The macro will panic in debug mode if the input exceeds `LOCAL_PATH_MAX`: (Simplified example)
 /// ```should_panic
 /// # use fdf::cstr;
 /// let long_string = [b'a'; 5000];

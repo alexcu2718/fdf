@@ -1,4 +1,4 @@
-use crate::traits_and_conversions::BytePath;
+use crate::traits_and_conversions::BytePath as _;
 use crate::{DirEntry, DirEntryError, Result, custom_types_result::BytesStorage};
 use regex::bytes::{Regex, RegexBuilder};
 

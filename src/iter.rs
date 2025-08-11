@@ -1,9 +1,9 @@
 #![allow(clippy::cast_possible_wrap)]
 #[allow(unused_imports)]
 use crate::{
-    AlignedBuffer, BytePath, DirEntry, DirEntryError as Error, FileType, LOCAL_PATH_MAX,
+    AlignedBuffer, BytePath as _, DirEntry, DirEntryError as Error, FileType, LOCAL_PATH_MAX,
     PathBuffer, Result, SyscallBuffer, cstr, custom_types_result::BytesStorage,
-    traits_and_conversions::DirentConstructor,
+    traits_and_conversions::DirentConstructor as _,
 };
 use libc::{DIR, closedir, opendir};
 #[cfg(not(target_os = "linux"))]

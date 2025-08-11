@@ -334,6 +334,7 @@ const LO_U64: u64 = repeat_u64(0x01);
 
 const HI_U64: u64 = repeat_u64(0x80);
 
+/// Previously public but left documents for posterity.
 /// Returns the index (0..=7) of the first zero byte** in a `u64` word.
 ///
 /// This uses a branchless, bitwise technique that identifies zero bytes
@@ -351,7 +352,7 @@ const HI_U64: u64 = repeat_u64(0x80);
 /// Returns:
 /// - The byte index of the first zero byte in `x`
 #[inline]
-pub(crate) const  fn find_zero_byte_u64(x: u64) -> usize {
+pub(crate) const fn find_zero_byte_u64(x: u64) -> usize {
     //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
     let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
 
@@ -405,7 +406,6 @@ pub(crate) const  fn find_zero_byte_u64(x: u64) -> usize {
 /// - `None`: If the byte is not found
 pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     // XOR with the target character will be 0 for matching bytes
-    //#[cfg(target_endian = "little")]
     let char_array = u64::from_le_bytes(bytestr);
 
     let xor_result = char_array ^ repeat_u64(c);
@@ -433,7 +433,7 @@ pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
 
 /// bit."
 ///
-/// COPY PASTED FROM STDLIB INTERNALS.
+// COPY PASTED FROM STDLIB INTERNALS.
 
 #[inline]
 pub const fn contains_zero_byte(x: usize) -> bool {

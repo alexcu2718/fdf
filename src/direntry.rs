@@ -15,11 +15,11 @@ use crate::{close_asm, open_asm};
 #[allow(unused_imports)]
 use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
 #[allow(unused_imports)]
-use std::{ffi::OsStr, io::Error, marker::PhantomData, os::unix::ffi::OsStrExt};
+use std::{ffi::OsStr, io::Error, marker::PhantomData, os::unix::ffi::OsStrExt as _};
 
 #[allow(unused_imports)]
 use crate::{
-    BytePath,
+    BytePath as _,
     DirIter,
     OsBytes,
     Result,
@@ -422,7 +422,7 @@ where
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
         self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-        d //this is a pointer to the dirent64 structure, which contains the directory entry information
+        d //return the pointer
     }
     #[inline]
     /// This is a syscall that fills the buffer (stack allocated) and resets the internal offset counter to 0.
@@ -479,7 +479,7 @@ where
     #[inline]
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
-        use crate::traits_and_conversions::DirentConstructor;
+        use crate::traits_and_conversions::DirentConstructor as _;
         loop {
             // If we have remaining data in buffer, process it
             if self.is_buffer_not_empty() {

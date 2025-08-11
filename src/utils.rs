@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #[allow(unused_imports)]
-use crate::{DirEntryError, Result, buffer::ValueType, cstr, memchr_derivations::find_zero_byte_u64};
+use crate::{
+    DirEntryError, Result, buffer::ValueType, cstr, memchr_derivations::find_zero_byte_u64,
+};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
@@ -211,6 +213,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 #[inline]
 #[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 8 bytes
 #[allow(clippy::cast_lossless)] //shutup
+#[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 /// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD.
 /// Constant time (therefore branchless)
 ///
@@ -241,7 +244,10 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
-    debug_assert!( reclen % 8 == 0,"reclen should be a multiple of 8!"); //show it's always aligned 
+    debug_assert!(
+        reclen.is_multiple_of(8),
+        "reclen should be a multiple of 8!"
+    ); //show it's always aligned 
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64
     #[cfg(target_endian = "little")]

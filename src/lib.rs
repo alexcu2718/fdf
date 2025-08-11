@@ -1,9 +1,9 @@
 //library imports
+//I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
 #![allow(clippy::macro_metavars_in_unsafe)]
-#![allow(clippy::shadow_unrelated)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
 #![allow(clippy::doc_lazy_continuation)]
@@ -20,7 +20,6 @@
 #![allow(clippy::std_instead_of_core)]
 #![allow(clippy::filetype_is_file)]
 #![allow(clippy::missing_assert_message)]
-#![allow(clippy::unused_trait_names)]
 #![allow(clippy::exhaustive_enums)]
 #![allow(clippy::exhaustive_structs)]
 #![allow(clippy::missing_inline_in_public_items)]
@@ -35,9 +34,7 @@
 #![allow(clippy::use_debug)]
 #![allow(clippy::map_err_ignore)]
 #![allow(clippy::exit)]
-#![allow(clippy::cast_ptr_alignment)]
 #![allow(clippy::multiple_unsafe_ops_per_block)]
-#![allow(clippy::pattern_type_mismatch)]
 #![allow(clippy::arithmetic_side_effects)]
 #![allow(clippy::as_conversions)]
 #![allow(clippy::question_mark_used)]
@@ -48,11 +45,6 @@
 #![allow(clippy::wildcard_enum_match_arm)]
 #![allow(clippy::semicolon_inside_block)]
 #![allow(clippy::must_use_candidate)]
-#![allow(clippy::semicolon_outside_block)]
-#![allow(clippy::return_and_then)]
-#![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::cast_lossless)]
-//#![allow(clippy::non_ex)]
 
 use rayon::prelude::*;
 use std::{
@@ -81,7 +73,7 @@ mod test;
 pub use buffer::{AlignedBuffer, ValueType};
 
 mod memchr_derivations;
-pub use memchr_derivations::{contains_zero_byte, find_char_in_word,  memrchr};
+pub use memchr_derivations::{contains_zero_byte, find_char_in_word, memrchr};
 mod direntry;
 pub use direntry::DirEntry;
 
@@ -95,8 +87,8 @@ pub use custom_types_result::{
     SlimmerBytes,
 };
 
-pub(crate) use custom_types_result:: SyscallBuffer;
 pub use custom_types_result::PathBuffer;
+pub(crate) use custom_types_result::SyscallBuffer;
 
 mod traits_and_conversions;
 pub use traits_and_conversions::BytePath;
@@ -204,8 +196,8 @@ where
                     .filter(|e| !config.hide_hidden || !e.is_hidden())
                     .partition(|x| x.is_dir() || config.follow_symlinks && x.is_symlink());
 
-                dirs.into_par_iter().for_each(|dir| {
-                    Self::process_directory(self, dir, sender);
+                dirs.into_par_iter().for_each(|dirnt| {
+                    Self::process_directory(self, dirnt, sender);
                 });
 
                 // Process files without intermediate Vec
@@ -254,8 +246,8 @@ where
                     .filter(|e| !config.hide_hidden || !e.is_hidden())
                     .partition(|x| x.is_dir() || config.follow_symlinks && x.is_symlink());
 
-                dirs.into_par_iter().for_each(|dir| {
-                    Self::process_directory(self, dir, sender);
+                dirs.into_par_iter().for_each(|dirnt| {
+                    Self::process_directory(self, dirnt, sender);
                 });
 
                 // Process files without intermediate Vec

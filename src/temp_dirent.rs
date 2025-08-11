@@ -6,7 +6,7 @@ use crate::DirEntry;
 use crate::FileType;
 use crate::SearchConfig;
 use crate::offset_dirent;
-use crate::traits_and_conversions::BytePath;
+use crate::traits_and_conversions::BytePath as _;
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]

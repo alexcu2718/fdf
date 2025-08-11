@@ -1,9 +1,10 @@
+#![allow(clippy::pattern_type_mismatch)] //stupid
 #[allow(unused_imports)]
-use crate::BytePath;
+use crate::BytePath as _;
 
 use libc::{
-    DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO,
-    S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t,
+    DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, DT_UNKNOWN, S_IFBLK, S_IFCHR,
+    S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t,
 };
 
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
@@ -63,10 +64,12 @@ impl FileType {
         matches!(self, Self::Pipe)
     }
     #[inline]
+    #[allow(clippy::pattern_type_mismatch)]
     pub const fn is_socket(&self) -> bool {
         matches!(self, Self::Socket)
     }
     #[inline]
+    #[allow(clippy::pattern_type_mismatch)]
     pub const fn is_unknown(&self) -> bool {
         matches!(self, Self::Unknown)
     }
@@ -158,7 +161,7 @@ impl FileType {
             Self::Pipe => DT_FIFO,
             Self::Symlink => DT_LNK,
             Self::Socket => DT_SOCK,
-            Self::Unknown => 0, // DT_UNKNOWN
+            Self::Unknown => DT_UNKNOWN,
         }
     }
 }

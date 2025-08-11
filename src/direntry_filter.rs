@@ -11,7 +11,7 @@
 #![allow(clippy::cast_sign_loss)] //this isnt 32bit and my division is fine.
 use crate::direntry::DirEntry;
 use crate::{
-    AlignedBuffer, BytePath, BytesStorage, LOCAL_PATH_MAX, PathBuffer, Result, SearchConfig,
+    AlignedBuffer, BytePath as _, BytesStorage, LOCAL_PATH_MAX, PathBuffer, Result, SearchConfig,
     SyscallBuffer, TempDirent, offset_dirent, traits_and_conversions::DirentConstructor,
 };
 

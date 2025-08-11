@@ -8,7 +8,7 @@ use crate::ValueType;
 // x86_64-specific implementation
 /// Opens a directory using direct syscall via assembly
 ///
-/// Uses the `open` syscall with flags optimized for directory scanning:
+/// Uses the `open` syscall with flags optimised for directory scanning:
 /// - `O_CLOEXEC`: Close on exec (security)
 /// - `O_DIRECTORY`: Fail if not a directory (safety)
 /// - `O_NONBLOCK`: Non-blocking operations (performance)

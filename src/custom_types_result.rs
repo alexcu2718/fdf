@@ -74,7 +74,10 @@ impl<S: BytesStorage> OsBytes<S> {
     #[allow(clippy::missing_const_for_fn)]
     /// Returns a reference to the underlying bytes.
     pub fn as_bytes(&self) -> &[u8] {
-        debug_assert!(self.bytes.len() < LOCAL_PATH_MAX);
+        debug_assert!(
+            self.bytes.len() < LOCAL_PATH_MAX,
+            "the path is longer than LOCAL_PATH_MAX, THIS SHOULDNT HAPPEN"
+        );
         &self.bytes
     }
 

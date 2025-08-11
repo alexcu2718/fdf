@@ -81,7 +81,10 @@ impl SearchConfig {
     where
         S: std::ops::Deref<Target = [u8]>,
     {
-        debug_assert!(!entry.contains(&b'/')); // ensure that the entry is a file name and not a path
+        debug_assert!(
+            !entry.contains(&b'/'),
+            "the filename contains a slash, some arithmetic has gone wrong somewhere!"
+        ); // ensure that the entry is a file name and not a path
         self.extension_match
             .as_ref()
             .is_none_or(|ext| entry.matches_extension(ext))

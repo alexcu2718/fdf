@@ -158,7 +158,7 @@ where
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Converts a dirent64 to a proper path, resolving all symlinks, etc,
-    /// Returns an error on invalid path 
+    /// Returns an error on invalid path
     //(errors to be filled in later)  (they're actually encoded though)
     pub fn to_full_path(self) -> Result<Self> {
         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
@@ -419,7 +419,7 @@ where
     /// the pointer is valid and that we don't read past the end of the buffer.
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
         // This is only used in the iterator implementation, so we can safely assume that the pointer
-         // is valid and that we don't read past the end of the buffer.
+        // is valid and that we don't read past the end of the buffer.
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
         self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //return the pointer

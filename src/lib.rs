@@ -1,7 +1,7 @@
 //library imports
 //I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
 #![allow(clippy::let_underscore_must_use)]
-#![allow(clippy::let_underscore_untyped)]
+//#![allow(clippy::let_underscore_untyped)]
 #![allow(clippy::macro_metavars_in_unsafe)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
@@ -17,10 +17,6 @@
 #![allow(clippy::impl_trait_in_params)]
 #![allow(clippy::arbitrary_source_item_ordering)]
 #![allow(clippy::std_instead_of_core)]
-#![allow(clippy::filetype_is_file)]
-#![allow(clippy::missing_assert_message)]
-#![allow(clippy::exhaustive_enums)]
-#![allow(clippy::exhaustive_structs)]
 #![allow(clippy::missing_inline_in_public_items)]
 #![allow(clippy::std_instead_of_alloc)]
 #![allow(clippy::unseparated_literal_suffix)]
@@ -170,6 +166,7 @@ where
     //linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
     #[inline]
     #[cfg(target_os = "linux")]
+    #[allow(clippy::let_underscore_untyped)]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
@@ -220,6 +217,7 @@ where
     //non linux version
     #[inline]
     #[cfg(not(target_os = "linux"))]
+    #[allow(clippy::let_underscore_untyped)]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;

@@ -8,7 +8,6 @@ const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
 const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
 const RESET: &[u8] = b"\x1b[0m";
 
-
 #[inline]
 #[allow(clippy::single_call_fn)]
 #[allow(clippy::wildcard_enum_match_arm)]
@@ -33,7 +32,6 @@ where
             .map_or(RESET, |pos| file_type_colour!(pos)),
     }
 }
-
 
 #[allow(clippy::single_call_fn)]
 #[inline]

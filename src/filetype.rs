@@ -10,6 +10,7 @@ use libc::{
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
 /// Represents the type of a file in the filesystem, tiny enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[allow(clippy::exhaustive_enums)]
 pub enum FileType {
     BlockDevice,
     CharDevice,
@@ -18,7 +19,7 @@ pub enum FileType {
     Symlink,
     RegularFile,
     Socket,
-    Unknown, //this shouldnt ever happen
+    Unknown, //this shouldnt ever happen but we have to check for it
 }
 
 impl FileType {
@@ -36,7 +37,7 @@ impl FileType {
             DT_FIFO => Self::Pipe,
             DT_LNK => Self::Symlink,
             DT_SOCK => Self::Socket,
-            _ => Self::Unknown,
+            _ => Self::Unknown, /*DT_UNKNOWN */
         }
     }
     #[inline]
@@ -126,6 +127,7 @@ impl FileType {
     /// converts a `FileType` from a path via stdlib's `Path`  this is handy for verification, its not meant for use within iteration
     #[must_use]
     #[inline]
+    #[allow(clippy::filetype_is_file)] //stupid
     pub fn from_path<P: AsRef<Path>>(path_start: P) -> Self {
         Path::new(path_start.as_ref())
             .symlink_metadata()

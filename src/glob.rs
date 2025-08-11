@@ -300,7 +300,7 @@ where
 /// Exclude the slash character from classes that would include it.
 #[allow(clippy::single_call_fn)]
 fn handle_slash_exclude(acc: ClassAccumulator) -> ClassAccumulator {
-    assert!(!acc.negated);
+    assert!(!acc.negated, "this should not be negated");
     ClassAccumulator {
         items: ExcIter {
             it: acc.items.into_iter(),
@@ -314,7 +314,7 @@ fn handle_slash_exclude(acc: ClassAccumulator) -> ClassAccumulator {
 /// Make sure a character class will match a slash.
 #[allow(clippy::single_call_fn)]
 fn handle_slash_include(mut acc: ClassAccumulator) -> ClassAccumulator {
-    assert!(acc.negated);
+    assert!(acc.negated, "this should be negated");
     let slash_found = acc.items.iter().any(|item| match *item {
         ClassItem::Char('/') => true,
         ClassItem::Char(_) => false,

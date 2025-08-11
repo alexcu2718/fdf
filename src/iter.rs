@@ -36,7 +36,7 @@ where
     S: BytesStorage,
 {
     #[inline]
-    #[allow(clippy::single_call_fn)] 
+    #[allow(clippy::single_call_fn)]
     //internal function to read the directory entries
     //it is used by the new function to initialise the iterator.
     /// Returns a either

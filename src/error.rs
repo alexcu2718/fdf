@@ -4,6 +4,7 @@ use libc::{EACCES, EAGAIN, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use std::{fmt, io};
 
 #[derive(Debug)]
+#[allow(clippy::exhaustive_enums)]
 /// An error type for directory entry operations.
 ///
 /// This enum represents various errors that can occur when working with directory entries,

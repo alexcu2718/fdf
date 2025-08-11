@@ -208,7 +208,7 @@ where
     fn is_writable(&self) -> bool {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0i32}
+        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0i32 }
     }
 
     #[inline]

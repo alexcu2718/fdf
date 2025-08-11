@@ -110,6 +110,7 @@ where
     /// TODO! write an implementation for RISC-V
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::single_call_fn)]
     #[cfg(target_os = "linux")]
     pub(crate) unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
         unsafe { crate::syscalls::getdents_asm(fd, self.as_mut_ptr(), SIZE) }

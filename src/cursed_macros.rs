@@ -274,6 +274,7 @@ macro_rules! const_from_env {
         pub const $name: $t = {
             // A helper const function to parse a string into a number.
             // This is used only when an environment variable is found.
+            #[allow(clippy::single_call_fn)]
             const fn parse_env(s: &str) -> $t {
                 let mut n: $t = 0;
                 let s_bytes = s.as_bytes();

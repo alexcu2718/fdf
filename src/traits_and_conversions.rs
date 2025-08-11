@@ -138,7 +138,7 @@ where
         self.as_cstr_ptr(|ptr| {
             let fd = unsafe { libc::open(ptr, FLAGS) };
 
-            if fd < 0 {
+            if fd < 0i32 {
                 Err(std::io::Error::last_os_error().into())
             } else {
                 Ok(fd)
@@ -200,7 +200,7 @@ where
     #[inline]
     ///somewhatcostly check for readable files
     fn is_readable(&self) -> bool {
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
+        unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0i32 }
     }
 
     #[inline]
@@ -208,7 +208,7 @@ where
     fn is_writable(&self) -> bool {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
+        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0i32}
     }
 
     #[inline]

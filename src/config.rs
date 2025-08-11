@@ -32,6 +32,7 @@ impl SearchConfig {
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::single_call_fn)]
     pub(crate) fn new(
         pattern: impl AsRef<str>,
         hide_hidden: bool,

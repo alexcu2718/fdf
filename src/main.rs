@@ -1,21 +1,18 @@
+//i use very strong lints.
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::all)]
 #![allow(clippy::absolute_paths)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
-#![allow(clippy::str_to_string)]
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
-#![allow(clippy::redundant_closure_for_method_calls)]
 #![allow(clippy::macro_metavars_in_unsafe)]
-#![allow(clippy::shadow_unrelated)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
 #![allow(clippy::as_underscore)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::min_ident_chars)]
-#![allow(clippy::implicit_return)]
 #![allow(clippy::missing_docs_in_private_items)]
 #![allow(clippy::undocumented_unsafe_blocks)]
 #![allow(clippy::blanket_clippy_restriction_lints)]
@@ -23,40 +20,27 @@
 #![allow(clippy::impl_trait_in_params)]
 #![allow(clippy::arbitrary_source_item_ordering)]
 #![allow(clippy::std_instead_of_core)]
-#![allow(clippy::filetype_is_file)]
-#![allow(clippy::missing_assert_message)]
 #![allow(clippy::unused_trait_names)]
-#![allow(clippy::exhaustive_enums)]
 #![allow(clippy::exhaustive_structs)]
 #![allow(clippy::missing_inline_in_public_items)]
 #![allow(clippy::std_instead_of_alloc)]
-#![allow(clippy::unseparated_literal_suffix)]
 #![allow(clippy::pub_use)]
 #![allow(clippy::field_scoped_visibility_modifiers)]
 #![allow(clippy::pub_with_shorthand)]
 #![allow(clippy::redundant_pub_crate)]
 #![allow(clippy::allow_attributes)]
 #![allow(clippy::allow_attributes_without_reason)]
-#![allow(clippy::use_debug)]
 #![allow(clippy::map_err_ignore)]
 #![allow(clippy::exit)]
-#![allow(clippy::cast_ptr_alignment)]
 #![allow(clippy::multiple_unsafe_ops_per_block)]
 #![allow(clippy::pattern_type_mismatch)]
 #![allow(clippy::arithmetic_side_effects)]
 #![allow(clippy::as_conversions)]
 #![allow(clippy::question_mark_used)]
-#![allow(clippy::semicolon_if_nothing_returned)]
-#![allow(clippy::indexing_slicing)]
-#![allow(clippy::missing_trait_methods)]
-#![allow(clippy::default_numeric_fallback)]
-#![allow(clippy::wildcard_enum_match_arm)]
 #![allow(clippy::semicolon_inside_block)]
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::semicolon_outside_block)]
-#![allow(clippy::return_and_then)]
 #![allow(clippy::cast_possible_wrap)]
-
 use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
@@ -265,6 +249,7 @@ fn main() -> Result<(), DirEntryError> {
 
 #[allow(clippy::must_use_candidate)]
 ///simple function to resolve the directory to use.
+#[allow(clippy::single_call_fn)]
 fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> OsString {
     let dir_to_use = args_directory.unwrap_or_else(|| generate_start_prefix());
     let path_check = Path::new(&dir_to_use);
@@ -277,7 +262,7 @@ fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> Os
     if canonicalise {
         match path_check.canonicalize() {
             //stupid yank spelling.
-            Ok(canonical_path) => canonical_path.into_os_string(),
+            Ok(canonical_path) => std::path::PathBuf::into_os_string(canonical_path),
             Err(e) => {
                 eprintln!(
                     "Failed to canonicalise path {} {}",
@@ -291,7 +276,7 @@ fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> Os
         dir_to_use
     }
 }
-
+#[allow(clippy::single_call_fn)]
 fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     if !args_glob {
         return pattern.into();
@@ -302,11 +287,11 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
         std::process::exit(1)
     })
 }
-
+#[allow(clippy::single_call_fn)]
 fn generate_start_prefix() -> OsString {
     env::current_dir()
         .ok()
-        .map(|p| p.into_os_string())
+        .map(|os_str| std::path::PathBuf::into_os_string(os_str))
         .or_else(|| env::var_os("HOME"))
         .unwrap_or_else(|| OsString::from("."))
 }

@@ -1,10 +1,10 @@
+/*
 #![allow(clippy::all)]
 #![allow(clippy::expect_used)]
 #![allow(clippy::all)]
 #![allow(clippy::absolute_paths)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::implicit_return)]
-//#![allow(clippy::print_stdin)]
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
@@ -56,7 +56,7 @@
 #![allow(clippy::semicolon_outside_block)]
 #![allow(clippy::return_and_then)]
 #![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::error_impl_error)]
+#![allow(clippy::error_impl_error)] */
 #![doc(hidden)]
 //#! BIG EXPLANATION
 //#! I WANTED TO USE THIS CRATE FOR GLOB MATCHING, BUT I DIDNT WANT TO USE THE FULL DEPENDENCY. SO I REMOVED EVERY DEPENDENCY :)
@@ -118,6 +118,7 @@ use std::vec::IntoIter as VecIntoIter;
 //use regex::Regex;
 
 /// Error type for glob pattern operations
+#[allow(clippy::error_impl_error)]
 #[derive(Debug)]
 pub enum Error {
     /// Bare escape at the end of the pattern
@@ -135,7 +136,8 @@ pub enum Error {
     /// An invalid regular expression was generated from the pattern
     InvalidRegex(String, String),
 }
-
+#[allow(clippy::error_impl_error)]
+#[allow(clippy::pattern_type_mismatch)] //bug
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -247,6 +249,7 @@ const fn map_letter_escape(chr: char) -> char {
 }
 
 /// Unescape a character and escape it if needed.
+#[allow(clippy::single_call_fn)]
 fn escape_special(chr: char) -> String {
     escape(map_letter_escape(chr))
 }
@@ -295,6 +298,7 @@ where
 }
 
 /// Exclude the slash character from classes that would include it.
+#[allow(clippy::single_call_fn)]
 fn handle_slash_exclude(acc: ClassAccumulator) -> ClassAccumulator {
     assert!(!acc.negated);
     ClassAccumulator {
@@ -308,6 +312,7 @@ fn handle_slash_exclude(acc: ClassAccumulator) -> ClassAccumulator {
 }
 
 /// Make sure a character class will match a slash.
+#[allow(clippy::single_call_fn)]
 fn handle_slash_include(mut acc: ClassAccumulator) -> ClassAccumulator {
     assert!(acc.negated);
     let slash_found = acc.items.iter().any(|item| match *item {
@@ -324,6 +329,7 @@ fn handle_slash_include(mut acc: ClassAccumulator) -> ClassAccumulator {
 /// Character classes should never match a slash when used in filenames.
 /// Thus, make sure that a negated character class will include the slash
 /// character and that a non-negated one will not include it.
+#[allow(clippy::single_call_fn)]
 fn handle_slash(acc: ClassAccumulator) -> ClassAccumulator {
     if acc.negated {
         handle_slash_include(acc)
@@ -402,6 +408,7 @@ fn close_class(glob_acc: ClassAccumulator) -> String {
 }
 
 /// Convert a glob alternatives list to a regular expression pattern.
+#[allow(clippy::single_call_fn)]
 fn close_alternate(gathered: Vec<String>) -> String {
     // Sort and deduplicate items (replace itertools::sorted_unstable, dedup, join)
     let mut items = gathered
@@ -687,6 +694,7 @@ where
 }
 
 // custom flatten_ok implementation to replace itertools functionality
+#[allow(clippy::single_call_fn)]
 fn flatten_ok<I, T, E>(iter: I) -> impl Iterator<Item = Result<T, E>>
 where
     I: Iterator<Item = Result<Option<T>, E>>,

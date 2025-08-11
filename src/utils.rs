@@ -118,9 +118,11 @@ where
 }
 
 //internal convenients functions for min/max
+#[allow(clippy::single_call_fn)]
 pub(crate) const fn const_min(a: usize, b: usize) -> usize {
     if a < b { a } else { b }
 }
+#[allow(clippy::single_call_fn)]
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     const_min(b, a)
 }
@@ -130,6 +132,7 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 /// It returns a u64 value representing the inode number.
 /// The inode number is a unique identifier for a file or directory in the filesystem.
 #[inline] //i wanted to skip the boiler plate in other function calls.
+#[allow(clippy::single_call_fn)]
 pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
     // This function resolves the inode from a `libc::stat` structure.
     // It is used to get the inode number of a file or directory.
@@ -161,17 +164,17 @@ pub(crate) fn construct_path(
     let name_len = unsafe { dirent_name_length(drnt) };
 
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
-    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned 
+    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned
 
     unsafe { path_buffer.get_unchecked(..base_len + name_len) } //the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
 }
 
 #[inline]
-#[allow(clippy::missing_const_for_fn)]
+#[allow(clippy::missing_const_for_fn)] //
+#[allow(clippy::single_call_fn)]
 ///a utility function for breaking down the config spaghetti that is platform specific optimisations
-/// i wanted to make this const and separate the function
-/// because only strlen isn't constant here :(
-///
+// i wanted to make this const and separate the function
+// because only strlen isn't constant here :(
 pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     #[cfg(target_os = "linux")]
     {

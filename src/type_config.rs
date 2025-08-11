@@ -7,6 +7,7 @@ static TYPE_FILTER_TYPES: OnceLock<Vec<String>> = OnceLock::new();
 //negligible impact.
 //#[allow(clippy::needless_pass_by_value)]
 #[allow(clippy::expect_used)]
+#[allow(clippy::single_call_fn)]
 pub fn build_type_filter<S>(types: &[String]) -> DirEntryFilter<S>
 where
     S: BytesStorage + 'static + Clone,
@@ -16,7 +17,7 @@ where
     // return a function pointer
     filter_by_type
 }
-
+#[allow(clippy::single_call_fn)]
 fn filter_by_type<S>(entry: &DirEntry<S>) -> bool
 where
     S: BytesStorage + 'static + Clone,

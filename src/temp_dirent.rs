@@ -156,12 +156,13 @@ where
         self.is_regular_file()
             && unsafe {
                 self.path
-                    .as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0)
+                    .as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0i32)
             }
     }
 
     #[inline]
     #[must_use]
+    ///Checks if path is readable
     pub fn is_readable(&self) -> bool {
         //R_OK is the read permission, requires access call
         self.path.is_readable()
@@ -169,14 +170,13 @@ where
     #[inline]
     #[must_use]
     pub fn is_writable(&self) -> bool {
-        //W_OK is the write permission,
         self.path.is_writable()
     }
 
     #[inline]
     #[must_use]
-    ///costly check for empty files
-    ///i dont see much use for this function
+    #[allow(clippy::wildcard_enum_match_arm)]
+    ///costly check for empty files'
     /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
     /// for files, it checks if the size is zero without loading all metadata
     /// for directories, it checks if they have no entries
@@ -187,7 +187,7 @@ where
     {
         match self.file_type {
             FileType::RegularFile => {
-                self.size().is_ok_and(|size| size == 0)
+                self.size().is_ok_and(|size| size == 0u64)
                 //this checks if the file size is zero, this is a costly check as it requires a stat call
             }
             FileType::Directory => {

@@ -77,7 +77,7 @@ where
     ///costly check for executables
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
-        self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0) }
+        self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0i32) }
     }
 
     ///cost free check for block devices
@@ -135,8 +135,8 @@ where
     }
     #[inline]
     #[must_use]
+    #[allow(clippy::wildcard_enum_match_arm)]
     ///costly check for empty files
-    ///i dont see much use for this function
     /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
     /// for files, it checks if the size is zero without loading all metadata
     /// for directories, it checks if they have no entries
@@ -144,7 +144,7 @@ where
     pub fn is_empty(&self) -> bool {
         match self.file_type() {
             FileType::RegularFile => {
-                self.size().is_ok_and(|size| size == 0)
+                self.size().is_ok_and(|size| size == 0u64)
                 //this checks if the file size is zero, this is a costly check as it requires a stat call
             }
             FileType::Directory => {
@@ -158,8 +158,8 @@ where
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     ///Converts a dirent64 to a proper path, resolving all symlinks, etc,
-    /// there's no way ahead of time to tell if a path has symbolic components.
-    /// Returns an error on invalid path (errors to be filled in later)  (they're actually encoded though)
+    /// Returns an error on invalid path 
+    //(errors to be filled in later)  (they're actually encoded though)
     pub fn to_full_path(self) -> Result<Self> {
         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
         let ptr = unsafe {
@@ -417,9 +417,9 @@ where
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
-    // This is only used in the iterator implementation, so we can safely assume that the pointer
-    // is valid and that we don't read past the end of the buffer.
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
+        // This is only used in the iterator implementation, so we can safely assume that the pointer
+         // is valid and that we don't read past the end of the buffer.
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
         self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //return the pointer

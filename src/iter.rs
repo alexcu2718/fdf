@@ -36,6 +36,7 @@ where
     S: BytesStorage,
 {
     #[inline]
+    #[allow(clippy::single_call_fn)] 
     //internal function to read the directory entries
     //it is used by the new function to initialise the iterator.
     /// Returns a either
@@ -81,6 +82,7 @@ where
     /// It initialises the iterator by opening the directory and preparing the path buffer.
     /// Utilises libc's `opendir` and `readdir64` for directory reading.
     #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::single_call_fn)]
     pub(crate) fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
         let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)

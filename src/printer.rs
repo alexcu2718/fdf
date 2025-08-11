@@ -8,8 +8,10 @@ const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
 const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
 const RESET: &[u8] = b"\x1b[0m";
 
-#[allow(clippy::inline_always)]
-#[inline(always)]
+
+#[inline]
+#[allow(clippy::single_call_fn)]
+#[allow(clippy::wildcard_enum_match_arm)]
 fn extension_colour<S>(entry: &DirEntry<S>) -> &[u8]
 where
     S: BytesStorage + 'static + Clone,
@@ -32,8 +34,9 @@ where
     }
 }
 
-#[allow(clippy::inline_always)]
-#[inline(always)]
+
+#[allow(clippy::single_call_fn)]
+#[inline]
 pub fn write_paths_coloured<I, S>(paths: I, limit: Option<usize>) -> Result<()>
 where
     I: Iterator<Item = Vec<DirEntry<S>>>,

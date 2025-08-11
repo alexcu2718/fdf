@@ -56,7 +56,7 @@ impl From<std::str::Utf8Error> for DirEntryError {
         Self::Utf8Error(e)
     }
 }
-#[allow(clippy::pattern_type_mismatch)]
+#[allow(clippy::pattern_type_mismatch)] //bug
 impl fmt::Display for DirEntryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -80,7 +80,8 @@ impl fmt::Display for DirEntryError {
         }
     }
 }
-#[allow(clippy::pattern_type_mismatch)]
+#[allow(clippy::pattern_type_mismatch)] //bug
+#[allow(clippy::wildcard_enum_match_arm)]
 impl std::error::Error for DirEntryError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {

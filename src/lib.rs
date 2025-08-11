@@ -1,6 +1,5 @@
 //library imports
 //I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
-#![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
 #![allow(clippy::macro_metavars_in_unsafe)]
@@ -40,10 +39,8 @@
 #![allow(clippy::question_mark_used)]
 #![allow(clippy::semicolon_if_nothing_returned)]
 #![allow(clippy::indexing_slicing)]
-#![allow(clippy::missing_trait_methods)]
-#![allow(clippy::default_numeric_fallback)]
-#![allow(clippy::wildcard_enum_match_arm)]
-#![allow(clippy::semicolon_inside_block)]
+#![allow(clippy::missing_trait_methods)] //this one too
+#![allow(clippy::semicolon_inside_block)] //this one is really dumb
 #![allow(clippy::must_use_candidate)]
 
 use rayon::prelude::*;

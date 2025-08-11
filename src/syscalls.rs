@@ -2,8 +2,8 @@
 #![allow(clippy::items_after_statements)] //clippy goes a bit stupid on this, maybe i should investigate it, or maybe im la-z
 use crate::ValueType;
 #[inline]
-#[allow(clippy::cast_possible_truncation)] //stupid
 #[allow(clippy::inline_asm_x86_intel_syntax)]
+#[allow(clippy::cast_possible_truncation)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 // x86_64-specific implementation
 /// Opens a directory using direct syscall via assembly

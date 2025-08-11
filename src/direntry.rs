@@ -10,22 +10,18 @@
 //#[cfg(target_os = "linux")]
 //use crate::{close_asm, open_asm};
 
-#[allow(unused_imports)]
 use crate::{
     BytePath as _,
     DirIter,
     OsBytes,
     Result,
-    cstr,
+   // cstr,
     custom_types_result::BytesStorage,
     filetype::FileType,
     // utils::unix_time_to_system_time,
 };
-#[cfg(target_os="linux")]
-use core::marker::PhantomData;
 
-#[allow(unused_imports)]
-use std::{ffi::OsStr, io::Error, os::unix::ffi::OsStrExt as _};
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
 
 /// A struct representing a directory entry.
 ///
@@ -206,7 +202,7 @@ where
             file_type: self.file_type,
             file_name_index: self.file_name_index as _,
             depth: self.depth as _,
-            _marker: PhantomData::<S>,
+            _marker: core::marker::PhantomData::<S>,
         }
     }
 
@@ -350,7 +346,7 @@ where
             parent_depth: self.depth,
             offset: 0,
             remaining_bytes: 0,
-            _marker: PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
+            _marker:  core::marker::PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
 }
@@ -385,7 +381,7 @@ where
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-    _marker: PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
+    _marker:  core::marker::PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
                              //this gets compiled away anyway as its as a zst
 }
 #[cfg(target_os = "linux")]

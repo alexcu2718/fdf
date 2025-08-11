@@ -5,12 +5,12 @@ use crate::{
     PathBuffer, Result, SyscallBuffer, cstr, custom_types_result::BytesStorage,
     traits_and_conversions::DirentConstructor as _,
 };
+use core::marker::PhantomData;
 use libc::{DIR, closedir, opendir};
 #[cfg(not(target_os = "linux"))]
 use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir}; //use readdir64 on linux
-use std::marker::PhantomData; //use readdir on other platforms, this is the standard POSIX function
 
 /// An iterator over directory entries from readdir (or 64 )via libc
 /// General POSIX compliant directory iterator.
@@ -60,7 +60,7 @@ where
         let d: *const dirent64 = unsafe { readdir(self.dir) };
         //we have to check for nulls here because we're not 'buffer climbing', aka readdir has abstracted this interface.
         //we do 'buffer climb' (word i just made up) in getdents, which is why this equivalent function does not check the null in my
-        //getdents iterator, GO home                                                                                 xd
+        //getdents iterator
         if d.is_null() {
             return None;
         }
@@ -100,12 +100,12 @@ where
     }
 }
 
-impl<S> std::fmt::Debug for DirIter<S>
+impl<S> core::fmt::Debug for DirIter<S>
 where
     S: BytesStorage,
 {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("DirIter")
             .field("path_buffer", &self.path_buffer)
             .field("file_name_index", &self.file_name_index)

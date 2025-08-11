@@ -1,11 +1,7 @@
 //library imports
 //I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
-#![allow(clippy::let_underscore_must_use)]
-//#![allow(clippy::let_underscore_untyped)]
-#![allow(clippy::macro_metavars_in_unsafe)]
-#![allow(clippy::print_stderr)]
+//#![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::implicit_return)]
-#![allow(clippy::doc_lazy_continuation)]
 #![allow(clippy::as_underscore)]
 #![allow(clippy::print_stderr)]
 #![allow(clippy::min_ident_chars)]
@@ -16,7 +12,7 @@
 #![allow(clippy::absolute_paths)]
 #![allow(clippy::impl_trait_in_params)]
 #![allow(clippy::arbitrary_source_item_ordering)]
-#![allow(clippy::std_instead_of_core)]
+//#![allow(clippy::std_instead_of_core)]
 #![allow(clippy::missing_inline_in_public_items)]
 #![allow(clippy::std_instead_of_alloc)]
 #![allow(clippy::unseparated_literal_suffix)]
@@ -26,8 +22,6 @@
 #![allow(clippy::redundant_pub_crate)]
 #![allow(clippy::allow_attributes)]
 #![allow(clippy::allow_attributes_without_reason)]
-#![allow(clippy::use_debug)]
-#![allow(clippy::map_err_ignore)]
 #![allow(clippy::exit)]
 #![allow(clippy::multiple_unsafe_ops_per_block)]
 #![allow(clippy::arithmetic_side_effects)]
@@ -167,6 +161,7 @@ where
     #[inline]
     #[cfg(target_os = "linux")]
     #[allow(clippy::let_underscore_untyped)]
+    #[allow(clippy::let_underscore_must_use)]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
@@ -218,6 +213,7 @@ where
     #[inline]
     #[cfg(not(target_os = "linux"))]
     #[allow(clippy::let_underscore_untyped)]
+    #[allow(clippy::let_underscore_must_use)]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;

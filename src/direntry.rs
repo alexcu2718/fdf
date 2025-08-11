@@ -13,11 +13,6 @@ use crate::{AlignedBuffer, LOCAL_PATH_MAX, temp_dirent::TempDirent, utils::resol
 use crate::{close_asm, open_asm};
 
 #[allow(unused_imports)]
-use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
-#[allow(unused_imports)]
-use std::{ffi::OsStr, io::Error, marker::PhantomData, os::unix::ffi::OsStrExt as _};
-
-#[allow(unused_imports)]
 use crate::{
     BytePath as _,
     DirIter,
@@ -28,6 +23,11 @@ use crate::{
     filetype::FileType,
     // utils::unix_time_to_system_time,
 };
+use core::marker::PhantomData;
+#[allow(unused_imports)]
+use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
+#[allow(unused_imports)]
+use std::{ffi::OsStr, io::Error, os::unix::ffi::OsStrExt as _};
 
 #[cfg(target_os = "linux")]
 use crate::{PathBuffer, SyscallBuffer, offset_dirent};
@@ -163,7 +163,7 @@ where
     pub fn to_full_path(self) -> Result<Self> {
         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
         let ptr = unsafe {
-            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, std::ptr::null_mut())) //we've created this pointer, we need to be careful
+            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, core::ptr::null_mut())) //we've created this pointer, we need to be careful
         };
 
         if ptr.is_null() {
@@ -171,7 +171,7 @@ where
             return Err(std::io::Error::last_os_error().into());
         }
         // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
-        let full_path = unsafe { &*std::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) }; //get length without null terminator (no ub check, this is why i do it this way)
+        let full_path = unsafe { &*core::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) }; //get length without null terminator (no ub check, this is why i do it this way)
         // we're dereferencing a valid pointer here, it's fine.
         //alignment is trivial, we use `libc::strlen` because it's probably the most optimal for possibly long paths
         // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out why(curiosity, not pragmatism!)
@@ -295,7 +295,7 @@ where
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
-        unsafe { self.get_unchecked(..std::cmp::max(self.file_name_index() - 1, 1)) }
+        unsafe { self.get_unchecked(..core::cmp::max(self.file_name_index() - 1, 1)) }
 
         //we need to be careful if it's root,im not a fan of this method but eh.
         //theres probably a more elegant way. TODO!
@@ -438,7 +438,7 @@ where
         {
             if self.offset + 128 < self.remaining_bytes as usize {
                 unsafe {
-                    use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                    use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
                     let next_entry = self.buffer.as_ptr().add(self.offset + 64).cast();
                     _mm_prefetch(next_entry, _MM_HINT_T0);
                 }
@@ -457,7 +457,7 @@ where
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         {
             unsafe {
-                use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
                 _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0);
             }
         }

@@ -111,8 +111,8 @@
  * SUCH DAMAGE.
  */
 
-use std::fmt;
-use std::mem;
+use core::fmt;
+use core::mem;
 use std::vec::IntoIter as VecIntoIter;
 
 //use regex::Regex;
@@ -157,8 +157,6 @@ impl fmt::Display for Error {
         }
     }
 }
-
-impl std::error::Error for Error {}
 
 /// Something that may appear in a character class.
 #[derive(Debug)]

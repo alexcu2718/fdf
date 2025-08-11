@@ -3,11 +3,12 @@
 use crate::{
     DirEntryError, Result, buffer::ValueType, cstr, memchr_derivations::find_zero_byte_u64,
 };
+use core::time::Duration;
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 const DOT_PATTERN: &str = ".";
 const START_PREFIX: &str = "/";
 
@@ -59,7 +60,7 @@ where
     {
         #[cfg(target_feature = "avx2")]
         unsafe {
-            use std::arch::x86_64::{
+            use core::arch::x86_64::{
                 __m256i,
                 _mm256_cmpeq_epi8,    // Compare 32 bytes at once
                 _mm256_loadu_si256,   // Unaligned 32-byte load
@@ -84,7 +85,7 @@ where
 
         #[cfg(not(target_feature = "avx2"))]
         unsafe {
-            use std::arch::x86_64::{
+            use core::arch::x86_64::{
                 __m128i,
                 _mm_cmpeq_epi8,    // Compare 16 bytes
                 _mm_loadu_si128,   // Unaligned 16-byte load
@@ -164,7 +165,7 @@ pub(crate) fn construct_path(
     let name_len = unsafe { dirent_name_length(drnt) };
 
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
-    unsafe { std::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned
+    unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned
 
     unsafe { path_buffer.get_unchecked(..base_len + name_len) } //the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
 }
@@ -234,18 +235,17 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 ///
 /// Main idea:
 /// - We read the last 8 bytes of the `d_name` field, which is guaranteed to be null-terminated by the kernel.
-///  so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks,
-/// we can locate the null terminator with a single 64-bit read and mask
+/// - so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks,
+/// - we can locate the null terminator with a single 64-bit read and mask
 ///                    
 ///
-/// WORKING ON BIG-ENDIAN AND LITTLE ENDIAN SYSTEMS (linux)
 ///
 /// # SAFETY
 /// The caller must uphold the following invariants:
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
 #[cfg(target_os = "linux")]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
+    const DIRENT_HEADER_START: usize = core::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
     debug_assert!(
         reclen.is_multiple_of(8),

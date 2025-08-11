@@ -168,9 +168,9 @@ impl FileType {
     }
 }
 
-impl std::fmt::Display for FileType {
+impl core::fmt::Display for FileType {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::BlockDevice => write!(f, "Block device"),
             Self::CharDevice => write!(f, "Character device"),

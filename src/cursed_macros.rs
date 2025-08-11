@@ -11,12 +11,10 @@
 ///
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
-///   Example: `offset_dirent!(entry_ptr, d_ino)` -> aliases to `d_fileno` and returns the VALUE of an inode(u64)  (internal consistency, be glad it works!)
 /// - On Linux, `d_reclen` is used to access the record length directly,
-///  Example: `offset_dirent!(entry_ptr, d_reclen)`
 /// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
-///  the other fields are accessed normally, as raw pointers to the field
-/// /// # Usage
+/// - The other fields are accessed normally, as raw pointers to the field
+/// # Usage
 /// ```ignore
 /// let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
 /// let d_name_ptr:*const _ = offset_dirent!(entry_ptr, d_name);
@@ -162,7 +160,7 @@ macro_rules! cstr {
         let c_path_buf = c_path_buf_start.as_mut_ptr();
 
         // Copy the bytes into the buffer and append a null terminator
-        std::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
+        core::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
         // Write a null terminator at the end of the buffer
         c_path_buf.add($bytes.len()).write(0);
         //let caller choose cast

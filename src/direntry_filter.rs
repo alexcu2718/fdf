@@ -40,7 +40,7 @@ macro_rules! construct_temp_dirent {
             inode,
             depth: $self.parent_depth + 1,
             file_name_index: $self.file_name_index,
-            _marker: std::marker::PhantomData,
+            _marker: core::marker::PhantomData,
         }
     }};
 }
@@ -120,7 +120,7 @@ where
         {
             if self.offset + 128 < self.remaining_bytes as usize {
                 unsafe {
-                    use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                    use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
                     let next_entry = self.buffer.as_ptr().add(self.offset + 64).cast();
                     _mm_prefetch(next_entry, _MM_HINT_T0);
                 }
@@ -134,7 +134,7 @@ where
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         {
             unsafe {
-                use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+                use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
                 _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0);
             }
         }

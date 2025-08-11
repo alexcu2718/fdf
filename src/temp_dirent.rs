@@ -7,11 +7,11 @@ use crate::FileType;
 use crate::SearchConfig;
 use crate::offset_dirent;
 use crate::traits_and_conversions::BytePath as _;
+use core::marker::PhantomData;
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
-use std::marker::PhantomData;
 /// A temporary directory entry used for filtering purposes.
 /// Used to avoid heap allocations.
 ///
@@ -28,7 +28,7 @@ pub struct TempDirent<'a, S> {
     pub(crate) _marker: PhantomData<S>, // placeholder for the storage type, this is used to ensure that the temporary dirent can be used with any storage type
 }
 
-impl<S> std::ops::Deref for TempDirent<'_, S> {
+impl<S> core::ops::Deref for TempDirent<'_, S> {
     type Target = [u8];
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -36,7 +36,7 @@ impl<S> std::ops::Deref for TempDirent<'_, S> {
     }
 }
 
-impl<S> std::convert::AsRef<[u8]> for TempDirent<'_, S> {
+impl<S> core::convert::AsRef<[u8]> for TempDirent<'_, S> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.path
@@ -53,11 +53,11 @@ where
     }
 }
 
-impl<S> std::fmt::Debug for TempDirent<'_, S>
+impl<S> core::fmt::Debug for TempDirent<'_, S>
 where
     S: BytesStorage,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TempDirent")
             .field("path", &self.path.to_string_lossy())
             .field("file_name", &self.file_name())

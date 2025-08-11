@@ -15,7 +15,7 @@ pub enum DirEntryError {
     TimeError,
     MetadataError,
     TemporarilyUnavailable, // this is used to indicate that the operation should be retried later(however in this case its because proc/sys etc are private etc)
-    Utf8Error(std::str::Utf8Error),
+    Utf8Error(core::str::Utf8Error),
     BrokenPipe(io::Error),
     OSerror(io::Error),
     Success, // this is used to indicate a successful operation, not an error
@@ -52,8 +52,8 @@ impl From<io::Error> for DirEntryError {
     }
 }
 
-impl From<std::str::Utf8Error> for DirEntryError {
-    fn from(e: std::str::Utf8Error) -> Self {
+impl From<core::str::Utf8Error> for DirEntryError {
+    fn from(e: core::str::Utf8Error) -> Self {
         Self::Utf8Error(e)
     }
 }
@@ -83,8 +83,8 @@ impl fmt::Display for DirEntryError {
 }
 #[allow(clippy::pattern_type_mismatch)] //bug
 #[allow(clippy::wildcard_enum_match_arm)]
-impl std::error::Error for DirEntryError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for DirEntryError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Self::Utf8Error(e) => Some(e),
             Self::BrokenPipe(e) | Self::OSerror(e) => Some(e),

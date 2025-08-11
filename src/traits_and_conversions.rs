@@ -9,16 +9,16 @@ use crate::Result;
 use crate::buffer::ValueType;
 use crate::memchr_derivations::memrchr;
 use crate::offset_dirent;
+use core::fmt;
+use core::mem::MaybeUninit;
+use core::mem::transmute;
+use core::ops::Deref;
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
 use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
-use std::fmt;
-use std::mem::MaybeUninit;
-use std::mem::transmute;
-use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -81,7 +81,7 @@ where
 
         // copy bytes using copy_nonoverlapping to avoid ub check
         unsafe {
-            std::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
+            core::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
             c_path_buf.add(self.len()).write(0) // Null terminate the string
         };
 
@@ -163,6 +163,7 @@ where
     #[inline]
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
+    #[allow(clippy::map_err_ignore)] //specify these later TODO!
     #[cfg(not(target_os = "netbsd"))]
     fn modified_time(&self) -> crate::Result<SystemTime> {
         let s = self.get_stat()?;
@@ -175,6 +176,7 @@ where
     #[inline]
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
+    #[allow(clippy::map_err_ignore)] //specify these later TODO!
     #[cfg(target_os = "netbsd")]
     fn modified_time(&self) -> crate::Result<SystemTime> {
         let s = self.get_stat()?;
@@ -213,6 +215,7 @@ where
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::map_err_ignore)] //specify these later TODO
     ///returns the std definition of metadata for easy validation/whatever purposes.
     fn metadata(&self) -> crate::Result<std::fs::Metadata> {
         std::fs::metadata(self.as_os_str()).map_err(|_| crate::DirEntryError::MetadataError) //TODO! provide a more specialised error
@@ -227,6 +230,7 @@ where
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::map_err_ignore)] //specify these later TODO!
     ///Costly conversion to a `std::fs::FileType`
     fn to_std_file_type(&self) -> crate::Result<std::fs::FileType> {
         //  can't directly create a std::fs::FileType,
@@ -249,7 +253,7 @@ where
     ///this is safe because path is always valid utf8
     ///(because unix paths are always valid utf8)
     fn as_str(&self) -> crate::Result<&str> {
-        std::str::from_utf8(self).map_err(crate::DirEntryError::Utf8Error)
+        core::str::from_utf8(self).map_err(crate::DirEntryError::Utf8Error)
     }
 
     #[inline]
@@ -259,7 +263,7 @@ where
     /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
     #[allow(clippy::missing_panics_doc)]
     unsafe fn as_str_unchecked(&self) -> &str {
-        unsafe { std::str::from_utf8_unchecked(self) }
+        unsafe { core::str::from_utf8_unchecked(self) }
     }
 
     #[inline]
@@ -287,7 +291,7 @@ where
     }
 }
 
-impl<S> std::ops::Deref for DirEntry<S>
+impl<S> Deref for DirEntry<S>
 where
     S: BytesStorage,
 {
@@ -339,11 +343,11 @@ where
     }
 }
 
-impl<S> std::fmt::Debug for DirEntry<S>
+impl<S> core::fmt::Debug for DirEntry<S>
 where
     S: BytesStorage,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Dirent")
             .field("path", &self.to_string_lossy())
             .field("file_name", &self.file_name().to_string_lossy())

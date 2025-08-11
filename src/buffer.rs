@@ -144,7 +144,7 @@ where
         let needs_slash = u8::from(dir_path.as_bytes() != b"/"); // check if we need to append a slash
 
         unsafe {
-            std::ptr::copy_nonoverlapping(dir_path.as_ptr(), buffer_ptr.cast(), base_len); // copy path
+            core::ptr::copy_nonoverlapping(dir_path.as_ptr(), buffer_ptr.cast(), base_len); // copy path
             *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash // add slash if needed  (this avoids a branch )
         }; //cast into byte types
 

@@ -7,7 +7,7 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::Arc;
 ///Generic result type for directory entry operations
-pub type Result<T> = std::result::Result<T, DirEntryError>;
+pub type Result<T> = core::result::Result<T, DirEntryError>;
 
 const_from_env!(
     /// The maximum length of a local path, set to 4096 by default, but can be customised via environment variable.
@@ -96,7 +96,7 @@ impl<S: BytesStorage> OsBytes<S> {
     /// This is unsafe because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
     pub fn as_os_str(&self) -> &OsStr {
         //transmute is safe because osstr <=> bytes on POSIX (NOT windows)
-        unsafe { std::mem::transmute(self.as_bytes()) }
+        unsafe { core::mem::transmute(self.as_bytes()) }
     }
 }
 

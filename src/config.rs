@@ -79,7 +79,7 @@ impl SearchConfig {
     #[inline]
     pub fn matches_extension<S>(&self, entry: &S) -> bool
     where
-        S: std::ops::Deref<Target = [u8]>,
+        S: core::ops::Deref<Target = [u8]>,
     {
         debug_assert!(
             !entry.contains(&b'/'),

@@ -104,14 +104,12 @@ impl<S> core::fmt::Debug for DirIter<S>
 where
     S: BytesStorage,
 {
-    #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("DirIter")
-            .field("path_buffer", &self.path_buffer)
             .field("file_name_index", &self.file_name_index)
             .field("parent_depth", &self.parent_depth)
             .field("error", &self.error)
-            .finish_non_exhaustive() //we're not including dir pointer here, as it is not safe to expose(and its fairly useless to the user)
+            .finish_non_exhaustive() //no need to expose anymore than this
     }
 }
 

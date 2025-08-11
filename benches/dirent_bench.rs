@@ -19,11 +19,10 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
 
     let candidate_pos = last_word | mask;
 
-    let byte_pos = 7 - find_zero_byte_u64(candidate_pos); 
-    
+    let byte_pos = 7 - find_zero_byte_u64(candidate_pos);
+
     reclen - DIRENT_HEADER_START - byte_pos
 }
-
 
 //repeated definitions (because i had to make find_zero_byte_u64 private)
 #[inline]
@@ -36,14 +35,13 @@ const LO_U64: u64 = repeat_u64(0x01);
 const HI_U64: u64 = repeat_u64(0x80);
 
 #[inline]
-pub(crate) const  fn find_zero_byte_u64(x: u64) -> usize {
+pub(crate) const fn find_zero_byte_u64(x: u64) -> usize {
     //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
     let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
 
     (zero_bit.trailing_zeros() >> 3) as usize
     //>> 3 converts from bit position to byte index (divides by 8)
 }
-
 
 #[repr(C, align(8))]
 pub struct LibcDirent64 {

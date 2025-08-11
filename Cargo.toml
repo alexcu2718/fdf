@@ -28,7 +28,7 @@ mimalloc = "0.1.43"
 
 
 [dev-dependencies]
-criterion = { version = "0.6.0", features = [
+criterion = { version = "0.7.0", features = [
   "cargo_bench_support",
   "real_blackbox",
 ] }

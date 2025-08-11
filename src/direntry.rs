@@ -6,11 +6,9 @@
 #![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
 #![allow(clippy::cast_lossless)]
 //TODO! get rid of these unused imports warnings, they really don't matter but they do confuse anyone trying to understand unsafe festival.
-#[allow(unused_imports)]
-use crate::{AlignedBuffer, LOCAL_PATH_MAX, temp_dirent::TempDirent, utils::resolve_inode};
-#[allow(unused_imports)]
-#[cfg(target_os = "linux")]
-use crate::{close_asm, open_asm};
+//#[allow(unused_imports)]
+//#[cfg(target_os = "linux")]
+//use crate::{close_asm, open_asm};
 
 #[allow(unused_imports)]
 use crate::{
@@ -201,8 +199,8 @@ where
 
     #[inline]
     #[cfg(target_os = "linux")]
-    pub fn to_temp_dirent(&self) -> TempDirent<'_, S> {
-        TempDirent {
+    pub fn to_temp_dirent(&self) -> crate::TempDirent<'_, S> {
+        crate::TempDirent {
             path: self.path.as_bytes(),
             inode: self.inode,
             file_type: self.file_type,
@@ -308,7 +306,7 @@ where
 
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;
-        let inode = resolve_inode(&get_stat); //resolves inode to u64 but avoids redundant cast
+        let inode = crate::utils::resolve_inode(&get_stat); //resolves inode to u64 but avoids redundant cast
         Ok(Self {
             path: path_ref.into(),
             file_type: get_stat.into(),

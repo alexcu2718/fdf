@@ -23,14 +23,11 @@ use crate::{
     filetype::FileType,
     // utils::unix_time_to_system_time,
 };
+#[cfg(target_os="linux")]
 use core::marker::PhantomData;
-#[allow(unused_imports)]
-use libc::{O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, X_OK, access, close, open};
+
 #[allow(unused_imports)]
 use std::{ffi::OsStr, io::Error, os::unix::ffi::OsStrExt as _};
-
-#[cfg(target_os = "linux")]
-use crate::{PathBuffer, SyscallBuffer, offset_dirent};
 
 /// A struct representing a directory entry.
 ///
@@ -77,7 +74,7 @@ where
     ///costly check for executables
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
-        self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| access(ptr, X_OK) == 0i32) }
+        self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0i32) }
     }
 
     ///cost free check for block devices
@@ -349,7 +346,7 @@ where
 
         Ok(DirEntryIterator {
             fd,
-            buffer: SyscallBuffer::new(),
+            buffer: crate::SyscallBuffer::new(),
             path_buffer,
             file_name_index: path_len as _,
             parent_depth: self.depth,
@@ -384,8 +381,8 @@ where
     S: BytesStorage,
 {
     pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from(it's completely useless after the iterator is dropped)
-    pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
-    pub(crate) path_buffer: PathBuffer, // buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
+    pub(crate) buffer: crate::SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
+    pub(crate) path_buffer: crate::PathBuffer, // buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
     pub(crate) file_name_index: u16, // base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
@@ -403,7 +400,7 @@ where
     /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
     #[inline]
     fn drop(&mut self) {
-        unsafe { close(self.fd) }; //this doesn't return an error code anyway, fuggedaboutit
+        unsafe { libc::close(self.fd) }; //this doesn't return an error code anyway, fuggedaboutit
         //unsafe { close_asm(self.fd) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }

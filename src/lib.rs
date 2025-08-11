@@ -12,7 +12,6 @@
 #![allow(clippy::absolute_paths)]
 #![allow(clippy::impl_trait_in_params)]
 #![allow(clippy::arbitrary_source_item_ordering)]
-//#![allow(clippy::std_instead_of_core)]
 #![allow(clippy::missing_inline_in_public_items)]
 #![allow(clippy::std_instead_of_alloc)]
 #![allow(clippy::unseparated_literal_suffix)]

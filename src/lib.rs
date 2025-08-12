@@ -1,9 +1,7 @@
 //library imports
 //I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
-//#![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::implicit_return)]
 #![allow(clippy::as_underscore)]
-#![allow(clippy::print_stderr)]
 #![allow(clippy::min_ident_chars)]
 #![allow(clippy::implicit_return)]
 #![allow(clippy::missing_docs_in_private_items)]
@@ -161,6 +159,7 @@ where
     #[cfg(target_os = "linux")]
     #[allow(clippy::let_underscore_untyped)]
     #[allow(clippy::let_underscore_must_use)]
+    #[allow(clippy::print_stderr)]//TODO, REMOVE THIS WHEN SATISIFIED
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
@@ -205,7 +204,7 @@ where
                 | DirEntryError::AccessDenied(_)
                 | DirEntryError::InvalidPath,
             ) => {}
-            Err(e) => eprintln!("Unexpected error: {e}"),
+            Err(e) => eprintln!("Unexpected error: {e}"),//todo! unreachable unchecked maybe!
         }
     }
     //non linux version
@@ -213,6 +212,7 @@ where
     #[cfg(not(target_os = "linux"))]
     #[allow(clippy::let_underscore_untyped)]
     #[allow(clippy::let_underscore_must_use)]
+    #[allow(clippy::print_stderr)]
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
@@ -355,6 +355,7 @@ where
     }
 
     /// Build the Finder instance
+    #[allow(clippy::print_stderr)]
     pub fn build(self) -> Finder<S> {
         let config = SearchConfig::new(
             self.pattern,

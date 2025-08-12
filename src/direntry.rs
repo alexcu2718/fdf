@@ -1,14 +1,4 @@
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::single_call_fn)]
-#![allow(clippy::ptr_as_ptr)] //i know what i'm doing.
-#![allow(clippy::integer_division)] //i know my division is safe.
-#![allow(clippy::items_after_statements)] //this is just some macro collision,stylistic,my pref.
-#![allow(clippy::cast_lossless)]
-//TODO! get rid of these unused imports warnings, they really don't matter but they do confuse anyone trying to understand unsafe festival.
-//#[allow(unused_imports)]
-//#[cfg(target_os = "linux")]
-//use crate::{close_asm, open_asm};
+
 
 use crate::{
     BytePath as _,
@@ -177,7 +167,7 @@ where
         //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
         //so we subtract the filename length from the total length, probably could've been done more elegantly.
         //TBD? not imperative.
-        unsafe { libc::free(ptr as _) }
+        unsafe { libc::free(ptr.cast()) }
         //free the pointer to stop leaking
 
         Ok(boxed)
@@ -319,7 +309,8 @@ where
         DirIter::new(self)
     }
     #[inline]
-    #[allow(clippy::missing_errors_doc)] //fixing errors later
+    #[allow(clippy::missing_errors_doc)] //fixing errors l
+    #[allow(clippy::cast_possible_truncation)] // truncation not a concern
     #[cfg(target_os = "linux")]
     ///`getdents` is an iterator over fd,where each consequent index is a directory entry.
     /// This function is a low-level syscall wrapper that reads directory entries.
@@ -423,6 +414,8 @@ where
     }
 
     #[inline]
+    #[allow(clippy::cast_sign_loss)] //this doesnt matter
+    #[allow(clippy::cast_possible_truncation)] //doesnt matter on 64bit
     /// Prefetches the next likely entry in the buffer to keep the cache warm.
     pub(crate) fn prefetch_next_entry(&self) {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -437,6 +430,8 @@ where
         }
     }
     #[inline]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_truncation)] //not an issue on 64bit
     /// Checks if the buffer is empty
     pub const fn is_buffer_not_empty(&self) -> bool {
         self.offset < self.remaining_bytes as _

@@ -56,9 +56,9 @@ jobs:
         prepare: |
           pkg install -y curl
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo 'source ~/.cargo/env' >> ~/.bashrc
+          echo 'source ~/.cargo/env' >> ~/.profile
         run: |
-          source ~/.cargo/env
+          . ~/.cargo/env
           cargo build --verbose
           cargo test --verbose
     

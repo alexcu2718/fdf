@@ -19,11 +19,11 @@ Contributions will be considered once features are stabilised and improved. This
 
 The implemented subset performs well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and learning how to program at a low level.
 
-### Platform Support Status (64 bit only)
+## Platform Support Status (64 bit only)
 
- **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD  
+ **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD, NetBSD
 
- **Compiles but Limited Testing**: OpenBSD, NetBSD, DragonflyBSD, Android  
+ **Compiles but Limited Testing**: OpenBSD,  DragonflyBSD, Android  (Not familiar with github actions for these ones)
 
  **Not Supported**: Windows (fundamental rewrite required due to architectural differences, will be done when I read through the API properly!)
 

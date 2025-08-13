@@ -21,7 +21,7 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 
 ## Platform Support Status (64 bit only)
 
- **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD, NetBSD
+ **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD(x86_64), NetBSD(x86_64)
 
  **Compiles but Limited Testing**: OpenBSD,  DragonflyBSD, Android  (Not familiar with github actions for these ones)
 

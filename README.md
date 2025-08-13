@@ -19,7 +19,7 @@ Contributions will be considered once features are stabilised and improved. This
 
 The implemented subset performs well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and learning how to program at a low level.
 
-*NO WINDOWS SUPPORT, THIS WILL BE DONE IN TIME*
+!@NO WINDOWS SUPPORT, THIS WILL BE DONE IN TIME*@!
 
 ## How to test
 

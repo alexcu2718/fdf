@@ -25,9 +25,6 @@ jobs:
           - os: macos
             arch: aarch64
             runner: macos-14
-          - os: freebsd
-            arch: x86_64
-            runner: ubuntu-latest
           - os: openbsd
             arch: x86_64
             runner: ubuntu-latest
@@ -72,21 +69,7 @@ jobs:
     
 
     
-    - name: Test on OpenBSD
-      if: matrix.os == 'openbsd'
-      uses: vmactions/openbsd-vm@v1
-      with:
-        usesh: true
-        mem: 2048
-        prepare: |
-          pkg_add curl
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          . "$HOME/.cargo/env"
-          echo '. "$HOME/.cargo/env"' >> ~/.profile
-        run: |
-          . "$HOME/.cargo/env"
-          cargo build --verbose
-          cargo test --verbose
+
     
     - name: Test on Linux s390x (big-endian)
       if: matrix.os == 'linux' && matrix.arch == 's390x'

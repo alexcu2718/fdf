@@ -25,7 +25,7 @@ jobs:
           - os: macos
             arch: aarch64
             runner: macos-14
-          - os: openbsd
+          - os: freebsd
             arch: x86_64
             runner: ubuntu-latest
           - os: linux
@@ -33,6 +33,9 @@ jobs:
             runner: ubuntu-latest
           - os: linux
             arch: riscv64
+            runner: ubuntu-latest
+          - os: linux
+            arch: aarch64
             runner: ubuntu-latest
 
     steps:
@@ -93,6 +96,23 @@ jobs:
       uses: uraimo/run-on-arch-action@v2
       with:
         arch: riscv64
+        distro: ubuntu22.04
+        githubToken: ${{ github.token }}
+        install: |
+          apt-get update -q -y
+          apt-get install -q -y curl build-essential
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source ~/.cargo/env
+        run: |
+          source ~/.cargo/env
+          cargo build --verbose
+          cargo test --verbose
+    
+    - name: Test on Linux aarch64
+      if: matrix.os == 'linux' && matrix.arch == 'aarch64'
+      uses: uraimo/run-on-arch-action@v2
+      with:
+        arch: aarch64
         distro: ubuntu22.04
         githubToken: ${{ github.token }}
         install: |

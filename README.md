@@ -11,8 +11,6 @@ Easily installed via:
 cargo install --git https://github.com/alexcu2718/fdf
 ```
 
-**i do have benchmark suites!**
-
 ## Important Notes
 
 Contributions will be considered once features are stabilised and improved. This remains a learning/hobby project requiring significant development.
@@ -21,7 +19,13 @@ Contributions will be considered once features are stabilised and improved. This
 
 The implemented subset performs well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and learning how to program at a low level.
 
-*NO WINDOWS SUPPORT, THIS WILL BE DONE IN TIME*
+### Platform Support Status (64 bit only)
+
+ **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD  
+
+ **Compiles but Limited Testing**: OpenBSD, NetBSD, DragonflyBSD, Android  
+
+ **Not Supported**: Windows (fundamental rewrite required due to architectural differences, will be done when I read through the API properly!)
 
 ## How to test
 
@@ -141,15 +145,27 @@ Fundamentally I want to develop something that's simple to use (doing --help sho
 
 ## COMPATIBILITY STATE
 
-1.Working on Linux(glibc dynamic linking/MUSL static linking) 64bit                                             Tested on Debian/Ubuntu/Arch/Fedora varying versions
+### Automatically Tested via GitHub Actions CI/CD
 
-2.Aarch 64 Linux/Android Debian
+The following platforms are continuously tested on every commit and pull request:
 
-3.Macos  64bit  (Tested on Sonoma)
+- **Linux x86_64** - Ubuntu latest (glibc)
+- **Linux aarch64** - Ubuntu 22.04 (cross-compiled)
+- **Linux s390x** - Ubuntu 22.04 (big-endian architecture)
+- **Linux RISC-V64** - Ubuntu 22.04 (emerging architecture)
+- **macOS x86_64** - Latest macOS runner
+- **macOS Apple Silicon (aarch64)** - macOS 14
+- **FreeBSD x86_64** - Using VM testing environment
 
-4.Free/Open/Net/Dragonfly BSD 64bit                             (Ok, it compiles on these platforms but only tested on freebsd+openbsd. I'm not testing every edgecase!)
+### Additional Verified Platforms
 
-5.Works on big endian systems, tested on Ubuntu PPC64 (took 20 minutes to compile....)
+Beyond CI testing, fdf has been manually verified on:
+
+- **Linux distributions**: Debian, Ubuntu, Arch, Fedora (various versions)
+- **Linux architectures**: MUSL static linking supported
+- **Android**: aarch64 Debian environment
+- **BSD systems**: OpenBSD, NetBSD, DragonflyBSD (compiles but limited testing)
+- **Big-endian systems**: Ubuntu PPC64 (compilation confirmed, 20+ minute build time)
 
 ## Installation
 

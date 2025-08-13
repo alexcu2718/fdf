@@ -5,7 +5,7 @@ Originally a learning project in **advanced Rust**, **C**, and **assembly**, it 
 
 [![Rust CI](https://github.com/alexcu2718/fdf/workflows/Rust/badge.svg)](<https://github.com/alexcu2718/fdf/actions>)
 
-Easily installed via:
+Easily installed via:   (FULL INSTRUCTIONS FOUND TOWARDS BOTTOM OF PAGE)
 
 ```bash
 cargo install --git https://github.com/alexcu2718/fdf
@@ -32,7 +32,7 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 ## How to test
 
 ```bash
-git clone https://github.com/alexcu2718/fdf /tmp/fdf_test  &&   /tmp/fdf_test/fd_benchmarks/run_all_tests_USE_ME.sh
+git clone https://github.com/alexcu2718/fdf /tmp/fdf_test  && cd /tmp/fdf_test/fd_benchmarks &&   ./run_all_tests_USE_ME.sh
 ```
 
 This executes a comprehensive suite of internal library, CLI tests, and benchmarks.
@@ -134,17 +134,17 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 
 ### Feature Enhancements
 
--- **DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use).
--- **Extended File Types**: Support for searching device drivers, and other special files.
--- **POSIX Compliance**: Broader support for Illumos/Solaris and other POSIX systems (currently challenging due to QEMU complexities(and laziness)).
+*DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use).
+*Extended File Types**: Support for searching device drivers, and other special files.
+*POSIX Compliance**: Broader support for Illumos/Solaris and other POSIX systems (currently challenging due to QEMU complexities(and laziness)).
 
 ### Platform Expansion
 
--- **Windows Support**: Acknowledged as a significant undertaking requiring architectural changes, but valuable for both usability and learning Windows internals.
+**Windows Support**: Acknowledged as a significant undertaking requiring architectural changes, but valuable for both usability and learning Windows internals.
 
 ### Tooling Exploration
 
--- **Compile-Time Techniques**: Further development of `compile_time_ls_colours` to explore advanced metaprogramming, mostly because it's interesting (doubt I can add much to it now but I think I could use similar techniques elsewhere!)
+**Compile-Time Techniques**: Further development of `compile_time_ls_colours` to explore advanced metaprogramming, mostly because it's interesting (doubt I can add much to it now but I think I could use similar techniques elsewhere!)
 
 ### Core Philosophy
 

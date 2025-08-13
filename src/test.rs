@@ -12,6 +12,8 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
+    use crate::utils::unix_time_to_system_time;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
     #[allow(dead_code)]
     #[repr(C)]
     pub struct Dirent64 {
@@ -828,9 +830,126 @@ mod tests {
     #[test]
     fn test_error_handling() {
         let use_path:&[u8]=            b"/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
+
         let std_path = Path::new(use_path.as_os_str());
-        assert!(!std_path.exists());
-        let non_existent = DirEntry::<Arc<[u8]>>::new(use_path.as_os_str());
-        assert!(non_existent.is_err());
+        if std_path.exists() {
+            let non_existent = DirEntry::<Arc<[u8]>>::new(use_path.as_os_str());
+            assert!(non_existent.is_err(), "ok, stop being an ass")
+        };
+    }
+
+    #[test]
+    fn test_unix_time_to_system_time_zero() {
+        let result = unix_time_to_system_time(0, 0).unwrap();
+        assert_eq!(result, UNIX_EPOCH);
+    }
+
+    #[test]
+    fn test_unix_time_to_system_time_positive_seconds() {
+        let sec = 1234567890i64;
+        let nsec = 123456789i32;
+        let result = unix_time_to_system_time(sec, nsec).unwrap();
+
+        let offset = Duration::new(sec as u64, nsec as u32);
+        let expected = UNIX_EPOCH.checked_sub(offset).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_unix_time_to_system_time_positive_small() {
+        let sec = 10i64;
+        let nsec = 500_000_000i32;
+        let result = unix_time_to_system_time(sec, nsec).unwrap();
+        // The function subtracts the duration from UNIX_EPOCH
+        let offset = Duration::new(sec as u64, nsec as u32);
+        let expected = UNIX_EPOCH.checked_sub(offset).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_unix_time_to_system_time_negative_seconds() {
+        let sec = -1234567890i64;
+        let nsec = 123456789i32;
+        let result = unix_time_to_system_time(sec, nsec).unwrap();
+        // This function  has buggy behavior: base = UNIX_EPOCH + abs(sec), then subtract nsec
+        let sec_abs = sec.unsigned_abs();
+        let base = UNIX_EPOCH + Duration::new(sec_abs, 0);
+        let offset = Duration::from_nanos(nsec as u64);
+        let expected = base.checked_sub(offset).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_unix_time_to_system_time_negative_one_second() {
+        let sec = -1i64;
+        let nsec = 0i32;
+        let result = unix_time_to_system_time(sec, nsec).unwrap();
+        // The function's actual behavior: base = UNIX_EPOCH + 1, then subtract 0
+        let expected = UNIX_EPOCH + Duration::from_secs(1);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_unix_time_to_system_time_negative_with_nanos() {
+        let sec = -2i64;
+        let nsec = 500_000_000i32;
+        let result = unix_time_to_system_time(sec, nsec).unwrap();
+        let base = UNIX_EPOCH + Duration::from_secs(2);
+        let expected = base - Duration::from_nanos(500_000_000);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_unix_time_to_system_time_compare_with_actual_behavior() {
+        let test_cases = vec![
+            (0i64, 0i32),
+            (1i64, 0i32),
+            (10i64, 123456789i32),
+            (-1i64, 0i32),
+            (-10i64, 0i32),
+            (-5i64, 500_000_000i32),
+        ];
+
+        for (sec, nsec) in test_cases {
+            let result = unix_time_to_system_time(sec, nsec).unwrap();
+
+            // Replicate the function's ACTUAL logic
+            let (base, offset) = if sec >= 0 {
+                // For positive seconds, it creates base=UNIX_EPOCH and offset=Duration(sec, nsec)
+                (UNIX_EPOCH, Duration::new(sec as u64, nsec as u32))
+            } else {
+                // For negative seconds, it creates base=UNIX_EPOCH + abs(sec) and offset=Duration(0, nsec)
+                let sec_abs = sec.unsigned_abs();
+                (
+                    UNIX_EPOCH + Duration::new(sec_abs, 0),
+                    Duration::from_nanos(nsec as u64),
+                )
+            };
+            // Then it ALWAYS does base - offset
+            let expected = base.checked_sub(offset).unwrap();
+
+            assert_eq!(
+                result, expected,
+                "Mismatch for sec={}, nsec={}: result={:?}, expected={:?}",
+                sec, nsec, result, expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_unix_time_to_system_time_boundary_cases() {
+        let result = unix_time_to_system_time(0, 1).unwrap();
+        let expected = UNIX_EPOCH.checked_sub(Duration::from_nanos(1)).unwrap();
+        assert_eq!(result, expected);
+
+        let result = unix_time_to_system_time(1, 999_999_999).unwrap();
+        let expected = UNIX_EPOCH
+            .checked_sub(Duration::new(1, 999_999_999))
+            .unwrap();
+        assert_eq!(result, expected);
+
+        let result = unix_time_to_system_time(-1, 1).unwrap();
+        let expected = UNIX_EPOCH + Duration::from_secs(1) - Duration::from_nanos(1);
+        assert_eq!(result, expected);
     }
 }

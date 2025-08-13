@@ -80,9 +80,10 @@ jobs:
         prepare: |
           pkg_add curl
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source ~/.cargo/env
           echo 'source ~/.cargo/env' >> ~/.profile
         run: |
-          . ~/.cargo/env
+          source ~/.cargo/env
           cargo build --verbose
           cargo test --verbose
     
@@ -95,9 +96,10 @@ jobs:
         prepare: |
           pkg install -y curl
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source ~/.cargo/env
           echo 'source ~/.cargo/env' >> ~/.profile
         run: |
-          . ~/.cargo/env
+          source ~/.cargo/env
           cargo build --verbose
           cargo test --verbose
     

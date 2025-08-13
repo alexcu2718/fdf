@@ -92,7 +92,7 @@ mod filetype;
 pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))] //miri doesnt support custom allocators
 //not sure which platforms support this, BSD doesnt from testing, will test others as appropriate(GREAT DOCS!!!)
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;

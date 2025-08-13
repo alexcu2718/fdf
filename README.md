@@ -128,15 +128,17 @@ I enjoy relying on  validated work like stdlib to ideally 'covalidate' my work, 
 
 ## Future Plans
 
-### Modularization
+### Modularisation
 
 While avoiding excessive fragmentation, I plan to extract reusable components (like platform-specific FFI utilities) into separate crates. This will improve maintainability without sacrificing the project's cohesive design.
 
 ### Feature Enhancements
 
-*DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use).
-*Extended File Types**: Support for searching device drivers, and other special files.
-*POSIX Compliance**: Broader support for Illumos/Solaris and other POSIX systems (currently challenging due to QEMU complexities(and laziness)).
+**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use).
+
+**Extended File Types**: Support for searching device drivers, and other special files.
+
+**POSIX Compliance**: Broader support for Illumos/Solaris and other POSIX systems (currently challenging due to QEMU complexities(and laziness)).
 
 ### Platform Expansion
 

@@ -10,13 +10,71 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
+  test:
+    name: Test on ${{ matrix.os }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: x86_64
+            runner: ubuntu-latest
+          - os: macos
+            arch: x86_64
+            runner: macos-latest
+          - os: macos
+            arch: aarch64
+            runner: macos-14
+          - os: freebsd
+            arch: x86_64
+            runner: ubuntu-latest
+          - os: linux
+            arch: s390x
+            runner: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    
+    - name: Test on Linux x86_64
+      if: matrix.os == 'linux' && matrix.arch == 'x86_64'
+      run: |
+        cargo build --verbose
+        cargo test --verbose
+    
+    - name: Test on macOS
+      if: matrix.os == 'macos'
+      run: |
+        cargo build --verbose
+        cargo test --verbose
+    
+    - name: Test on FreeBSD
+      if: matrix.os == 'freebsd'
+      uses: vmactions/freebsd-vm@v1
+      with:
+        usesh: true
+        mem: 2048
+        prepare: |
+          pkg install -y curl
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo 'source ~/.cargo/env' >> ~/.bashrc
+        run: |
+          source ~/.cargo/env
+          cargo build --verbose
+          cargo test --verbose
+    
+    - name: Test on Linux s390x (big-endian)
+      if: matrix.os == 'linux' && matrix.arch == 's390x'
+      uses: uraimo/run-on-arch-action@v2
+      with:
+        arch: s390x
+        distro: ubuntu22.04
+        githubToken: ${{ github.token }}
+        install: |
+          apt-get update -q -y
+          apt-get install -q -y curl build-essential
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source ~/.cargo/env
+        run: |
+          source ~/.cargo/env
+          cargo build --verbose
+          cargo test --verbose

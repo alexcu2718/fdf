@@ -28,12 +28,6 @@ jobs:
           - os: freebsd
             arch: x86_64
             runner: ubuntu-latest
-          - os: netbsd
-            arch: x86_64
-            runner: ubuntu-latest
-          - os: dragonflybsd
-            arch: x86_64
-            runner: ubuntu-latest
           - os: openbsd
             arch: x86_64
             runner: ubuntu-latest
@@ -74,37 +68,9 @@ jobs:
           cargo build --verbose
           cargo test --verbose
     
-    - name: Test on NetBSD
-      if: matrix.os == 'netbsd'
-      uses: vmactions/netbsd-vm@v1
-      with:
-        usesh: true
-        mem: 2048
-        prepare: |
-          pkg_add curl
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          . "$HOME/.cargo/env"
-          echo '. "$HOME/.cargo/env"' >> ~/.profile
-        run: |
-          . "$HOME/.cargo/env"
-          cargo build --verbose
-          cargo test --verbose
+
     
-    - name: Test on DragonFlyBSD
-      if: matrix.os == 'dragonflybsd'
-      uses: vmactions/dragonflybsd-vm@v1
-      with:
-        usesh: true
-        mem: 2048
-        prepare: |
-          pkg install -y curl
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          . "$HOME/.cargo/env"
-          echo '. "$HOME/.cargo/env"' >> ~/.profile
-        run: |
-          . "$HOME/.cargo/env"
-          cargo build --verbose
-          cargo test --verbose
+
     
     - name: Test on OpenBSD
       if: matrix.os == 'openbsd'

@@ -110,7 +110,7 @@ Currently, filtering-before-allocation is partially implemented in the crate but
 
 * Open to contributions - Once the codebase stabilises, I welcome others to add features if they're extremely inclined anyway!
 
-* Pragmatic focus - Some areas, like datetime filtering, are on hold simply because I rarely use them. They may be added in the future, especially if someone else is motivated to implement them.
+* Pragmatic focus - Some areas, like datetime filtering, are on hold simply because I rarely use them. They will in the future, especially if someone else is motivated to implement them!
 
 In short, this project is a personal exploration into performance, low-level programming, and building practical tools - with the side benefit that it's actually good at what it does.
 

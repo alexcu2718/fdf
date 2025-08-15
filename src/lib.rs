@@ -40,6 +40,7 @@ use std::{
 pub(crate) mod cursed_macros;
 
 mod temp_dirent;
+#[cfg(target_os="linux")]
 pub use temp_dirent::TempDirent;
 //crate imports
 mod iter;
@@ -72,6 +73,7 @@ pub use custom_types_result::{
 };
 
 pub(crate) use custom_types_result::PathBuffer;
+#[cfg(target_os="linux")]
 pub(crate) use custom_types_result::SyscallBuffer;
 
 mod traits_and_conversions;

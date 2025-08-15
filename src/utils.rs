@@ -1,5 +1,5 @@
 use crate::{
-    DirEntryError, Result, buffer::ValueType, memchr_derivations::find_zero_byte_u64,
+    DirEntryError, Result, buffer::ValueType, 
 };
 use core::time::Duration;
 #[cfg(not(target_os = "linux"))]

@@ -92,7 +92,9 @@ where
     /// If the file has no '.' returns `None`.
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        memrchr(b'.', self).map(|pos| &self[pos + 1..])
+        unsafe{memrchr(b'.', self).map(|pos| self.get_unchecked(pos+1..))} //avoid UB check
+        // # SAFETY
+        // the filename is guaranteed to have more than one character at the end
     }
 
     /// Converts the byte slice into a `DirEntry`.

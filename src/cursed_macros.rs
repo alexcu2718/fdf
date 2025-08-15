@@ -156,7 +156,7 @@ macro_rules! cstr {
         // Debug assert to check test builds for unexpected conditions
         core::debug_assert!($bytes.len() < $crate::LOCAL_PATH_MAX);
         // Create a buffer and make into a pointer
-        let mut c_path_buf_start = $crate::PathBuffer::new();
+        let mut c_path_buf_start = $crate::AlignedBuffer::<u8, {$crate::LOCAL_PATH_MAX}>::new();
         let c_path_buf = c_path_buf_start.as_mut_ptr();
 
         // Copy the bytes into the buffer and append a null terminator

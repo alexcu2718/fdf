@@ -23,7 +23,7 @@ const_from_env!(
 //basically this is the should allow getdents to grab a lot of entries in one go
 
 pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
-#[allow(dead_code)] //this should be only linux only (because of getdents )
+#[cfg(target_os="linux")] //we only use a buffer for syscalls on linux because of stable ABI
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
 ///  a trait that all storage types must implement (for our main types) (so the user can use their own types if they want)
@@ -113,7 +113,6 @@ impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
 pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S>>) -> bool;
 ///generic filter function type for directory entries
 pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
-#[allow(dead_code)]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 /// This is a type alias for a boxed slice of bytes with a slimmer size representation on Linux/macos, 10 bytes not 16
 pub type SlimmerBytes = SlimmerBox<[u8], u16>;

@@ -74,7 +74,6 @@ where
 
     #[inline]
     #[must_use]
-    #[allow(dead_code)] //not used YET
     pub const fn as_ptr(&self) -> *const T {
         self.data.as_ptr().cast()
     }
@@ -89,7 +88,6 @@ where
     /// # Safety
     /// The buffer must be initialised before calling this
     #[inline]
-    #[allow(dead_code)]
     pub const unsafe fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { &mut *self.data.as_mut_ptr() }
     }
@@ -156,7 +154,6 @@ where
     /// # Safety
     /// The range must be within initialised portion of the buffer
     #[inline]
-    #[allow(dead_code)]
     pub unsafe fn get_unchecked_mut<R>(&mut self, range: R) -> &mut R::Output
     where
         R: SliceIndex<[T]>,

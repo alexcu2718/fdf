@@ -91,7 +91,7 @@ impl SearchConfig {
     }
     #[inline]
     #[must_use]
-    #[allow(dead_code)]
+    #[cfg(target_os="linux")] //FOR EXPERIMENTAL REASONS, ITS LINUX ONLY FOR NOW (EASE OF TESTING)
     #[allow(clippy::if_not_else)] // this is a stylistic choice to avoid unnecessary else branches
     pub(crate) fn matches_path_internal(
         &self,

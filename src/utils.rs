@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::{
     DirEntryError, Result, buffer::ValueType, memchr_derivations::find_zero_byte_u64,
 };
@@ -8,8 +7,7 @@ use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
 use std::time::{SystemTime, UNIX_EPOCH};
-const DOT_PATTERN: &str = ".";
-const START_PREFIX: &str = "/";
+
 
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 /// Not in use currently, later.
@@ -116,15 +114,7 @@ where
     }
 }
 
-//internal convenients functions for min/max
-#[allow(clippy::single_call_fn)]
-pub(crate) const fn const_min(a: usize, b: usize) -> usize {
-    if a < b { a } else { b }
-}
-#[allow(clippy::single_call_fn)]
-pub(crate) const fn const_max(a: usize, b: usize) -> usize {
-    const_min(b, a)
-}
+
 
 /// This function resolves the inode from a `libc::stat` structure in a platform-independent way(well, POSIX way).
 /// It is used to get the inode number of a file or directory.

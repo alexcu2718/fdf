@@ -7,8 +7,6 @@ use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
 use std::time::{SystemTime, UNIX_EPOCH};
-#[cfg(target_os = "linux")]
-use crate::memchr_derivations::find_zero_byte_u64; //only used in SWAR func
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 /// Not in use currently, later.
 #[allow(clippy::missing_errors_doc)] //fixing errors later
@@ -43,8 +41,6 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 /// It's faster than my constant time strlen for dirents for small strings, but after 32 bytes, it becomes slower.
 /// It is also faster than the libc implementation but only for size below 128...?wtf.
 #[inline]
-#[allow(clippy::unnecessary_safety_comment)] //ill fix this later.
-#[allow(clippy::ptr_as_ptr)]
 pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
@@ -66,10 +62,10 @@ where
 
             let mut offset = 0;
             loop {
-                let chunk = _mm256_loadu_si256(ptr.add(offset) as *const __m256i); //load the pointer, add offset, cast to simd type
+                let chunk = _mm256_loadu_si256(ptr.add(offset).cast::< __m256i>()); //load the pointer, add offset, cast to simd type
                 let zeros = _mm256_setzero_si256(); //zeroise vector
                 let cmp = _mm256_cmpeq_epi8(chunk, zeros); //compare each byte in the chunk to 0, 32 at a time,
-                let mask = _mm256_movemask_epi8(cmp) as i32; //
+                let mask = _mm256_movemask_epi8(cmp); //
 
                 if mask != 0 {
                     //find the
@@ -91,10 +87,10 @@ where
 
             let mut offset = 0;
             loop {
-                let chunk = _mm_loadu_si128(ptr.add(offset) as *const __m128i); //same as below but for different instructions
+                let chunk = _mm_loadu_si128(ptr.add(offset).cast::<__m128i>()); //same as above but for diff instructions
                 let zeros = _mm_setzero_si128();
                 let cmp = _mm_cmpeq_epi8(chunk, zeros);
-                let mask = _mm_movemask_epi8(cmp) as i32;
+                let mask = _mm_movemask_epi8(cmp);
 
                 if mask != 0 {
                     //U
@@ -159,7 +155,7 @@ pub(crate) fn construct_path(
 }
 
 #[inline]
-#[allow(clippy::missing_const_for_fn)] //
+#[allow(clippy::missing_const_for_fn)] 
 #[allow(clippy::single_call_fn)]
 ///a utility function for breaking down the config spaghetti that is platform specific optimisations
 // i wanted to make this const and separate the function
@@ -203,8 +199,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// */
 
 #[inline]
-#[allow(clippy::ptr_as_ptr)] //safe to do this as u8 is aligned to 8 bytes
-#[allow(clippy::cast_lossless)] //shutup
+#[cfg(target_os = "linux")]
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 /// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD.
 /// Constant time (therefore branchless)
@@ -231,8 +226,8 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// # SAFETY
 /// The caller must uphold the following invariants:
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
-#[cfg(target_os = "linux")]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
+    use crate::memchr_derivations::find_zero_byte_u64; 
     const DIRENT_HEADER_START: usize = core::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
     debug_assert!(
@@ -241,11 +236,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     ); //show it's always aligned 
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64
+    //because unaligned reads are expensive
     #[cfg(target_endian = "little")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //go to the last word in the struct.
+    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>()}.to_le(); //go to the last word in the struct.
     //this is safe because the reclen is the size of the struct, therefore indexing into it like this is ALWAYS in bounds.
     #[cfg(target_endian = "big")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if on big-endian
+    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>()}.to_le(); 
     //TODO! this could probably be optimised, testing anything on bigendian is a fucking pain because it takes an ungodly time to compile.
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.

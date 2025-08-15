@@ -1,5 +1,4 @@
 #![allow(clippy::pattern_type_mismatch)] //stupid
-#[allow(unused_imports)]
 use crate::BytePath as _;
 
 use libc::{

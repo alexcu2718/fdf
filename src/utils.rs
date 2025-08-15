@@ -1,7 +1,6 @@
 #![allow(dead_code)]
-#[allow(unused_imports)]
 use crate::{
-    DirEntryError, Result, buffer::ValueType, cstr, memchr_derivations::find_zero_byte_u64,
+    DirEntryError, Result, buffer::ValueType, memchr_derivations::find_zero_byte_u64,
 };
 use core::time::Duration;
 #[cfg(not(target_os = "linux"))]
@@ -47,7 +46,6 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 /// It is also faster than the libc implementation but only for size below 128...?wtf.
 #[inline]
 #[allow(clippy::unnecessary_safety_comment)] //ill fix this later.
-#[allow(unused_unsafe)]
 #[allow(clippy::ptr_as_ptr)]
 pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where

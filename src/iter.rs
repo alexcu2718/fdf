@@ -1,8 +1,8 @@
 #![allow(clippy::cast_possible_wrap)]
-#[allow(unused_imports)]
+
 use crate::{
-    AlignedBuffer, BytePath as _, DirEntry, DirEntryError as Error, FileType, LOCAL_PATH_MAX,
-    PathBuffer, Result, SyscallBuffer, cstr, custom_types_result::BytesStorage,
+    AlignedBuffer, BytePath as _, DirEntry, DirEntryError as Error,  LOCAL_PATH_MAX,
+    PathBuffer, Result,  custom_types_result::BytesStorage,
     traits_and_conversions::DirentConstructor as _,
 };
 use core::marker::PhantomData;
@@ -119,7 +119,7 @@ where
 {
     type Item = DirEntry<T>;
     #[inline]
-    #[allow(clippy::ptr_as_ptr)] //we're align so raw pointer as casts are fine.
+    #[allow(clippy::ptr_as_ptr)] //we're aligned so raw pointer as casts are fine.
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
             return None;

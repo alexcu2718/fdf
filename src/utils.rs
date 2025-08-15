@@ -7,8 +7,8 @@ use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-
+#[cfg(target_os = "linux")]
+use crate::memchr_derivations::find_zero_byte_u64; //only used in SWAR func
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 /// Not in use currently, later.
 #[allow(clippy::missing_errors_doc)] //fixing errors later

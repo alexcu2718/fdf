@@ -75,7 +75,7 @@ where
             "Input too large for buffer"
         );
 
-        let mut c_path_buf_start = crate::PathBuffer::new();
+        let mut c_path_buf_start = crate::AlignedBuffer::<u8, {crate::LOCAL_PATH_MAX}>::new();
 
         let c_path_buf = c_path_buf_start.as_mut_ptr();
 

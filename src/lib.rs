@@ -71,7 +71,7 @@ pub use custom_types_result::{
     SlimmerBytes,
 };
 
-pub use custom_types_result::PathBuffer;
+pub(crate) use custom_types_result::PathBuffer;
 pub(crate) use custom_types_result::SyscallBuffer;
 
 mod traits_and_conversions;
@@ -154,9 +154,7 @@ where
             _ => Err(DirEntryError::InvalidPath),
         }
     }
-    //linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
     #[inline]
-    #[cfg(target_os = "linux")]
     #[allow(clippy::let_underscore_untyped)]
     #[allow(clippy::let_underscore_must_use)]
     #[allow(clippy::print_stderr)]//TODO, REMOVE THIS WHEN SATISIFIED
@@ -172,10 +170,16 @@ where
                 let _ = sender.send(vec![dir]);
             } //have to put into a vec, this doesnt matter because this only happens when we depth limit
 
-            return; // stop processing this directory if depth limit is reached
+            return // stop processing this directory if depth limit is reached
         }
+        #[cfg(target_os = "linux")]     //linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
+        let direntries = dir.getdents(); //additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
+        #[cfg(not(target_os = "linux"))]
+        let direntries = dir.readdir(); //in theory i can use getattrlistbulk on macos, this requires linking and a LOT of complexity
+        //https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5 TODO! 
+        
 
-        match dir.getdents() {
+        match direntries {
             Ok(entries) => {
                 // Store only directories for parallel recursive call
 
@@ -192,7 +196,7 @@ where
                     .into_iter()
                     .filter(|entry| (self.custom_filter)(config, entry, self.filter))
                     .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately
-                    .collect(); //by doing it this way we reduce channel contention and avoid an intermediate vec, which is more efficient!
+                    .collect(); //by doing it this way we reduce channel contention 
 
                 if !matched_files.is_empty() {
                     let _ = sender.send(matched_files);
@@ -207,59 +211,7 @@ where
             Err(e) => eprintln!("Unexpected error: {e}"),//todo! unreachable unchecked maybe!
         }
     }
-    //non linux version
-    #[inline]
-    #[cfg(not(target_os = "linux"))]
-    #[allow(clippy::let_underscore_untyped)]
-    #[allow(clippy::let_underscore_must_use)]
-    #[allow(clippy::print_stderr)]
-    #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
-    fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
-        let config = &self.search_config;
-
-        let should_send =
-            config.keep_dirs && (self.custom_filter)(config, &dir, self.filter) && dir.depth() != 0;
-
-        if self.search_config.depth.is_some_and(|d| dir.depth >= d) {
-            if should_send {
-                let _ = sender.send(vec![dir]);
-            } //have to put into a vec, this doesnt matter because this only happens when we depth limit
-
-            return; // stop processing this directory if depth limit is reached
-        }
-
-        match dir.readdir() {
-            Ok(entries) => {
-                // Store only directories for parallel recursive call
-
-                let (dirs, files): (Vec<_>, Vec<_>) = entries
-                    .filter(|e| !config.hide_hidden || !e.is_hidden())
-                    .partition(|x| x.is_dir() || config.follow_symlinks && x.is_symlink());
-
-                dirs.into_par_iter().for_each(|dirnt| {
-                    Self::process_directory(self, dirnt, sender);
-                });
-
-                // Process files without intermediate Vec
-                let matched_files: Vec<_> = files
-                    .into_iter()
-                    .filter(|entry| (self.custom_filter)(config, entry, self.filter))
-                    .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately
-                    .collect(); //by doing it this way we reduce channel contention and avoid an intermediate vec, which is more efficient!
-
-                if !matched_files.is_empty() {
-                    let _ = sender.send(matched_files);
-                }
-            }
-            Err(
-                DirEntryError::Success
-                | DirEntryError::TemporarilyUnavailable
-                | DirEntryError::AccessDenied(_)
-                | DirEntryError::InvalidPath,
-            ) => {}
-            Err(e) => eprintln!("Unexpected error: {e}"),
-        }
-    }
+   
 }
 
 /// A builder for creating a `Finder` instance with customisable options.

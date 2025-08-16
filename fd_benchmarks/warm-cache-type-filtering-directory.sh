@@ -31,7 +31,6 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-type-filtering-directory.md"
 
-# Improved difference checking
 echo -e "\nAnalyzing differences..."
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_type_d.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_type_d.lst"

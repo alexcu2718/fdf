@@ -13,14 +13,12 @@ pattern="'.*[0-9].*(md|\.c)$'"
 COMMAND_FIND="fdf -HI $pattern '$SEARCH_ROOT'"
 COMMAND_FD="fd -HI $pattern '$SEARCH_ROOT'"
 
-# First get accurate baseline counts
 echo -e "\nGetting accurate file counts..."
 fd_count=$(eval "$COMMAND_FD" | wc -l)
 fdf_count=$(eval "$COMMAND_FIND" | wc -l)
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
-# Run benchmarks with stabilization
 echo -e "\nRunning benchmarks..."
 hyperfine \
   --warmup "$WARMUP_COUNT" \
@@ -29,7 +27,6 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-simple-pattern.md"
 
-# Improved difference checking
 echo -e "\nAnalysing differences..."
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_pattern.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_pattern.lst"

@@ -42,15 +42,24 @@ This executes a comprehensive suite of internal library, CLI tests, and benchmar
 Testing on my local filesystem (to show on non-toy example)
 
 ```bash
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf ''  '/home/alexc' -HI --type l` | 259.2 ± 5.0 | 252.7 | 267.5 | 1.00 | #search for symlinks
-| `fd -HI '' '/home/alexc' --type l` | 418.2 ± 12.8 | 402.2 | 442.6 | 1.61 ± 0.06 |
+Running fdf vs fd benchmarks...
+Search root: /home/alexc
 
+Benchmark 1: fdf 'hi' '/home/alexc' -HI -extension 'c' | wc -l
+  Time (mean ± σ):     428.2 ms ±  11.4 ms    [User: 876.8 ms, System: 3728.4 ms]
+  Range (min … max):   410.2 ms … 441.1 ms    10 runs
 
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-| `fdf -HI --extension 'jpg' '' '/home/alexc'` | 292.6 ± 2.0 | 289.5 | 295.8 | 1.00 |
-| `fd -HI --extension 'jpg' '' '/home/alexc'` | 516.3 ± 5.8 | 509.1 | 524.1 | 1.76 ± 0.02 |
+Benchmark 2: fd 'hi' '/home/alexc' -HI --extension 'c' | wc -l
+  Time (mean ± σ):     658.0 ms ±  11.6 ms    [User: 3105.2 ms, System: 3946.4 ms]
+  Range (min … max):   638.7 ms … 679.1 ms    10 runs
 
+Benchmark 3: fdf '.*[0-9].*(md|\.c)$' '/home/alexc' -HI | wc -l
+  Time (mean ± σ):     482.4 ms ±  11.0 ms    [User: 1387.3 ms, System: 3801.4 ms]
+  Range (min … max):   465.3 ms … 498.5 ms    10 runs
+
+Benchmark 4: fd '.*[0-9].*(md|\.c)$' '/home/alexc' -HI | wc -l
+  Time (mean ± σ):     682.6 ms ±  10.7 ms    [User: 3331.4 ms, System: 3932.1 ms]
+  Range (min … max):   663.7 ms … 700.2 ms    10 runs
 
 
 ```

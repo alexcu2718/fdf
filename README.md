@@ -64,7 +64,7 @@ Benchmark 4: fd '.*[0-9].*(md|\.c)$' '/home/alexc' -HI | wc -l
 
 ```
 
- **Full Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
+ **Full Repeatable Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
 ## Extra bits
 
@@ -250,25 +250,12 @@ Options:
 -- Conflicts with minimal-dependency philosophy  
 -- Linux only, that isn't too appealing for such a difficult addition.
 
-**3. Compile-time LS_COLORS Enhancement**  
--- Develop dependency-free version:  
-  [No-PHF Implementation](https://github.com/alexcu2718/compile_time_ls_colours/tree/no_phf_build)  
--- Address current limitations:  
--- Manual byte manipulation requirements  
--- Runtime static initialisation  
-
-**4. Native Threading Implementation**  
+**3. Native Threading Implementation**  
 -- Replace Rayon dependency  
 -- Develop custom work-distribution algorithm  
 -- Current status: Experimental approaches underway  
 
-**5. Allocation-Optimised Iterator Adaptor**  
+**4. Allocation-Optimised Iterator Adaptor**  
 -- Design filter mechanism avoiding:  
 -- Unnecessary directory allocations  
 -- Non-essential memory operations  
-
-**6. Syscall Efficiency Research**  
--- Investigate hard limits of system calls  
--- Experimental Zig-based io_uring integration:  
--- Currently outside comfort zone  
--- Considered valuable learning opportunity  

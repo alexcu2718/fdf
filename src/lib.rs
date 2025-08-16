@@ -148,7 +148,7 @@ where
             Ok(entry) if entry.is_traversible() => {
                 // spawn the search in a new thread.
                 rayon::spawn(move || {
-                    Self::process_directory(&self, entry, &sender);
+                    self.process_directory(entry, &sender);
                 });
 
                 //return receiver
@@ -168,7 +168,7 @@ where
         let should_send =
             config.keep_dirs && (self.custom_filter)(config, &dir, self.filter) && dir.depth() != 0;
 
-        if self.search_config.depth.is_some_and(|d| dir.depth >= d) {
+        if config.depth.is_some_and(|d| dir.depth >= d) {
             if should_send {
                 let _ = sender.send(vec![dir]);
             } //have to put into a vec, this doesnt matter because this only happens when we depth limit
@@ -207,7 +207,8 @@ where
                 });
                 //checking if we should send directories
                 if should_send{
-                    files.push(dir.clone()) //we have to clone here unfortunately because
+                    files.push(dir.clone()) //we have to clone here unfortunately because it's being used to keep the iterator going.
+                    //luckily we're only cloning once, not cloning multiple!
                 }
 
                 if !files.is_empty() {

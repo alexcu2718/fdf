@@ -1,1 +1,1 @@
-grep -R --include="*.rs" "TODO" ./src
+grep -Ri --include="*.rs" --include="README*" "TODO" .

@@ -40,7 +40,7 @@ use std::{
 pub(crate) mod cursed_macros;
 
 mod temp_dirent;
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 pub use temp_dirent::TempDirent;
 //crate imports
 mod iter;
@@ -73,7 +73,7 @@ pub use custom_types_result::{
 };
 
 pub(crate) use custom_types_result::PathBuffer;
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 pub(crate) use custom_types_result::SyscallBuffer;
 
 mod traits_and_conversions;
@@ -94,7 +94,8 @@ mod filetype;
 pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
-#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))] //miri doesnt support custom allocators
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
+//miri doesnt support custom allocators
 //not sure which platforms support this, BSD doesnt from testing, will test others as appropriate(GREAT DOCS!!!)
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -159,7 +160,7 @@ where
     #[inline]
     #[allow(clippy::let_underscore_untyped)]
     #[allow(clippy::let_underscore_must_use)]
-    #[allow(clippy::print_stderr)]//TODO, REMOVE THIS WHEN SATISIFIED
+    #[allow(clippy::print_stderr)] //TODO, REMOVE THIS WHEN SATISIFIED
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
@@ -172,36 +173,45 @@ where
                 let _ = sender.send(vec![dir]);
             } //have to put into a vec, this doesnt matter because this only happens when we depth limit
 
-            return // stop processing this directory if depth limit is reached
+            return; // stop processing this directory if depth limit is reached
         }
-        #[cfg(target_os = "linux")]     //linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
+        #[cfg(target_os = "linux")]
+        //linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
         let direntries = dir.getdents(); //additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
         #[cfg(not(target_os = "linux"))]
         let direntries = dir.readdir(); //in theory i can use getattrlistbulk on macos, this requires linking and a LOT of complexity
-        //https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5 TODO! 
-        
+        //https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5 TODO!
+
+
+
+        //these lambdas make the code a bit easier to follow, i might define them as functions later, TODO!
+        //directory or symlink lambda
+         // Keep all directories (and symlinks if following them)
+        let d_or_s_filter=|myentry:&DirEntry<S>|->bool { myentry.is_dir() || config.follow_symlinks && myentry.is_symlink()};
+        //the filter for keeping files
+        let file_filter=|file_entry:&DirEntry<S>|->bool{(self.custom_filter)(config, file_entry, self.filter)};
+        let keep_hidden=|hfile:&DirEntry<S>|->bool {!config.hide_hidden || !hfile.is_hidden()};
+
 
         match direntries {
             Ok(entries) => {
-                // Store only directories for parallel recursive call
 
-                let (dirs, files): (Vec<_>, Vec<_>) = entries
-                    .filter(|e| !config.hide_hidden || !e.is_hidden())
-                    .partition(|x| x.is_dir() || config.follow_symlinks && x.is_symlink());
+                // Apply filters before partitioning 
+                let (dirs, mut files): (Vec<_>, Vec<_>) = entries
+                    .filter(|entry| keep_hidden(entry) && (d_or_s_filter(entry) || file_filter(entry)))
+                    .partition(|x| d_or_s_filter(x));
 
+                // Process directories in parallel
                 dirs.into_par_iter().for_each(|dirnt| {
-                    Self::process_directory(self, dirnt, sender);
+                    self.process_directory( dirnt, sender);
                 });
+                //checking if we should send directories
+                if should_send{
+                    files.push(dir.clone()) //we have to clone here unfortunately because
+                }
 
-                // Process files without intermediate Vec
-                let matched_files: Vec<_> = files
-                    .into_iter()
-                    .filter(|entry| (self.custom_filter)(config, entry, self.filter))
-                    .chain(should_send.then(|| dir.clone())) // Include `dir` if `should_send`, we have to clone it unfortunately
-                    .collect(); //by doing it this way we reduce channel contention 
-
-                if !matched_files.is_empty() {
-                    let _ = sender.send(matched_files);
+                if !files.is_empty() {
+                    let _ = sender.send(files);
                 }
             }
             Err(
@@ -210,10 +220,9 @@ where
                 | DirEntryError::AccessDenied(_)
                 | DirEntryError::InvalidPath,
             ) => {}
-            Err(e) => eprintln!("Unexpected error: {e}"),//todo! unreachable unchecked maybe!
+            Err(e) => eprintln!("Unexpected error: {e}"), //todo! unreachable unchecked maybe!
         }
     }
-   
 }
 
 /// A builder for creating a `Finder` instance with customisable options.

@@ -238,7 +238,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     //  Access the last 8 bytes(word) of the dirent structure as a u64
     //because unaligned reads are expensive
     #[cfg(target_endian = "little")]
-    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>()}.to_le(); //go to the last word in the struct.
+    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>()}; //go to the last word in the struct.
     //this is safe because the reclen is the size of the struct, therefore indexing into it like this is ALWAYS in bounds.
     #[cfg(target_endian = "big")]
     let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>()}.to_le(); 

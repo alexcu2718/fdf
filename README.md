@@ -32,14 +32,20 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 ## How to test
 
 ```bash
-git clone https://github.com/alexcu2718/fdf /tmp/fdf_test  && cd /tmp/fdf_test/fd_benchmarks &&   ./run_all_tests_USE_ME.sh
+git clone https://github.com/alexcu2718/fdf /tmp/fdf_test
+cd /tmp/fdf_test/fd_benchmarks
+./run_all_tests_USE_ME.sh
 ```
 
 This executes a comprehensive suite of internal library, CLI tests, and benchmarks.
 
 ## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
 
-Testing on my local filesystem (to show on non-toy example)
+ **Full Repeatable Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt) 
+
+(Repeatable via the testing code seen above, they cover file type filtering, among many more!)
+
+Tests ran on my local system instead of the llvm-project (to give a good example)
 
 ```bash
 Running fdf vs fd benchmarks...
@@ -63,8 +69,6 @@ Benchmark 4: fd '.*[0-9].*(md|\.c)$' '/home/alexc' -HI | wc -l
 
 
 ```
-
- **Full Repeatable Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
 ## Extra bits
 

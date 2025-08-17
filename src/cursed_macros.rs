@@ -1,7 +1,7 @@
 #![allow(unused_macros)]
 
 #[allow(clippy::doc_markdown)]
-#[macro_export(local_inner_macros)]
+#[macro_export]
 ///A helper macro to safely access dirent(64 on linux)'s
 /// fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
 ///
@@ -77,6 +77,7 @@ macro_rules! offset_dirent {
     ($entry_ptr:expr, $field:ident) => {{ (*$entry_ptr).$field }};
 }
 
+
 /*
 
    // The dirent64 struct is a weird imaginary thing that isn't ever supposed
@@ -104,6 +105,53 @@ macro_rules! offset_dirent {
                     continue;
                 }
 */
+
+///A macro to safely access stat entries in a filesystem independent way 
+// TODO! add other fields as appropriate (this could be pretty long)
+macro_rules! access_stat {
+    ($stat_struct:expr, st_mtimensec) => {{
+        #[cfg(target_os = "netbsd")]
+        { $stat_struct.st_mtimensec as _ }
+
+        #[cfg(not(target_os = "netbsd"))]
+        { $stat_struct.st_mtime_nsec as _ }
+    }};
+
+
+    ($stat_struct:expr, st_mtime) => {{
+        $stat_struct.st_mtime as _
+    }};
+
+
+
+    // inode number, normalized to u64
+    ($stat_struct:expr, st_ino) => {{
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        ))]
+        { $stat_struct.st_ino as u64 }
+
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        )))]
+        { $stat_struct.st_ino  }
+    }};
+
+    // Fallback for other fields 
+    ($stat_struct:expr, $field:ident) => {{
+        $stat_struct.$field as _
+    }};
+}
+
+
+
+
 
 #[macro_export]
 /// A macro to create a C-style *str pointer from a byte slice (does not allocate!)

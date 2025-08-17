@@ -292,7 +292,7 @@ where
 
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;
-        let inode = crate::utils::resolve_inode(&get_stat); //resolves inode to u64 but avoids redundant cast
+        let inode = access_stat!(get_stat,st_ino); 
         Ok(Self {
             path: path_ref.into(),
             file_type: get_stat.into(),

@@ -112,30 +112,7 @@ where
 
 
 
-/// This function resolves the inode from a `libc::stat` structure in a platform-independent way(well, POSIX way).
-/// It is used to get the inode number of a file or directory.
-/// It returns a u64 value representing the inode number.
-/// The inode number is a unique identifier for a file or directory in the filesystem.
-#[inline] //i wanted to skip the boiler plate in other function calls.
-#[allow(clippy::single_call_fn)]
-pub const fn resolve_inode(libcstat: &libc::stat) -> u64 {
-    // This function resolves the inode from a `libc::stat` structure.
-    // It is used to get the inode number of a file or directory.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "dragonfly"
-    )))]
-    return libcstat.st_ino;
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "dragonfly"
-    ))]
-    return libcstat.st_ino as u64; // FreeBSD uses u32 for st_ino, so we cast it to u64
-}
+
 
 #[inline]
 ///  constructs a path convenience (just a utility function to save verbosity)

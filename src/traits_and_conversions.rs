@@ -166,25 +166,16 @@ where
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::map_err_ignore)] //specify these later TODO!
-    #[cfg(not(target_os = "netbsd"))]
     fn modified_time(&self) -> crate::Result<SystemTime> {
+         
         let s = self.get_stat()?;
-        crate::unix_time_to_system_time(s.st_mtime, s.st_mtime_nsec as i32)
+        let modified_time=access_stat!(s,st_mtime);
+        let modified_seconds=access_stat!(s,st_mtime_nsec);
+        crate::unix_time_to_system_time(modified_time, modified_seconds)
             .map_err(|_| crate::DirEntryError::TimeError)
     }
-    /// Get last modification time, this will be more useful when I implement filters for it. (netbsd specific)
 
-    //we have to use st_mtimensec on netbsd, why they did this, i do not know.
-    #[inline]
-    #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
-    #[allow(clippy::missing_errors_doc)] //fixing errors later
-    #[allow(clippy::map_err_ignore)] //specify these later TODO!
-    #[cfg(target_os = "netbsd")]
-    fn modified_time(&self) -> crate::Result<SystemTime> {
-        let s = self.get_stat()?;
-        crate::unix_time_to_system_time(s.st_mtime, s.st_mtimensec as i32)
-            .map_err(|_| crate::DirEntryError::TimeError)
-    }
+
 
     /// Converts the byte slice into a `Path`.
     #[inline]

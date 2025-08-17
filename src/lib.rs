@@ -81,7 +81,6 @@ pub use traits_and_conversions::BytePath;
 
 mod utils;
 
-//pub(crate) use utils::strlen_asm;
 #[cfg(target_os = "linux")]
 pub use utils::dirent_const_time_strlen;
 pub use utils::{strlen, unix_time_to_system_time};

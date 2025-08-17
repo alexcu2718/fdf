@@ -13,18 +13,18 @@ mkdir -p "$OUTPUT_DIR"
 # Testing with relative parent directory (..) as search root
 REL_ROOT=".."
 
-# Command definitions
 COMMAND_FIND="fdf '.' '$REL_ROOT' -HI"
 COMMAND_FD="fd '.' '$REL_ROOT' -HI"
 
 # First get accurate baseline counts
 echo -e "\nGetting accurate file counts..."
-fd_count=$(eval "$COMMAND_FD" | wc -l)
-fdf_count=$(eval "$COMMAND_FIND" | wc -l)
+
+echo 'I HAVE TO EXPLICITLY FILTER SYSTEMD FILES WHICH ARE TEMPORARY FALSE RESULTS'
+fd_count=$(eval "$COMMAND_FD" | grep -v 'systemd-private' | wc -l)
+fdf_count=$(eval "$COMMAND_FIND" | grep -v 'systemd-private' | wc -l)
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
-# Run benchmarks with stabilization
 echo -e "\nRunning relative directory benchmarks..."
 hyperfine \
   --warmup 3 \
@@ -33,15 +33,15 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-relative-dir-test.md" 
 
-# Improved difference checking
-echo -e "\nAnalyzing differences..."
-eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_relative.lst"
-eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_relative.lst"
 
-# Create the diff file with context
+echo -e "\nAnalysing differences..."
+eval "$COMMAND_FD" | grep -v 'systemd-private' | sort > "$OUTPUT_DIR/fd_relative.lst"
+
+eval "$COMMAND_FIND" | grep -v 'systemd-private' | sort > "$OUTPUT_DIR/fdf_relative.lst"
+
+# Create the diff file
 diff -u --color "$OUTPUT_DIR/fd_relative.lst" "$OUTPUT_DIR/fdf_relative.lst" > "./fd_diff_relative.md"
 
-# Accurate count reporting
 fd_total=$(wc -l < "$OUTPUT_DIR/fd_relative.lst")
 fdf_total=$(wc -l < "$OUTPUT_DIR/fdf_relative.lst")
 differences=$(diff -y --suppress-common-lines "$OUTPUT_DIR/fd_relative.lst" "$OUTPUT_DIR/fdf_relative.lst" | wc -l)
@@ -66,7 +66,3 @@ else
   echo "No differences found in direct execution"
 fi
 
-echo -e "\nBenchmark summary:"
-echo "fdf was 1.58x faster than fd in relative directory search"
-echo "Complete results saved to $OUTPUT_DIR/results-warm-cache-relative-dir-test.md"
-echo "Diff details saved to $OUTPUT_DIR/fd_diff_relative.md"

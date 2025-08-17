@@ -403,7 +403,7 @@ where
         // This is only used in the iterator implementation, so we can safely assume that the pointer
         // is valid and that we don't read past the end of the buffer.
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
-        self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+        self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //return the pointer
     }
     #[inline]

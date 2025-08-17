@@ -17,12 +17,12 @@
 /// # Usage
 /// ```ignore
 /// let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
-/// let d_name_ptr:*const _ = offset_dirent!(entry_ptr, d_name);
-/// let d_reclen:usize = offset_dirent!(entry_ptr, d_reclen);
+/// let d_name_ptr:*const _ = access_dirent!(entry_ptr, d_name);
+/// let d_reclen:usize = access_dirent!(entry_ptr, d_reclen);
 ///
-/// let d_namlen:usize = offset_dirent!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
-/// let d_ino :u64= offset_dirent!(entry_ptr, d_ino); // This
-macro_rules! offset_dirent {
+/// let d_namlen:usize = access_dirent!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
+/// let d_ino :u64= access_dirent!(entry_ptr, d_ino); // This
+macro_rules! access_dirent {
     // Special case for `d_reclen`
     ($entry_ptr:expr, d_reclen) => {{
         // SAFETY: Caller must ensure pointer is valid
@@ -108,10 +108,11 @@ macro_rules! offset_dirent {
 
 ///A macro to safely access stat entries in a filesystem independent way 
 // TODO! add other fields as appropriate (this could be pretty long)
+// will be public when kinks are worked out
 macro_rules! access_stat {
     ($stat_struct:expr, st_mtimensec) => {{
         #[cfg(target_os = "netbsd")]
-        { $stat_struct.st_mtimensec as _ }
+        { $stat_struct.st_mtimensec as _ } //why did they do such a specific change
 
         #[cfg(not(target_os = "netbsd"))]
         { $stat_struct.st_mtime_nsec as _ }
@@ -124,7 +125,7 @@ macro_rules! access_stat {
 
 
 
-    // inode number, normalized to u64
+    // inode number, normalised to u64 for compatibility
     ($stat_struct:expr, st_ino) => {{
         #[cfg(any(
             target_os = "freebsd",
@@ -234,15 +235,15 @@ macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]
         unsafe {
-            let d_type = offset_dirent!($entry, d_type);
+            let d_type = access_dirent!($entry, d_type);
 
             #[cfg(target_os = "linux")]
             {
                 //reclen is always 24 for . and .. on linux,
                 if (d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN)
-                    && offset_dirent!($entry, d_reclen) == 24
+                    && access_dirent!($entry, d_reclen) == 24
                 {
-                    let name_ptr = offset_dirent!($entry, d_name);
+                    let name_ptr = access_dirent!($entry, d_name);
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),
@@ -253,7 +254,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(not(target_os = "linux"))]
             {
                 if d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN {
-                    let name_ptr = offset_dirent!($entry, d_name);
+                    let name_ptr = access_dirent!($entry, d_name);
                     match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                         (b'.', 0, _) | (b'.', b'.', 0) => $action,
                         _ => (),

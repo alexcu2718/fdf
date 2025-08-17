@@ -8,7 +8,7 @@ use crate::PathBuffer;
 use crate::Result;
 use crate::buffer::ValueType;
 use crate::memchr_derivations::memrchr;
-use crate::offset_dirent;
+use crate::access_dirent;
 use core::fmt;
 use core::mem::MaybeUninit;
 use core::mem::transmute;
@@ -366,8 +366,8 @@ pub trait DirentConstructor<S: BytesStorage> {
         let base_len = self.file_index();
         let full_path = crate::utils::construct_path(self.path_buffer(), base_len, drnt);
 
-        let dtype = unsafe { offset_dirent!(drnt, d_type) };
-        let inode = unsafe { offset_dirent!(drnt, d_ino) };
+        let dtype = unsafe { access_dirent!(drnt, d_type) };
+        let inode = unsafe { access_dirent!(drnt, d_ino) };
 
         DirEntry {
             path: full_path.into(),

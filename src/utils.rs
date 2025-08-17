@@ -122,7 +122,7 @@ pub(crate) fn construct_path(
     base_len: usize,
     drnt: *const dirent64,
 ) -> &[u8] {
-    let d_name = unsafe { crate::offset_dirent!(drnt, d_name) };
+    let d_name = unsafe { crate::access_dirent!(drnt, d_name) };
     let name_len = unsafe { dirent_name_length(drnt) };
 
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
@@ -152,7 +152,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "macos"
     ))]
     {
-        unsafe { offset_dirent!(drnt, d_namlen) } //specialisation for BSD and macOS, where d_namlen is available
+        unsafe { access_dirent!(drnt, d_namlen) } //specialisation for BSD and macOS, where d_namlen is available
     }
 
     #[cfg(not(any(
@@ -164,7 +164,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "macos"
     )))]
     {
-        unsafe { libc::strlen(offset_dirent!(drnt, d_name).cast::<_>()) }
+        unsafe { libc::strlen(access_dirent!(drnt, d_name).cast::<_>()) }
         // Fallback for other OSes
     }
 }

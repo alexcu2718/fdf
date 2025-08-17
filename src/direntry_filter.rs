@@ -12,7 +12,7 @@
 use crate::direntry::DirEntry;
 use crate::{
     AlignedBuffer, BytePath as _, BytesStorage, LOCAL_PATH_MAX, PathBuffer, Result, SearchConfig,
-    SyscallBuffer, TempDirent, offset_dirent, traits_and_conversions::DirentConstructor,
+    SyscallBuffer, TempDirent, access_dirent, traits_and_conversions::DirentConstructor,
 };
 
 /// Constructs a temporary `TempDirent<S>` from a `dirent64`/`dirent` pointer for any relevant self type
@@ -25,8 +25,8 @@ macro_rules! construct_temp_dirent {
     ($self:ident, $dirent:ident) => {{
         let (d_type, inode) = unsafe {
             (
-                offset_dirent!($dirent, d_type), // get d_type
-                offset_dirent!($dirent, d_ino),  // get inode
+                access_dirent!($dirent, d_type), // get d_type
+                access_dirent!($dirent, d_ino),  // get inode
             )
         };
         let base_len = $self.file_name_index();
@@ -93,7 +93,7 @@ where
     #[allow(clippy::missing_safety_doc)]
     pub const unsafe fn next_getdents_read(&mut self) -> *const dirent64 {
         let d: *const dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
-        self.offset += unsafe { offset_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+        self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //this is a pointer to the dirent64 structure, which contains the directory entry information
     }
     #[inline]

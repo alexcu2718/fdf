@@ -99,8 +99,13 @@ pub use filetype::FileType;
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+// The `Finder` struct is the main entry point for the file search.
+// Its methods are exposed for building the search configuration
 #[derive(Debug)]
 /// A struct to find files in a directory.
+///
+/// This is the core component of the library. It is responsible for
+/// configuring and executing the parallel directory traversal
 pub struct Finder<S>
 where
     S: BytesStorage,
@@ -162,6 +167,14 @@ where
     #[allow(clippy::let_underscore_must_use)]
     #[allow(clippy::print_stderr)] //TODO, REMOVE THIS WHEN SATISIFIED
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
+    /// Recursively processes a directory, sending found files to a channel.
+    ///
+    /// This method uses a depth-first traversal with `rayon` to process directories
+    /// in parallel.
+    ///
+    /// # Arguments
+    /// * `dir` - The `DirEntry` representing the directory to process.
+    /// * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
         //the filter for keeping files/dirs (as appropriate), this could be a function TODO-MAYBE

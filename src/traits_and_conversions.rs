@@ -23,37 +23,98 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-///a trait over anything which derefs to `&[u8]` then convert to *const i8 or *const u8 (inferred ), useful for FFI.
+/// A trait for types that dereference to a byte slice (`[u8]`) representing file paths.
+/// Provides efficient path operations, FFI compatibility, and filesystem interactions.
+///
+/// # Safety
+/// Several methods contain unsafe blocks assuming valid UTF-8 paths (Unix convention).
+/// FFI methods require paths shorter than `LOCAL_PATH_MAX` (default 4096/1024 (Linux/non Linux (POSIX STILL))
 pub trait BytePath<T>
 where
     T: Deref<Target = [u8]>,
 {
+    /// Converts path to a C-compatible string pointer, executes a closure with it,
+    /// Does not heap allocate.
+    ///
+    /// Creates a null-terminated copy in a stack buffer, passing the pointer to `f`.
+    /// The pointer type (`*const VT`) is automatically inferred as `u8` or `i8`.
+    ///
+    /// # Arguments
+    /// * `f` - Closure receiving the temporary C string pointer
+    ///
+    /// # Panics
+    /// In debug mode if path length exceeds `LOCAL_PATH_MAX`
+    ///
+    /// # Example
+    /// ```ignore
+    /// path.as_cstr_ptr(|ptr| unsafe { libc::open(ptr, O_RDONLY) });
+    /// ```
     fn as_cstr_ptr<F, R, VT>(&self, f: F) -> R
     where
         F: FnOnce(*const VT) -> R,
-        VT: ValueType; // VT==ValueType is u8/i8
+        VT: ValueType; // VT==ValueType 
 
+    /// Gets file extension from byte path (without dot)
+    ///
+    /// Returns `None` if no extension found.
+    ///
+    /// # Example
+    /// ```ignore
+    /// assert_eq!(b"file.txt".extension(), Some(&b"txt"[..]));
+    /// ```
     fn extension(&self) -> Option<&[u8]>;
+
+    /// Checks if file extension matches given bytes (case-insensitive)
     fn matches_extension(&self, ext: &[u8]) -> bool;
+    /// Gets file size in bytes
     fn size(&self) -> crate::Result<u64>;
+    /// Gets file metadata via `lstat`
     fn get_stat(&self) -> crate::Result<stat>;
+    /// Gets last modification time
     fn modified_time(&self) -> crate::Result<SystemTime>;
+    /// Converts to `&Path` (zero-cost on Unix)
     fn as_path(&self) -> &Path;
+    /// Opens file descriptor for directory paths
+    ///
+    /// # Safety
+    /// - Path must be a directory
+    /// - Uses `O_DIRECTORY | O_CLOEXEC | O_NONBLOCK`
     unsafe fn open_fd(&self) -> crate::Result<i32>;
+    /// Gets index of filename component start
+    ///
+    /// Returns position after last '/' or 0 if none.
+
     fn file_name_index(&self) -> u16;
+    /// Converts to `&OsStr` (zero-cost)
     fn as_os_str(&self) -> &OsStr;
+
+    /// Checks file existence (`access(F_OK)`)
     fn exists(&self) -> bool;
+    /// Creates directory entry from self
     fn to_direntry<S>(&self) -> Result<DirEntry<S>>
     where
         S: BytesStorage;
+    /// Checks read permission (`access(R_OK)`)
     fn is_readable(&self) -> bool;
+    /// Checks write permission (`access(W_OK)`)
     fn is_writable(&self) -> bool;
+    /// Gets standard filesystem metadata
     fn metadata(&self) -> crate::Result<std::fs::Metadata>;
+    /// Splits path into components (split on '/')
     fn components(&self) -> impl Iterator<Item = &[u8]>;
+    /// Gets standard filesystem metadata
     fn to_std_file_type(&self) -> crate::Result<std::fs::FileType>;
+    /// Converts to UTF-8 string (with validation)
     fn as_str(&self) -> crate::Result<&str>;
+    /// Converts to UTF-8 string without validation
+    ///
+    /// # Safety
+    /// Requires valid UTF-8 bytes (true on Unix)
     unsafe fn as_str_unchecked(&self) -> &str;
+
+    /// Converts to string with invalid UTF-8 replaced
     fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>;
+    /// Converts to owned `PathBuf`
     fn to_path(&self) -> PathBuf;
 }
 
@@ -62,9 +123,6 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
-    /// Converts a byte slice into a C string pointer
-    /// Utilises `LOCAL_PATH_MAX` to create an upper bounded array
-    /// if the signature is too confusing, use the `cstr!` macro instead.
     fn as_cstr_ptr<F, R, VT>(&self, f: F) -> R
     where
         F: FnOnce(*const VT) -> R,
@@ -89,17 +147,12 @@ where
         f(c_path_buf.cast::<_>())
     }
 
-    /// Returns the extension of the file as a byte slice, if it exists.
-    /// If the file has no '.' returns `None`.
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
         // SAFETY: the filename is guaranteed to have more than one character at the end (it can never be . or .. )
         memrchr(b'.', self).map(|pos| unsafe { self.get_unchecked(pos + 1..) }) //avoid UB check
     }
 
-    /// Converts the byte slice into a `DirEntry`.
-    /// This is a convenience method that allows you to create a `DirEntry` from a
-    /// byte slice without needing to convert it to an `OsStr` first.
     #[inline]
     fn to_direntry<S>(&self) -> Result<DirEntry<S>>
     where
@@ -110,23 +163,17 @@ where
         DirEntry::<S>::new(self.as_os_str())
     }
 
-    /// Converts the byte slice into a `PathBuf`.
-    /// This is a simple conversion that does not check if the path is valid.
     fn to_path(&self) -> PathBuf {
         // Convert the byte slice to a PathBuf
         self.as_os_str().into()
     }
 
-    /// Checks if the file matches the given extension.
-    /// Returns `true` if the file's extension matches, `false` otherwise.
     #[inline]
     fn matches_extension(&self, ext: &[u8]) -> bool {
         self.extension()
             .is_some_and(|e| e.eq_ignore_ascii_case(ext))
     }
 
-    /// Returns the size of the file in bytes.
-    /// If the file size cannot be determined, returns `InvalidStat`
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
     fn size(&self) -> crate::Result<u64> {
@@ -134,10 +181,6 @@ where
     }
 
     #[inline]
-    /// Opens a file descriptor (when given a valid directory/symlink)
-    ///
-    /// # Safety
-    /// The path provided must be a directory!
     unsafe fn open_fd(&self) -> crate::Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
@@ -155,8 +198,6 @@ where
     }
 
     #[inline]
-    /// Converts into `libc::stat` or returns `DirEntryError::InvalidStat`
-    /// More specialised errors are on the TODO list.
     fn get_stat(&self) -> crate::Result<stat> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
         // SAFETY: We know the path is valid
@@ -169,7 +210,6 @@ where
             Err(crate::DirEntryError::InvalidStat)
         }
     }
-    /// Get last modification time, this will be more useful when I implement filters for it.
     #[inline]
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
@@ -182,7 +222,6 @@ where
             .map_err(|_| crate::DirEntryError::TimeError)
     }
 
-    /// Converts the byte slice into a `Path`.
     #[inline]
     fn as_path(&self) -> &Path {
         //&[u8] <=> &OsStr <=> &Path on linux
@@ -198,14 +237,12 @@ where
     }
 
     #[inline]
-    /// Costly check for readable files (makes a syscall)
     fn is_readable(&self) -> bool {
         // SAFETY: The path is guaranteed to be a filepath (when used internally)
         unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0i32 }
     }
 
     #[inline]
-    /// Somewhat costly check for writable files(by current user)
     fn is_writable(&self) -> bool {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
@@ -231,7 +268,6 @@ where
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::map_err_ignore)] //specify these later TODO!
-    ///Costly conversion to a `std::fs::FileType`
     fn to_std_file_type(&self) -> crate::Result<std::fs::FileType> {
         //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it

@@ -11,16 +11,16 @@ fdf count: 396
 
 Running depth-limited benchmarks (depth=2)...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI -d 2
-  Time (mean ± σ):       3.6 ms ±   0.4 ms    [User: 1.0 ms, System: 10.9 ms]
-  Range (min … max):     3.0 ms …   4.3 ms    14 runs
+  Time (mean ± σ):       3.5 ms ±   0.7 ms    [User: 2.2 ms, System: 9.1 ms]
+  Range (min … max):     2.5 ms …   5.2 ms    14 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI -d 2
-  Time (mean ± σ):      11.8 ms ±   4.3 ms    [User: 5.3 ms, System: 15.3 ms]
-  Range (min … max):     7.7 ms …  20.6 ms    13 runs
+  Time (mean ± σ):       8.7 ms ±   0.7 ms    [User: 3.1 ms, System: 11.1 ms]
+  Range (min … max):     7.9 ms …  10.1 ms    14 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI -d 2 ran
-    3.27 ± 1.24 times faster than fd '.' '/tmp/llvm-project' -HI -d 2
+    2.47 ± 0.51 times faster than fd '.' '/tmp/llvm-project' -HI -d 2
 
 Analyzing differences...
 Total files found by fd: 396
@@ -42,16 +42,16 @@ fdf count: 12801
 
 Running benchmarks...
 Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
-  Time (mean ± σ):      16.3 ms ±   1.7 ms    [User: 34.7 ms, System: 107.9 ms]
-  Range (min … max):    13.6 ms …  19.0 ms    13 runs
+  Time (mean ± σ):      14.7 ms ±   1.4 ms    [User: 31.8 ms, System: 104.7 ms]
+  Range (min … max):    12.7 ms …  17.6 ms    13 runs
  
 Benchmark 2: fd -HI --extension 'c' '' '/tmp/llvm-project'
-  Time (mean ± σ):      34.7 ms ±   2.7 ms    [User: 168.5 ms, System: 120.8 ms]
-  Range (min … max):    29.3 ms …  39.0 ms    12 runs
+  Time (mean ± σ):      30.8 ms ±   1.6 ms    [User: 151.3 ms, System: 106.5 ms]
+  Range (min … max):    29.0 ms …  33.4 ms    12 runs
  
 Summary
   fdf -HI --extension 'c' '' '/tmp/llvm-project' ran
-    2.13 ± 0.28 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
+    2.09 ± 0.23 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
 
 Analyzing differences...
 Total files differing: 0
@@ -73,16 +73,16 @@ fdf count: 176841
 
 Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI
-  Time (mean ± σ):      20.4 ms ±   1.2 ms    [User: 44.9 ms, System: 120.9 ms]
-  Range (min … max):    18.3 ms …  21.8 ms    13 runs
+  Time (mean ± σ):      18.4 ms ±   1.6 ms    [User: 40.6 ms, System: 115.2 ms]
+  Range (min … max):    16.2 ms …  21.3 ms    13 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI
-  Time (mean ± σ):      35.0 ms ±   2.9 ms    [User: 180.1 ms, System: 123.8 ms]
-  Range (min … max):    28.5 ms …  39.5 ms    12 runs
+  Time (mean ± σ):      30.2 ms ±   2.0 ms    [User: 155.6 ms, System: 100.2 ms]
+  Range (min … max):    28.0 ms …  34.2 ms    12 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI ran
-    1.72 ± 0.18 times faster than fd '.' '/tmp/llvm-project' -HI
+    1.64 ± 0.18 times faster than fd '.' '/tmp/llvm-project' -HI
 
 Analyzing differences...
 Total lines differing: 0
@@ -99,48 +99,30 @@ I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET.
 Note: Benchmarking relative directory searches (../)
 
 Getting accurate file counts...
-fd count: 177596
-fdf count: 177591
+I HAVE TO EXPLICITLY FILTER SYSTEMD FILES WHICH ARE TEMPORARY FALSE RESULTS
+fd count: 178436
+fdf count: 178436
 
 Running relative directory benchmarks...
 Benchmark 1: fdf '.' '..' -HI
-  Time (mean ± σ):      20.1 ms ±   1.8 ms    [User: 47.5 ms, System: 122.9 ms]
-  Range (min … max):    18.3 ms …  23.5 ms    10 runs
+  Time (mean ± σ):      17.9 ms ±   1.3 ms    [User: 43.8 ms, System: 110.6 ms]
+  Range (min … max):    15.7 ms …  19.9 ms    13 runs
  
 Benchmark 2: fd '.' '..' -HI
-  Time (mean ± σ):      35.6 ms ±   2.5 ms    [User: 184.3 ms, System: 123.6 ms]
-  Range (min … max):    30.5 ms …  39.2 ms    11 runs
+  Time (mean ± σ):      33.0 ms ±   1.2 ms    [User: 175.1 ms, System: 113.7 ms]
+  Range (min … max):    30.6 ms …  34.9 ms    12 runs
  
 Summary
   fdf '.' '..' -HI ran
-    1.77 ± 0.20 times faster than fd '.' '..' -HI
+    1.85 ± 0.15 times faster than fd '.' '..' -HI
 
-Analyzing differences...
+Analysing differences...
 
 Final counts:
-fd total files:  177596
-fdf total files: 177591
-Files differing: 5
-
-# NOTE, DISCREPANCY HERE IS DUE TO TEMPORARY FILES BEING CREATED/DESTROYED
-Files only in fd:
-../systemd-private-b4376643fdb24886bc3f3ed213e717fb-bolt.service-g1VrGt/
-../systemd-private-b4376643fdb24886bc3f3ed213e717fb-dbus-broker.service-2mNMJd/
-../systemd-private-b4376643fdb24886bc3f3ed213e717fb-polkit.service-AihLYU/
-../systemd-private-b4376643fdb24886bc3f3ed213e717fb-systemd-logind.service-8l4ykM/
-../systemd-private-b4376643fdb24886bc3f3ed213e717fb-upower.service-nZey1h/
-
-Files only in fdf:
-
-Note about the 1-file difference:
-The discrepancy is in the benchmark output file itself:
-../fd_benchmarks/bench_results/fdf_relative.lst
-This is expected as the file is created during benchmarking
-
-Benchmark summary:
-fdf was 1.58x faster than fd in relative directory search
-Complete results saved to ./bench_results/results-warm-cache-relative-dir-test.md
-Diff details saved to ./bench_results/fd_diff_relative.md
+fd total files:  178436
+fdf total files: 178436
+Files differing: 0
+No differences found in direct execution
 sleeping for 2 seconds
 running ./warm-cache-simple-pattern.sh
 /tmp/llvm-project already found, not cloning repo
@@ -153,16 +135,16 @@ fdf count: 4439
 
 Running benchmarks...
 Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
-  Time (mean ± σ):      17.1 ms ±   1.3 ms    [User: 52.3 ms, System: 108.4 ms]
-  Range (min … max):    13.9 ms …  19.3 ms    13 runs
+  Time (mean ± σ):      17.3 ms ±   1.8 ms    [User: 53.3 ms, System: 100.4 ms]
+  Range (min … max):    14.6 ms …  20.9 ms    13 runs
  
 Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
-  Time (mean ± σ):      29.9 ms ±   2.2 ms    [User: 134.0 ms, System: 116.2 ms]
-  Range (min … max):    25.5 ms …  32.7 ms    12 runs
+  Time (mean ± σ):      26.6 ms ±   2.1 ms    [User: 118.0 ms, System: 94.3 ms]
+  Range (min … max):    23.4 ms …  29.4 ms    12 runs
  
 Summary
   fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project' ran
-    1.75 ± 0.19 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
+    1.53 ± 0.20 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
 
 Analysing differences...
 Total lines differing: 0
@@ -184,16 +166,16 @@ fdf count: 15224
 
 Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type d
-  Time (mean ± σ):      15.8 ms ±   1.4 ms    [User: 34.3 ms, System: 106.8 ms]
-  Range (min … max):    14.0 ms …  18.0 ms    12 runs
+  Time (mean ± σ):      15.2 ms ±   0.8 ms    [User: 32.1 ms, System: 102.1 ms]
+  Range (min … max):    14.3 ms …  16.6 ms    13 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type d
-  Time (mean ± σ):      32.6 ms ±   2.4 ms    [User: 156.5 ms, System: 120.1 ms]
-  Range (min … max):    28.2 ms …  36.4 ms    12 runs
+  Time (mean ± σ):      28.5 ms ±   2.1 ms    [User: 127.6 ms, System: 102.1 ms]
+  Range (min … max):    24.3 ms …  31.5 ms    10 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI --type d ran
-    2.07 ± 0.24 times faster than fd '.' '/tmp/llvm-project' -HI --type d
+    1.87 ± 0.17 times faster than fd '.' '/tmp/llvm-project' -HI --type d
 
 Analyzing differences...
 Total files differing: 0
@@ -215,16 +197,16 @@ fdf count: 2843
 
 Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type e
-  Time (mean ± σ):      43.8 ms ±   3.7 ms    [User: 71.1 ms, System: 349.5 ms]
-  Range (min … max):    38.9 ms …  51.6 ms    11 runs
+  Time (mean ± σ):      42.1 ms ±   1.6 ms    [User: 64.5 ms, System: 337.1 ms]
+  Range (min … max):    39.7 ms …  45.1 ms    12 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type e
-  Time (mean ± σ):      71.5 ms ±   2.8 ms    [User: 257.9 ms, System: 446.7 ms]
-  Range (min … max):    67.7 ms …  77.7 ms    10 runs
+  Time (mean ± σ):      63.0 ms ±   1.5 ms    [User: 214.9 ms, System: 397.2 ms]
+  Range (min … max):    59.0 ms …  64.6 ms    11 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI --type e ran
-    1.63 ± 0.15 times faster than fd '.' '/tmp/llvm-project' -HI --type e
+    1.50 ± 0.07 times faster than fd '.' '/tmp/llvm-project' -HI --type e
 
 Analyzing differences...
 Total files differing: 0
@@ -246,16 +228,16 @@ fdf count: 929
 
 Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type x
-  Time (mean ± σ):      34.2 ms ±   3.0 ms    [User: 55.2 ms, System: 267.1 ms]
-  Range (min … max):    29.2 ms …  38.2 ms    12 runs
+  Time (mean ± σ):      26.4 ms ±   1.8 ms    [User: 43.8 ms, System: 212.3 ms]
+  Range (min … max):    23.8 ms …  30.0 ms    12 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type x
-  Time (mean ± σ):      54.6 ms ±   3.5 ms    [User: 202.3 ms, System: 296.5 ms]
-  Range (min … max):    47.7 ms …  59.1 ms    11 runs
+  Time (mean ± σ):      43.8 ms ±   2.0 ms    [User: 159.2 ms, System: 236.2 ms]
+  Range (min … max):    39.4 ms …  45.6 ms    11 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI --type x ran
-    1.60 ± 0.17 times faster than fd '.' '/tmp/llvm-project' -HI --type x
+    1.66 ± 0.14 times faster than fd '.' '/tmp/llvm-project' -HI --type x
 
 Analyzing differences...
 Total files differing: 0
@@ -264,3 +246,4 @@ No differences found in direct execution
 Benchmark results saved to ./bench_results/results-warm-cache-type-filtering-executable.md
 Diff results saved to ./bench_results/fd_diff_type_x.md
 sleeping for 2 seconds
+Keeping /tmp/llvm-project.

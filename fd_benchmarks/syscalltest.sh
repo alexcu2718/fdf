@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 source "new_prelude.sh"
 FDF="fdf"
 FD="fd"
-DIR="."
+DIR="$HOME"
 STRACE_OUT_DIR="./bench_results"
 mkdir -p "$STRACE_OUT_DIR"
 
@@ -24,22 +24,21 @@ for i in "${!PATTERNS[@]}"; do
 
   echo "Running $CASE_NAME (pattern: $PATTERN)"
 
-  STRACE_FDF="$STRACE_OUT_DIR/${CASE_NAME}_fdf.txt"
-  STRACE_FD="$STRACE_OUT_DIR/${CASE_NAME}_fd.txt"
-
-  strace -c -o "$STRACE_FDF" "$FDF" "$PATTERN" "$DIR" -HI
-  strace -c -o "$STRACE_FD" "$FD" "$PATTERN" "$DIR" -HI
-
+  STRACE_FDF="$STRACE_OUT_DIR/strace_outputs_${CASE_NAME}_fdf.txt"
+  STRACE_FD="$STRACE_OUT_DIR/strace_outputs_${CASE_NAME}_fd.txt"
+  echo "testing syscalls on directory $DIR USING $PATTERN"
+  strace -fc -o "$STRACE_FDF" "$FDF" "$PATTERN" "$DIR" -HI > /dev/null 2>&1
+  strace -fc -o "$STRACE_FD" "$FD" "$PATTERN" "$DIR" -HI > /dev/null 2>&1
   echo "Finished $CASE_NAME"
-  echo
 done
 
-echo "🧾 Side-by-side syscall comparisons:"
+echo "Side-by-side syscall comparisons:"
+
 
 for CASE_NAME in "${CASE_NAMES[@]}"; do
   echo "=== $CASE_NAME ==="
   diff -y --suppress-common-lines \
-    "$STRACE_OUT_DIR/${CASE_NAME}_fdf.txt" \
-    "$STRACE_OUT_DIR/${CASE_NAME}_fd.txt" || true
+    "$STRACE_OUT_DIR/strace_outputs_${CASE_NAME}_fdf.txt" \
+    "$STRACE_OUT_DIR/strace_outputs_${CASE_NAME}_fd.txt" || true
   echo
 done

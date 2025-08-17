@@ -3,13 +3,13 @@
 source "prelude.sh"
 source "new_prelude.sh"
 
-# Setup output directories
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
-# Extension definition
+# search for this extension
 EXT="c"
-
+echo "i dont use gitignore so -HI is equivalent on both tools"
+echo "running extension test"
 # Command definitions
 COMMAND_FIND="fdf -HI --extension '$EXT' '' '$SEARCH_ROOT'"
 COMMAND_FD="fd -HI --extension '$EXT' '' '$SEARCH_ROOT'"
@@ -31,12 +31,10 @@ hyperfine \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-file-extension.md"
 
 
-echo -e "\nAnalyzing differences..."
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_extension.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_extension.lst"
 
-# Create the diff file
-diff -u "$OUTPUT_DIR/fd_extension.lst" "$OUTPUT_DIR/fdf_extension.lst" > "./fd_diff_extension.md"
+diff -u "$OUTPUT_DIR/fd_extension.lst" "$OUTPUT_DIR/fdf_extension.lst" > "$OUTPUT_DIR/fd_diff_extension.md"
 
 differences=$(comm -3 "$OUTPUT_DIR/fd_extension.lst" "$OUTPUT_DIR/fdf_extension.lst" | wc -l)
 echo "Total files differing: $differences"
@@ -48,9 +46,6 @@ if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd_extension.lst" "$OUTPUT_DIR/fdf_extension.lst"
   
-  echo -e "\nNote about the known edge case:"
-  echo " i'm gonna fix this ideally weekend "
-  echo "This accounts for the expected 1-file difference"
 else
   echo "No differences found in direct execution"
 fi

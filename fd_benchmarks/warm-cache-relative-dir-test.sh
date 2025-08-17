@@ -1,9 +1,8 @@
 #!/bin/bash
-
+set -euo pipefail
 source "prelude.sh"
 source "new_prelude.sh"
-echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET."
-echo "Note: Benchmarking relative directory searches (../)"
+echo "i dont use gitignore so -HI is equivalent on both tools"
 
 
 
@@ -20,8 +19,8 @@ COMMAND_FD="fd '.' '$REL_ROOT' -HI"
 echo -e "\nGetting accurate file counts..."
 
 echo 'I HAVE TO EXPLICITLY FILTER SYSTEMD FILES WHICH ARE TEMPORARY FALSE RESULTS'
-fd_count=$(eval "$COMMAND_FD" | grep -v 'systemd-private' | wc -l)
-fdf_count=$(eval "$COMMAND_FIND" | grep -v 'systemd-private' | wc -l)
+fd_count=$(eval "$COMMAND_FD" | grep -vc 'systemd-private' ) #thanks shellcheck!
+fdf_count=$(eval "$COMMAND_FIND" | grep -vc 'systemd-private' )
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
@@ -34,13 +33,11 @@ hyperfine \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-relative-dir-test.md" 
 
 
-echo -e "\nAnalysing differences..."
 eval "$COMMAND_FD" | grep -v 'systemd-private' | sort > "$OUTPUT_DIR/fd_relative.lst"
 
 eval "$COMMAND_FIND" | grep -v 'systemd-private' | sort > "$OUTPUT_DIR/fdf_relative.lst"
 
-# Create the diff file
-diff -u --color "$OUTPUT_DIR/fd_relative.lst" "$OUTPUT_DIR/fdf_relative.lst" > "./fd_diff_relative.md"
+diff -u --color "$OUTPUT_DIR/fd_relative.lst" "$OUTPUT_DIR/fdf_relative.lst" > "$OUTPUT_DIR/fd_diff_relative.md"
 
 fd_total=$(wc -l < "$OUTPUT_DIR/fd_relative.lst")
 fdf_total=$(wc -l < "$OUTPUT_DIR/fdf_relative.lst")
@@ -57,11 +54,7 @@ if [[ $differences -gt 0 ]]; then
   
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd_relative.lst" "$OUTPUT_DIR/fdf_relative.lst"
-  
-  echo -e "\nNote about the 1-file difference:"
-  echo "The discrepancy is in the benchmark output file itself:"
-  echo "../fd_benchmarks/bench_results/fdf_relative.lst"
-  echo "This is expected as the file is created during benchmarking"
+
 else
   echo "No differences found in direct execution"
 fi

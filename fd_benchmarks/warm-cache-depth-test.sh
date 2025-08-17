@@ -3,8 +3,7 @@
 source "prelude.sh"
 source "new_prelude.sh"
 
-echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET."
-echo "Note: Hyperfine may show small discrepancies due to benchmarking overhead."
+echo "i dont use gitignore so -HI is equivalent on both tools"
 
 # Setup output directories
 OUTPUT_DIR="./bench_results"
@@ -22,7 +21,6 @@ fdf_count=$(eval "$COMMAND_FIND" | wc -l)
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
-# Run benchmarks with stabilization
 echo -e "\nRunning depth-limited benchmarks (depth=$DEPTH_LIMIT)..."
 hyperfine \
   --warmup "$WARMUP_COUNT" \
@@ -31,13 +29,10 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-depth-test.md"
 
-# Improved difference checking
-echo -e "\nAnalyzing differences..."
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_depth.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_depth.lst"
 
-# Create the diff file
-diff -u "$OUTPUT_DIR/fd_depth.lst" "$OUTPUT_DIR/fdf_depth.lst" > "./fd_diff_depth.md"
+diff -u "$OUTPUT_DIR/fd_depth.lst" "$OUTPUT_DIR/fdf_depth.lst" > "$OUTPUT_DIR/fd_diff_depth.md"
 
 differences=$(comm -3 "$OUTPUT_DIR/fd_depth.lst" "$OUTPUT_DIR/fdf_depth.lst" | wc -l)
 echo "Total files found by fd: $(wc -l < "$OUTPUT_DIR/fd_depth.lst")"
@@ -51,11 +46,7 @@ if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd_depth.lst" "$OUTPUT_DIR/fdf_depth.lst"
   
-  echo -e "\nNote: Differences may occur due to:"
-  echo "- Different depth calculation methods between tools"
-  echo "- Filesystem timestamp changes during execution"
-  echo "- Race conditions in fast scans"
-  echo "- Hyperfine measurement artifacts"
+
 else
   echo "No differences found in direct execution"
 fi

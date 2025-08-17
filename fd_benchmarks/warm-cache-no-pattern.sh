@@ -2,8 +2,7 @@
 
 source "prelude.sh"
 source "new_prelude.sh"
-echo "I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET."
-echo "Note: Hyperfine may show small discrepancies due to benchmarking overhead. For accurate counts, run commands directly."
+echo "i dont use gitignore so -HI is equivalent on both tools"
 
 COMMAND_FIND="fdf '.' '$SEARCH_ROOT' -HI"
 COMMAND_FD="fd '.' '$SEARCH_ROOT' -HI"
@@ -25,11 +24,10 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-no-pattern.md"
 
-echo -e "\nAnalyzing differences..."
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf.lst"
 
-diff -u "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst" > "./fd_diff_no_pattern.md"
+diff -u "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst" > "$OUTPUT_DIR/fd_diff_no_pattern.md"
 
 differences=$(comm -3 "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst" | wc -l)
 echo "Total lines differing: $differences"
@@ -41,10 +39,7 @@ if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd.lst" "$OUTPUT_DIR/fdf.lst"
   
-  echo -e "\nNote: Small differences may occur due to:"
-  echo "- Filesystem timestamp changes during execution"
-  echo "- Race conditions in very fast scans"
-  echo "- Hyperfine measurement artifacts"
+
 else
   echo "No differences found in direct execution"
 fi

@@ -6,10 +6,8 @@ source "new_prelude.sh"
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
-# Pattern definition
 pattern="'.*[0-9].*(md|\.c)$'"
-
-# Command definitions
+echo "i dont use gitignore so -HI is equivalent on both tools"
 COMMAND_FIND="fdf -HI $pattern '$SEARCH_ROOT'"
 COMMAND_FD="fd -HI $pattern '$SEARCH_ROOT'"
 
@@ -31,8 +29,7 @@ echo -e "\nAnalysing differences..."
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_pattern.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_pattern.lst"
 
-# Create the diff file
-diff -u "$OUTPUT_DIR/fd_pattern.lst" "$OUTPUT_DIR/fdf_pattern.lst" > "./fd_diff_simple_pattern.md"
+diff -u "$OUTPUT_DIR/fd_pattern.lst" "$OUTPUT_DIR/fdf_pattern.lst" > "$OUTPUT_DIR/fd_diff_simple_pattern.md"
 
 differences=$(comm -3 "$OUTPUT_DIR/fd_pattern.lst" "$OUTPUT_DIR/fdf_pattern.lst" | wc -l)
 echo "Total lines differing: $differences"
@@ -44,10 +41,7 @@ if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd_pattern.lst" "$OUTPUT_DIR/fdf_pattern.lst"
   
-  echo -e "\nNote: Small differences may occur due to:"
-  echo "- Filesystem timestamp changes during execution"
-  echo "- Race conditions in very fast scans"
-  echo "- Hyperfine measurement artifacts"
+
 else
   echo "No differences found in direct execution"
 fi

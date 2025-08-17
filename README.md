@@ -108,8 +108,8 @@ At the core, this is about learning. When I began, I didn't even know C, so ther
 
 ### Performance Motivation
 
-Even though fdf is already faster than fd in some cases, I'm experimenting with filtering before allocation.
-Rust's std::fs has some inefficiencies, notably more heap allocation than I'd like. Rewriting certain parts using libc was the ideal way to bypass that and learn in the process.
+Even though fdf is already faster than fd in all cases, I'm experimenting with filtering before allocation(I don't stop at good enough!)
+Rust's std::fs has some inefficiencies, notably more heap allocation and file descriptor manipulation than I'd like. Rewriting certain parts using libc was the ideal way to bypass that and learn in the process.
 
 Currently, filtering-before-allocation is partially implemented in the crate but not yet exposed via the CLI. If the results prove consistently performant, I'll integrate it into the public tool.
 
@@ -243,7 +243,7 @@ Options:
 -- Reference implementation: [Microsoft's Edit Arena](https://github.com/microsoft/edit/tree/main/src/arena)  
 
 **2. io_uring System Call Batching**  
--- Explore batched open/read operations  
+-- Explore batched stat operations (and others as appropriate)  
 -- Significant challenges:  
 -- Current lack of `getdents` support in io_uring  
 -- Necessitates async runtime integration (potential Tokio dependency)  

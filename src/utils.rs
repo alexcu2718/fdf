@@ -1,6 +1,4 @@
-use crate::{
-    DirEntryError, Result, buffer::ValueType, 
-};
+use crate::{DirEntryError, Result, buffer::ValueType};
 use core::time::Duration;
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
@@ -41,6 +39,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 /// It's faster than my constant time strlen for dirents for small strings, but after 32 bytes, it becomes slower.
 /// It is also faster than the libc implementation but only for size below 128...?wtf.
 #[inline]
+#[allow(clippy::undocumented_unsafe_blocks)] //not commenting all of this.
 pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
@@ -62,7 +61,7 @@ where
 
             let mut offset = 0;
             loop {
-                let chunk = _mm256_loadu_si256(ptr.add(offset).cast::< __m256i>()); //load the pointer, add offset, cast to simd type
+                let chunk = _mm256_loadu_si256(ptr.add(offset).cast::<__m256i>()); //load the pointer, add offset, cast to simd type
                 let zeros = _mm256_setzero_si256(); //zeroise vector
                 let cmp = _mm256_cmpeq_epi8(chunk, zeros); //compare each byte in the chunk to 0, 32 at a time,
                 let mask = _mm256_movemask_epi8(cmp); //
@@ -76,15 +75,14 @@ where
         }
 
         #[cfg(not(target_feature = "avx2"))]
+        use core::arch::x86_64::{
+            __m128i,
+            _mm_cmpeq_epi8,    // Compare 16 bytes
+            _mm_loadu_si128,   // Unaligned 16-byte load
+            _mm_movemask_epi8, // Bitmask of null matches
+            _mm_setzero_si128, // Zero vector
+        };
         unsafe {
-            use core::arch::x86_64::{
-                __m128i,
-                _mm_cmpeq_epi8,    // Compare 16 bytes
-                _mm_loadu_si128,   // Unaligned 16-byte load
-                _mm_movemask_epi8, // Bitmask of null matches
-                _mm_setzero_si128, // Zero vector
-            };
-
             let mut offset = 0;
             loop {
                 let chunk = _mm_loadu_si128(ptr.add(offset).cast::<__m128i>()); //same as above but for diff instructions
@@ -110,10 +108,6 @@ where
     }
 }
 
-
-
-
-
 #[inline]
 ///  constructs a path convenience (just a utility function to save verbosity)
 /// this internal function relies on the pointer to the `dirent64` being non-null
@@ -122,17 +116,27 @@ pub(crate) fn construct_path(
     base_len: usize,
     drnt: *const dirent64,
 ) -> &[u8] {
+    // SAFETY: The `drnt` must not be null (checked before using)
     let d_name = unsafe { crate::access_dirent!(drnt, d_name) };
+    // SAFETY: as above
     let name_len = unsafe { dirent_name_length(drnt) };
-
+    // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
+    // by the caller of this function.
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
+    // SAFETY: `d_name` and `buffer` are known not to overlap because `d_name` is
+    // from a `dirent64` pointer and `buffer` is a slice of `path_buffer`.
+    // The pointers are properly aligned as they point to bytes. The `name_len`
+    // is guaranteed to be within the bounds of `buffer` because the total path
+    // length (`base_len + name_len`) is always less than or equal to `LOCAL_PATH_MAX`,
+    // which is the capacity of `path_buffer`.
     unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned
-
-    unsafe { path_buffer.get_unchecked(..base_len + name_len) } //the buffer has a capacit of 4000~ (`LOCAL_PATH_MAX`) ergo this will be in bounds 
+    //  SAFETY: The total length `base_len + name_len` is guaranteed to be
+    // less than or equal to `LOCAL_PATH_MAX`, which is 4096 or 1024 by default
+    unsafe { path_buffer.get_unchecked(..base_len + name_len) }
 }
 
 #[inline]
-#[allow(clippy::missing_const_for_fn)] 
+#[allow(clippy::missing_const_for_fn)]
 #[allow(clippy::single_call_fn)]
 ///a utility function for breaking down the config spaghetti that is platform specific optimisations
 // i wanted to make this const and separate the function
@@ -141,6 +145,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     #[cfg(target_os = "linux")]
     {
         use crate::dirent_const_time_strlen;
+        // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { dirent_const_time_strlen(drnt) } //const time strlen for linux (specialisation)
     }
 
@@ -152,6 +157,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "macos"
     ))]
     {
+        // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { access_dirent!(drnt, d_namlen) } //specialisation for BSD and macOS, where d_namlen is available
     }
 
@@ -164,6 +170,7 @@ pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "macos"
     )))]
     {
+        // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { libc::strlen(access_dirent!(drnt, d_name).cast::<_>()) }
         // Fallback for other OSes
     }
@@ -204,8 +211,11 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// The caller must uphold the following invariants:
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
-    use crate::memchr_derivations::find_zero_byte_u64; 
+    use crate::memchr_derivations::find_zero_byte_u64;
     const DIRENT_HEADER_START: usize = core::mem::offset_of!(libc::dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
+    // SAFETY: `dirent` must be validly checked before passing to this function
+    // It points to a properly initialised `dirent` struct,
+    // so reading the `d_reclen` field is safe.
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
     debug_assert!(
         reclen.is_multiple_of(8),
@@ -215,10 +225,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     //  Access the last 8 bytes(word) of the dirent structure as a u64
     //because unaligned reads are expensive
     #[cfg(target_endian = "little")]
-    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>()}; //go to the last word in the struct.
-    //this is safe because the reclen is the size of the struct, therefore indexing into it like this is ALWAYS in bounds.
+    // SAFETY: `dirent` is a valid pointer to a struct whose size is always a multiple of 8.
+    // `reclen - 8` therefore points to the last properly aligned 8-byte word in the struct,
+    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }; //go to the last word in the struct.
+    // SAFETY: The dirent struct is always a multiple of 8
     #[cfg(target_endian = "big")]
-    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>()}.to_le(); 
+    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le();
     //TODO! this could probably be optimised, testing anything on bigendian is a fucking pain because it takes an ungodly time to compile.
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.

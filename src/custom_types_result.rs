@@ -23,7 +23,7 @@ const_from_env!(
 //basically this is the should allow getdents to grab a lot of entries in one go
 
 pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
-#[cfg(target_os="linux")] //we only use a buffer for syscalls on linux because of stable ABI
+#[cfg(target_os = "linux")] //we only use a buffer for syscalls on linux because of stable ABI
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
 ///  a trait that all storage types must implement (for our main types) (so the user can use their own types if they want)
@@ -44,6 +44,7 @@ impl BytesStorage for SlimmerBox<[u8], u16> {
             bytes.len() < crate::LOCAL_PATH_MAX,
             "Input bytes length exceeds u16::MAX"
         );
+        // SAFETY: AS ABOVE^
         unsafe { Self::new_unchecked(bytes) }
     }
 }
@@ -95,7 +96,7 @@ impl<S: BytesStorage> OsBytes<S> {
     /// Returns a reference to the underlying bytes as an `OsStr`.
     /// This is unsafe because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
     pub fn as_os_str(&self) -> &OsStr {
-        //transmute is safe because osstr <=> bytes on POSIX (NOT windows)
+        // SAFETY: transmute is safe because osstr <=> bytes on POSIX (NOT windows)
         unsafe { core::mem::transmute(self.as_bytes()) }
     }
 }

@@ -6,9 +6,9 @@ use crate::DirEntryError;
 use crate::FileType;
 use crate::PathBuffer;
 use crate::Result;
+use crate::access_dirent;
 use crate::buffer::ValueType;
 use crate::memchr_derivations::memrchr;
-use crate::access_dirent;
 use core::fmt;
 use core::mem::MaybeUninit;
 use core::mem::transmute;
@@ -75,15 +75,16 @@ where
             "Input too large for buffer"
         );
 
-        let mut c_path_buf_start = crate::AlignedBuffer::<u8, {crate::LOCAL_PATH_MAX}>::new();
+        let mut c_path_buf_start = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new();
 
         let c_path_buf = c_path_buf_start.as_mut_ptr();
 
         // copy bytes using copy_nonoverlapping to avoid ub check
-        unsafe {
-            core::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len());
-            c_path_buf.add(self.len()).write(0) // Null terminate the string
-        };
+        // SAFETY: The source (`self`) and destination (`c_path_buf`) pointers are known not to overlap,
+        // and the length is guaranteed to be less than or equal to the destination's capacity (`LOCAL_PATH_MAX`).
+        unsafe { core::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len()) };
+        // SAFETY: The destination is `c_path_buf` offset by `self.len()`, which is a valid index since
+        unsafe { c_path_buf.add(self.len()).write(0) }; // Null terminate the string
 
         f(c_path_buf.cast::<_>())
     }
@@ -92,9 +93,8 @@ where
     /// If the file has no '.' returns `None`.
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        unsafe{memrchr(b'.', self).map(|pos| self.get_unchecked(pos+1..))} //avoid UB check
-        // # SAFETY
-        // the filename is guaranteed to have more than one character at the end
+        // SAFETY: the filename is guaranteed to have more than one character at the end (it can never be . or .. )
+        memrchr(b'.', self).map(|pos| unsafe { self.get_unchecked(pos + 1..) }) //avoid UB check
     }
 
     /// Converts the byte slice into a `DirEntry`.
@@ -132,12 +132,18 @@ where
     fn size(&self) -> crate::Result<u64> {
         self.get_stat().map(|s| s.st_size as u64)
     }
+
     #[inline]
+    /// Opens a file descriptor (when given a valid directory/symlink)
+    ///
+    /// # Safety
+    /// The path provided must be a directory!
     unsafe fn open_fd(&self) -> crate::Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
         const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
         self.as_cstr_ptr(|ptr| {
+            // SAFETY: we're only calling this on a directory
             let fd = unsafe { libc::open(ptr, FLAGS) };
 
             if fd < 0i32 {
@@ -153,9 +159,11 @@ where
     /// More specialised errors are on the TODO list.
     fn get_stat(&self) -> crate::Result<stat> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
+        // SAFETY: We know the path is valid
         let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
 
         if res == 0 {
+            // SAFETY: If the return code is 0, we know it's been initialised properly
             Ok(unsafe { stat_buf.assume_init() })
         } else {
             Err(crate::DirEntryError::InvalidStat)
@@ -167,15 +175,12 @@ where
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::map_err_ignore)] //specify these later TODO!
     fn modified_time(&self) -> crate::Result<SystemTime> {
-         
         let s = self.get_stat()?;
-        let modified_time=access_stat!(s,st_mtime);
-        let modified_seconds=access_stat!(s,st_mtime_nsec);
+        let modified_time = access_stat!(s, st_mtime);
+        let modified_seconds = access_stat!(s, st_mtime_nsec);
         crate::unix_time_to_system_time(modified_time, modified_seconds)
             .map_err(|_| crate::DirEntryError::TimeError)
     }
-
-
 
     /// Converts the byte slice into a `Path`.
     #[inline]
@@ -188,28 +193,30 @@ where
     #[allow(clippy::transmute_ptr_to_ptr)]
     ///cheap conversion from byte slice to `OsStr`
     fn as_os_str(&self) -> &OsStr {
-        //same represensation fuck clippy  yapping
+        // SAFETY: OSstr's are bytes under the hood.
         unsafe { transmute::<&[u8], &OsStr>(self) }
     }
 
     #[inline]
-    ///somewhatcostly check for readable files
+    /// Costly check for readable files (makes a syscall)
     fn is_readable(&self) -> bool {
+        // SAFETY: The path is guaranteed to be a filepath (when used internally)
         unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0i32 }
     }
 
     #[inline]
-    ///somewhat costly check for writable files(by current user)
+    /// Somewhat costly check for writable files(by current user)
     fn is_writable(&self) -> bool {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
+        // SAFETY: The path is guaranteed to be a filepath (when used internally)
         unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0i32 }
     }
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::map_err_ignore)] //specify these later TODO
-    ///returns the std definition of metadata for easy validation/whatever purposes.
+    /// Returns the std definition of metadata for easy validation/whatever purposes.
     fn metadata(&self) -> crate::Result<std::fs::Metadata> {
         std::fs::metadata(self.as_os_str()).map_err(|_| crate::DirEntryError::MetadataError) //TODO! provide a more specialised error
     }
@@ -236,15 +243,14 @@ where
     #[inline]
     ///checks if the file exists, this, makes a syscall
     fn exists(&self) -> bool {
+        // SAFETY: The path is guaranteed to be a filepath (when used internally)
         unsafe { self.as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
     }
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING
-    ///returns the path as a &str
-    ///this is safe because path is always valid utf8
-    ///(because unix paths are always valid utf8)
+    /// Returns the path as a `Result<&str>`
     fn as_str(&self) -> crate::Result<&str> {
         core::str::from_utf8(self).map_err(crate::DirEntryError::Utf8Error)
     }
@@ -256,6 +262,7 @@ where
     /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
     #[allow(clippy::missing_panics_doc)]
     unsafe fn as_str_unchecked(&self) -> &str {
+        // SAFETY: This should not panic as unix paths are guaranteed utf8
         unsafe { core::str::from_utf8_unchecked(self) }
     }
 
@@ -365,8 +372,9 @@ pub trait DirentConstructor<S: BytesStorage> {
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
         let base_len = self.file_index();
         let full_path = crate::utils::construct_path(self.path_buffer(), base_len, drnt);
-
+        // SAFETY: The `drnt` must not be null(checked before hand)
         let dtype = unsafe { access_dirent!(drnt, d_type) };
+        // SAFETY: Same as above^
         let inode = unsafe { access_dirent!(drnt, d_ino) };
 
         DirEntry {

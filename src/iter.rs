@@ -1,9 +1,8 @@
 #![allow(clippy::cast_possible_wrap)]
 
 use crate::{
-    AlignedBuffer, BytePath as _, DirEntry, DirEntryError as Error,  LOCAL_PATH_MAX,
-    PathBuffer, Result,  custom_types_result::BytesStorage,
-    traits_and_conversions::DirentConstructor as _,
+    AlignedBuffer, BytePath as _, DirEntry, DirEntryError as Error, LOCAL_PATH_MAX, PathBuffer,
+    Result, custom_types_result::BytesStorage, traits_and_conversions::DirentConstructor as _,
 };
 use core::marker::PhantomData;
 use libc::{DIR, closedir, opendir};

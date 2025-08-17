@@ -91,7 +91,7 @@ impl SearchConfig {
     }
     #[inline]
     #[must_use]
-    #[cfg(target_os="linux")] //FOR EXPERIMENTAL REASONS, ITS LINUX ONLY FOR NOW (EASE OF TESTING)
+    #[cfg(target_os = "linux")] //FOR EXPERIMENTAL REASONS, ITS LINUX ONLY FOR NOW (EASE OF TESTING)
     #[allow(clippy::if_not_else)] // this is a stylistic choice to avoid unnecessary else branches
     pub(crate) fn matches_path_internal(
         &self,
@@ -102,11 +102,10 @@ impl SearchConfig {
         self.regex_match.as_ref().is_none_or(|reg| {
             reg.is_match(if !full_path {
                 debug_assert!(path_len <= dir.len(), "path_len is greater than dir length");
-                debug_assert!(
-                    !(dir[path_len..]).contains(&b'/'),
-                    "filename should not contain a directory separator"
-                );
-                unsafe { dir.get_unchecked(path_len..) } //this is the likelier path so we choose it first
+
+                // SAFETY: path_len is guaranteed to be <= dir.len()
+                // so slicing with get_unchecked(path_len..) is always within bounds.
+                unsafe { dir.get_unchecked(path_len..) }
             } else {
                 dir
             })

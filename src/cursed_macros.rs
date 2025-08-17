@@ -77,7 +77,6 @@ macro_rules! access_dirent {
     ($entry_ptr:expr, $field:ident) => {{ (*$entry_ptr).$field }};
 }
 
-
 /*
 
    // The dirent64 struct is a weird imaginary thing that isn't ever supposed
@@ -106,24 +105,23 @@ macro_rules! access_dirent {
                 }
 */
 
-///A macro to safely access stat entries in a filesystem independent way 
+///A macro to safely access stat entries in a filesystem independent way
 // TODO! add other fields as appropriate (this could be pretty long)
 // will be public when kinks are worked out
 macro_rules! access_stat {
     ($stat_struct:expr, st_mtimensec) => {{
         #[cfg(target_os = "netbsd")]
-        { $stat_struct.st_mtimensec as _ } //why did they do such a specific change
+        {
+            $stat_struct.st_mtimensec as _
+        } //why did they do such a specific change
 
         #[cfg(not(target_os = "netbsd"))]
-        { $stat_struct.st_mtime_nsec as _ }
+        {
+            $stat_struct.st_mtime_nsec as _
+        }
     }};
 
-
-    ($stat_struct:expr, st_mtime) => {{
-        $stat_struct.st_mtime as _
-    }};
-
-
+    ($stat_struct:expr, st_mtime) => {{ $stat_struct.st_mtime as _ }};
 
     // inode number, normalised to u64 for compatibility
     ($stat_struct:expr, st_ino) => {{
@@ -133,7 +131,9 @@ macro_rules! access_stat {
             target_os = "netbsd",
             target_os = "dragonfly"
         ))]
-        { $stat_struct.st_ino as u64 }
+        {
+            $stat_struct.st_ino as u64
+        }
 
         #[cfg(not(any(
             target_os = "freebsd",
@@ -141,18 +141,14 @@ macro_rules! access_stat {
             target_os = "netbsd",
             target_os = "dragonfly"
         )))]
-        { $stat_struct.st_ino  }
+        {
+            $stat_struct.st_ino
+        }
     }};
 
-    // Fallback for other fields 
-    ($stat_struct:expr, $field:ident) => {{
-        $stat_struct.$field as _
-    }};
+    // Fallback for other fields
+    ($stat_struct:expr, $field:ident) => {{ $stat_struct.$field as _ }};
 }
-
-
-
-
 
 #[macro_export]
 /// A macro to create a C-style *str pointer from a byte slice (does not allocate!)
@@ -205,7 +201,7 @@ macro_rules! cstr {
         // Debug assert to check test builds for unexpected conditions
         core::debug_assert!($bytes.len() < $crate::LOCAL_PATH_MAX);
         // Create a buffer and make into a pointer
-        let mut c_path_buf_start = $crate::AlignedBuffer::<u8, {$crate::LOCAL_PATH_MAX}>::new();
+        let mut c_path_buf_start = $crate::AlignedBuffer::<u8, { $crate::LOCAL_PATH_MAX }>::new();
         let c_path_buf = c_path_buf_start.as_mut_ptr();
 
         // Copy the bytes into the buffer and append a null terminator

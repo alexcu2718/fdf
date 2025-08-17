@@ -1,11 +1,9 @@
-
-
 use crate::{
     BytePath as _,
     DirIter,
     OsBytes,
     Result,
-   // cstr,
+    // cstr,
     custom_types_result::BytesStorage,
     filetype::FileType,
     // utils::unix_time_to_system_time,
@@ -58,7 +56,8 @@ where
     ///costly check for executables
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
-        self.is_regular_file() && unsafe { self.as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0i32) }
+        self.is_regular_file()
+            && unsafe { self.as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0i32) }
     }
 
     ///cost free check for block devices
@@ -292,7 +291,7 @@ where
 
         // extract information from successful stat
         let get_stat = path_ref.get_stat()?;
-        let inode = access_stat!(get_stat,st_ino); 
+        let inode = access_stat!(get_stat, st_ino);
         Ok(Self {
             path: path_ref.into(),
             file_type: get_stat.into(),
@@ -337,7 +336,7 @@ where
             parent_depth: self.depth,
             offset: 0,
             remaining_bytes: 0,
-            _marker:  core::marker::PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
+            _marker: core::marker::PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
     }
 }
@@ -372,8 +371,8 @@ where
     pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-    _marker:  core::marker::PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
-                             //this gets compiled away anyway as its as a zst
+    _marker: core::marker::PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
+                                           //this gets compiled away anyway as its as a zst
 }
 #[cfg(target_os = "linux")]
 impl<S> Drop for DirEntryIterator<S>

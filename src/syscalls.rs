@@ -71,16 +71,18 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     const SYSCALL_OPENAT: i32 = libc::SYS_openat as i32;
 
     let fd: i32;
-    unsafe{asm!(
-        "svc 0",
-        in("x0") libc::AT_FDCWD,          // dirfd = AT_FDCWD
-        in("x1") filename,
-        in("x2") FLAGS,
-        in("x3") MODE,
-        in("x8") SYSCALL_OPENAT,
-        lateout("x0") fd,           // return value 
-        options(nostack)
-    )};
+    unsafe {
+        asm!(
+            "svc 0",
+            in("x0") libc::AT_FDCWD,          // dirfd = AT_FDCWD
+            in("x1") filename,
+            in("x2") FLAGS,
+            in("x3") MODE,
+            in("x8") SYSCALL_OPENAT,
+            lateout("x0") fd,           // return value
+            options(nostack)
+        )
+    };
     fd
 }
 

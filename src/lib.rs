@@ -164,8 +164,10 @@ where
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
-         //the filter for keeping files/dirs (as appropriate), this could be a function TODO-MAYBE
-        let file_filter=|file_entry:&DirEntry<S>|->bool{(self.custom_filter)(config, file_entry, self.filter)};
+        //the filter for keeping files/dirs (as appropriate), this could be a function TODO-MAYBE
+        let file_filter = |file_entry: &DirEntry<S>| -> bool {
+            (self.custom_filter)(config, file_entry, self.filter)
+        };
 
         let should_send_dir_or_symlink =//CHECK IF WE SHOULD SEND DIRS
             config.keep_dirs && file_filter(&dir) && dir.depth() != 0; //dont send root directory
@@ -188,14 +190,14 @@ where
         // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls
         // THIS REQUIRES A LOT MORE WORK TO VALIDATE SAFETY BEFORE I CAN USE IT, IT'S ALSO VERY ROUGH SINCE MACOS API IS TERRIBLE
 
-
-
         //these lambdas make the code a bit easier to follow, i might define them as functions later, TODO-MAYBE!
         //directory or symlink lambda
-         // Keep all directories (and symlinks if following them)
-        let d_or_s_filter=|myentry:&DirEntry<S>|->bool { myentry.is_dir() || config.follow_symlinks && myentry.is_symlink()};
-        let keep_hidden=|hfile:&DirEntry<S>|->bool {!config.hide_hidden || !hfile.is_hidden()};
-
+        // Keep all directories (and symlinks if following them)
+        let d_or_s_filter = |myentry: &DirEntry<S>| -> bool {
+            myentry.is_dir() || config.follow_symlinks && myentry.is_symlink()
+        };
+        let keep_hidden =
+            |hfile: &DirEntry<S>| -> bool { !config.hide_hidden || !hfile.is_hidden() };
 
         match direntries {
             Ok(entries) => {

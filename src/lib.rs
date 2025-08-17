@@ -155,6 +155,7 @@ where
                 Ok(receiver)
             }
             _ => Err(DirEntryError::InvalidPath),
+            //fix this error (it can also be permission denied, maybe some others, TEST THIS!) TODO
         }
     }
     #[inline]
@@ -164,14 +165,18 @@ where
     #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
         let config = &self.search_config;
+         //the filter for keeping files/dirs (as appropriate), this could be a function TODO-MAYBE
+        let file_filter=|file_entry:&DirEntry<S>|->bool{(self.custom_filter)(config, file_entry, self.filter)};
 
-        let should_send =
-            config.keep_dirs && (self.custom_filter)(config, &dir, self.filter) && dir.depth() != 0;
+        let should_send_dir_or_symlink =//CHECK IF WE SHOULD SEND DIRS
+            config.keep_dirs && file_filter(&dir) && dir.depth() != 0; //dont send root directory
 
         if config.depth.is_some_and(|d| dir.depth >= d) {
-            if should_send {
+            if should_send_dir_or_symlink {
                 let _ = sender.send(vec![dir]);
             } //have to put into a vec, this doesnt matter because this only happens when we depth limit
+            //i purposely ignore the result here because of pipe errors/other errors (like  -n 10 ) that i should probably log.
+            //TODO-MAYBE
 
             return; // stop processing this directory if depth limit is reached
         }
@@ -179,17 +184,17 @@ where
         //linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
         let direntries = dir.getdents(); //additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
         #[cfg(not(target_os = "linux"))]
-        let direntries = dir.readdir(); //in theory i can use getattrlistbulk on macos, this requires linking and a LOT of complexity
+        let direntries = dir.readdir(); //in theory i can use getattrlistbulk on macos, this has  a LOT of complexity!
         //https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5 TODO!
+        // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls
+        // THIS REQUIRES A LOT MORE WORK TO VALIDATE SAFETY BEFORE I CAN USE IT, IT'S ALSO VERY ROUGH SINCE MACOS API IS TERRIBLE
 
 
 
-        //these lambdas make the code a bit easier to follow, i might define them as functions later, TODO!
+        //these lambdas make the code a bit easier to follow, i might define them as functions later, TODO-MAYBE!
         //directory or symlink lambda
          // Keep all directories (and symlinks if following them)
         let d_or_s_filter=|myentry:&DirEntry<S>|->bool { myentry.is_dir() || config.follow_symlinks && myentry.is_symlink()};
-        //the filter for keeping files
-        let file_filter=|file_entry:&DirEntry<S>|->bool{(self.custom_filter)(config, file_entry, self.filter)};
         let keep_hidden=|hfile:&DirEntry<S>|->bool {!config.hide_hidden || !hfile.is_hidden()};
 
 
@@ -199,14 +204,16 @@ where
                 // Apply filters before partitioning 
                 let (dirs, mut files): (Vec<_>, Vec<_>) = entries
                     .filter(|entry| keep_hidden(entry) && (d_or_s_filter(entry) || file_filter(entry)))
-                    .partition(|x| d_or_s_filter(x));
+                    //this boolean logic is horrible but highly efficient.
+                    //essentially we do a lot of shortcircuiting to evaluate
+                    .partition(d_or_s_filter);
 
                 // Process directories in parallel
                 dirs.into_par_iter().for_each(|dirnt| {
                     self.process_directory( dirnt, sender);
                 });
                 //checking if we should send directories
-                if should_send{
+                if should_send_dir_or_symlink{
                     files.push(dir.clone()) //we have to clone here unfortunately because it's being used to keep the iterator going.
                     //luckily we're only cloning once, not cloning multiple!
                 }
@@ -216,10 +223,10 @@ where
                 }
             }
             Err(
-                DirEntryError::Success
-                | DirEntryError::TemporarilyUnavailable
-                | DirEntryError::AccessDenied(_)
-                | DirEntryError::InvalidPath,
+                DirEntryError::Success //this really shouldnt be here, fix this TODO!
+                | DirEntryError::TemporarilyUnavailable // can possibly get rid of this
+                | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
+                | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
             ) => {}
             Err(e) => eprintln!("Unexpected error: {e}"), //todo! unreachable unchecked maybe!
         }
@@ -231,7 +238,7 @@ where
 /// This builder allows you to set various options such as hiding hidden files, case sensitivity,
 /// keeping directories in results, matching file extensions, setting maximum search depth,
 /// following symlinks, and applying a custom filter function.
-#[allow(clippy::struct_excessive_bools)] //....
+#[allow(clippy::struct_excessive_bools)] //NATURALLY ANY BUILDER WILL CONTAIN A LOT OF BOOLS FFS
 pub struct FinderBuilder<S>
 where
     S: BytesStorage,
@@ -336,7 +343,7 @@ where
             Ok(cfg) => cfg,
             Err(e) => {
                 eprintln!("Error creating search config: {e}");
-                std::process::exit(1);
+                std::process::exit(1); //TODO, TIDY THIS UP
             }
         };
 

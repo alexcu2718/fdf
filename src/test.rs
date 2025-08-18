@@ -799,10 +799,10 @@ mod tests {
    
         use crate::Finder;
         let pattern: &str = ".";
-        let home_dir=std::env::home_dir().unwrap();
+        let home_dir=std::env::home_dir();
         
-
-        let finder: Finder<SlimmerBytes> = Finder::init(home_dir.as_os_str(), &pattern)
+        if home_dir.is_some(){
+        let finder: Finder<SlimmerBytes> = Finder::init(home_dir.unwrap().as_os_str(), &pattern)
             .keep_hidden(true)
             .keep_dirs(true)
             .build();
@@ -812,6 +812,7 @@ mod tests {
         let collected: Vec<_> = result.collect();
 
         assert!(collected.len() > 3);
+        }
         //a fairly arbitirary assert, this is to make sure that the result isnt no-opped away.
     }
 

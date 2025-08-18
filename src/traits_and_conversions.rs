@@ -1,19 +1,23 @@
-#![allow(clippy::missing_safety_doc)] //adding these later
-#![allow(clippy::missing_errors_doc)]
-use crate::AlignedBuffer;
-use crate::BytesStorage;
-use crate::DirEntry;
-use crate::DirEntryError;
-use crate::FileType;
-use crate::LOCAL_PATH_MAX;
-use crate::PathBuffer;
-use crate::Result;
-use crate::access_dirent;
-use crate::buffer::ValueType;
-use crate::memchr_derivations::memrchr;
-use core::fmt;
-use core::mem::MaybeUninit;
-use core::ops::Deref;
+#![allow(clippy::missing_errors_doc)] //need to add these
+use crate::{
+    access_dirent,
+    buffer::ValueType,
+    memchr_derivations::memrchr,
+    AlignedBuffer,
+    BytesStorage,
+    DirEntry,
+    DirEntryError,
+    FileType,
+    PathBuffer,
+    Result,
+    LOCAL_PATH_MAX,
+};
+
+use core::{
+    fmt,
+    mem::MaybeUninit,
+    ops::Deref,
+};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
@@ -41,14 +45,26 @@ where
     /// The pointer type (`*const VT`) is automatically inferred as `u8` or `i8`.
     ///
     /// # Arguments
-    /// * `f` - Closure receiving the temporary C string pointer
+    /// * `func` - Closure receiving the temporary C string pointer
     ///
     /// # Panics
     /// In debug mode if path length exceeds `LOCAL_PATH_MAX`
     ///
     /// # Example
-    /// ```ignore
-    /// path.as_cstr_ptr(|ptr| unsafe { libc::open(ptr, O_RDONLY) });
+    /// ```
+    /// use fdf::BytePath;
+    /// let path: &[u8] = b"abc";
+    /// let length = path.as_cstr_ptr(|ptr:*const u8| {
+    ///     // Simulate a bad strlen
+    ///     unsafe {
+    ///         let mut len = 0;
+    ///         while *ptr.add(len) != 0 {
+    ///             len += 1;
+    ///         }
+    ///         len
+    ///     }
+    /// });
+    /// assert_eq!(length, 3);
     /// ```
     fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
@@ -60,8 +76,10 @@ where
     /// Returns `None` if no extension found.
     ///
     /// # Example
-    /// ```ignore
-    /// assert_eq!(b"file.txt".extension(), Some(&b"txt"[..]));
+    /// ```
+    /// use fdf::BytePath;
+    /// let filename:&[u8]=b"file.txt";
+    /// assert_eq!(filename.extension(), Some(&b"txt"[..]));
     /// ```
     fn extension(&self) -> Option<&[u8]>;
 
@@ -124,6 +142,7 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
+    #[allow(clippy::multiple_unsafe_ops_per_block)]
     fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
         F: FnOnce(*const VT) -> R,

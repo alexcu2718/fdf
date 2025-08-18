@@ -40,6 +40,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 /// It is also faster than the libc implementation but only for size below 128...?wtf.
 #[inline]
 #[allow(clippy::undocumented_unsafe_blocks)] //not commenting all of this.
+#[allow(clippy::multiple_unsafe_ops_per_block)] //DIS
 pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
@@ -184,6 +185,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 
 #[inline]
 #[cfg(target_os = "linux")]
+#[allow(clippy::multiple_unsafe_ops_per_block)]
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 /// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD.
 /// Constant time (therefore branchless)

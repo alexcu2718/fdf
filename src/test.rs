@@ -794,6 +794,27 @@ mod tests {
         //(basically  trying to avoid the same segfault issue seen previously....)
     }
 
+      #[test]
+    fn test_home() {
+   
+        use crate::Finder;
+        let pattern: &str = ".";
+        let home_dir=std::env::home_dir().unwrap();
+        
+
+        let finder: Finder<SlimmerBytes> = Finder::init(home_dir.as_os_str(), &pattern)
+            .keep_hidden(true)
+            .keep_dirs(true)
+            .build();
+
+        let result = finder.traverse().unwrap().into_iter();
+
+        let collected: Vec<_> = result.collect();
+
+        assert!(collected.len() > 3);
+        //a fairly arbitirary assert, this is to make sure that the result isnt no-opped away.
+    }
+
     #[test]
     fn test_cstr() {
         let test_bytes = b"randopath";
@@ -829,7 +850,7 @@ mod tests {
 
     #[test]
     fn test_error_handling() {
-        let use_path:&[u8]=            b"/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
+        let use_path:&[u8]= b"/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
 
         let std_path = Path::new(use_path.as_os_str());
         if std_path.exists() {

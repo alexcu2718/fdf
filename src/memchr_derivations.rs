@@ -2,7 +2,7 @@
 // this essentially provides a more rigorous foundation to my SWAR technique.
 //the original definition is below the copy pasted code above.
 #![allow(clippy::all)]
-#![allow(warnings)]
+#![allow(warnings)] //the warnings are from memchr and thats a std lib func, too strict lints!
 //I really prefer having some strong foundation to rely on, so I'll use it and say stuff it to pride. Make it easy for people to verify.
 
 ///copy pasting code here, will probably add something in the readme about it.

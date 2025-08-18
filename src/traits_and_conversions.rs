@@ -1,9 +1,11 @@
 #![allow(clippy::missing_safety_doc)] //adding these later
 #![allow(clippy::missing_errors_doc)]
+use crate::AlignedBuffer;
 use crate::BytesStorage;
 use crate::DirEntry;
 use crate::DirEntryError;
 use crate::FileType;
+use crate::LOCAL_PATH_MAX;
 use crate::PathBuffer;
 use crate::Result;
 use crate::access_dirent;
@@ -11,7 +13,6 @@ use crate::buffer::ValueType;
 use crate::memchr_derivations::memrchr;
 use core::fmt;
 use core::mem::MaybeUninit;
-use core::mem::transmute;
 use core::ops::Deref;
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
@@ -67,11 +68,11 @@ where
     /// Checks if file extension matches given bytes (case-insensitive)
     fn matches_extension(&self, ext: &[u8]) -> bool;
     /// Gets file size in bytes
-    fn size(&self) -> crate::Result<i64>;
+    fn size(&self) -> Result<i64>;
     /// Gets file metadata via `lstat`
-    fn get_stat(&self) -> crate::Result<stat>;
+    fn get_stat(&self) -> Result<stat>;
     /// Gets last modification time
-    fn modified_time(&self) -> crate::Result<SystemTime>;
+    fn modified_time(&self) -> Result<SystemTime>;
     /// Converts to `&Path` (zero-cost on Unix)
     fn as_path(&self) -> &Path;
     /// Opens file descriptor for directory paths
@@ -79,7 +80,7 @@ where
     /// # Safety
     /// - Path must be a directory
     /// - Uses `O_DIRECTORY | O_CLOEXEC | O_NONBLOCK`
-    unsafe fn open_fd(&self) -> crate::Result<i32>;
+    unsafe fn open_fd(&self) -> Result<i32>;
 
     /// Gets index of filename component start
     ///
@@ -99,13 +100,13 @@ where
     /// Checks write permission (`access(W_OK)`)
     fn is_writable(&self) -> bool;
     /// Gets standard filesystem metadata
-    fn metadata(&self) -> crate::Result<std::fs::Metadata>;
+    fn metadata(&self) -> Result<std::fs::Metadata>;
     /// Splits path into components (split on '/')
     fn components(&self) -> impl Iterator<Item = &[u8]>;
     /// Gets standard filesystem metadata
-    fn to_std_file_type(&self) -> crate::Result<std::fs::FileType>;
+    fn to_std_file_type(&self) -> Result<std::fs::FileType>;
     /// Converts to UTF-8 string (with validation)
-    fn as_str(&self) -> crate::Result<&str>;
+    fn as_str(&self) -> Result<&str>;
     /// Converts to UTF-8 string without validation
     ///
     /// # Safety
@@ -129,11 +130,11 @@ where
         VT: ValueType, // VT==ValueType is u8/i8
     {
         debug_assert!(
-            self.len() < crate::LOCAL_PATH_MAX, //declared at compile time via env_var or default to 4096/1024 (Linux/ BSD-like(including macos))
+            self.len() < LOCAL_PATH_MAX, //declared at compile time via env_var or default to 4096/1024 (Linux/ BSD-like(including macos))
             "Input too large for buffer"
         );
 
-        let mut c_path_buf_start = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new();
+        let mut c_path_buf_start = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new();
 
         let c_path_buf = c_path_buf_start.as_mut_ptr();
 
@@ -182,12 +183,12 @@ where
 
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
-    fn size(&self) -> crate::Result<i64> {
+    fn size(&self) -> Result<i64> {
         self.get_stat().map(|s| s.st_size as _)
     }
 
     #[inline]
-    unsafe fn open_fd(&self) -> crate::Result<i32> {
+    unsafe fn open_fd(&self) -> Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
         const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
@@ -204,7 +205,7 @@ where
     }
 
     #[inline]
-    fn get_stat(&self) -> crate::Result<stat> {
+    fn get_stat(&self) -> Result<stat> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
         // SAFETY: We know the path is valid
         let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
@@ -220,10 +221,10 @@ where
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::map_err_ignore)] //specify these later TODO!
-    fn modified_time(&self) -> crate::Result<SystemTime> {
+    fn modified_time(&self) -> Result<SystemTime> {
         let s = self.get_stat()?;
         let modified_time = access_stat!(s, st_mtime);
-        let modified_seconds = access_stat!(s, st_mtime_nsec);
+        let modified_seconds = access_stat!(s, st_mtime_nsec); //macro helps avoid funky aliasing on weird systems
         crate::unix_time_to_system_time(modified_time, modified_seconds)
             .map_err(|_| crate::DirEntryError::TimeError)
     }
@@ -238,14 +239,14 @@ where
     #[allow(clippy::transmute_ptr_to_ptr)]
     ///cheap conversion from byte slice to `OsStr`
     fn as_os_str(&self) -> &OsStr {
-        // SAFETY: OSstr's are bytes under the hood.
-        unsafe { transmute::<&[u8], &OsStr>(self) }
+        std::os::unix::ffi::OsStrExt::from_bytes(self)
+        //we do it this way because it avoids using the trait from std::fs (avoid needing to import it)
     }
 
     #[inline]
     fn is_readable(&self) -> bool {
         // SAFETY: The path is guaranteed to be a filepath (when used internally)
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0i32 }
+        unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
     }
 
     #[inline]
@@ -260,7 +261,7 @@ where
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::map_err_ignore)] //specify these later TODO
     /// Returns the std definition of metadata for easy validation/whatever purposes.
-    fn metadata(&self) -> crate::Result<std::fs::Metadata> {
+    fn metadata(&self) -> Result<std::fs::Metadata> {
         std::fs::metadata(self.as_os_str()).map_err(|_| crate::DirEntryError::MetadataError) //TODO! provide a more specialised error
     }
 
@@ -274,7 +275,7 @@ where
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::map_err_ignore)] //specify these later TODO!
-    fn to_std_file_type(&self) -> crate::Result<std::fs::FileType> {
+    fn to_std_file_type(&self) -> Result<std::fs::FileType> {
         //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it
         std::fs::symlink_metadata(self.as_path())
@@ -293,7 +294,7 @@ where
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING
     /// Returns the path as a `Result<&str>`
-    fn as_str(&self) -> crate::Result<&str> {
+    fn as_str(&self) -> Result<&str> {
         core::str::from_utf8(self).map_err(crate::DirEntryError::Utf8Error)
     }
 

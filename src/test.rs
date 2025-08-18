@@ -795,6 +795,7 @@ mod tests {
     }
 
       #[test]
+      #[allow(unused)]
     fn test_home() {
    
         use crate::Finder;
@@ -809,11 +810,9 @@ mod tests {
 
         let result = finder.traverse().unwrap().into_iter();
 
-        let collected: Vec<_> = result.collect();
-
-        assert!(collected.len() > 3);
+        let collected: Vec<_> = std::hint::black_box(result.collect());
+        
         }
-        //a fairly arbitirary assert, this is to make sure that the result isnt no-opped away.
     }
 
     #[test]

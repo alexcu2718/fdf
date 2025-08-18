@@ -1,6 +1,5 @@
 #!/bin/bash
 cd "$(dirname "$0" )" || exit
-# Execute all warm*.sh scripts in the current directory
 
 
 read -rp "Do you want to run speed/correctness benchmarks? (y/n) " run_benchmarks
@@ -10,6 +9,7 @@ if [[ "$run_benchmarks" =~ ^[Yy]$ ]]; then
         ./"$script"
         sleep 2
     done
+    ./cold-cache-simple-pattern.sh
 else
     echo "Skipping benchmarks."
 fi

@@ -188,7 +188,7 @@ where
     {
         match self.file_type {
             FileType::RegularFile => {
-                self.size().is_ok_and(|size| size == 0u64)
+                self.size().is_ok_and(|size| size == 0)
                 //this checks if the file size is zero, this is a costly check as it requires a stat call
             }
             FileType::Directory => {

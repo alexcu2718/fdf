@@ -26,9 +26,9 @@ use std::time::SystemTime;
 /// A trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.
 ///
-/// # Safety
-/// Several methods contain unsafe blocks assuming valid UTF-8 paths (Unix convention).
-/// FFI methods require paths shorter than `LOCAL_PATH_MAX` (default 4096/1024 (Linux/non Linux (POSIX STILL))
+// # Safety
+// Several methods contain unsafe blocks assuming valid UTF-8 paths (Unix convention).
+// FFI methods require paths shorter than `LOCAL_PATH_MAX` (default 4096/1024 (Linux/non Linux (POSIX STILL))
 pub trait BytePath<T>
 where
     T: Deref<Target = [u8]>,
@@ -49,7 +49,7 @@ where
     /// ```ignore
     /// path.as_cstr_ptr(|ptr| unsafe { libc::open(ptr, O_RDONLY) });
     /// ```
-    fn as_cstr_ptr<F, R, VT>(&self, f: F) -> R
+    fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
         F: FnOnce(*const VT) -> R,
         VT: ValueType; // VT==ValueType 
@@ -67,7 +67,7 @@ where
     /// Checks if file extension matches given bytes (case-insensitive)
     fn matches_extension(&self, ext: &[u8]) -> bool;
     /// Gets file size in bytes
-    fn size(&self) -> crate::Result<u64>;
+    fn size(&self) -> crate::Result<i64>;
     /// Gets file metadata via `lstat`
     fn get_stat(&self) -> crate::Result<stat>;
     /// Gets last modification time
@@ -80,10 +80,10 @@ where
     /// - Path must be a directory
     /// - Uses `O_DIRECTORY | O_CLOEXEC | O_NONBLOCK`
     unsafe fn open_fd(&self) -> crate::Result<i32>;
+
     /// Gets index of filename component start
     ///
     /// Returns position after last '/' or 0 if none.
-
     fn file_name_index(&self) -> u16;
     /// Converts to `&OsStr` (zero-cost)
     fn as_os_str(&self) -> &OsStr;
@@ -123,13 +123,13 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
-    fn as_cstr_ptr<F, R, VT>(&self, f: F) -> R
+    fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
         F: FnOnce(*const VT) -> R,
         VT: ValueType, // VT==ValueType is u8/i8
     {
         debug_assert!(
-            self.len() < crate::LOCAL_PATH_MAX, //delcared at compile time via env_var or default to 1024
+            self.len() < crate::LOCAL_PATH_MAX, //declared at compile time via env_var or default to 4096/1024 (Linux/ BSD-like(including macos))
             "Input too large for buffer"
         );
 
@@ -144,13 +144,19 @@ where
         // SAFETY: The destination is `c_path_buf` offset by `self.len()`, which is a valid index since
         unsafe { c_path_buf.add(self.len()).write(0) }; // Null terminate the string
 
-        f(c_path_buf.cast::<_>())
+        func(c_path_buf.cast::<_>())
     }
 
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        // SAFETY: the filename is guaranteed to have more than one character at the end (it can never be . or .. )
-        memrchr(b'.', self).map(|pos| unsafe { self.get_unchecked(pos + 1..) }) //avoid UB check
+        // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
+        memrchr(b'.', unsafe { self.get_unchecked(..self.len() - 1) }) //exclude cases where the . is the final character
+            // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
+            // The slice `..self.len() - 1` is a subslice of `self`.
+            // Therefore, `pos` is a valid index into `self`.
+            // `pos + 1` is also guaranteed to be a valid index.
+            // We do this to avoid any runtime checks
+            .map(|pos| unsafe { self.get_unchecked(pos + 1..) })
     }
 
     #[inline]
@@ -176,8 +182,8 @@ where
 
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
-    fn size(&self) -> crate::Result<u64> {
-        self.get_stat().map(|s| s.st_size as u64)
+    fn size(&self) -> crate::Result<i64> {
+        self.get_stat().map(|s| s.st_size as _)
     }
 
     #[inline]
@@ -399,7 +405,6 @@ where
 /// More documentation TBD
 #[allow(clippy::cast_possible_truncation)] //no truncation issue (reclen is always under u16, casting to and  from a usize is lossless)
 pub trait DirentConstructor<S: BytesStorage> {
-    // Required accessors
     fn path_buffer(&mut self) -> &mut PathBuffer;
     fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
     fn parent_depth(&self) -> u8;

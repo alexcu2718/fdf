@@ -25,9 +25,11 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 
  **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD(x86_64)
 
- **Compiles but Limited Testing**: OpenBSD, NetBSD,  DragonflyBSD, Android  (Not familiar with github actions for these ones)
+ **Compiles but Limited Testing**: OpenBSD, NetBSD,  DragonflyBSD, Android(works on my phone!)  (Not familiar with github actions for these ones)
 
  **Not Supported**: Windows (fundamental rewrite required due to architectural differences, will be done when I read through the API properly!)
+
+ **Known broken**, Illumos/Solaris (this is easy to fix, just the OS'es don't use inodes, I will fix this when I setup QEMU for them(not in a rush))
 
 ## How to test
 
@@ -41,7 +43,7 @@ This executes a comprehensive suite of internal library, CLI tests, and benchmar
 
 ## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
 
- **Full Repeatable Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt) 
+ **Full Repeatable Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
 (Repeatable via the testing code seen above, they cover file type filtering, among many more!)
 
@@ -245,6 +247,8 @@ Options:
 **1. Custom Arena Allocator**  
 -- Investigate implementing from scratch  
 -- Reference implementation: [Microsoft's Edit Arena](https://github.com/microsoft/edit/tree/main/src/arena)  
+-- (Caveat: see comments at <https://github.com/microsoft/edit/blob/main/src/arena/release.rs>,
+-- this essentially says that my custom allocator (MiMalloc) is *just* as fast, I think it'd be interesting to test this!)
 
 **2. io_uring System Call Batching**  
 -- Explore batched stat operations (and others as appropriate)  
@@ -263,3 +267,9 @@ Options:
 -- Design filter mechanism avoiding:  
 -- Unnecessary directory allocations  
 -- Non-essential memory operations  
+
+**5. MacOS/BSD(potentially) Specific Optimisations**
+-- Implement an iterator using getattrlistbulk (this may be possible for bsd too?)
+-- Test repo found at <https://github.com/alexcu2718/mac_os_getattrlistbulk_ls>
+-- This allows for much more efficient syscalls to get filesystem entries
+-- (Admittedly I've been a bit half arsed to do this, will be done soon!)

@@ -783,7 +783,8 @@ mod tests {
         let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str(), &pattern)
             .keep_hidden(true)
             .keep_dirs(true)
-            .build().unwrap();
+            .build()
+            .unwrap();
 
         let result = finder.traverse().unwrap().into_iter();
 
@@ -794,24 +795,24 @@ mod tests {
         //(basically  trying to avoid the same segfault issue seen previously....)
     }
 
-      #[test]
-      #[allow(unused)]
+    #[test]
+    #[allow(unused)]
     fn test_home() {
-   
         use crate::Finder;
         let pattern: &str = ".";
-        let home_dir=std::env::home_dir();
-        
-        if home_dir.is_some(){
-        let finder: Finder<SlimmerBytes> = Finder::init(home_dir.unwrap().as_os_str(), &pattern)
-            .keep_hidden(true)
-            .keep_dirs(true)
-            .build().unwrap();
+        let home_dir = std::env::home_dir();
 
-        let result = finder.traverse().unwrap().into_iter();
+        if home_dir.is_some() {
+            let finder: Finder<SlimmerBytes> =
+                Finder::init(home_dir.unwrap().as_os_str(), &pattern)
+                    .keep_hidden(true)
+                    .keep_dirs(true)
+                    .build()
+                    .unwrap();
 
-        let collected: Vec<_> = std::hint::black_box(result.collect());
-        
+            let result = finder.traverse().unwrap().into_iter();
+
+            let collected: Vec<_> = std::hint::black_box(result.collect());
         }
     }
 

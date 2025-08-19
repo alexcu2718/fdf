@@ -116,7 +116,7 @@ where
     #[inline]
     #[must_use]
     #[allow(clippy::wildcard_enum_match_arm)]
-    #[cfg(not(target_os="linux"))]
+    #[cfg(not(target_os = "linux"))]
     ///costly check for empty files
     /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
     /// for files, it checks if the size is zero without loading all metadata
@@ -138,7 +138,7 @@ where
     #[inline]
     #[must_use]
     #[allow(clippy::wildcard_enum_match_arm)]
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     ///costly check for empty files
     /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
     /// for files, it checks if the size is zero without loading all metadata
@@ -194,24 +194,24 @@ where
 
         Ok(boxed)
     }
-            /*
-            
-            
-            https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
-        pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
-            let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
-            if r.is_null() {
-                return Err(io::Error::last_os_error());
-            }
-            Ok(PathBuf::from(OsString::from_vec(unsafe {
-                let buf = CStr::from_ptr(r).to_bytes().to_vec();
-                libc::free(r as *mut _);
-                buf
-            })))
+    /*
+
+
+        https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
+    pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
+        let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
+        if r.is_null() {
+            return Err(io::Error::last_os_error());
         }
-            
-            
-            */
+        Ok(PathBuf::from(OsString::from_vec(unsafe {
+            let buf = CStr::from_ptr(r).to_bytes().to_vec();
+            libc::free(r as *mut _);
+            buf
+        })))
+    }
+
+
+        */
 
     #[inline]
     #[allow(clippy::missing_const_for_fn)]

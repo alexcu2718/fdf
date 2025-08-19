@@ -1,23 +1,10 @@
 #![allow(clippy::missing_errors_doc)] //need to add these
 use crate::{
-    access_dirent,
-    buffer::ValueType,
-    memchr_derivations::memrchr,
-    AlignedBuffer,
-    BytesStorage,
-    DirEntry,
-    DirEntryError,
-    FileType,
-    PathBuffer,
-    Result,
-    LOCAL_PATH_MAX,
+    AlignedBuffer, BytesStorage, DirEntry, DirEntryError, FileType, LOCAL_PATH_MAX, PathBuffer,
+    Result, access_dirent, buffer::ValueType, memchr_derivations::memrchr,
 };
 
-use core::{
-    fmt,
-    mem::MaybeUninit,
-    ops::Deref,
-};
+use core::{fmt, mem::MaybeUninit, ops::Deref};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]

@@ -19,7 +19,8 @@
 #![allow(clippy::allow_attributes)]
 #![allow(clippy::allow_attributes_without_reason)] //broken lint
 #![allow(clippy::multiple_unsafe_ops_per_block)]
-#![allow(clippy::arithmetic_side_effects)] //a lot of the arithmetic side effects are simply we're we know usize->u16 is fine (just any indexing requires a usize)
+#![allow(clippy::arithmetic_side_effects)]
+//a lot of the arithmetic side effects are simply we're we know usize->u16 is fine (just any indexing requires a usize)
 #![allow(clippy::as_conversions)] //same as above
 #![allow(clippy::question_mark_used)] //super dumb
 #![allow(clippy::semicolon_if_nothing_returned)] //this is dumb
@@ -121,7 +122,7 @@ where
     #[must_use]
     #[inline]
     /// Create a new Finder instance.
-    pub fn init<A:AsRef<OsStr>,B:AsRef<str>>(root: A, pattern: B) -> FinderBuilder<S> {
+    pub fn init<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> FinderBuilder<S> {
         FinderBuilder::new(root, pattern)
     }
 
@@ -271,7 +272,7 @@ where
     S: BytesStorage + 'static + Clone + Send,
 {
     /// Create a new `FinderBuilder` with required fields
-    pub fn new<A:AsRef<OsStr>,B:AsRef<str>>(root: A, pattern: B) -> Self {
+    pub fn new<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> Self {
         Self {
             root: root.as_ref().to_owned(),
             pattern: pattern.as_ref().to_owned(),
@@ -338,7 +339,7 @@ where
 
     /// Build the Finder instance
     #[allow(clippy::missing_errors_doc)] //TODO! add error docs here
-    pub fn build(self) -> Result<Finder<S>>{
+    pub fn build(self) -> Result<Finder<S>> {
         let config = SearchConfig::new(
             self.pattern,
             self.hide_hidden,

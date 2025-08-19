@@ -5,7 +5,7 @@
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
 #![allow(clippy::implicit_return)] //this one is dumb
-#![allow(clippy::as_underscore)] // this too 
+#![allow(clippy::as_underscore)] // this too
 #![allow(clippy::min_ident_chars)]
 #![allow(clippy::missing_docs_in_private_items)]
 #![allow(clippy::undocumented_unsafe_blocks)]

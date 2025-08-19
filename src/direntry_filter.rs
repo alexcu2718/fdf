@@ -53,7 +53,7 @@ use libc::{close, dirent64};
 /// the provided filter function. It avoids unnecessary heap allocations by using a temporary
 /// `TempDirent` struct to hold the entry data, which is then converted to a `DirEntry` when needed.
 /// The iterator is designed to be efficient and to work with any type that implements the `BytesStorage` trait.
-pub  struct DirEntryIteratorFilter<'a, S>
+pub struct DirEntryIteratorFilter<'a, S>
 where
     S: BytesStorage,
 {

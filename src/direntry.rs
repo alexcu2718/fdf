@@ -449,7 +449,7 @@ where
     #[inline]
     /// This is a syscall that fills the buffer (stack allocated) and resets the internal offset counter to 0.
     pub unsafe fn getdents_syscall(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
+        self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) };
         self.offset = 0;
     }
 

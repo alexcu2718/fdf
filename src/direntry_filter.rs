@@ -101,7 +101,7 @@ where
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
     pub(crate) unsafe fn getdents_syscall(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64_internal(self.fd) };
+        self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) };
         self.offset = 0;
     }
 

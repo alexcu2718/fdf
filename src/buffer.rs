@@ -92,20 +92,13 @@ where
         unsafe { &mut *self.data.as_mut_ptr() }
     }
 
-    /// # Safety
-    /// this is only to be called when using syscalls in the getdents interface
-    #[inline]
-    #[cfg(target_os = "linux")]
-    pub(crate) unsafe fn getdents64_internal(&mut self, fd: i32) -> i64 {
-        unsafe { Self::getdents64_asm(self, fd) }
-    }
-
+ 
     /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'.
     /// At the end of the day, the only way to bypass glibc's quirks is to use inline assembly.
     ///
-    /// TODO! write an implementation for RISC-V
+    //TODO! write an implementation for RISC-V
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::single_call_fn)]

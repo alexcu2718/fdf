@@ -32,8 +32,8 @@ where
     /// Inode number of the file.
     ///
     /// 8 bytes, (may be hidden under a cfg flag in future for relevant reasons/32bit systems(if i ever do that.))
-    pub(crate) inode: u64,
-
+    pub(crate) inode: u64, //TODO! illumos/solaris doesn't have ino, so we need to flag this for appropriate systems
+    //
     /// Depth of the directory entry relative to the root.
     ///
     /// Stored as a single byte, supporting up to 255 levels deep.
@@ -116,6 +116,7 @@ where
     #[inline]
     #[must_use]
     #[allow(clippy::wildcard_enum_match_arm)]
+    #[cfg(not(target_os="linux"))]
     ///costly check for empty files
     /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
     /// for files, it checks if the size is zero without loading all metadata
@@ -129,7 +130,29 @@ where
             }
             FileType::Directory => {
                 self.readdir() //if we can read the directory, we check if it has no entries
-                    .is_ok_and(|mut entries| entries.next().is_none()) //i use readdir here to make code more concise.
+                    .is_ok_and(|mut entries| entries.next().is_none()) //readdir on non-linux 
+            }
+            _ => false,
+        }
+    }
+    #[inline]
+    #[must_use]
+    #[allow(clippy::wildcard_enum_match_arm)]
+    #[cfg(target_os="linux")]
+    ///costly check for empty files
+    /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
+    /// for files, it checks if the size is zero without loading all metadata
+    /// for directories, it checks if they have no entries
+    /// for special files like devices, sockets, etc., it returns false
+    pub fn is_empty(&self) -> bool {
+        match self.file_type() {
+            FileType::RegularFile => {
+                self.size().is_ok_and(|size| size == 0)
+                //this checks if the file size is zero, this is a costly check as it requires a stat call
+            }
+            FileType::Directory => {
+                self.getdents() //if we can read the directory, we check if it has no entries
+                    .is_ok_and(|mut entries| entries.next().is_none()) //getdents requires a lot less syscalls (doesnt call stat implicitly)
             }
             _ => false,
         }
@@ -166,11 +189,29 @@ where
         //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
         //so we subtract the filename length from the total length, probably could've been done more elegantly.
         //TBD? not imperative.
-        unsafe { libc::free(ptr.cast()) }
+        unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
         //free the pointer to stop leaking
 
         Ok(boxed)
     }
+            /*
+            
+            
+            https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
+        pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
+            let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
+            if r.is_null() {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(PathBuf::from(OsString::from_vec(unsafe {
+                let buf = CStr::from_ptr(r).to_bytes().to_vec();
+                libc::free(r as *mut _);
+                buf
+            })))
+        }
+            
+            
+            */
 
     #[inline]
     #[allow(clippy::missing_const_for_fn)]
@@ -225,7 +266,7 @@ where
     /// as the file name or path, it is a number that identifies the file on the
     /// It should be u32 on BSD's but I use u64 for consistency across platforms
     pub const fn ino(&self) -> u64 {
-        self.inode
+        self.inode //illumos/solaris doesnt have inode revisit when doing compatibility TODO!
     }
 
     #[inline]
@@ -254,7 +295,7 @@ where
     #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
-        unsafe { *self.get_unchecked(self.file_name_index()) == b'.' } //we yse the base_len as a way to index to filename immediately, this means
+        unsafe { *self.get_unchecked(self.file_name_index()) == b'.' } //we use the base_len as a way to index to filename immediately, this means
         //we can store a full path and still get the filename without copying.
         //this is safe because we know that the base_len is always less than the length of the path
     }

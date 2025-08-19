@@ -1,31 +1,28 @@
 //library imports
 //I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
-#![allow(clippy::implicit_return)]
-#![allow(clippy::as_underscore)]
-#![allow(clippy::min_ident_chars)]
-#![allow(clippy::implicit_return)]
+//cargo clippy --all -- -W clippy::all -W clippy::pedantic -W clippy::restriction -W clippy::nursery -D warnings
+
+#![allow(clippy::implicit_return)] //this too
+#![allow(clippy::as_underscore)] //this is dumb
+#![allow(clippy::min_ident_chars)] //i could fix this
 #![allow(clippy::missing_docs_in_private_items)]
-#![allow(clippy::undocumented_unsafe_blocks)]
-#![allow(clippy::blanket_clippy_restriction_lints)]
-#![allow(clippy::absolute_paths)]
-#![allow(clippy::impl_trait_in_params)]
-#![allow(clippy::arbitrary_source_item_ordering)]
-#![allow(clippy::missing_inline_in_public_items)]
-#![allow(clippy::std_instead_of_alloc)]
-#![allow(clippy::unseparated_literal_suffix)]
-#![allow(clippy::pub_use)]
+#![allow(clippy::undocumented_unsafe_blocks)] //there's A LOT OF UNSAFE!, THIS WILL TAKE A WHILE
+#![allow(clippy::blanket_clippy_restriction_lints)] //well...
+#![allow(clippy::absolute_paths)] //dumb (this makes writing cross compatibility easier, stupid lint.)
+#![allow(clippy::arbitrary_source_item_ordering)] //stylistic nazis
+#![allow(clippy::missing_inline_in_public_items)] //not all items need inlining fffs
+#![allow(clippy::std_instead_of_alloc)] //this one is plain broken
+#![allow(clippy::unseparated_literal_suffix)] //very dumb
+#![allow(clippy::pub_use)] //STYLISTIC again
 #![allow(clippy::field_scoped_visibility_modifiers)]
-#![allow(clippy::pub_with_shorthand)]
-#![allow(clippy::redundant_pub_crate)]
+#![allow(clippy::pub_with_shorthand)] //this is *************
 #![allow(clippy::allow_attributes)]
-#![allow(clippy::allow_attributes_without_reason)]
-#![allow(clippy::exit)]
+#![allow(clippy::allow_attributes_without_reason)] //broken lint
 #![allow(clippy::multiple_unsafe_ops_per_block)]
-#![allow(clippy::arithmetic_side_effects)]
-#![allow(clippy::as_conversions)]
-#![allow(clippy::question_mark_used)]
-#![allow(clippy::semicolon_if_nothing_returned)]
-#![allow(clippy::indexing_slicing)]
+#![allow(clippy::arithmetic_side_effects)] //a lot of the arithmetic side effects are simply we're we know usize->u16 is fine (just any indexing requires a usize)
+#![allow(clippy::as_conversions)] //same as above
+#![allow(clippy::question_mark_used)] //super dumb
+#![allow(clippy::semicolon_if_nothing_returned)] //this is dumb
 #![allow(clippy::missing_trait_methods)] //this one too
 #![allow(clippy::semicolon_inside_block)] //this one is really dumb
 #![allow(clippy::must_use_candidate)]
@@ -124,7 +121,7 @@ where
     #[must_use]
     #[inline]
     /// Create a new Finder instance.
-    pub fn init(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> FinderBuilder<S> {
+    pub fn init<A:AsRef<OsStr>,B:AsRef<str>>(root: A, pattern: B) -> FinderBuilder<S> {
         FinderBuilder::new(root, pattern)
     }
 
@@ -274,7 +271,7 @@ where
     S: BytesStorage + 'static + Clone + Send,
 {
     /// Create a new `FinderBuilder` with required fields
-    pub fn new(root: impl AsRef<OsStr>, pattern: impl AsRef<str>) -> Self {
+    pub fn new<A:AsRef<OsStr>,B:AsRef<str>>(root: A, pattern: B) -> Self {
         Self {
             root: root.as_ref().to_owned(),
             pattern: pattern.as_ref().to_owned(),
@@ -340,7 +337,7 @@ where
     }
 
     /// Build the Finder instance
-    #[allow(clippy::print_stderr)]
+    #[allow(clippy::missing_errors_doc)] //TODO! add error docs here
     pub fn build(self) -> Result<Finder<S>>{
         let config = SearchConfig::new(
             self.pattern,

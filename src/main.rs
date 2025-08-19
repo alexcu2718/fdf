@@ -1,46 +1,33 @@
 //i use very strong lints.
-#![allow(clippy::single_call_fn)]
 #![allow(clippy::all)]
 #![allow(clippy::absolute_paths)]
-#![allow(clippy::print_stderr)]
-#![allow(clippy::implicit_return)]
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
-#![allow(clippy::macro_metavars_in_unsafe)]
-#![allow(clippy::print_stderr)]
-#![allow(clippy::implicit_return)]
-#![allow(clippy::as_underscore)]
-#![allow(clippy::print_stderr)]
+#![allow(clippy::implicit_return)] //this one is dumb
+#![allow(clippy::as_underscore)] // this too 
 #![allow(clippy::min_ident_chars)]
 #![allow(clippy::missing_docs_in_private_items)]
 #![allow(clippy::undocumented_unsafe_blocks)]
 #![allow(clippy::blanket_clippy_restriction_lints)]
-#![allow(clippy::absolute_paths)]
+#![allow(clippy::absolute_paths)] //this ones dumb
 #![allow(clippy::impl_trait_in_params)]
 #![allow(clippy::arbitrary_source_item_ordering)]
-#![allow(clippy::std_instead_of_core)]
 #![allow(clippy::unused_trait_names)]
 #![allow(clippy::exhaustive_structs)]
 #![allow(clippy::missing_inline_in_public_items)]
-#![allow(clippy::std_instead_of_alloc)]
-#![allow(clippy::pub_use)]
+#![allow(clippy::std_instead_of_alloc)] //this one is stupid
 #![allow(clippy::field_scoped_visibility_modifiers)]
 #![allow(clippy::pub_with_shorthand)]
 #![allow(clippy::redundant_pub_crate)]
 #![allow(clippy::allow_attributes)]
 #![allow(clippy::allow_attributes_without_reason)]
 #![allow(clippy::map_err_ignore)]
-#![allow(clippy::exit)]
-#![allow(clippy::multiple_unsafe_ops_per_block)]
 #![allow(clippy::pattern_type_mismatch)]
-#![allow(clippy::arithmetic_side_effects)]
-#![allow(clippy::as_conversions)]
-#![allow(clippy::question_mark_used)]
-#![allow(clippy::semicolon_inside_block)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::semicolon_outside_block)]
-#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::question_mark_used)] //dumb
+#![allow(clippy::semicolon_inside_block)] //dumb
+#![allow(clippy::must_use_candidate)] //dumb
+#![allow(clippy::semicolon_outside_block)] //dumb
 use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
@@ -188,7 +175,8 @@ struct Args {
     )]
     fixed_string: bool,
 }
-
+#[allow(clippy::exit)]
+#[allow(clippy::print_stderr)]
 fn main() -> Result<(), DirEntryError> {
     let args = Args::parse();
 
@@ -213,7 +201,7 @@ fn main() -> Result<(), DirEntryError> {
             eprintln!("Error: No pattern provided. Exiting.");
             std::process::exit(1);
         },
-        std::clone::Clone::clone,
+        core::clone::Clone::clone,
     );
 
     let pattern = if args.fixed_string {
@@ -250,6 +238,8 @@ fn main() -> Result<(), DirEntryError> {
 #[allow(clippy::must_use_candidate)]
 ///simple function to resolve the directory to use.
 #[allow(clippy::single_call_fn)]
+#[allow(clippy::exit)]
+#[allow(clippy::print_stderr)] //this is fine because it's CLI only
 fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> OsString {
     let dir_to_use = args_directory.unwrap_or_else(|| generate_start_prefix());
     let path_check = Path::new(&dir_to_use);
@@ -276,6 +266,8 @@ fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> Os
         dir_to_use
     }
 }
+#[allow(clippy::exit)]
+#[allow(clippy::print_stderr)]
 #[allow(clippy::single_call_fn)]
 fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     if !args_glob {
@@ -293,5 +285,5 @@ fn generate_start_prefix() -> OsString {
         .ok()
         .map(|os_str| std::path::PathBuf::into_os_string(os_str))
         .or_else(|| env::var_os("HOME"))
-        .unwrap_or_else(|| OsString::from("."))
+        .unwrap_or_else(|| OsString::from("~"))
 }

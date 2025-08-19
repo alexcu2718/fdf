@@ -112,7 +112,7 @@ where
 #[inline]
 ///  constructs a path convenience (just a utility function to save verbosity)
 /// this internal function relies on the pointer to the `dirent64` being non-null
-pub(crate) fn construct_path(
+pub fn construct_path(
     path_buffer: &mut crate::PathBuffer,
     base_len: usize,
     drnt: *const dirent64,
@@ -142,7 +142,7 @@ pub(crate) fn construct_path(
 ///a utility function for breaking down the config spaghetti that is platform specific optimisations
 // i wanted to make this const and separate the function
 // because only strlen isn't constant here :(
-pub(crate) unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
+pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     #[cfg(target_os = "linux")]
     {
         use crate::dirent_const_time_strlen;

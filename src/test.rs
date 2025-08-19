@@ -783,7 +783,7 @@ mod tests {
         let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str(), &pattern)
             .keep_hidden(true)
             .keep_dirs(true)
-            .build();
+            .build().unwrap();
 
         let result = finder.traverse().unwrap().into_iter();
 
@@ -806,7 +806,7 @@ mod tests {
         let finder: Finder<SlimmerBytes> = Finder::init(home_dir.unwrap().as_os_str(), &pattern)
             .keep_hidden(true)
             .keep_dirs(true)
-            .build();
+            .build().unwrap();
 
         let result = finder.traverse().unwrap().into_iter();
 

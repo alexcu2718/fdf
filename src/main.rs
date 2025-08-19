@@ -235,7 +235,7 @@ fn main() -> Result<(), DirEntryError> {
         .extension_match(args.extension)
         .max_depth(args.depth)
         .follow_symlinks(args.follow_symlinks)
-        .build();
+        .build()?;
 
     if let Some(types) = args.type_of {
         let type_filter = build_type_filter(&types);

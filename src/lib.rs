@@ -241,7 +241,7 @@ where
                 | DirEntryError::TemporarilyUnavailable // can possibly get rid of this
                 | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
                 | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
-            ) => {}
+            ) => {} //TODO! add logging
             Err(e) => eprintln!("Unexpected error: {e}"), //todo! unreachable unchecked maybe!
         }
     }
@@ -341,7 +341,7 @@ where
 
     /// Build the Finder instance
     #[allow(clippy::print_stderr)]
-    pub fn build(self) -> Finder<S> {
+    pub fn build(self) -> Result<Finder<S>>{
         let config = SearchConfig::new(
             self.pattern,
             self.hide_hidden,
@@ -353,13 +353,7 @@ where
             self.follow_symlinks,
         );
 
-        let search_config = match config {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("Error creating search config: {e}");
-                std::process::exit(1); //TODO, TIDY THIS UP
-            }
-        };
+        let search_config = config?;
 
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
             {
@@ -369,11 +363,11 @@ where
             }
         };
 
-        Finder {
+        Ok(Finder {
             root: self.root,
             search_config,
             filter: self.filter,
             custom_filter: lambda,
-        }
+        })
     }
 }

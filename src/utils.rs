@@ -229,10 +229,10 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     #[cfg(target_endian = "little")]
     // SAFETY: `dirent` is a valid pointer to a struct whose size is always a multiple of 8.
     // `reclen - 8` therefore points to the last properly aligned 8-byte word in the struct,
-    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }; //go to the last word in the struct.
+    let last_word:u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }; //go to the last word in the struct.
     // SAFETY: The dirent struct is always a multiple of 8
     #[cfg(target_endian = "big")]
-    let last_word = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le();
+    let last_word:u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le();
     //TODO! this could probably be optimised, testing anything on bigendian is a fucking pain because it takes an ungodly time to compile.
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
@@ -241,7 +241,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
     // Special handling for 24-byte records (common case):
     // Mask out non-name bytes (d_type and padding) that could cause false null detection
-    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
+    // When the d_name is  4 bytes or fewer, the kernel places null bytes at the start of the d_name, we need to mask them out 
+    let mask:u64 = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes,
     //we're bit manipulating the last word (a byte/u64) to find the first null byte
@@ -249,7 +250,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // Combine the word with our mask to ensure:
     // - Original name bytes remain unchanged
     // - Non-name bytes are set to 0xFF (guaranteed non-zero)
-    let candidate_pos = last_word | mask;
+    let candidate_pos:u64 = last_word | mask;
     // The resulting value (`candidate_pos`) has:
     // - Original name bytes preserved
     // - Non-name bytes forced to 0xFF (guaranteed non-zero)

@@ -31,7 +31,8 @@ macro_rules! construct_temp_dirent {
         };
         let base_len = $self.file_name_index();
 
-        let full_path = $crate::utils::construct_path(&mut $self.path_buffer, base_len, $dirent);
+        let full_path =
+            unsafe { $crate::utils::construct_path(&mut $self.path_buffer, base_len, $dirent) };
         let file_type = $crate::FileType::from_dtype_fallback(d_type, full_path);
 
         $crate::TempDirent {

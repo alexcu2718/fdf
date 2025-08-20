@@ -112,7 +112,7 @@ where
 #[inline]
 ///  constructs a path convenience (just a utility function to save verbosity)
 /// this internal function relies on the pointer to the `dirent64` being non-null
-pub fn construct_path(
+pub unsafe fn construct_path(
     path_buffer: &mut crate::PathBuffer,
     base_len: usize,
     drnt: *const dirent64,

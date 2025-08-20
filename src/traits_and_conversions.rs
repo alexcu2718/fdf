@@ -417,11 +417,12 @@ pub trait DirentConstructor<S: BytesStorage> {
     fn parent_depth(&self) -> u8;
 
     #[inline]
-    #[allow(unused_unsafe)]//lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
+    #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
         let base_len = self.file_index();
-        let full_path = crate::utils::construct_path(self.path_buffer(), base_len, drnt);
         // SAFETY: The `drnt` must not be null(checked before hand)
+        let full_path = unsafe { crate::utils::construct_path(self.path_buffer(), base_len, drnt) };
+        // SAFETY: as above ^^
         let dtype = unsafe { access_dirent!(drnt, d_type) };
         // SAFETY: Same as above^
         let inode = unsafe { access_dirent!(drnt, d_ino) };
@@ -444,7 +445,7 @@ impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
 
     #[inline]
     fn file_index(&self) -> usize {
-        self.file_name_index as usize
+        self.file_name_index as _
     }
 
     #[inline]
@@ -462,7 +463,7 @@ impl<S: BytesStorage> DirentConstructor<S> for crate::direntry::DirEntryIterator
 
     #[inline]
     fn file_index(&self) -> usize {
-        self.file_name_index as usize
+        self.file_name_index as _
     }
 
     #[inline]

@@ -92,7 +92,6 @@ where
         unsafe { &mut *self.data.as_mut_ptr() }
     }
 
- 
     /// # Safety
     /// this is only to be called when using syscalls in the getdents interface
     /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'.

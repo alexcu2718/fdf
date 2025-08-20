@@ -25,13 +25,11 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 
 ### Automatically Tested via GitHub Actions CI/CD
 
- **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD(x86_64)
+ **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD(x86_64), Illumos/Solaris (x86_64)
 
- **Compiles but Limited Testing**: OpenBSD, NetBSD,  DragonflyBSD, Android(works on my phone!)  (Not familiar with github actions for these ones)
+ **Compiles but Limited Testing**: OpenBSD, NetBSD,  DragonflyBSD, Android(works on my phone!), Illumos/Solaris (x86_64)  (Not familiar with github actions for these ones)
 
  **Not Supported**: Windows (fundamental rewrite required due to architectural differences, will be done when I read through the API properly!)
-
- **Known broken**, Illumos/Solaris (this is easy to fix, just the OS'es don't use inodes, I will fix this when I setup QEMU for them(not in a rush))
 
 ## How to test
 

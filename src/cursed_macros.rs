@@ -46,6 +46,16 @@ macro_rules! access_dirent {
         //explanation also copypasted below.
          (&raw const (*$entry_ptr).d_name).cast::<u8>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
     }};
+
+         ($entry_ptr:expr, d_type) => {{
+        #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+        {
+            libc::DT_UNKNOWN
+        }
+        #[cfg(not(any(target_os = "solaris", target_os = "illumos")))]
+        {
+            (*$entry_ptr).d_type
+        }}};
       // Handle inode number field with aliasing for BSD systems
     //you can use d_ino or d_fileno (preferentially d_ino for cross-compatbility!)
     ($entry_ptr:expr, d_ino) => {{
@@ -72,9 +82,7 @@ macro_rules! access_dirent {
         }
     }};
 
-    // General case for all other fields
-    //which shouldn't really have any use case
-    ($entry_ptr:expr, $field:ident) => {{ (*$entry_ptr).$field }};
+
 }
 
 /*

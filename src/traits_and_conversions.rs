@@ -417,6 +417,7 @@ pub trait DirentConstructor<S: BytesStorage> {
     fn parent_depth(&self) -> u8;
 
     #[inline]
+    #[allow(unused_unsafe)]//lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
         let base_len = self.file_index();
         let full_path = crate::utils::construct_path(self.path_buffer(), base_len, drnt);

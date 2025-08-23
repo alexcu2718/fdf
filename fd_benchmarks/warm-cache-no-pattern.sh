@@ -2,8 +2,7 @@
 
 source "prelude.sh"
 source "new_prelude.sh"
-echo "i dont use gitignore so -HI is equivalent on both tools"
-
+#i dont use gitignore so -HI is equivalent on both tools
 COMMAND_FIND="fdf '.' '$SEARCH_ROOT' -HI"
 COMMAND_FD="fd '.' '$SEARCH_ROOT' -HI"
 

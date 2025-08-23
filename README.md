@@ -15,7 +15,7 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 ## Important Notes
 
-Contributions will be considered once features are stabilised and improved. This remains a learning/hobby project requiring significant development.
+Contributions will be considered once features are stabilised and improved. This remains a learning/hobby project requiring *significant* development.
 
 (Although if someone really wants to contribute, go nuts!)
 
@@ -75,6 +75,7 @@ Benchmark 4: fd '.*[0-9].*(md|\.c)$' '/home/alexc' -HI | wc -l
 ## Extra bits
 
 -cstr! :a macro  use a byte slice as a pointer (automatically initialise memory(no heap use), then add a **null terminator** for FFI use)
+(NOTE: THIS MAY CHANGE DUE TO IMPLICATIONS OF LLVM)
 
 -find_char_in_word: Find the first occurrence of a byte in a 64-bit word (Using SWAR(SIMD within a register)), a const fn
 
@@ -147,17 +148,19 @@ I enjoy relying on  validated work like stdlib to ideally 'covalidate' my work, 
 
 While avoiding excessive fragmentation, I plan to extract reusable components (like platform-specific FFI utilities) into separate crates. This will improve maintainability without sacrificing the project's cohesive design.
 
-### Feature Enhancements
+### Feature Enhancements (Planned)
 
-**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use).
+**Size based filtering**: Search for files by size ()
+
+**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt fix this).
 
 **Extended File Types**: Support for searching device drivers, and other special files.
 
-**POSIX Compliance**: Broader support for Illumos/Solaris and other POSIX systems (currently challenging due to QEMU complexities(and laziness)).
+**POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris (the other ones are embedded mostly, correct me if i'm wrong!)
 
 ### Platform Expansion
 
-**Windows Support**: Acknowledged as a significant undertaking requiring architectural changes, but valuable for both usability and learning Windows internals.
+**Windows Support**: Acknowledged as a significant undertaking requiring architectural(because I used libc) changes, but valuable for both usability and learning Windows internals.
 
 ### Tooling Exploration
 
@@ -256,7 +259,7 @@ Options:
 -- Current lack of `getdents` support in io_uring  
 -- Necessitates async runtime integration (potential Tokio dependency)  
 -- Conflicts with minimal-dependency philosophy  
--- Linux only, that isn't too appealing for such a difficult addition.
+-- Linux only, that isn't too appealing for such a difficult addition (I'll probably not do it)
 
 **3. Native Threading Implementation**  
 -- Replace Rayon dependency  

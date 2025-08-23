@@ -2,20 +2,17 @@
 set -euo pipefail
 source "prelude.sh"
 source "new_prelude.sh"
-echo "i dont use gitignore so -HI is equivalent on both tools"
-
+#i dont use gitignore so -HI is equivalent on both tools
 
 
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
-# Testing with relative parent directory (..) as search root
 REL_ROOT=".."
 
 COMMAND_FIND="fdf '.' '$REL_ROOT' -HI"
 COMMAND_FD="fd '.' '$REL_ROOT' -HI"
 
-# First get accurate baseline counts
 echo -e "\nGetting accurate file counts..."
 
 echo 'I HAVE TO EXPLICITLY FILTER SYSTEMD FILES WHICH ARE TEMPORARY FALSE RESULTS'

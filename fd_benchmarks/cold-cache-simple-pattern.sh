@@ -1,16 +1,14 @@
 #!/bin/bash
 
-
+set -euo pipefail
 # TODO WRITE THIS  MESS INTO SOME FUNCTIONS
 source "prelude.sh"
 source "new_prelude.sh"
-echo "We need sudo to drop caches"
 ask_for_sudo
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
 pattern="'.*[0-9]\.jpg$'"
-echo "i dont use gitignore so -HI is equivalent on both tools"
 
 COMMAND_FD="fd -HI $pattern '$SEARCH_ROOT'"
 COMMAND_FIND="fdf -HI $pattern '$SEARCH_ROOT'"

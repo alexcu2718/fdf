@@ -7,7 +7,7 @@ OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
 pattern="'.*[0-9].*(md|\.c)$'"
-echo "i dont use gitignore so -HI is equivalent on both tools"
+#i dont use gitignore so -HI is equivalent on both tools
 COMMAND_FIND="fdf -HI $pattern '$SEARCH_ROOT'"
 COMMAND_FD="fd -HI $pattern '$SEARCH_ROOT'"
 

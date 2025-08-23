@@ -3,13 +3,10 @@
 source "prelude.sh"
 source "new_prelude.sh"
 
-echo "i dont use gitignore so -HI is equivalent on both tools"
-
-# Setup output directories
+#i dont use gitignore so -HI is equivalent on both tools
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
-# Command definitions with depth limit
 DEPTH_LIMIT=2
 COMMAND_FIND="fdf '.' '$SEARCH_ROOT' -HI -d $DEPTH_LIMIT"
 COMMAND_FD="fd '.' '$SEARCH_ROOT' -HI -d $DEPTH_LIMIT"

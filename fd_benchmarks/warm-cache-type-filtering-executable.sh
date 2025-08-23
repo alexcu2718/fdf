@@ -3,17 +3,14 @@
 source "prelude.sh"
 source "new_prelude.sh"
 
-echo "i dont use gitignore so -HI is equivalent on both tools"
-
+#i dont use gitignore so -HI is equivalent on both tools
 
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
-# Command definitions
 COMMAND_FIND="fdf '.' '$SEARCH_ROOT' -HI --type x"
 COMMAND_FD="fd '.' '$SEARCH_ROOT' -HI --type x"
 
-# First get accurate baseline counts
 echo -e "\nGetting accurate file counts..."
 fd_count=$(eval "$COMMAND_FD" | wc -l)
 fdf_count=$(eval "$COMMAND_FIND" | wc -l)

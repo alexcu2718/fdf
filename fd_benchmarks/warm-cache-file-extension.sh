@@ -6,22 +6,21 @@ source "new_prelude.sh"
 OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
-# search for this extension
-EXT="c"
-echo "i dont use gitignore so -HI is equivalent on both tools"
-echo "running extension test"
-# Command definitions
-COMMAND_FIND="fdf -HI --extension '$EXT' '' '$SEARCH_ROOT'"
-COMMAND_FD="fd -HI --extension '$EXT' '' '$SEARCH_ROOT'"
+EXTENSION="c"
 
-# First get accurate baseline counts
+
+
+#i dont use gitignore so -HI is equivalent on both tools
+echo "running extension test"
+COMMAND_FIND="fdf -HI --extension '$EXTENSION' '' '$SEARCH_ROOT'"
+COMMAND_FD="fd -HI --extension '$EXTENSION' '' '$SEARCH_ROOT'"
+
 echo -e "\nGetting accurate file counts..."
 fd_count=$(eval "$COMMAND_FD" | wc -l)
 fdf_count=$(eval "$COMMAND_FIND" | wc -l)
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
-# Run benchmarks with stabilisation
 echo -e "\nRunning benchmarks..."
 hyperfine \
   --warmup "$WARMUP_COUNT" \

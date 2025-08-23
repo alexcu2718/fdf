@@ -3,18 +3,15 @@
 source "prelude.sh"
 source "new_prelude.sh"
 
-echo "i dont use gitignore so -HI is equivalent on both tools"
-
+#i dont use gitignore so -HI is equivalent on both tools
 
 OUTPUT_DIR="./bench_results"
 
 mkdir -p "$OUTPUT_DIR"
 
-# Command definitions
 COMMAND_FIND="fdf '.' '$SEARCH_ROOT' -HI --type d"
 COMMAND_FD="fd '.' '$SEARCH_ROOT' -HI --type d"
 
-# First get accurate baseline counts
 echo -e "\nGetting accurate file counts..."
 fd_count=$(eval "$COMMAND_FD" | wc -l)
 fdf_count=$(eval "$COMMAND_FIND" | wc -l)
@@ -32,7 +29,6 @@ hyperfine \
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_type_d.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_type_d.lst"
 
-# Create the diff file
 diff -u "$OUTPUT_DIR/fd_type_d.lst" "$OUTPUT_DIR/fdf_type_d.lst" > "$OUTPUT_DIR/fd_diff_type_d.md"
 
 differences=$(comm -3 "$OUTPUT_DIR/fd_type_d.lst" "$OUTPUT_DIR/fdf_type_d.lst" | wc -l)

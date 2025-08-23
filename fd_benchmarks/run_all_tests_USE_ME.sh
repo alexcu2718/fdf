@@ -1,19 +1,20 @@
 #!/bin/bash
 cd "$(dirname "$0" )" || exit
 
-
-read -rp "Do you want to run speed/correctness benchmarks? (y/n) " run_benchmarks
+echo "This script will clone llvm-project into /tmp for testing/validation purposes"
+read -rp "Do you want to run speed/correctness benchmarks for the llvm project? [y/n] " run_benchmarks
 if [[ "$run_benchmarks" =~ ^[Yy]$ ]]; then
     for script in ./warm*.sh; do
-        echo "Running $script"
-        ./"$script"
-        sleep 2
+        if [[ "$script" != *"_home_dir"* ]]; then
+            echo "Running $script"
+            ./"$script"
+            sleep 2
+        fi
     done
     ./cold-cache-simple-pattern.sh
 else
     echo "Skipping benchmarks."
 fi
-
 
 ##quick hack to delete it in case people complain 
 if [[ -d /tmp/llvm-project ]]; then
@@ -26,8 +27,23 @@ if [[ -d /tmp/llvm-project ]]; then
     fi
 fi
 
+echo -e "\n\nTHERE WILL BE A SMALL DISPARITY IN THESE TESTS DUE TO fd being located in /usr/bin (USUALLY) ((different permissions!))\n, differences are expected to be very small";
+echo -e "there will also be predictable temporary files created!\n\n"
+echo "these tests will take a while!"
+read -rp 'Do you want to run speed/correctness benchmarks for home directory? [y/n]:' run_benchmarks_home
 
-read -rp "Do you want to run the syscall test? (y/n) " response
+if [[ "$run_benchmarks_home" =~ ^[Yy]$ ]]; then
+    for script in ./warm*_home_dir.sh; do
+        echo "Running $script"
+        ./"$script"
+        sleep 2
+    done
+else
+    echo "Skipping benchmarks for home directory."
+fi
+
+
+read -rp "Do you want to run the syscall test? [y/n] " response
 
 if [[ "$response" =~ ^[Yy]$ ]]; then
     if command -v strace &> /dev/null; then
@@ -42,7 +58,7 @@ fi
 
 
 
-read -rp "Do you want to run cargo test? (y/n) " response_test
+read -rp "Do you want to run cargo test? [y/n]" response_test
 
 if [[ "$response_test" =~ ^[Yy]$ ]]; then
     cargo test

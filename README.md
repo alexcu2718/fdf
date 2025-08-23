@@ -45,6 +45,8 @@ This executes a comprehensive suite of internal library, CLI tests, and benchmar
 
  **Full Repeatable Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
+(There's 16 benchmark tests!)
+
 (Repeatable via the testing code seen above, they cover file type filtering, among many more!)
 
 Tests ran on my local system instead of the llvm-project (to give a good example)
@@ -53,21 +55,42 @@ Tests ran on my local system instead of the llvm-project (to give a good example
 Running fdf vs fd benchmarks...
 Search root: /home/alexc
 
-Benchmark 1: fdf 'hi' '/home/alexc' -HI -extension 'c' | wc -l
-  Time (mean ± σ):     428.2 ms ±  11.4 ms    [User: 876.8 ms, System: 3728.4 ms]
-  Range (min … max):   410.2 ms … 441.1 ms    10 runs
+Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
+  Time (mean ± σ):     431.6 ms ±  10.6 ms    [User: 1307.7 ms, System: 3530.7 ms]
+  Range (min … max):   414.7 ms … 446.1 ms    10 runs
 
-Benchmark 2: fd 'hi' '/home/alexc' -HI --extension 'c' | wc -l
-  Time (mean ± σ):     658.0 ms ±  11.6 ms    [User: 3105.2 ms, System: 3946.4 ms]
-  Range (min … max):   638.7 ms … 679.1 ms    10 runs
+Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
+  Time (mean ± σ):     636.7 ms ±  16.9 ms    [User: 3194.6 ms, System: 3780.9 ms]
+  Range (min … max):   615.1 ms … 661.5 ms    10 runs
 
-Benchmark 3: fdf '.*[0-9].*(md|\.c)$' '/home/alexc' -HI | wc -l
-  Time (mean ± σ):     482.4 ms ±  11.0 ms    [User: 1387.3 ms, System: 3801.4 ms]
-  Range (min … max):   465.3 ms … 498.5 ms    10 runs
+Summary
+  fdf -HI '.*[0-9].*(md|\.c)$' '/home/alexc' ran
+    1.48 ± 0.05 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
 
-Benchmark 4: fd '.*[0-9].*(md|\.c)$' '/home/alexc' -HI | wc -l
-  Time (mean ± σ):     682.6 ms ±  10.7 ms    [User: 3331.4 ms, System: 3932.1 ms]
-  Range (min … max):   663.7 ms … 700.2 ms    10 runs
+Benchmark 1: fdf '.' '/home/alexc' -HI
+  Time (mean ± σ):     462.1 ms ±  17.8 ms    [User: 1233.5 ms, System: 3694.2 ms]
+  Range (min … max):   432.4 ms … 491.3 ms    10 runs
+
+Benchmark 2: fd '.' '/home/alexc' -HI
+  Time (mean ± σ):     786.6 ms ±  19.2 ms    [User: 4548.4 ms, System: 3941.3 ms]
+  Range (min … max):   743.8 ms … 808.5 ms    10 runs
+
+Summary
+  fdf '.' '/home/alexc' -HI ran
+    1.70 ± 0.08 times faster than fd '.' '/home/alexc' -HI
+
+
+Benchmark 1: fdf '.' '/home/alexc' -HI --type d
+  Time (mean ± σ):     461.8 ms ±   7.4 ms    [User: 1109.2 ms, System: 3674.4 ms]
+  Range (min … max):   451.3 ms … 473.2 ms    10 runs
+
+Benchmark 2: fd '.' '/home/alexc' -HI --type d
+  Time (mean ± σ):     681.2 ms ±  32.4 ms    [User: 3697.3 ms, System: 3784.3 ms]
+  Range (min … max):   639.6 ms … 720.7 ms    10 runs
+
+Summary
+  fdf '.' '/home/alexc' -HI --type d ran
+    1.48 ± 0.07 times faster than fd '.' '/home/alexc' -HI --type d
 
 
 ```

@@ -1,9 +1,5 @@
-running ./warm-cache-depth-test.sh
-/tmp/llvm-project already found, not cloning repo
-fdf already installed at /tmp/fdf_test
-fdf location is /tmp/fdf_test/target/release/fdf
-I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET.
-Note: Hyperfine may show small discrepancies due to benchmarking overhead.
+This script will clone llvm-project into /tmp for testing/validation purposes
+Running ./warm-cache-depth-test.sh
 
 Getting accurate file counts...
 fd count: 396
@@ -11,18 +7,16 @@ fdf count: 396
 
 Running depth-limited benchmarks (depth=2)...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI -d 2
-  Time (mean ± σ):       3.5 ms ±   0.7 ms    [User: 2.2 ms, System: 9.1 ms]
-  Range (min … max):     2.5 ms …   5.2 ms    14 runs
+  Time (mean ± σ):       9.6 ms ±   1.6 ms    [User: 3.8 ms, System: 18.2 ms]
+  Range (min … max):     6.9 ms …  12.7 ms    13 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI -d 2
-  Time (mean ± σ):       8.7 ms ±   0.7 ms    [User: 3.1 ms, System: 11.1 ms]
-  Range (min … max):     7.9 ms …  10.1 ms    14 runs
+  Time (mean ± σ):      18.2 ms ±   1.8 ms    [User: 8.1 ms, System: 22.3 ms]
+  Range (min … max):    16.1 ms …  21.7 ms    13 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI -d 2 ran
-    2.47 ± 0.51 times faster than fd '.' '/tmp/llvm-project' -HI -d 2
-
-Analyzing differences...
+    1.90 ± 0.37 times faster than fd '.' '/tmp/llvm-project' -HI -d 2
 Total files found by fd: 396
 Total files found by fdf: 396
 Total files differing: 0
@@ -30,11 +24,8 @@ No differences found in direct execution
 
 Benchmark results saved to ./bench_results/results-warm-cache-depth-test.md
 Diff results saved to ./bench_results/fd_diff_depth.md
-sleeping for 2 seconds
-running ./warm-cache-file-extension.sh
-/tmp/llvm-project already found, not cloning repo
-fdf already installed at /tmp/fdf_test
-fdf location is /tmp/fdf_test/target/release/fdf
+Running ./warm-cache-file-extension.sh
+running extension test
 
 Getting accurate file counts...
 fd count: 12801
@@ -42,30 +33,22 @@ fdf count: 12801
 
 Running benchmarks...
 Benchmark 1: fdf -HI --extension 'c' '' '/tmp/llvm-project'
-  Time (mean ± σ):      14.7 ms ±   1.4 ms    [User: 31.8 ms, System: 104.7 ms]
-  Range (min … max):    12.7 ms …  17.6 ms    13 runs
+  Time (mean ± σ):      23.3 ms ±   3.0 ms    [User: 38.8 ms, System: 142.9 ms]
+  Range (min … max):    16.1 ms …  26.2 ms    12 runs
  
 Benchmark 2: fd -HI --extension 'c' '' '/tmp/llvm-project'
-  Time (mean ± σ):      30.8 ms ±   1.6 ms    [User: 151.3 ms, System: 106.5 ms]
-  Range (min … max):    29.0 ms …  33.4 ms    12 runs
+  Time (mean ± σ):      38.4 ms ±   6.8 ms    [User: 158.9 ms, System: 131.6 ms]
+  Range (min … max):    32.2 ms …  59.1 ms    12 runs
  
 Summary
   fdf -HI --extension 'c' '' '/tmp/llvm-project' ran
-    2.09 ± 0.23 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
-
-Analyzing differences...
+    1.65 ± 0.36 times faster than fd -HI --extension 'c' '' '/tmp/llvm-project'
 Total files differing: 0
 No differences found in direct execution
 
 Benchmark results saved to ./bench_results/results-warm-cache-file-extension.md
 Diff results saved to ./bench_results/fd_diff_extension.md
-sleeping for 2 seconds
-running ./warm-cache-no-pattern.sh
-/tmp/llvm-project already found, not cloning repo
-fdf already installed at /tmp/fdf_test
-fdf location is /tmp/fdf_test/target/release/fdf
-I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET.
-Note: Hyperfine may show small discrepancies due to benchmarking overhead. For accurate counts, run commands directly.
+Running ./warm-cache-no-pattern.sh
 
 Getting accurate file counts...
 fd count: 176841
@@ -73,61 +56,47 @@ fdf count: 176841
 
 Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI
-  Time (mean ± σ):      18.4 ms ±   1.6 ms    [User: 40.6 ms, System: 115.2 ms]
-  Range (min … max):    16.2 ms …  21.3 ms    13 runs
+  Time (mean ± σ):      24.2 ms ±   2.2 ms    [User: 47.8 ms, System: 145.0 ms]
+  Range (min … max):    20.9 ms …  27.1 ms    13 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI
-  Time (mean ± σ):      30.2 ms ±   2.0 ms    [User: 155.6 ms, System: 100.2 ms]
-  Range (min … max):    28.0 ms …  34.2 ms    12 runs
+  Time (mean ± σ):      37.0 ms ±   2.4 ms    [User: 156.1 ms, System: 119.2 ms]
+  Range (min … max):    32.5 ms …  40.9 ms    12 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI ran
-    1.64 ± 0.18 times faster than fd '.' '/tmp/llvm-project' -HI
-
-Analyzing differences...
+    1.53 ± 0.17 times faster than fd '.' '/tmp/llvm-project' -HI
 Total lines differing: 0
 No differences found in direct execution
 
 Benchmark results saved to ./bench_results/results-warm-cache-no-pattern.md
 Diff results saved to ./bench_results/fd_diff_no_pattern.md
-sleeping for 2 seconds
-running ./warm-cache-relative-dir-test.sh
-/tmp/llvm-project already found, not cloning repo
-fdf already installed at /tmp/fdf_test
-fdf location is /tmp/fdf_test/target/release/fdf
-I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET.
-Note: Benchmarking relative directory searches (../)
+Running ./warm-cache-relative-dir-test.sh
 
 Getting accurate file counts...
 I HAVE TO EXPLICITLY FILTER SYSTEMD FILES WHICH ARE TEMPORARY FALSE RESULTS
-fd count: 178436
-fdf count: 178436
+fd count: 196267
+fdf count: 196267
 
 Running relative directory benchmarks...
 Benchmark 1: fdf '.' '..' -HI
-  Time (mean ± σ):      17.9 ms ±   1.3 ms    [User: 43.8 ms, System: 110.6 ms]
-  Range (min … max):    15.7 ms …  19.9 ms    13 runs
+  Time (mean ± σ):      27.0 ms ±   1.8 ms    [User: 47.4 ms, System: 157.1 ms]
+  Range (min … max):    23.6 ms …  30.7 ms    12 runs
  
 Benchmark 2: fd '.' '..' -HI
-  Time (mean ± σ):      33.0 ms ±   1.2 ms    [User: 175.1 ms, System: 113.7 ms]
-  Range (min … max):    30.6 ms …  34.9 ms    12 runs
+  Time (mean ± σ):      39.7 ms ±   3.9 ms    [User: 171.1 ms, System: 134.9 ms]
+  Range (min … max):    36.4 ms …  51.3 ms    12 runs
  
 Summary
   fdf '.' '..' -HI ran
-    1.85 ± 0.15 times faster than fd '.' '..' -HI
-
-Analysing differences...
+    1.47 ± 0.18 times faster than fd '.' '..' -HI
 
 Final counts:
-fd total files:  178436
-fdf total files: 178436
+fd total files:  196267
+fdf total files: 196267
 Files differing: 0
 No differences found in direct execution
-sleeping for 2 seconds
-running ./warm-cache-simple-pattern.sh
-/tmp/llvm-project already found, not cloning repo
-fdf already installed at /tmp/fdf_test
-fdf location is /tmp/fdf_test/target/release/fdf
+Running ./warm-cache-simple-pattern.sh
 
 Getting accurate file counts...
 fd count: 4439
@@ -135,16 +104,16 @@ fdf count: 4439
 
 Running benchmarks...
 Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
-  Time (mean ± σ):      17.3 ms ±   1.8 ms    [User: 53.3 ms, System: 100.4 ms]
-  Range (min … max):    14.6 ms …  20.9 ms    13 runs
+  Time (mean ± σ):      25.6 ms ±   3.2 ms    [User: 57.1 ms, System: 133.0 ms]
+  Range (min … max):    22.2 ms …  31.0 ms    12 runs
  
 Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
-  Time (mean ± σ):      26.6 ms ±   2.1 ms    [User: 118.0 ms, System: 94.3 ms]
-  Range (min … max):    23.4 ms …  29.4 ms    12 runs
+  Time (mean ± σ):      34.3 ms ±   2.1 ms    [User: 121.9 ms, System: 118.7 ms]
+  Range (min … max):    29.6 ms …  37.5 ms    12 runs
  
 Summary
   fdf -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project' ran
-    1.53 ± 0.20 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
+    1.34 ± 0.19 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/tmp/llvm-project'
 
 Analysing differences...
 Total lines differing: 0
@@ -152,13 +121,7 @@ No differences found in direct execution
 
 Benchmark results saved to ./bench_results/results-warm-cache-simple-pattern.md
 Diff results saved to ./bench_results/fd_diff_simple_pattern.md
-sleeping for 2 seconds
-running ./warm-cache-type-filtering-directory.sh
-/tmp/llvm-project already found, not cloning repo
-fdf already installed at /tmp/fdf_test
-fdf location is /tmp/fdf_test/target/release/fdf
-I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET.
-Note: Hyperfine may show small discrepancies due to benchmarking overhead.
+Running ./warm-cache-type-filtering-directory.sh
 
 Getting accurate file counts...
 fd count: 15224
@@ -166,30 +129,22 @@ fdf count: 15224
 
 Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type d
-  Time (mean ± σ):      15.2 ms ±   0.8 ms    [User: 32.1 ms, System: 102.1 ms]
-  Range (min … max):    14.3 ms …  16.6 ms    13 runs
+  Time (mean ± σ):      23.4 ms ±   2.4 ms    [User: 37.6 ms, System: 137.0 ms]
+  Range (min … max):    19.0 ms …  26.6 ms    12 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type d
-  Time (mean ± σ):      28.5 ms ±   2.1 ms    [User: 127.6 ms, System: 102.1 ms]
-  Range (min … max):    24.3 ms …  31.5 ms    10 runs
+  Time (mean ± σ):      33.4 ms ±   2.8 ms    [User: 125.4 ms, System: 118.2 ms]
+  Range (min … max):    29.2 ms …  38.2 ms    12 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI --type d ran
-    1.87 ± 0.17 times faster than fd '.' '/tmp/llvm-project' -HI --type d
-
-Analyzing differences...
+    1.43 ± 0.19 times faster than fd '.' '/tmp/llvm-project' -HI --type d
 Total files differing: 0
 No differences found in direct execution
 
 Benchmark results saved to ./bench_results/results-warm-cache-type-filtering-directory.md
 Diff results saved to ./bench_results/fd_diff_type_d.md
-sleeping for 2 seconds
-running ./warm-cache-type-filtering-empty.sh
-/tmp/llvm-project already found, not cloning repo
-fdf already installed at /tmp/fdf_test
-fdf location is /tmp/fdf_test/target/release/fdf
-I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET.
-Note: Hyperfine may show small discrepancies due to benchmarking overhead.
+Running ./warm-cache-type-filtering-empty.sh
 
 Getting accurate file counts...
 fd count: 2843
@@ -197,16 +152,16 @@ fdf count: 2843
 
 Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type e
-  Time (mean ± σ):      42.1 ms ±   1.6 ms    [User: 64.5 ms, System: 337.1 ms]
-  Range (min … max):    39.7 ms …  45.1 ms    12 runs
+  Time (mean ± σ):      42.0 ms ±   2.4 ms    [User: 68.4 ms, System: 320.0 ms]
+  Range (min … max):    36.5 ms …  44.5 ms    11 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type e
-  Time (mean ± σ):      63.0 ms ±   1.5 ms    [User: 214.9 ms, System: 397.2 ms]
-  Range (min … max):    59.0 ms …  64.6 ms    11 runs
+  Time (mean ± σ):      62.8 ms ±   2.4 ms    [User: 200.6 ms, System: 376.6 ms]
+  Range (min … max):    58.1 ms …  66.5 ms    11 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI --type e ran
-    1.50 ± 0.07 times faster than fd '.' '/tmp/llvm-project' -HI --type e
+    1.50 ± 0.10 times faster than fd '.' '/tmp/llvm-project' -HI --type e
 
 Analyzing differences...
 Total files differing: 0
@@ -214,13 +169,7 @@ No differences found in direct execution
 
 Benchmark results saved to ./bench_results/results-warm-cache-type-filtering-empty.md
 Diff results saved to ./bench_results/fd_diff_type_e.md
-sleeping for 2 seconds
-running ./warm-cache-type-filtering-executable.sh
-/tmp/llvm-project already found, not cloning repo
-fdf already installed at /tmp/fdf_test
-fdf location is /tmp/fdf_test/target/release/fdf
-I HAVE MODIFIED THESE BECAUSE I DO NOT HAVE GIT ignore IN MINE YET.
-Note: Hyperfine may show small discrepancies due to benchmarking overhead.
+Running ./warm-cache-type-filtering-executable.sh
 
 Getting accurate file counts...
 fd count: 929
@@ -228,22 +177,225 @@ fdf count: 929
 
 Running benchmarks...
 Benchmark 1: fdf '.' '/tmp/llvm-project' -HI --type x
-  Time (mean ± σ):      26.4 ms ±   1.8 ms    [User: 43.8 ms, System: 212.3 ms]
-  Range (min … max):    23.8 ms …  30.0 ms    12 runs
+  Time (mean ± σ):      34.1 ms ±   2.1 ms    [User: 45.4 ms, System: 252.6 ms]
+  Range (min … max):    31.0 ms …  39.1 ms    12 runs
  
 Benchmark 2: fd '.' '/tmp/llvm-project' -HI --type x
-  Time (mean ± σ):      43.8 ms ±   2.0 ms    [User: 159.2 ms, System: 236.2 ms]
-  Range (min … max):    39.4 ms …  45.6 ms    11 runs
+  Time (mean ± σ):      52.2 ms ±   2.5 ms    [User: 156.6 ms, System: 270.4 ms]
+  Range (min … max):    46.5 ms …  55.7 ms    11 runs
  
 Summary
   fdf '.' '/tmp/llvm-project' -HI --type x ran
-    1.66 ± 0.14 times faster than fd '.' '/tmp/llvm-project' -HI --type x
+    1.53 ± 0.12 times faster than fd '.' '/tmp/llvm-project' -HI --type x
 
-Analyzing differences...
+AnalySing differences...
 Total files differing: 0
 No differences found in direct execution
 
 Benchmark results saved to ./bench_results/results-warm-cache-type-filtering-executable.md
 Diff results saved to ./bench_results/fd_diff_type_x.md
-sleeping for 2 seconds
+This script will now ask for your password in order to gain root/sudo
+permissions. These are required to reset the harddisk caches in between
+benchmark runs.
+
+Okay, acquired superpowers :-)
+
+
+Running cold cache benchmarks...
+Benchmark 1: fdf -HI '.*[0-9]\.jpg$' '/tmp/llvm-project'
+  Time (mean ± σ):      27.9 ms ±   2.3 ms    [User: 53.0 ms, System: 113.4 ms]
+  Range (min … max):    25.6 ms …  30.3 ms    3 runs
+ 
+Benchmark 2: fd -HI '.*[0-9]\.jpg$' '/tmp/llvm-project'
+  Time (mean ± σ):      47.6 ms ±   1.7 ms    [User: 122.7 ms, System: 120.5 ms]
+  Range (min … max):    44.8 ms …  50.0 ms    12 runs
+ 
+Summary
+  fdf -HI '.*[0-9]\.jpg$' '/tmp/llvm-project' ran
+    1.70 ± 0.15 times faster than fd -HI '.*[0-9]\.jpg$' '/tmp/llvm-project'
+
+Analysing differences...
+Total lines differing: 0
+No differences found in direct execution
+
+Benchmark results saved to ./bench_results/results-cold-cache-simple-pattern.md
+Diff results saved to ./bench_results/fd_diff_cold_pattern.md
 Keeping /tmp/llvm-project.
+
+
+THERE WILL BE A SMALL DISPARITY IN THESE TESTS DUE TO fd being located in /usr/bin (USUALLY) ((different permissions!))
+, differences are expected to be very small
+there will also be predictable temporary files created!
+
+
+these tests will take a while!
+Running ./warm-cache-depth-test_home_dir.sh
+
+Getting accurate file counts...
+fd count: 53594
+fdf count: 53594
+
+Running depth-limited benchmarks (depth=4)...
+Benchmark 1: fdf '.' '/home/alexc' -HI -d 4
+  Time (mean ± σ):      17.6 ms ±   2.1 ms    [User: 23.1 ms, System: 74.6 ms]
+  Range (min … max):    15.1 ms …  22.2 ms    13 runs
+ 
+Benchmark 2: fd '.' '/home/alexc' -HI -d 4
+  Time (mean ± σ):      25.3 ms ±   2.3 ms    [User: 69.6 ms, System: 78.4 ms]
+  Range (min … max):    22.8 ms …  30.2 ms    12 runs
+ 
+Summary
+  fdf '.' '/home/alexc' -HI -d 4 ran
+    1.44 ± 0.22 times faster than fd '.' '/home/alexc' -HI -d 4
+Total files found by fd: 53594
+Total files found by fdf: 53594
+Total files differing: 0
+No differences found in direct execution
+
+Benchmark results saved to ./bench_results/results-warm-cache-depth-test_home_dir.md
+Diff results saved to ./bench_results/fd_diff_depth_home_dir.md
+Running ./warm-cache-file-extension_home_dir.sh
+running extension test
+
+Getting accurate file counts...
+fd count: 102125
+fdf count: 102125
+
+Running benchmarks...
+Benchmark 1: fdf -HI --extension 'c' '' '/home/alexc'
+  Time (mean ± σ):     359.5 ms ±   7.9 ms    [User: 767.2 ms, System: 3198.8 ms]
+  Range (min … max):   348.9 ms … 378.7 ms    10 runs
+ 
+Benchmark 2: fd -HI --extension 'c' '' '/home/alexc'
+  Time (mean ± σ):     654.8 ms ±  15.9 ms    [User: 3785.2 ms, System: 3521.4 ms]
+  Range (min … max):   633.6 ms … 686.6 ms    10 runs
+ 
+Summary
+  fdf -HI --extension 'c' '' '/home/alexc' ran
+    1.82 ± 0.06 times faster than fd -HI --extension 'c' '' '/home/alexc'
+Total files differing: 0
+No differences found in direct execution
+
+Benchmark results saved to ./bench_results/results-warm-cache-file-extension_home_dir.md
+Diff results saved to ./bench_results/fd_diff_extension_home_dir.md
+Running ./warm-cache-no-pattern_home_dir.sh
+
+Getting accurate file counts...
+fd count: 2382812
+fdf count: 2382812
+
+Running benchmarks...
+Benchmark 1: fdf '.' '/home/alexc' -HI
+  Time (mean ± σ):     416.1 ms ±   9.7 ms    [User: 1135.9 ms, System: 3374.6 ms]
+  Range (min … max):   392.7 ms … 425.9 ms    10 runs
+ 
+Benchmark 2: fd '.' '/home/alexc' -HI
+  Time (mean ± σ):     710.4 ms ±  11.9 ms    [User: 4289.0 ms, System: 3692.9 ms]
+  Range (min … max):   694.6 ms … 731.5 ms    10 runs
+ 
+Summary
+  fdf '.' '/home/alexc' -HI ran
+    1.71 ± 0.05 times faster than fd '.' '/home/alexc' -HI
+Total lines differing: 0
+No differences found in direct execution
+
+Benchmark results saved to ./bench_results/results-warm-cache-no-pattern_home_dir.md
+Diff results saved to ./bench_results/fd_diff_no_pattern_home_dir.md
+Running ./warm-cache-simple-pattern_home_dir.sh
+
+Getting accurate file counts...
+fd count: 72688
+fdf count: 72688
+
+Running benchmarks...
+Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
+  Time (mean ± σ):     395.0 ms ±  10.5 ms    [User: 1227.7 ms, System: 3203.0 ms]
+  Range (min … max):   379.5 ms … 406.8 ms    10 runs
+ 
+Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
+  Time (mean ± σ):     575.6 ms ±  10.9 ms    [User: 3062.7 ms, System: 3464.5 ms]
+  Range (min … max):   553.9 ms … 589.2 ms    10 runs
+ 
+Summary
+  fdf -HI '.*[0-9].*(md|\.c)$' '/home/alexc' ran
+    1.46 ± 0.05 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
+
+Analysing differences...
+Total lines differing: 0
+No differences found in direct execution
+
+Benchmark results saved to ./bench_results/results-warm-cache-simple-pattern_home_dir.md
+Diff results saved to ./bench_results/fd_diff_simple_pattern_home_dir.md
+Running ./warm-cache-type-filtering-directory_home_dir.sh
+
+Getting accurate file counts...
+fd count: 250268
+fdf count: 250268
+
+Running benchmarks...
+Benchmark 1: fdf '.' '/home/alexc' -HI --type d
+  Time (mean ± σ):     399.1 ms ±   7.7 ms    [User: 1001.5 ms, System: 3297.2 ms]
+  Range (min … max):   382.6 ms … 407.3 ms    10 runs
+ 
+Benchmark 2: fd '.' '/home/alexc' -HI --type d
+  Time (mean ± σ):     610.8 ms ±  17.8 ms    [User: 3454.5 ms, System: 3504.3 ms]
+  Range (min … max):   574.3 ms … 635.2 ms    10 runs
+ 
+Summary
+  fdf '.' '/home/alexc' -HI --type d ran
+    1.53 ± 0.05 times faster than fd '.' '/home/alexc' -HI --type d
+Total files differing: 0
+No differences found in direct execution
+
+Benchmark results saved to ./bench_results/results-warm-cache-type-filtering-directory_home_dir.md
+Diff results saved to ./bench_results/fd_diff_type_d_home_dir.md
+Running ./warm-cache-type-filtering-empty_home_dir.sh
+
+Getting accurate file counts...
+fd count: 29088
+fdf count: 29088
+
+Running benchmarks...
+Benchmark 1: fdf '.' '/home/alexc' -HI --type e
+  Time (mean ± σ):      1.193 s ±  0.014 s    [User: 1.836 s, System: 11.268 s]
+  Range (min … max):    1.165 s …  1.219 s    10 runs
+ 
+Benchmark 2: fd '.' '/home/alexc' -HI --type e
+  Time (mean ± σ):      1.535 s ±  0.020 s    [User: 5.031 s, System: 12.250 s]
+  Range (min … max):    1.519 s …  1.588 s    10 runs
+ 
+Summary
+  fdf '.' '/home/alexc' -HI --type e ran
+    1.29 ± 0.02 times faster than fd '.' '/home/alexc' -HI --type e
+
+Analysing differences...
+Total files differing: 0
+No differences found in direct execution
+
+Benchmark results saved to ./bench_results/results-warm-cache-type-filtering-empty_home_dir.md
+Diff results saved to ./bench_results/fd_diff_type_e_home_dir.md
+Running ./warm-cache-type-filtering-executable_home_dir.sh
+
+Getting accurate file counts...
+fd count: 62670
+fdf count: 62670
+
+Running benchmarks...
+Benchmark 1: fdf '.' '/home/alexc' -HI --type x
+  Time (mean ± σ):     838.3 ms ±  10.1 ms    [User: 1302.6 ms, System: 7945.1 ms]
+  Range (min … max):   819.3 ms … 855.1 ms    10 runs
+ 
+Benchmark 2: fd '.' '/home/alexc' -HI --type x
+  Time (mean ± σ):      1.134 s ±  0.008 s    [User: 4.284 s, System: 8.424 s]
+  Range (min … max):    1.119 s …  1.147 s    10 runs
+ 
+Summary
+  fdf '.' '/home/alexc' -HI --type x ran
+    1.35 ± 0.02 times faster than fd '.' '/home/alexc' -HI --type x
+
+Analysing differences...
+Total files differing: 0
+No differences found in direct execution
+
+Benchmark results saved to ./bench_results/results-warm-cache-type-filtering-executable_home_dir.md
+Diff results saved to ./bench_results/fd_diff_type_x_home_dir.md

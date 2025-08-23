@@ -22,7 +22,7 @@ for i in "${!PATTERNS[@]}"; do
   PATTERN="${PATTERNS[i]}"
   CASE_NAME="${CASE_NAMES[i]}"
 
-  echo "Running $CASE_NAME (pattern: $PATTERN)"
+  echo "Running $CASE_NAME fdf VS fd (left vs right) (pattern: $PATTERN)"
 
   STRACE_FDF="$STRACE_OUT_DIR/strace_outputs_${CASE_NAME}_fdf.txt"
   STRACE_FD="$STRACE_OUT_DIR/strace_outputs_${CASE_NAME}_fd.txt"

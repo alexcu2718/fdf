@@ -12,8 +12,8 @@ COMMAND_FIND="fdf '.' '$HOME' -HI --type d"
 COMMAND_FD="fd '.' '$HOME' -HI --type d"
 
 echo -e "\nGetting accurate file counts..."
-fd_count=$(eval "$COMMAND_FD" | wc -l)
-fdf_count=$(eval "$COMMAND_FIND" | wc -l)
+fd_count=$(eval "$COMMAND_FD" | grep -vcE 'paru/clone/.*/pkg')
+fdf_count=$(eval "$COMMAND_FIND" | grep -vcE 'paru/clone/.*/pkg' )
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
@@ -25,8 +25,8 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-type-filtering-directory_home_dir.md"
 
-eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_type_d_home_dir.lst"
-eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_type_d_home_dir.lst"
+eval "$COMMAND_FD"  | grep -vE 'paru/clone/.*/pkg' | sort > "$OUTPUT_DIR/fd_type_d_home_dir.lst"
+eval "$COMMAND_FIND" | grep -vE 'paru/clone/.*/pkg' | sort > "$OUTPUT_DIR/fdf_type_d_home_dir.lst"
 
 diff -u "$OUTPUT_DIR/fd_type_d_home_dir.lst" "$OUTPUT_DIR/fdf_type_d_home_dir.lst" > "$OUTPUT_DIR/fd_diff_type_d_home_dir.md"
 

@@ -10,8 +10,8 @@ OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 
 echo -e "\nGetting accurate file counts..."
-fd_count=$(eval "$COMMAND_FD" | wc -l)
-fdf_count=$(eval "$COMMAND_FIND" | wc -l)
+fd_count=$(eval "$COMMAND_FD"  | grep -vcE 'paru/clone/.*/pkg' ) #filter stupid package manager files
+fdf_count=$(eval "$COMMAND_FIND" | grep -vcE 'paru/clone/.*/pkg')
 echo "fd count: $fd_count"
 echo "fdf count: $fdf_count"
 
@@ -23,8 +23,8 @@ hyperfine \
   "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-no-pattern_home_dir.md"
 
-eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_home_dir.lst"
-eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_home_dir.lst"
+eval "$COMMAND_FD" | grep -vE 'paru/clone/.*/pkg' | sort > "$OUTPUT_DIR/fd_home_dir.lst"
+eval "$COMMAND_FIND" | grep -vE 'paru/clone/.*/pkg' | sort > "$OUTPUT_DIR/fdf_home_dir.lst"
 
 diff -u "$OUTPUT_DIR/fd_home_dir.lst" "$OUTPUT_DIR/fdf_home_dir.lst" > "$OUTPUT_DIR/fd_diff_no_pattern_home_dir.md"
 

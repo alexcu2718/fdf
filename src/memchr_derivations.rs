@@ -334,8 +334,7 @@ const LO_U64: u64 = repeat_u64(0x01);
 
 const HI_U64: u64 = repeat_u64(0x80);
 
-/// Previously public but left documents for posterity.
-/// Returns the index (0..=7) of the first zero byte** in a `u64` word.
+/// Returns the index (0..=7) of the first zero byte** in a `u64` word
 ///
 /// This uses a branchless, bitwise technique that identifies zero bytes
 /// by subtracting `0x01` from each byte and masking out non-zero bytes.
@@ -348,16 +347,16 @@ const HI_U64: u64 = repeat_u64(0x80);
 ///
 /// The resulting word will have high bits set only for zero bytes in `x`.
 /// We then use `trailing_zeros() >> 3` to get the byte index (0-based).
-///
+/// >> 3 converts from bit position to byte index (divides by 8)
 /// Returns:
 /// - The byte index of the first zero byte in `x`
 #[inline]
 pub(crate) const fn find_zero_byte_u64(x: u64) -> usize {
     //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
+    // Because I don't intend to do a 32bit port, this is fine.
     let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
 
     (zero_bit.trailing_zeros() >> 3) as usize
-    //>> 3 converts from bit position to byte index (divides by 8)
 }
 
 #[inline]

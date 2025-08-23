@@ -75,7 +75,7 @@ where
     /// Gets file size in bytes
     fn size(&self) -> Result<i64>;
     /// Gets file metadata via `lstat`
-    fn get_stat(&self) -> Result<stat>;
+    fn get_lstat(&self) -> Result<stat>;
     /// Gets last modification time
     fn modified_time(&self) -> Result<SystemTime>;
     /// Converts to `&Path` (zero-cost on Unix)
@@ -139,6 +139,8 @@ where
             self.len() < LOCAL_PATH_MAX, //declared at compile time via env_var or default to 4096/1024 (Linux/ BSD-like(including macos))
             "Input too large for buffer"
         );
+        // TODO! investigate this https://docs.rs/nix/latest/src/nix/lib.rs.html#318-350
+        // Essentially I need to check the implications of this.
 
         let mut c_path_buf_start = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new();
 
@@ -190,7 +192,7 @@ where
     #[inline]
     #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
     fn size(&self) -> Result<i64> {
-        self.get_stat().map(|s| s.st_size as _)
+        self.get_lstat().map(|s| s.st_size as _)
     }
 
     #[inline]
@@ -211,7 +213,7 @@ where
     }
 
     #[inline]
-    fn get_stat(&self) -> Result<stat> {
+    fn get_lstat(&self) -> Result<stat> {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
         // SAFETY: We know the path is valid
         let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
@@ -228,7 +230,7 @@ where
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::map_err_ignore)] //specify these later TODO!
     fn modified_time(&self) -> Result<SystemTime> {
-        let s = self.get_stat()?;
+        let s = self.get_lstat()?;
         let modified_time = access_stat!(s, st_mtime);
         let modified_seconds = access_stat!(s, st_mtime_nsec); //macro helps avoid funky aliasing on weird systems
         crate::unix_time_to_system_time(modified_time, modified_seconds)
@@ -260,7 +262,7 @@ where
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
         // SAFETY: The path is guaranteed to be a filepath (when used internally)
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0i32 }
+        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
     }
 
     #[inline]
@@ -414,7 +416,7 @@ where
 pub trait DirentConstructor<S: BytesStorage> {
     fn path_buffer(&mut self) -> &mut PathBuffer;
     fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
-    fn parent_depth(&self) -> u8;
+    fn parent_depth(&self) -> u16;
 
     #[inline]
     #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
@@ -449,13 +451,13 @@ impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
     }
 
     #[inline]
-    fn parent_depth(&self) -> u8 {
+    fn parent_depth(&self) -> u16 {
         self.parent_depth
     }
 }
 
 #[cfg(target_os = "linux")]
-impl<S: BytesStorage> DirentConstructor<S> for crate::direntry::DirEntryIterator<S> {
+impl<S: BytesStorage> DirentConstructor<S> for crate::iter::DirEntryIterator<S> {
     #[inline]
     fn path_buffer(&mut self) -> &mut crate::PathBuffer {
         &mut self.path_buffer
@@ -467,7 +469,7 @@ impl<S: BytesStorage> DirentConstructor<S> for crate::direntry::DirEntryIterator
     }
 
     #[inline]
-    fn parent_depth(&self) -> u8 {
+    fn parent_depth(&self) -> u16 {
         self.parent_depth
     }
 }

@@ -26,7 +26,7 @@
 #![allow(clippy::semicolon_if_nothing_returned)] //this is dumb
 #![allow(clippy::missing_trait_methods)] //this one too
 #![allow(clippy::semicolon_inside_block)] //this one is really dumb
-#![allow(clippy::must_use_candidate)]
+//#![allow(clippy::must_use_candidate)]
 
 use rayon::prelude::*;
 use std::{
@@ -262,7 +262,7 @@ where
     pub(crate) keep_dirs: bool,
     pub(crate) file_name_only: bool,
     pub(crate) extension_match: Option<Box<[u8]>>,
-    pub(crate) max_depth: Option<u8>,
+    pub(crate) max_depth: Option<u16>,
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter<S>>,
 }
@@ -318,7 +318,7 @@ where
     }
     #[must_use]
     /// Set maximum search depth
-    pub const fn max_depth(mut self, max_depth: Option<u8>) -> Self {
+    pub const fn max_depth(mut self, max_depth: Option<u16>) -> Self {
         self.max_depth = max_depth;
         self
     }

@@ -62,7 +62,7 @@ where
     pub(crate) buffer: SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the file descriptor via syscall, it is 4.3k bytes~ish
     pub(crate) path_buffer: PathBuffer, // buffer for the path, this is used to construct the full path of the entry, this is reused for each entry
     pub(crate) file_name_index: u16, // base path length, this is the length of the path up to and including the last slash
-    pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
+    pub(crate) parent_depth: u16, // depth of the parent directory, this is used to calculate the depth of the child entries
     pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
     pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
     pub(crate) filter_func: fn(&TempDirent<S>, &SearchConfig) -> bool, // filter function, this is used to filter the entries based on the provided function
@@ -102,7 +102,7 @@ where
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
     pub(crate) unsafe fn getdents_syscall(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) };
+        self.remaining_bytes = unsafe { self.buffer.getdents(self.fd) };
         self.offset = 0;
     }
 
@@ -247,7 +247,7 @@ impl<S: BytesStorage> DirentConstructor<S> for DirEntryIteratorFilter<'_, S> {
         self.file_name_index as usize
     }
 
-    fn parent_depth(&self) -> u8 {
+    fn parent_depth(&self) -> u16 {
         self.parent_depth
     }
 }

@@ -137,7 +137,7 @@ struct Args {
         long = "depth",
         help = "Retrieves only traverse to x depth\n"
     )]
-    depth: Option<u8>,
+    depth: Option<u16>,
     #[arg(
         long = "generate",
         action = ArgAction::Set,

@@ -13,8 +13,8 @@
 //THIS IS ENTIRELY EXPERIMENTAL
 //THIS IS ENTIRELY EXPERIMENTAL
 //THIS IS ENTIRELY EXPERIMENTAL
-#![allow(clippy::single_char_lifetime_names)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(clippy::all)]
+#![allow(warnings)]
 #![allow(clippy::missing_errors_doc)]
 #![cfg(target_os = "linux")] //add later
 use crate::BytesStorage;
@@ -37,7 +37,7 @@ use libc::dirent64;
 /// provided filter function.
 pub struct TempDirent<'a, S> {
     pub(crate) path: &'a [u8], // path of the entry, this is used to store the path of the entry 16b (64bit)
-    pub(crate) depth: u8, // depth of the entry, this is used to calculate the depth of   1bytes
+    pub(crate) depth: u16, // depth of the entry, this is used to calculate the depth of   1bytes
     pub(crate) file_type: FileType, // file type of the entry, this is used to determine the type of the entry 1bytes
     pub(crate) file_name_index: u16, //used to calculate filename via indexing 2bytes
     pub(crate) inode: u64, // inode of the entry, this is used to uniquely identify the entry 8bytes
@@ -96,8 +96,9 @@ where
 {
     /// Returns a new `TempDirent` with the given path, depth, file type and base length.
     /// for filtering purposes (so we can avoid heap allocations)
+    #[must_use]
     #[inline]
-    pub fn new(path: &'a [u8], depth: u8, base_len: u16, dirent: *const dirent64) -> Self {
+    pub fn new(path: &'a [u8], depth: u16, base_len: u16, dirent: *const dirent64) -> Self {
         let (d_type, inode) = unsafe {
             (
                 access_dirent!(dirent, d_type), //get the d_type from the dirent structure, this is the type of the entry
@@ -117,6 +118,7 @@ where
 
     /// Converts the temporary dirent into a `DirEntry`.
     #[inline]
+
     pub fn to_direntry(&self) -> DirEntry<S> {
         // Converts the temporary dirent into a DirEntry, this is used to convert the temporary dirent into a DirEntry
         DirEntry {

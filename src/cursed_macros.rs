@@ -50,14 +50,13 @@ macro_rules! access_dirent {
          ($entry_ptr:expr, d_type) => {{
         #[cfg(any(target_os = "solaris", target_os = "illumos"))]
         {
-            libc::DT_UNKNOWN
+            libc::DT_UNKNOWN //return D_TYPE unknown on these OS'es, because the struct does not hold the type!
         }
         #[cfg(not(any(target_os = "solaris", target_os = "illumos")))]
         {
             (*$entry_ptr).d_type
         }}};
       // Handle inode number field with aliasing for BSD systems
-    //you can use d_ino or d_fileno (preferentially d_ino for cross-compatbility!)
     ($entry_ptr:expr, d_ino) => {{
         #[cfg(any(
             target_os = "freebsd",
@@ -207,6 +206,8 @@ macro_rules! access_stat {
 macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
+        // TODO! investigate this https://docs.rs/nix/latest/src/nix/lib.rs.html#318-350
+        // Essentially I need to check the implications of this.
         core::debug_assert!($bytes.len() < $crate::LOCAL_PATH_MAX);
         // Create a buffer and make into a pointer
         let mut c_path_buf_start = $crate::AlignedBuffer::<u8, { $crate::LOCAL_PATH_MAX }>::new();

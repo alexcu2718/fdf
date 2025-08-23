@@ -23,7 +23,7 @@ pub struct SearchConfig {
     ///if this is Some, then we match against the extension of the file otherwise accept (if none)
     pub(crate) file_name_only: bool,
     ///if true, then we only match against the file name, otherwise we match against the full path when regexing
-    pub(crate) depth: Option<u8>,
+    pub(crate) depth: Option<u16>,
     ///the maximum depth to search, if None then no limit
     pub(crate) follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
 }
@@ -40,7 +40,7 @@ impl SearchConfig {
         keep_dirs: bool,
         file_name_only: bool,
         extension_match: Option<Box<[u8]>>,
-        depth: Option<u8>,
+        depth: Option<u16>,
         follow_symlinks: bool,
     ) -> Result<Self> {
         let patt = pattern.as_ref();

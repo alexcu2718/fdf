@@ -186,29 +186,30 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 #[inline]
 #[cfg(target_os = "linux")]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
+#[must_use]
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 /// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD.
-/// Constant time (therefore branchless)
+/// Constant time(and branchless)
 ///
-/// This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
-/// It's probably the most efficient way to calculate the length
-/// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null(kernel guaranteed)
-///
-/// This is my own implementation of a constant-time strlen for dirents, which is an extremely common operation(probably one of THE hottest functions in this library
-/// and ignore/fd etc. So this is a big win!)
+// This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
+// It's the most efficient way to calculate the length(on Linux)
+// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null(kernel guaranteed)
+//
+// This is my own implementation of a constant-time strlen for dirents, which is an extremely common operation(probably one of THE hottest functions in this library
+// and ignore/fd etc. So this is a big win!)
 ///                                   
-/// Reference <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>    
-///                        
-/// Reference <https://github.com/Soveu/find/blob/master/src/dirent.rs>          
+// Reference <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>
+//
+// Reference <https://github.com/Soveu/find/blob/master/src/dirent.rs>
 ///
-///
-/// Main idea:
-/// - We read the last 8 bytes of the `d_name` field, which is guaranteed to be null-terminated by the kernel.
-/// - so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks,
-/// - we can locate the null terminator with a single 64-bit read and mask
-///                    
-///
-///
+//
+// Main idea:
+// - We read the last 8 bytes of the `d_name` field, which is guaranteed to be null-terminated by the kernel.
+// - so we only need to scan at most 255 bytes. However, since we read the last 8 bytes and apply bit tricks,
+// - we can locate the null terminator with a single 64-bit read and mask
+//
+//
+//
 /// # SAFETY
 /// The caller must uphold the following invariants:
 /// - The `dirent` pointer must point to a valid `libc::dirent64` structure
@@ -229,20 +230,20 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     #[cfg(target_endian = "little")]
     // SAFETY: `dirent` is a valid pointer to a struct whose size is always a multiple of 8.
     // `reclen - 8` therefore points to the last properly aligned 8-byte word in the struct,
-    let last_word:u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }; //go to the last word in the struct.
+    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }; //go to the last word in the struct.
     // SAFETY: The dirent struct is always a multiple of 8
     #[cfg(target_endian = "big")]
-    let last_word:u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le();
+    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le();
     //TODO! this could probably be optimised, testing anything on bigendian is a fucking pain because it takes an ungodly time to compile.
     // Special case: When processing the 3rd u64 word (index 2), we need to mask
     // the non-name bytes (d_type and padding) to avoid false null detection.
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
     // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
-    // Special handling for 24-byte records (common case):
+    // Special handling for 24-byte records
     // Mask out non-name bytes (d_type and padding) that could cause false null detection
-    // When the d_name is  4 bytes or fewer, the kernel places null bytes at the start of the d_name, we need to mask them out 
-    let mask:u64 = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
+    // When the d_name is  4 bytes or fewer, the kernel places null bytes at the start of the d_name, we need to mask them out
+    let mask: u64 = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes,
     //we're bit manipulating the last word (a byte/u64) to find the first null byte
@@ -250,12 +251,11 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     // Combine the word with our mask to ensure:
     // - Original name bytes remain unchanged
     // - Non-name bytes are set to 0xFF (guaranteed non-zero)
-    let candidate_pos:u64 = last_word | mask;
+    let candidate_pos: u64 = last_word | mask;
     // The resulting value (`candidate_pos`) has:
     // - Original name bytes preserved
     // - Non-name bytes forced to 0xFF (guaranteed non-zero)
     // - Maintains the exact position of any null bytes in the name
-    //I have changed the definition since the original README, I found a more rigorous backing!
     // We subtract 7 to get the correct offset in the d_name field.
     let byte_pos = 7 - find_zero_byte_u64(candidate_pos); // a constant time SWAR function
     // The final length is calculated as:

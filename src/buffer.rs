@@ -2,22 +2,70 @@ use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
 mod sealed {
+    /// Sealed trait pattern to restrict `ValueType` implementation to i8 and u8 only
     pub trait Sealed {}
     impl Sealed for i8 {}
     impl Sealed for u8 {}
 }
 
+/// Marker trait for valid buffer value types (i8 and u8)
+///
+/// This trait ensures type safety while allowing the buffer to work with both
+/// signed and unsigned byte types, which are equivalent for raw memory operations.
 pub trait ValueType: sealed::Sealed {}
 impl ValueType for i8 {}
 impl ValueType for u8 {}
 
-// This buffer is in this crate to do a few things:
-//1.serve as a generic buffer for syscall operations
-//2.ensure that the buffer is always aligned to 8 bytes, which is required for some syscalls.
-//3. provide a safe interface for accessing the buffer's data.
-//4. It is generic over type T, which can be either i8 or u8, and the size of the buffer. which are equivalent in our case.
-//5. It uses MaybeUninit to avoid initialising the buffer until it is actually used, which is useful for performance.
-//6. it provides a buffer to construct byte path
+/// A highly optimized, aligned buffer for system call operations
+///
+/// This buffer provides memory-aligned storage with several key features:
+/// - Guaranteed 8-byte alignment required by various system calls
+/// - Zero-cost abstraction for working with raw memory
+/// - Support for both i8 and u8 types (equivalent for byte operations)
+/// - Safe access methods with proper bounds checking
+/// - Lazy initialisation to avoid unnecessary memory writes
+///
+/// # Type Parameters
+/// - `T`: The element type (i8 or u8)
+/// - `SIZE`: The fixed capacity of the buffer
+///
+/// # Safety
+/// The buffer uses `MaybeUninit` internally, so users must ensure proper
+/// initialisation before accessing the contents. All unsafe methods document
+/// their safety requirements.
+///
+/// # Examples
+/// ```
+/// use fdf::AlignedBuffer;
+///
+/// // Create a new aligned buffer
+/// // Purposely set a non-aligned amount to show alignment is forced.
+/// let mut buffer = AlignedBuffer::<u8, 1026>::new(); //You should really use 1024 here.
+///
+/// // Initialise the buffer with data
+/// let data = b"Hello, World!";
+/// unsafe {
+///     // Copy data into the buffer
+///     core::ptr::copy_nonoverlapping(
+///         data.as_ptr(),
+///         buffer.as_mut_ptr(),
+///         data.len()
+///     );
+///     
+///     // Access the initialised data
+///     let slice = buffer.get_unchecked(0..data.len());
+///     assert_eq!(slice, data);
+///     
+///     // Modify the buffer contents
+///     let mut_slice = buffer.get_unchecked_mut(0..data.len());
+///     mut_slice[0] = b'h'; // Change 'H' to 'h'
+///     assert_eq!(&mut_slice[0..5], b"hello");
+/// }
+///
+/// // The buffer maintains proper alignment for syscalls
+/// //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
+/// assert!((buffer.as_ptr() as usize).is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
+/// ```
 #[derive(Debug)]
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T, const SIZE: usize>
@@ -92,22 +140,36 @@ where
         unsafe { &mut *self.data.as_mut_ptr() }
     }
 
-    /// # Safety
-    /// this is only to be called when using syscalls in the getdents interface
-    /// This uses inline assembly, in theory it should be equivalent but glibc is 'quirky'.
-    /// At the end of the day, the only way to bypass glibc's quirks is to use inline assembly.
+    /// Executes the getdents64 system call using inline assembly
     ///
-    //TODO! write an implementation for RISC-V
+    /// This method bypasses libc to directly invoke the getdents64 system call,
+    /// which is necessary to avoid certain libc quirks and limitations.
+    ///
+    /// # Safety
+    /// This method uses inline assembly and directly interacts with the kernel.
+    /// The caller must ensure:
+    /// - The file descriptor is valid and open for reading
+    /// - The buffer is properly aligned and sized
+    /// - Proper error handling is implemented
+    ///
+    /// # Platform Specificity
+    /// This implementation is specific to Linux on supported architectures (currently x86 and aarch64)
+    /// Otherwise backing up to libc
+    // the main idea is to avoid dynamically linking glibc eventually.
+    // A RISC-V implementation is currently pending(might do others because i'm learning assembly)
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::single_call_fn)]
     #[cfg(target_os = "linux")]
-    pub(crate) unsafe fn getdents64_asm(&mut self, fd: i32) -> i64 {
+    pub unsafe fn getdents(&mut self, fd: i32) -> i64 {
         unsafe { crate::syscalls::getdents_asm(fd, self.as_mut_ptr(), SIZE) }
     }
 
+    /// Returns a reference to a subslice without doing bounds checking
+    ///
     /// # Safety
-    /// The range must be within initialised portion of the buffer
+    /// The caller must ensure the range is within the initialised portion
+    /// of the buffer. Accessing out-of-bounds or uninitialised memory is undefined behavior.
     #[inline]
     pub unsafe fn get_unchecked<R>(&self, range: R) -> &R::Output
     where
@@ -117,13 +179,21 @@ where
     }
 
     #[inline]
-    /// Initialises the buffer with the given path, appending a slash if needed.
+    /// Initialises the buffer with directory path contents
     ///
-    /// Returns the new base length after writing into the buffer.
+    /// This method prepares the buffer for directory traversal operations by
+    /// copying the directory path and appending a slash if needed.
+    ///
+    /// # Parameters
+    /// - `dir_path`: The directory entry containing the path to initialise
+    ///
+    /// # Returns
+    /// The new base length after writing into the buffer
     ///
     /// # Safety
-    /// Assumes `self` is zeroed and sized at least `LOCAL_PATH_MAX`.
-    // TODO! this is REALLY unergonomic, need to make it clearer
+    /// The caller must ensure:
+    /// - The buffer is zeroed and has sufficient capacity (at least `LOCAL_PATH_MAX`) (4096 on Linux or 1024 on non-Linux (dependent on `libc::PATH_MAX`))
+    /// - The directory path is valid UTF-8 or compatible with the expected encoding
     pub(crate) unsafe fn init_from_direntry<S>(&mut self, dir_path: &crate::DirEntry<S>) -> usize
     where
         S: crate::BytesStorage,
@@ -153,15 +223,21 @@ where
         unsafe { self.as_mut_slice().get_unchecked_mut(range) }
     }
 
+    /// Assumes the buffer is initialised and returns a reference to the contents
+    ///
     /// # Safety
-    /// The entire buffer must be initialised
+    /// The caller must guarantee the entire buffer has been properly initialiSed
+    /// before calling this method. Accessing uninitialised memory is undefined behavior.
     #[inline]
     const unsafe fn assume_init(&self) -> &[T; SIZE] {
         unsafe { &*self.data.as_ptr() }
     }
 
+    /// Assumes the buffer is initialised and returns a mutable reference to the contents
+    ///
     /// # Safety
-    /// The entire buffer must be initialised
+    /// The caller must guarantee the entire buffer has been properly initialised
+    /// before calling this method. Accessing uninitialised memory is undefined behavior
     #[inline]
     const unsafe fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
         unsafe { &mut *self.data.as_mut_ptr() }

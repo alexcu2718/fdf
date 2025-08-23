@@ -24,7 +24,7 @@ pub enum DirEntryError {
     RayonError(rayon::ThreadPoolBuildError),
     RegexError(regex::Error),
     NotADirectory,
-    TooManySymbolicLinks, //this shouldnt happen because im ignoring symlinks but this makes it easier to debug
+    TooManySymbolicLinks,
 }
 
 impl From<io::Error> for DirEntryError {

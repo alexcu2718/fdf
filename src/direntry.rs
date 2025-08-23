@@ -1,19 +1,57 @@
 use crate::{
-    BytePath as _,
-    DirIter,
-    OsBytes,
-    Result,
-    // cstr,
-    custom_types_result::BytesStorage,
-    filetype::FileType,
-    // utils::unix_time_to_system_time,
+    BytePath as _, DirIter, OsBytes, Result, custom_types_result::BytesStorage, filetype::FileType,
 };
 
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
 
-/// A struct representing a directory entry.
+/// A struct representing a directory entry with minimal memory overhead.
 ///
-/// `S` is a storage type (e.g., `Box<[u8]>`, `Arc<[u8]>`, `Vec<u8>`) used to hold the path bytes.
+/// This struct is designed for high-performance file system traversal and analysis.
+/// It holds metadata and a path to a file or directory, optimised for size
+/// and efficient access to its components.
+///
+/// # Type Parameters
+///
+/// - `S`: The storage type for the path bytes (e.g., `Box<[u8]>`, `Arc<[u8]>`, `Vec<u8>`).
+///
+/// # Memory Layout
+///
+/// The struct's memory footprint is approximately 10 bytes on most Unix-like platforms(MacOS/Linux):
+/// - **Path**: A thin pointer wrapper, optimised for size.
+/// - **File type**: A 1-byte enum representing the entry's type (file, directory, etc.).
+/// - **Inode**: An 8-byte integer for the file's unique inode number.
+/// - **Depth**: A 2-byte integer indicating the entry's depth from the root.
+/// - **File name index**: A 2-byte integer pointing to the start of the file name within the path buffer.
+///
+/// # Examples
+///
+/// ```
+/// use fdf::DirEntry;
+/// use std::path::Path;
+/// use std::fs::File;
+/// use std::io::Write;
+/// use std::sync::Arc;
+///
+///
+///
+/// // Create a temporary directory for the test
+/// let temp_dir = std::env::temp_dir();
+///
+/// let file_path = temp_dir.join("test_file.txt");
+///
+/// // Create a file inside the temporary directory
+/// {
+///     let mut file = File::create(&file_path).expect("Failed to create file");
+///     writeln!(file, "Hello, world!").expect("Failed to write to file");
+/// }
+///
+/// // Create a DirEntry from the temporary file path
+///  let entry: DirEntry<Arc<[u8]>>  = DirEntry::new(&file_path).unwrap();
+/// assert!(entry.is_regular_file());
+/// assert_eq!(entry.file_name(), b"test_file.txt");
+///
+///
+/// ```
 #[derive(Clone)] //could probably implement a more specialised clone.
 pub struct DirEntry<S>
 where
@@ -21,7 +59,7 @@ where
 {
     /// Path to the entry, stored as OS-native bytes.
     ///
-    /// This is a thin pointer wrapper around the storage `S`, optimized for size (~10 bytes). ( on linux/macos, not tested bsds etc)
+    /// This is a thin pointer wrapper around the storage `S`, optimised for size (~10 bytes). ( on linux/macos, will be bigger on other systems)
     pub(crate) path: OsBytes<S>,
 
     /// File type (file, directory, symlink, etc.).
@@ -30,21 +68,18 @@ where
     pub(crate) file_type: FileType,
 
     /// Inode number of the file.
-    ///
-    /// 8 bytes, (may be hidden under a cfg flag in future for relevant reasons/32bit systems(if i ever do that.))
-    pub(crate) inode: u64, //TODO! illumos/solaris doesn't have ino, so we need to flag this for appropriate systems
+    pub(crate) inode: u64,
     //
     /// Depth of the directory entry relative to the root.
     ///
-    /// Stored as a single byte, supporting up to 255 levels deep.
-    pub(crate) depth: u8,
+    pub(crate) depth: u16, //2bytes
 
     /// Offset in the path buffer where the file name starts.
     ///
     /// This helps quickly extract the file name from the full path.
     pub(crate) file_name_index: u16,
-    // 2 bytes free here., we need to leave 1 byte free so we can save on the size of the option/result enum.
-    //i'm not sure what's a good use of 1 byte (maybe is_root? Would help simplify edge cases but wouldn't be applicable on macos)
+    // 23 bytes in total if using slimmerbox (default for CLI on macos/Linux)
+    //this is to save 1 byte to make sure the `Result`/`Option` enum is minimised (optimisation trick)
 }
 
 impl<S> DirEntry<S>
@@ -53,7 +88,31 @@ where
 {
     #[inline]
     #[must_use]
-    ///costly check for executables
+    /// Checks if the entry is an executable file.
+    ///
+    /// This is a **costly** operation as it performs an `access` system call.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fdf::DirEntry;
+    /// use std::fs::{self, File};
+    /// use std::os::unix::fs::PermissionsExt;
+    /// use std::sync::Arc;
+    /// let temp_dir = std::env::temp_dir();
+    /// let exe_path = temp_dir.join("my_executable");
+    /// File::create(&exe_path).unwrap().set_permissions(fs::Permissions::from_mode(0o755)).unwrap();
+    ///
+    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(&exe_path).unwrap();
+    /// assert!(entry.is_executable());
+    ///
+    /// let non_exe_path = temp_dir.join("my_file");
+    /// File::create(&non_exe_path).unwrap();
+    /// let non_exe_entry:DirEntry<Arc<[u8]>> = DirEntry::new(&non_exe_path).unwrap();
+    /// assert!(!non_exe_entry.is_executable());
+    /// fs::remove_file(exe_path).unwrap();
+    /// fs::remove_file(non_exe_path).unwrap();
+    /// ```
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
         self.is_regular_file()
@@ -116,53 +175,106 @@ where
     #[inline]
     #[must_use]
     #[allow(clippy::wildcard_enum_match_arm)]
-    #[cfg(not(target_os = "linux"))]
-    ///costly check for empty files
-    /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
-    /// for files, it checks if the size is zero without loading all metadata
-    /// for directories, it checks if they have no entries
-    /// for special files like devices, sockets, etc., it returns false
+    /// Checks if the entry is empty.
+    ///
+    /// For files, it checks if the size is zero. For directories, it checks if there are no entries.
+    /// This is a **costly** operation as it requires system calls (`stat` or `getdents`/`readdir`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fdf::DirEntry;
+    /// use std::fs::{self, File};
+    /// use std::io::Write;
+    /// use std::sync::Arc;
+    /// let temp_dir = std::env::temp_dir();
+    ///
+    /// // Check an empty file.
+    /// let empty_file_path = temp_dir.join("empty.txt");
+    /// File::create(&empty_file_path).unwrap();
+    /// let empty_entry:DirEntry<Arc<[u8]>> = DirEntry::new(&empty_file_path).unwrap();
+    /// assert!(empty_entry.is_empty());
+    ///
+    /// // Check a non-empty file.
+    /// let non_empty_file_path = temp_dir.join("not_empty.txt");
+    /// File::create(&non_empty_file_path).unwrap().write_all(b"Hello").unwrap();
+    /// let non_empty_entry:DirEntry<Arc<[u8]>> = DirEntry::new(&non_empty_file_path).unwrap();
+    /// assert!(!non_empty_entry.is_empty());
+    ///
+    /// // Check an empty directory.
+    /// let empty_dir_path = temp_dir.join("empty_dir");
+    /// fs::create_dir(&empty_dir_path).unwrap();
+    /// let empty_dir_entry:DirEntry<Arc<[u8]>> = DirEntry::new(&empty_dir_path).unwrap();
+    /// assert!(empty_dir_entry.is_empty());
+    ///
+    /// fs::remove_file(empty_file_path).unwrap();
+    /// fs::remove_file(non_empty_file_path).unwrap();
+    /// fs::remove_dir(empty_dir_path).unwrap();
+    /// ```
     pub fn is_empty(&self) -> bool {
         match self.file_type() {
-            FileType::RegularFile => {
-                self.size().is_ok_and(|size| size == 0)
-                //this checks if the file size is zero, this is a costly check as it requires a stat call
-            }
+            FileType::RegularFile => self.size().is_ok_and(|size| size == 0),
             FileType::Directory => {
-                self.readdir() //if we can read the directory, we check if it has no entries
-                    .is_ok_and(|mut entries| entries.next().is_none()) //readdir on non-linux 
+                #[cfg(target_os = "linux")]
+                let result = self
+                    .getdents() //use getdents on linux to avoid  extra stat calls
+                    .is_ok_and(|mut entries| entries.next().is_none());
+                #[cfg(not(target_os = "linux"))]
+                let result = self
+                    .readdir()
+                    .is_ok_and(|mut entries| entries.next().is_none());
+                result
             }
             _ => false,
         }
     }
-    #[inline]
-    #[must_use]
-    #[allow(clippy::wildcard_enum_match_arm)]
-    #[cfg(target_os = "linux")]
-    ///costly check for empty files
-    /// returns false for errors/char devices/sockets/fifos/etc, mostly useful for files and directories
-    /// for files, it checks if the size is zero without loading all metadata
-    /// for directories, it checks if they have no entries
-    /// for special files like devices, sockets, etc., it returns false
-    pub fn is_empty(&self) -> bool {
-        match self.file_type() {
-            FileType::RegularFile => {
-                self.size().is_ok_and(|size| size == 0)
-                //this checks if the file size is zero, this is a costly check as it requires a stat call
-            }
-            FileType::Directory => {
-                self.getdents() //if we can read the directory, we check if it has no entries
-                    .is_ok_and(|mut entries| entries.next().is_none()) //getdents requires a lot less syscalls (doesnt call stat implicitly)
-            }
-            _ => false,
-        }
-    }
-
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    ///Converts a dirent64 to a proper path, resolving all symlinks, etc,
-    /// Returns an error on invalid path
-    //(errors to be filled in later)  (they're actually encoded though)
+    /// Converts a directory entry to a full, canonical path, resolving all symlinks.
+    ///
+    /// This is a **costly** operation as it involves a system call (`realpath`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Err`
+    ///
+    /// It can be one of the following,
+    ///  `FileType::AccessDenied`, (EACCESS)
+    ///  `FileType::TooManySymbolicLinks`, ( ELOOP)
+    ///  `FileType::InvalidPath` (ENOENT)
+    /// (There may be more, this documentation is not complete)
+    //TODO!
+    ///
+    ///    
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fdf::DirEntry;
+    /// use std::path::Path;
+    /// use std::fs;
+    /// use std::sync::Arc;
+    /// use std::os::unix::ffi::OsStrExt as _;
+    /// use std::os::unix::fs::symlink;
+    /// let temp_dir = std::env::temp_dir();
+    /// let target_path = temp_dir.join("target_file_full_path.txt");
+    /// fs::File::create(&target_path).unwrap();
+    /// let symlink_path = temp_dir.join("link_to_target_full_path.txt");
+    /// symlink(&target_path, &symlink_path).unwrap();
+    ///
+    /// // Create a DirEntry from the symlink path
+    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(&symlink_path).unwrap();
+    /// assert!(entry.is_symlink());
+    ///
+    /// // Canonicalise the path
+    /// let full_entry = entry.to_full_path().unwrap();
+    ///
+    /// // The full path of the canonicalised entry should match the target path.
+    /// assert_eq!(full_entry.as_bytes(), target_path.as_os_str().as_bytes());
+    ///
+    /// fs::remove_file(&symlink_path).unwrap();
+    /// fs::remove_file(&target_path).unwrap();
+    /// ```
     pub fn to_full_path(self) -> Result<Self> {
         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
         let ptr = unsafe {
@@ -331,7 +443,7 @@ where
         let path_ref = path.as_ref().as_bytes();
 
         // extract information from successful stat
-        let get_stat = path_ref.get_stat()?;
+        let get_stat = path_ref.get_lstat()?;
         let inode = access_stat!(get_stat, st_ino);
         Ok(Self {
             path: path_ref.into(),
@@ -342,7 +454,51 @@ where
         })
     }
 
-    /// Returns an iterator over the directory entries using `readdir64` as opposed to `getdents`, this uses a higher level api
+    /// Returns an iterator over directory entries using the `readdir` API.
+    ///
+    /// This provides a higher-level, more portable interface for directory iteration
+    /// compared to `getdents`. Suitable for most use cases where maximum performance
+    /// isn't critical.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if:
+    /// - The entry is not a directory
+    /// - Permission restrictions prevent reading the directory
+    /// - The directory has been removed or become inaccessible
+    /// - Any other system error occurs during directory opening/reading
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fdf::DirEntry;
+    /// use std::fs::{self, File};
+    /// use std::io::Write;
+    /// use std::sync::Arc;
+    ///
+    /// // Create a temporary directory with test files
+    /// let temp_dir = std::env::temp_dir().join("test_readdir");
+    /// fs::create_dir(&temp_dir).unwrap();
+    ///
+    /// // Create test files
+    /// File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
+    /// File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
+    /// fs::create_dir(temp_dir.join("subdir")).unwrap();
+    ///
+    /// // Create DirEntry for the temporary directory
+    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(&temp_dir).unwrap();
+    ///
+    /// // Use readdir to iterate through directory contents
+    /// let mut entries: Vec<_> = entry.readdir().unwrap().collect();
+    /// entries.sort_by_key(|e| e.file_name().to_vec());
+    ///
+    /// // Should contain 3 entries: 2 files and 1 directory
+    /// assert_eq!(entries.len(), 3);
+    /// assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
+    /// assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
+    /// assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
+    /// fs::remove_dir_all(&temp_dir).unwrap();
+    /// ```
     #[inline]
     #[allow(clippy::missing_errors_doc)]
     pub fn readdir(&self) -> Result<impl Iterator<Item = Self>> {
@@ -352,20 +508,64 @@ where
     #[allow(clippy::missing_errors_doc)] //fixing errors l
     #[allow(clippy::cast_possible_truncation)] // truncation not a concern
     #[cfg(target_os = "linux")]
-    ///`getdents` is an iterator over fd,where each consequent index is a directory entry.
-    /// This function is a low-level syscall wrapper that reads directory entries.
-    /// It returns an iterator that yields `DirEntry` objects.
-    /// This differs from my `as_iter` impl, which uses libc's `readdir64`, this uses `libc::syscall(SYS_getdents64.....)`
-    //which in theory allows it to be offered tuned parameters, such as a high buffer size (shows performance benefits)
-    //  you can likely make the stack copies extremely cheap
-    // EG I use a ~4.1k buffer, which is about close to the max size for most dirents, meaning few will require more than one.
-    // (Could get the block size via an lstat call, blk size is not reliable however (well, on Linux)
-    //this is because the blk size does NOT accurately reflect the size of the directory(aka, removing files does not *necessarily* )
+
+    /// Low-level directory iterator using the `getdents64` system call.
+    ///
+    /// This method provides high-performance directory scanning by using a large buffer
+    /// (typically ~4.1KB) to minimise system calls. It's Linux-specific and generally
+    /// faster than `readdir` for bulk directory operations.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if:
+    /// - The entry is not a directory
+    /// - Permission restrictions prevent reading the directory
+    /// - The directory file descriptor cannot be opened
+    /// - Buffer allocation fails
+    /// - Any other system error occurs during the `getdents` operation
+    ///
+    /// # Platform Specificity
+    ///
+    /// This method is only available on Linux targets due to its dependence on
+    /// the `getdents64` system call.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fdf::DirEntry;
+    /// use std::fs::{self, File};
+    /// use std::io::Write;
+    /// use std::sync::Arc;
+    ///
+    /// // Create a temporary directory with test files
+    /// let temp_dir = std::env::temp_dir().join("test_getdents");
+    /// fs::create_dir(&temp_dir).unwrap();
+    ///
+    /// // Create test files
+    /// File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
+    /// File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
+    /// fs::create_dir(temp_dir.join("subdir")).unwrap();
+    ///
+    /// // Create DirEntry for the temporary directory
+    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(&temp_dir).unwrap();
+    ///
+    /// // Use getdents to iterate through directory contents
+    /// let mut entries: Vec<_> = entry.getdents().unwrap().collect();
+    /// entries.sort_by_key(|e| e.file_name().to_vec());
+    ///
+    /// // Should contain 3 entries: 2 files and 1 directory
+    /// assert_eq!(entries.len(), 3);
+    /// assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
+    /// assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
+    /// assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
+    ///
+    /// // Clean up
+    /// fs::remove_dir_all(&temp_dir).unwrap();
+    /// ```
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
-        //matching type signature of above for consistency
+        use crate::iter::DirEntryIterator;
         let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
         let mut path_buffer = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
-
         let path_len = unsafe { path_buffer.init_from_direntry(self) };
         //TODO! make this more ergonomic
 
@@ -379,157 +579,5 @@ where
             remaining_bytes: 0,
             _marker: core::marker::PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
         })
-    }
-}
-
-/*
-interesting when testing blk size of via stat calls on my own pc, none had an IO block>4096
-
-// also see reference https://github.com/golang/go/issues/64597, to test this TODO!
-
-libc source code for reference on blk size.
-  size_t allocation = default_allocation;
-#ifdef _STATBUF_ST_BLKSIZE
-  /* Increase allocation if requested, but not if the value appears to
-     be bogus.  */
-  if (statp != NULL)
-    allocation = MIN (MAX ((size_t) statp->st_blksize, default_allocation),
-              MAX_DIR_BUFFER_SIZE);
-#endif
-
-*/
-
-#[cfg(target_os = "linux")]
-///Iterator for directory entries using getdents syscall
-pub struct DirEntryIterator<S>
-where
-    S: BytesStorage,
-{
-    pub(crate) fd: i32, //fd, this is the file descriptor of the directory we are reading from(it's completely useless after the iterator is dropped)
-    pub(crate) buffer: crate::SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
-    pub(crate) path_buffer: crate::PathBuffer, // buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
-    pub(crate) file_name_index: u16, // base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
-    pub(crate) parent_depth: u8, // depth of the parent directory, this is used to calculate the depth of the child entries
-    pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
-    pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-    _marker: core::marker::PhantomData<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
-                                           //this gets compiled away anyway as its as a zst
-}
-#[cfg(target_os = "linux")]
-impl<S> Drop for DirEntryIterator<S>
-where
-    S: BytesStorage,
-{
-    /// Drops the iterator, closing the file descriptor.
-    /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
-    /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
-    #[inline]
-    fn drop(&mut self) {
-        unsafe { libc::close(self.fd) }; //this doesn't return an error code anyway, fuggedaboutit
-        //unsafe { close_asm(self.fd) }; //asm implementation, for when i feel like testing if it does anything useful.
-    }
-}
-#[cfg(target_os = "linux")]
-impl<S> DirEntryIterator<S>
-where
-    S: BytesStorage,
-{
-    #[inline]
-    ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
-    /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
-    /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
-    /// the pointer is valid and that we don't read past the end of the buffer.
-    pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
-        // This is only used in the iterator implementation, so we can safely assume that the pointer
-        // is valid and that we don't read past the end of the buffer.
-        let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
-        self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-        d //return the pointer
-    }
-    #[inline]
-    /// This is a syscall that fills the buffer (stack allocated) and resets the internal offset counter to 0.
-    pub unsafe fn getdents_syscall(&mut self) {
-        self.remaining_bytes = unsafe { self.buffer.getdents64_asm(self.fd) };
-        self.offset = 0;
-    }
-
-    #[inline]
-    #[allow(clippy::cast_sign_loss)] //this doesnt matter
-    #[allow(clippy::cast_possible_truncation)] //doesnt matter on 64bit
-    /// Prefetches the next likely entry in the buffer to keep the cache warm.
-    pub(crate) fn prefetch_next_entry(&self) {
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        {
-            if self.offset + 128 < self.remaining_bytes as usize {
-                unsafe {
-                    use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-                    let next_entry = self.buffer.as_ptr().add(self.offset + 64).cast();
-                    _mm_prefetch(next_entry, _MM_HINT_T0);
-                }
-            }
-        }
-    }
-    #[inline]
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)] //not an issue on 64bit
-    /// Checks if the buffer is empty
-    pub const fn is_buffer_not_empty(&self) -> bool {
-        self.offset < self.remaining_bytes as _
-    }
-
-    #[inline]
-    /// Prefetches the start of the buffer to keep the cache warm.
-    pub(crate) fn prefetch_next_buffer(&self) {
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        {
-            unsafe {
-                use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-                _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0);
-            }
-        }
-    }
-
-    #[inline]
-    /// Checks if we're at end of directory
-    pub const fn is_end_of_directory(&self) -> bool {
-        self.remaining_bytes <= 0
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl<S> Iterator for DirEntryIterator<S>
-where
-    S: BytesStorage,
-{
-    type Item = DirEntry<S>;
-    #[inline]
-    /// Returns the next directory entry in the iterator.
-    fn next(&mut self) -> Option<Self::Item> {
-        use crate::traits_and_conversions::DirentConstructor as _;
-        loop {
-            // If we have remaining data in buffer, process it
-            if self.is_buffer_not_empty() {
-                //we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
-                let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
-                // this is a pointer to the dirent64 structure, which contains the directory entry information
-                self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache this is a no-op on non-x86_64*/
-
-                skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
-                //extract non . and .. files
-                let entry = unsafe { self.construct_entry(d) }; //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
-
-                return Some(entry);
-            }
-            // prefetch the next buffer content before reading
-
-            self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-x86_64
-            // issue a syscall once out of entries
-            unsafe { self.getdents_syscall() }; //fill up the buffer again once out  of loop
-
-            if self.is_end_of_directory() {
-                // If no more entries, return None,
-                return None;
-            }
-        }
     }
 }

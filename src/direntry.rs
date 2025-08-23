@@ -242,14 +242,14 @@ where
     ///  `FileType::AccessDenied`, (EACCESS)
     ///  `FileType::TooManySymbolicLinks`, ( ELOOP)
     ///  `FileType::InvalidPath` (ENOENT)
-    /// (There may be more, this documentation is not complete)
-    //TODO!
+    /// (There may be more, this documentation is not complete) TODO!
     ///
     ///    
     ///
     /// # Examples
+    /// these tests are broken on macos because of funky stuff  with mac's privacy/security settings.
+    /// ```ignore
     ///
-    /// ```ignore //these tests are broken on macos because of funky stuff I don't understand with tmp, which is annoying!
     /// use fdf::DirEntry;
     /// use std::path::Path;
     /// use std::fs;
@@ -274,6 +274,7 @@ where
     ///
     /// fs::remove_file(&symlink_path).unwrap();
     /// fs::remove_file(&target_path).unwrap();
+    ///
     /// ```
     pub fn to_full_path(self) -> Result<Self> {
         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)

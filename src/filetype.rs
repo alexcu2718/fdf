@@ -1,4 +1,3 @@
-#![allow(clippy::pattern_type_mismatch)] //stupid
 use crate::BytePath as _;
 
 use libc::{
@@ -87,58 +86,56 @@ impl FileType {
     #[inline]
     #[must_use]
     pub const fn is_dir(&self) -> bool {
-        matches!(self, Self::Directory)
+        matches!(*self, Self::Directory)
     }
 
     /// Returns true if this represents a regular file  (cost free check)
     #[inline]
     #[must_use]
     pub const fn is_regular_file(&self) -> bool {
-        matches!(self, Self::RegularFile)
+        matches!(*self, Self::RegularFile)
     }
 
     /// Returns true if this represents a symbolic link  (cost free check)
     #[inline]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
-        matches!(self, Self::Symlink)
+        matches!(*self, Self::Symlink)
     }
 
     /// Returns true if this represents a block device  (cost free check)
     #[inline]
     #[must_use]
     pub const fn is_block_device(&self) -> bool {
-        matches!(self, Self::BlockDevice)
+        matches!(*self, Self::BlockDevice)
     }
 
     /// Returns true if this represents a character device  (cost free check)
     #[inline]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
-        matches!(self, Self::CharDevice)
+        matches!(*self, Self::CharDevice)
     }
 
     /// Returns true if this represents a FIFO (named pipe)  (cost free check)
     #[inline]
     #[must_use]
     pub const fn is_pipe(&self) -> bool {
-        matches!(self, Self::Pipe)
+        matches!(*self, Self::Pipe)
     }
 
     /// Returns true if this represents a socket (cost free check)
     #[inline]
     #[must_use]
-    #[allow(clippy::pattern_type_mismatch)]
     pub const fn is_socket(&self) -> bool {
-        matches!(self, Self::Socket)
+        matches!(*self, Self::Socket)
     }
 
     /// Returns true if this represents an unknown file type  (cost free check)
     #[inline]
-    #[allow(clippy::pattern_type_mismatch)]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
-        matches!(self, Self::Unknown)
+        matches!(*self, Self::Unknown)
     }
 
     /// Returns true if the file type is traversible (directory or symlink)
@@ -148,7 +145,7 @@ impl FileType {
     #[inline]
     #[must_use]
     pub const fn is_traversible(&self) -> bool {
-        matches!(self, Self::Directory | Self::Symlink)
+        matches!(*self, Self::Directory | Self::Symlink)
     }
 
     #[must_use]
@@ -276,7 +273,7 @@ impl FileType {
 impl core::fmt::Display for FileType {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
+        match *self {
             Self::BlockDevice => write!(f, "Block device"),
             Self::CharDevice => write!(f, "Character device"),
             Self::Directory => write!(f, "Directory"),

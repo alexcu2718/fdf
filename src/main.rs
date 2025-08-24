@@ -23,7 +23,6 @@
 #![allow(clippy::allow_attributes)]
 #![allow(clippy::allow_attributes_without_reason)]
 #![allow(clippy::map_err_ignore)]
-#![allow(clippy::pattern_type_mismatch)]
 #![allow(clippy::question_mark_used)] //dumb
 #![allow(clippy::semicolon_inside_block)] //dumb
 #![allow(clippy::must_use_candidate)] //dumb

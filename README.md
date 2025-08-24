@@ -175,7 +175,7 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 
 **Size based filtering**: Search for files by size ()
 
-**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt fix this).
+**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt fix this, it's also complex to reproduce the time methodologies for all POSIX platforms because each one differs so much, the drawbacks of not using the stdlib!)
 
 **Extended File Types**: Support for searching device drivers, and other special files.
 
@@ -192,6 +192,10 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 ### Core Philosophy
 
 The CLI will remain **simple** (avoiding overwhelming help menus(looking at you, ripgrep!)) and **efficient** (prioritising performance in both design and implementation).
+
+## Current Issues
+
+There's bugs I need to diagnose causing small differences when doing size difference, fixing this shortly!
 
 ## Installation
 
@@ -218,54 +222,120 @@ fdf . ~ -E jpg
 # Find all  Python files in /usr/local (including hidden files)
 fdf . /usr/local -E py -H
 
-## Options (T)
+## Options 
 
 Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
 Arguments:
-  [PATTERN]  Pattern to search for
-  [PATH]     Path to search (defaults to current working directory )
+  [PATTERN]
+          Pattern to search for
+
+  [PATH]
+          Path to search (defaults to current working directory )
 
 
-Options: 
+Options:
+  -E, --extension <EXTENSION>
+          filters based on extension, eg -E .txt or -E txt
 
-  -s, --case-sensitive         Enable case-sensitive matching, defaults to false
 
-  -j, --threads <THREAD_NUM>   Number of threads to use, defaults to available threads
-                                [default: 12]
-  -a, --absolute-path          Show absolute paths of results, defaults to false
+  -H, --hidden
+          Shows hidden files eg .gitignore or .bashrc, defaults to off
 
-  -I, --include-dirs           Include directories, defaults to off
 
-  -L, --follow                 Include symlinks in traversal,defaults to false
+  -s, --case-sensitive
+          Enable case-sensitive matching, defaults to false
 
-  -g, --glob                   Use a glob pattern,defaults to off
 
-  -n, --max-results <TOP_N>    Retrieves the first eg 10 results, '.cache' / -n 10
+  -j, --threads <THREAD_NUM>
+          Number of threads to use, defaults to available threads
 
-  -d, --depth <DEPTH>          Retrieves only traverse to x depth
 
-      --generate <GENERATE>    Generate shell completions
-                                [possible values: bash, elvish, fish, powershell, zsh]
-  -t, --type <TYPE_OF>...      Select type of files (can use multiple times).
-                                Available options are:
-                               d: Directory
-                               u: Unknown
-                               l: Symlink
-                               f: Regular File
-                               p: Pipe
-                               c: Char Device
-                               b: Block Device
-                               s: Socket
-                               e: Empty
-                               x: Executable
-  -p, --full-path              Use a full path for regex matching, default to false
+          [default: <NUM_CORES>]
 
-  -F, --fixed-strings          Use a fixed string not a regex, defaults to false
+  -a, --absolute-path
+          Show absolute paths of results, defaults to false
 
-  -h, --help                   Print help
-  -V, --version                Print version
 
+  -I, --include-dirs
+          Include directories, defaults to off
+
+
+  -L, --follow
+          Include symlinks in traversal,defaults to false
+
+
+  -g, --glob
+          Use a glob pattern,defaults to off
+
+
+  -n, --max-results <TOP_N>
+          Retrieves the first eg 10 results, '.cache' / -n 10
+
+
+  -d, --depth <DEPTH>
+          Retrieves only traverse to x depth
+
+
+      --generate <GENERATE>
+          Generate shell completions
+
+
+          [possible values: bash, elvish, fish, powershell, zsh]
+
+  -t, --type <TYPE_OF>...
+          Select type of files (can use multiple times).
+           Available options are:
+          d: Directory
+          u: Unknown
+          l: Symlink
+          f: Regular File
+          p: Pipe
+          c: Char Device
+          b: Block Device
+          s: Socket
+          e: Empty
+          x: Executable
+
+  -p, --full-path
+          Use a full path for regex matching, default to false
+
+
+  -F, --fixed-strings
+          Use a fixed string not a regex, defaults to false
+
+
+  -S, --size <SIZE>
+          Filter files by their size. The size can be specified with optional prefixes and units:
+
+                  PREFIXES:
+                  +SIZE    Find files larger than SIZE
+                  -SIZE    Find files smaller than SIZE
+                  SIZE     Find files exactly SIZE (default)
+
+                  UNITS:
+                  b        Bytes (default if no unit specified)
+                  k, kb    Kilobytes (1000 bytes)
+                  ki, kib  Kibibytes (1024 bytes)
+                  m, mb    Megabytes (1000^2 bytes)
+                  mi, mib  Mebibytes (1024^2 bytes)
+                  g, gb    Gigabytes (1000^3 bytes)
+                  gi, gib  Gibibytes (1024^3 bytes)
+                  t, tb    Terabytes (1000^4 bytes)
+                  ti, tib  Tebibytes (1024^4 bytes)
+
+                  EXAMPLES:
+                  --size 100         Files exactly 100 bytes
+                  --size +1k         Files larger than 1000 bytes
+                  --size -10mb       Files smaller than 10 megabytes
+                  --size +1gi        Files larger than 1 gibibyte
+                  --size 500ki       Files exactly 500 kibibytes
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
 ```
 
 ### Potential Future Enhancements

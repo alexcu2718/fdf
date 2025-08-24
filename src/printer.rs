@@ -1,6 +1,6 @@
+use crate::BytesStorage;
+use crate::{BytePath, DirEntry, FileType, Result};
 use compile_time_ls_colours::file_type_colour;
-use fdf::BytesStorage;
-use fdf::{BytePath, DirEntry, FileType, Result};
 use std::io::{BufWriter, IsTerminal, Write, stdout};
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";

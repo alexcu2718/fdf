@@ -1,7 +1,7 @@
+use crate::size_filter::SizeFilter;
 use crate::traits_and_conversions::BytePath as _;
 use crate::{DirEntry, DirEntryError, Result, custom_types_result::BytesStorage};
 use regex::bytes::{Regex, RegexBuilder};
-
 #[derive(Clone, Debug)]
 #[allow(clippy::struct_excessive_bools)] //shutup:
 /// This struct holds the configuration for searching directories.
@@ -26,6 +26,8 @@ pub struct SearchConfig {
     pub(crate) depth: Option<u16>,
     ///the maximum depth to search, if None then no limit
     pub(crate) follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
+    /// a size filter
+    pub(crate) size_filter: Option<SizeFilter>,
 }
 
 impl SearchConfig {
@@ -42,6 +44,7 @@ impl SearchConfig {
         extension_match: Option<Box<[u8]>>,
         depth: Option<u16>,
         follow_symlinks: bool,
+        size_filter: Option<SizeFilter>,
     ) -> Result<Self> {
         let patt = pattern.as_ref();
 
@@ -67,6 +70,7 @@ impl SearchConfig {
             file_name_only,
             depth,
             follow_symlinks,
+            size_filter,
         })
     }
 
@@ -114,18 +118,38 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
+    pub fn matches_size<S>(&self, entry: &DirEntry<S>) -> bool
+    where
+        S: BytesStorage,
+    {
+        if let Some(filter_size) = self.size_filter {
+
+
+            if !entry.is_regular_file() || !entry.is_symlink() {return false} //dont check anything except regular files/symlinks
+
+            if let Ok(file_size) = entry.size() {
+                filter_size.is_within_size(file_size as u64)
+            } else {
+                false
+            }
+        } else {
+            true
+        }
+    }
+
+    #[inline]
+    #[must_use]
     #[allow(clippy::if_not_else)] // this is a stylistic choice to avoid unnecessary else branches
     pub fn matches_path<S>(&self, dir: &DirEntry<S>, full_path: bool) -> bool
     where
         S: BytesStorage,
     {
+        debug_assert!(
+            !dir.file_name().contains(&b'/'),
+            "file_name contains a directory separator"
+        );
         self.regex_match.as_ref().is_none_or(|reg| {
             reg.is_match(if !full_path {
-                debug_assert!(
-                    !dir.file_name().contains(&b'/'),
-                    "file_name contains a directory separator"
-                );
-
                 dir.file_name() //this is the likelier path so we choose it first
             } else {
                 dir

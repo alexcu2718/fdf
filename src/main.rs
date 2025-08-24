@@ -37,8 +37,8 @@ use std::io::stdout;
 use std::path::Path;
 use std::str;
 
-mod printer;
-use printer::write_paths_coloured;
+use fdf::printer::write_paths_coloured;
+use fdf::size_filter::SizeFilter;
 mod type_config;
 use type_config::build_type_filter;
 
@@ -93,6 +93,7 @@ struct Args {
         long = "threads",
         default_value_t = env!("CPU_COUNT").parse::<usize>().unwrap_or(1),
         help = "Number of threads to use, defaults to available threads\n",
+    
     )]
     thread_num: usize,
     #[arg(
@@ -174,7 +175,41 @@ struct Args {
         conflicts_with = "glob"
     )]
     fixed_string: bool,
+
+    #[arg(
+        long = "size",
+        short = 'S',
+        required = false,
+        allow_hyphen_values = true,
+        help = "Filter by file size. Examples: '10k' (exactly 10KB), '+1M' (larger than 1MB)\n, '-500b' (smaller than 500 bytes)\n",
+        long_help = "Filter files by their size. The size can be specified with optional prefixes and units:
+
+        PREFIXES:
+        +SIZE    Find files larger than SIZE
+        -SIZE    Find files smaller than SIZE
+        SIZE     Find files exactly SIZE (default)
+
+        UNITS:
+        b        Bytes (default if no unit specified)
+        k, kb    Kilobytes (1000 bytes)
+        ki, kib  Kibibytes (1024 bytes)
+        m, mb    Megabytes (1000^2 bytes)
+        mi, mib  Mebibytes (1024^2 bytes)
+        g, gb    Gigabytes (1000^3 bytes)
+        gi, gib  Gibibytes (1024^3 bytes)
+        t, tb    Terabytes (1000^4 bytes)
+        ti, tib  Tebibytes (1024^4 bytes)
+
+        EXAMPLES:
+        --size 100         Files exactly 100 bytes
+        --size +1k         Files larger than 1000 bytes
+        --size -10mb       Files smaller than 10 megabytes
+        --size +1gi        Files larger than 1 gibibyte
+        --size 500ki       Files exactly 500 kibibytes"
+    )]
+    size: Option<String>,
 }
+
 #[allow(clippy::exit)]
 #[allow(clippy::print_stderr)]
 fn main() -> Result<(), DirEntryError> {
@@ -215,6 +250,18 @@ fn main() -> Result<(), DirEntryError> {
         std::process::exit(1);
     }
 
+    let size_of_file = if let Some(file_size) = args.size {
+        match SizeFilter::from_string(&file_size) {
+            Ok(filter) => Some(filter),
+            Err(e) => {
+                eprintln!("Error parsing size filter '{}': {}", file_size, e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
+
     let mut finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
@@ -223,6 +270,7 @@ fn main() -> Result<(), DirEntryError> {
         .extension_match(args.extension)
         .max_depth(args.depth)
         .follow_symlinks(args.follow_symlinks)
+        .filter_by_size(size_of_file)
         .build()?;
 
     if let Some(types) = args.type_of {

@@ -22,7 +22,7 @@ fn filter_by_type<S>(entry: &DirEntry<S>) -> bool
 where
     S: BytesStorage + 'static + Clone,
 {
-    let types = unsafe { TYPE_FILTER_TYPES.get().unwrap_unchecked() }; // safe because we initialized it in build_type_filter
+    let types = unsafe { TYPE_FILTER_TYPES.get().unwrap_unchecked() }; // safe because we initialised it in build_type_filter
 
     for type_char in types.iter().flat_map(|s| s.chars()) {
         match type_char {

@@ -37,10 +37,14 @@ use std::{
 #[macro_use]
 pub(crate) mod cursed_macros;
 
+pub mod size_filter;
+
+use size_filter::SizeFilter;
+pub mod printer;
 mod temp_dirent;
 #[cfg(target_os = "linux")]
 pub use temp_dirent::TempDirent;
-//crate imports
+
 mod iter;
 pub(crate) use iter::DirIter;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -78,10 +82,9 @@ mod traits_and_conversions;
 pub use traits_and_conversions::BytePath;
 
 mod utils;
-
 #[cfg(target_os = "linux")]
 pub use utils::dirent_const_time_strlen;
-pub use utils::{strlen, unix_time_to_system_time};
+pub use utils::{dirent_name_length, strlen, unix_time_to_system_time};
 
 mod glob;
 pub use glob::glob_to_regex;
@@ -265,6 +268,7 @@ where
     pub(crate) max_depth: Option<u16>,
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter<S>>,
+    pub(crate) size_filter: Option<SizeFilter>,
 }
 
 impl<S> FinderBuilder<S>
@@ -284,6 +288,7 @@ where
             max_depth: None,
             follow_symlinks: false,
             filter: None,
+            size_filter: None,
         }
     }
     #[must_use]
@@ -323,6 +328,13 @@ where
         self
     }
 
+    #[must_use]
+    /// Set maximum search depth
+    pub const fn filter_by_size(mut self, size_of: Option<SizeFilter>) -> Self {
+        self.size_filter = size_of;
+        self
+    }
+
     /// Set whether to follow symlinks, defaults to false. Careful for recursion!
     #[must_use]
     pub const fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
@@ -349,6 +361,7 @@ where
             self.extension_match,
             self.max_depth,
             self.follow_symlinks,
+            self.size_filter,
         );
 
         let search_config = config?;
@@ -358,6 +371,7 @@ where
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_path(rdir, rconfig.file_name_only)
+                    && rconfig.matches_size(rdir)
             }
         };
 

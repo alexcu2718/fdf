@@ -125,7 +125,7 @@ impl SearchConfig {
         if let Some(filter_size) = self.size_filter {
 
 
-            if !entry.is_regular_file() || !entry.is_symlink() {return false} //dont check anything except regular files/symlinks
+            if !entry.is_regular_file() {return false} //only check regular files
 
             if let Ok(file_size) = entry.size() {
                 filter_size.is_within_size(file_size as u64)

@@ -509,7 +509,6 @@ where
     #[allow(clippy::missing_errors_doc)] //fixing errors l
     #[allow(clippy::cast_possible_truncation)] // truncation not a concern
     #[cfg(target_os = "linux")]
-
     /// Low-level directory iterator using the `getdents64` system call.
     ///
     /// This method provides high-performance directory scanning by using a large buffer

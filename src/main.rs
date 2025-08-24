@@ -93,7 +93,6 @@ struct Args {
         long = "threads",
         default_value_t = env!("CPU_COUNT").parse::<usize>().unwrap_or(1),
         help = "Number of threads to use, defaults to available threads\n",
-    
     )]
     thread_num: usize,
     #[arg(
@@ -250,7 +249,7 @@ fn main() -> Result<(), DirEntryError> {
         std::process::exit(1);
     }
 
-    let size_of_file = if let Some(file_size) = args.size {
+    let size_of_file = args.size.map_or(None, |file_size| {
         match SizeFilter::from_string(&file_size) {
             Ok(filter) => Some(filter),
             Err(e) => {
@@ -258,9 +257,7 @@ fn main() -> Result<(), DirEntryError> {
                 std::process::exit(1);
             }
         }
-    } else {
-        None
-    };
+    });
 
     let mut finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
         .keep_hidden(!args.hidden)

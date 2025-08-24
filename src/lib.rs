@@ -84,7 +84,7 @@ pub use traits_and_conversions::BytePath;
 mod utils;
 #[cfg(target_os = "linux")]
 pub use utils::dirent_const_time_strlen;
-pub use utils::{dirent_name_length, strlen, unix_time_to_system_time};
+pub use utils::{strlen, unix_time_to_system_time};
 
 mod glob;
 pub use glob::glob_to_regex;

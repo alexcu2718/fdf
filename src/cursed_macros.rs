@@ -33,8 +33,8 @@ macro_rules! access_dirent {
 
     ($entry_ptr:expr, d_namlen) => {{
         // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_namlen as usize // access field directly as it is not aligned like the others
-    }};//should this backup to a function call for platforms without d_namlen? TODO
+        (*$entry_ptr).d_namlen as usize
+    }};
 
 
     ($entry_ptr:expr, d_off) => {{

@@ -137,12 +137,13 @@ pub unsafe fn construct_path(
 }
 
 #[inline]
+#[must_use]
 #[allow(clippy::missing_const_for_fn)]
 #[allow(clippy::single_call_fn)]
 ///a utility function for breaking down the config spaghetti that is platform specific optimisations
 // i wanted to make this const and separate the function
 // because only strlen isn't constant here :(
-pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
+unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     #[cfg(target_os = "linux")]
     {
         use crate::dirent_const_time_strlen;

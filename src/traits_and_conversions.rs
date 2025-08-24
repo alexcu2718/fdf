@@ -86,7 +86,6 @@ where
     /// - Path must be a directory
     /// - Uses `O_DIRECTORY | O_CLOEXEC | O_NONBLOCK`
     unsafe fn open_fd(&self) -> Result<i32>;
-
     /// Gets index of filename component start
     ///
     /// Returns position after last '/' or 0 if none.
@@ -225,6 +224,7 @@ where
             Err(crate::DirEntryError::InvalidStat)
         }
     }
+
     #[inline]
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later

@@ -1,7 +1,7 @@
 use crate::BytesStorage;
-use crate::{BytePath, DirEntry, FileType, Result};
+use crate::{BytePath as _, DirEntry, FileType, Result};
 use compile_time_ls_colours::file_type_colour;
-use std::io::{BufWriter, IsTerminal, Write, stdout};
+use std::io::{BufWriter, IsTerminal as _, Write as _, stdout};
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
 const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
@@ -35,6 +35,7 @@ where
 
 #[allow(clippy::single_call_fn)]
 #[inline]
+#[allow(clippy::missing_errors_doc)] //fix later TODO!
 pub fn write_paths_coloured<I, S>(paths: I, limit: Option<usize>) -> Result<()>
 where
     I: Iterator<Item = Vec<DirEntry<S>>>,

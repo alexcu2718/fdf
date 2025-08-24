@@ -8,7 +8,8 @@ pub(crate) const MEBI: u64 = KIBI * 1024;
 pub(crate) const GIBI: u64 = MEBI * 1024;
 pub(crate) const TEBI: u64 = GIBI * 1024;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::exhaustive_enums)]
 pub enum ParseSizeError {
     Empty,
     InvalidNumber,
@@ -16,20 +17,21 @@ pub enum ParseSizeError {
     InvalidFormat,
 }
 
-impl std::fmt::Display for ParseSizeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParseSizeError::Empty => write!(f, "empty size string"),
-            ParseSizeError::InvalidNumber => write!(f, "invalid number"),
-            ParseSizeError::InvalidUnit => write!(f, "invalid unit"),
-            ParseSizeError::InvalidFormat => write!(f, "invalid format"),
+impl core::fmt::Display for ParseSizeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match *self {
+            Self::Empty => write!(f, "empty size string"),
+            Self::InvalidNumber => write!(f, "invalid number"),
+            Self::InvalidUnit => write!(f, "invalid unit"),
+            Self::InvalidFormat => write!(f, "invalid format"),
         }
     }
 }
 
-impl std::error::Error for ParseSizeError {}
+impl core::error::Error for ParseSizeError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::exhaustive_enums)]
 pub enum SizeFilter {
     Max(u64),
     Min(u64),
@@ -37,50 +39,47 @@ pub enum SizeFilter {
 }
 
 impl SizeFilter {
+    #[allow(clippy::single_call_fn)]
+    #[allow(clippy::missing_errors_doc)] //private function not doing this
     pub fn from_string(s: &str) -> Result<Self, ParseSizeError> {
         Self::parse_args(s).ok_or(ParseSizeError::InvalidFormat)
     }
-
-    fn parse_args(s: &str) -> Option<Self> {
-        let s = s.trim();
+    #[allow(clippy::single_call_fn)]
+    fn parse_args(start: &str) -> Option<Self> {
+        let s = start.trim();
         if s.is_empty() {
             return None;
         }
 
-        // Determine prefix (+, -, or none)
-        let (limit, remaining) = if s.starts_with('+') {
-            ("+", &s[1..])
-        } else if s.starts_with('-') {
-            ("-", &s[1..])
-        } else {
-            ("", s)
-        };
+        let (limit, remaining) = s
+            .strip_prefix('+')
+            .map(|stripped| ("+", stripped))
+            .or_else(|| s.strip_prefix('-').map(|stripped| ("-", stripped)))
+            .unwrap_or(("", s));
 
         let (quantity, unit_str) = Self::parse_size_parts(remaining)?;
 
-      
         let multiplier = Self::unit_multiplier(&unit_str)?;
 
         let size = quantity * multiplier;
         match limit {
-            "+" => Some(SizeFilter::Min(size)),
-            "-" => Some(SizeFilter::Max(size)),
-            "" => Some(SizeFilter::Equals(size)),
+            "+" => Some(Self::Min(size)),
+            "-" => Some(Self::Max(size)),
+            "" => Some(Self::Equals(size)),
             _ => None,
         }
     }
-
-    fn parse_size_parts(s: &str) -> Option<(u64, String)> {
-        let s = s.trim().to_lowercase();
+    #[allow(clippy::single_call_fn)]
+    fn parse_size_parts(start: &str) -> Option<(u64, String)> {
+        let s = start.trim().to_lowercase();
         let ref_s = s.as_str();
 
-        // check where digits end
         let digit_end = ref_s
             .chars()
             .position(|c| !c.is_ascii_digit())
             .unwrap_or(s.len());
 
-        if digit_end == s.len() {
+        if digit_end == ref_s.len() {
             let quantity = s.parse().ok()?;
             return Some((quantity, "b".into()));
         }
@@ -90,10 +89,10 @@ impl SizeFilter {
 
         Some((quantity, unit_str.into()))
     }
-
+    #[allow(clippy::single_call_fn)]
     fn unit_multiplier(unit: &str) -> Option<u64> {
-        let unit = unit.trim().to_lowercase();
-        match unit.as_ref() {
+        let unit_lower = unit.trim().to_lowercase();
+        match unit_lower.as_ref() {
             "b" => Some(1),
             "k" | "kb" => Some(KILO),
             "ki" | "kib" => Some(KIBI),
@@ -106,12 +105,13 @@ impl SizeFilter {
             _ => None,
         }
     }
-
-    pub fn is_within_size(&self, size: u64) -> bool {
+    #[allow(clippy::single_call_fn)]
+    #[must_use]
+    pub const fn is_within_size(&self, size: u64) -> bool {
         match *self {
-            SizeFilter::Max(limit) => size <= limit,
-            SizeFilter::Min(limit) => size >= limit,
-            SizeFilter::Equals(limit) => size == limit,
+            Self::Max(limit) => size <= limit,
+            Self::Min(limit) => size >= limit,
+            Self::Equals(limit) => size == limit,
         }
     }
 }

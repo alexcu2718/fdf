@@ -36,7 +36,7 @@ where
 #[allow(clippy::single_call_fn)]
 #[inline]
 #[allow(clippy::missing_errors_doc)] //fix later TODO!
-pub fn write_paths_coloured<I, S>(paths: I, limit: Option<usize>) -> Result<()>
+pub fn write_paths_coloured<I, S>(paths: I, limit: Option<usize>,nocolour:bool) -> Result<()>
 where
     I: Iterator<Item = Vec<DirEntry<S>>>,
     S: BytesStorage + 'static + Clone,
@@ -48,7 +48,7 @@ where
 
     let limit_opt: usize = limit.unwrap_or(usize::MAX);
 
-    let check_std_colours = /*arbitrary feature request  */
+    let check_std_colours = nocolour || /*arbitrary feature request  */
         std::env::var("FDF_NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
 
     if use_colors && !check_std_colours {

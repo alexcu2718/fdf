@@ -116,6 +116,12 @@ struct Args {
         help = "Include symlinks in traversal,defaults to false\n"
     )]
     follow_symlinks: bool,
+       #[arg(
+        long = "nocolour",
+        default_value_t = false,
+        help = "Disable colouring output when sending to terminal\n"
+    )]
+    no_colour: bool,
     #[arg(
         short = 'g',
         long = "glob",
@@ -252,7 +258,8 @@ fn main() -> Result<(), DirEntryError> {
         match SizeFilter::from_string(&file_size) {
             Ok(filter) => Some(filter),
             Err(e) => {
-                eprintln!("Error parsing size filter '{}': {}", file_size, e);
+                //todo! make these errors prettier
+                eprintln!("Error parsing size filter, please check fdf --help '{}': {}", file_size, e);
                 std::process::exit(1);
             }
         }
@@ -274,7 +281,7 @@ fn main() -> Result<(), DirEntryError> {
         finder = finder.with_type_filter(type_filter);
     }
 
-    let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n);
+    let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n,args.no_colour);
 
     Ok(())
 }
@@ -288,7 +295,7 @@ fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> Os
     let dir_to_use = args_directory.unwrap_or_else(|| generate_start_prefix());
     let path_check = Path::new(&dir_to_use);
 
-    if !path_check.is_dir() && !path_check.is_symlink() {
+    if !path_check.is_dir() {
         eprintln!("{} is not a directory", dir_to_use.to_string_lossy());
         std::process::exit(1);
     }
@@ -318,8 +325,8 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
         return pattern.into();
     }
 
-    glob_to_regex(pattern).unwrap_or_else(|_| {
-        eprintln!("This can't be processed as a glob pattern");
+    glob_to_regex(pattern).unwrap_or_else(|e| {
+        eprintln!("This can't be processed as a glob pattern error is  {e}"); //todo! fix these errors
         std::process::exit(1)
     })
 }

@@ -232,7 +232,7 @@ where
     fn modified_time(&self) -> Result<SystemTime> {
         let s = self.get_lstat()?;
         let modified_time = access_stat!(s, st_mtime);
-        let modified_seconds = access_stat!(s, st_mtime_nsec); //macro helps avoid funky aliasing on weird systems
+        let modified_seconds = access_stat!(s, st_mtimensec); //macro helps avoid funky aliasing on weird systems
         crate::unix_time_to_system_time(modified_time, modified_seconds)
             .map_err(|_| crate::DirEntryError::TimeError)
     }

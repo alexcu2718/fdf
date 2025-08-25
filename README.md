@@ -27,7 +27,8 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 
  **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64), macOS (Intel & Apple Silicon), FreeBSD(x86_64),
 
- **Compiles but Limited Testing**: OpenBSD, NetBSD,  DragonflyBSD, Android(works on my phone!), Illumos/Solaris (x86_64)(QEMU tested)  (Not familiar with github actions for these ones)
+ **Compiles but Limited Testing**: OpenBSD, NetBSD,  DragonflyBSD, Android(works on my phone!), Illumos/Solaris (x86_64)(QEMU tested)
+ These platforms don't support rust 2024 yet via github actions, I will add in checks when they do!
 
  **Not Supported**: Windows (fundamental rewrite required due to architectural differences(because of using libc), will be done when I read through the API properly!)
 

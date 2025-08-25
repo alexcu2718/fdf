@@ -357,7 +357,7 @@ where
     /// Build the Finder instance
     #[allow(clippy::missing_errors_doc)] //TODO! add error docs here
     pub fn build(self) -> Result<Finder<S>> {
-        let config = SearchConfig::new(
+        let search_config = SearchConfig::new(
             self.pattern,
             self.hide_hidden,
             self.case_insensitive,
@@ -367,9 +367,9 @@ where
             self.max_depth,
             self.follow_symlinks,
             self.size_filter,
-        );
+        )?;
 
-        let search_config = config?;
+       
 
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
             {

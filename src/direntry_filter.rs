@@ -2,6 +2,7 @@
 
 #![cfg(target_os = "linux")]
 #![allow(dead_code)]
+#![allow(clippy::multiple_unsafe_ops_per_block)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::single_char_lifetime_names)]
 // THIS IS PRETTY MUCH A CARBON COPY OF `direntry.rs`

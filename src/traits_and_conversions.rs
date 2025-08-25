@@ -1,4 +1,4 @@
-#![allow(clippy::missing_errors_doc)] //need to add these
+#![allow(clippy::missing_errors_doc)] //need to add these todo
 use crate::{
     AlignedBuffer, BytesStorage, DirEntry, DirEntryError, FileType, LOCAL_PATH_MAX, PathBuffer,
     Result, access_dirent, buffer::ValueType, memchr_derivations::memrchr,
@@ -425,7 +425,8 @@ pub trait DirentConstructor<S: BytesStorage> {
         // SAFETY: The `drnt` must not be null(checked before hand)
         let full_path = unsafe { crate::utils::construct_path(self.path_buffer(), base_len, drnt) };
         // SAFETY: as above ^^
-        let dtype = unsafe { access_dirent!(drnt, d_type) };
+
+        let dtype = unsafe { access_dirent!(drnt, d_type) }; //need to optimise this for illumos/solaris TODO!
         // SAFETY: Same as above^
         let inode = unsafe { access_dirent!(drnt, d_ino) };
 

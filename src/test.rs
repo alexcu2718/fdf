@@ -48,7 +48,7 @@ mod tests {
             .parent()
             .expect("File path should have parent");
 
-        let _ = std::fs::remove_dir_all(test_dir); 
+        let _ = std::fs::remove_dir_all(test_dir);
         std::fs::create_dir_all(test_dir).expect("Failed to create test directory");
         std::fs::write(&test_file_path, "test").expect("Failed to write test file");
         let entry: DirEntry<Box<[u8]>> =
@@ -329,7 +329,7 @@ mod tests {
         let entry = DirEntry::<SlimmerBytes>::new(file_path.as_os_str()).unwrap();
 
         assert_eq!(entry.file_name(), b"testfile.txt");
-        let x = std::fs::remove_file(&file_path).is_ok(); 
+        let x = std::fs::remove_file(&file_path).is_ok();
         assert!(x, "File should be removed successfully");
         let _ = std::fs::remove_dir_all(&new_dir);
     }
@@ -456,7 +456,6 @@ mod tests {
         fs::write(dir_path.join("file2.txt"), "content")?;
         fs::create_dir(dir_path.join("subdir"))?;
 
-
         // init a DirEntry for testing
 
         let dir_entry = DirEntry::<SlimmerBytes>::new(&dir_path)?;
@@ -466,7 +465,6 @@ mod tests {
 
         // collect entries
         let mut entries = Vec::new();
-     
 
         for entry in iter {
             entries.push(entry)

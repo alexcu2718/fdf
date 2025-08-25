@@ -18,15 +18,12 @@
 #![allow(clippy::pub_with_shorthand)] //this is *************
 #![allow(clippy::allow_attributes)]
 #![allow(clippy::allow_attributes_without_reason)] //broken lint
-#![allow(clippy::multiple_unsafe_ops_per_block)]
-#![allow(clippy::arithmetic_side_effects)]
-//a lot of the arithmetic side effects are simply we're we know usize->u16 is fine (just any indexing requires a usize)
-#![allow(clippy::as_conversions)] //same as above
+#![allow(clippy::arithmetic_side_effects)] //a lot of the arithmetic side effects are simply we're we know usize->u16 is fine (just any indexing requires a usize)
+#![allow(clippy::as_conversions)]
 #![allow(clippy::question_mark_used)] //super dumb
 #![allow(clippy::semicolon_if_nothing_returned)] //this is dumb
 #![allow(clippy::missing_trait_methods)] //this one too
 #![allow(clippy::semicolon_inside_block)] //this one is really dumb
-//#![allow(clippy::must_use_candidate)]
 
 use rayon::prelude::*;
 use std::{
@@ -217,11 +214,20 @@ where
             Ok(entries) => {
 
                 // Apply filters before partitioning 
-                let (dirs, mut files): (Vec<_>, Vec<_>) = entries
-                    .filter(|entry| keep_hidden(entry) && (d_or_s_filter(entry) || file_filter(entry)))
-                    //this boolean logic is horrible but highly efficient.
-                    //essentially we do a lot of shortcircuiting to evaluate
-                    .partition(d_or_s_filter);
+            let (dirs, mut files): (Vec<_>, Vec<_>) = entries
+                .filter(|entry| keep_hidden(entry) && 
+                (d_or_s_filter(entry) || file_filter(entry)))
+                // This boolean logic is designed for efficiency through short-circuiting.
+                // 1. We first check `keep_hidden`. If a file is hidden and `hide_hidden` is true,
+                //    the entire expression immediately evaluates to `false`, and we move to the next entry.
+                // 2. If the entry is not hidden (or `hide_hidden` is false), we then check
+                //    `(d_or_s_filter(entry) || file_filter(entry))`.
+                // 3. This part uses another short-circuit. `d_or_s_filter` checks if the entry is
+                //    a directory or a symlink we should follow. If it is, the right side (`file_filter`)
+                //    is not evaluated, which avoids an expensive call to `file_filter` on directories.
+                // 4. If the entry is not a directory/symlink, we then run the `file_filter`, which
+                //    contains the main logic for filtering files (e.g., by name, size, or content).
+                .partition(d_or_s_filter);
 
                 // Process directories in parallel
                 dirs.into_par_iter().for_each(|dirnt| {
@@ -234,7 +240,8 @@ where
                 }
 
                 if !files.is_empty() {
-                    let _ = sender.send(files);
+                    let _ = sender.send(files); //We do batch sending to minimise contention of threads
+                    
                 }
             }
             Err(

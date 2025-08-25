@@ -1,3 +1,4 @@
+#![allow(clippy::multiple_unsafe_ops_per_block)] //annoying convention
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;

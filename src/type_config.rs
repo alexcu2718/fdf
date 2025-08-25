@@ -12,7 +12,7 @@ pub fn build_type_filter<S>(types: &[String]) -> DirEntryFilter<S>
 where
     S: BytesStorage + 'static + Clone,
 {
-    TYPE_FILTER_TYPES.get_or_init(|| types.iter().map(|t| t.to_lowercase()).collect());
+    TYPE_FILTER_TYPES.get_or_init(|| types.iter().map(|typ| typ.to_lowercase()).collect());
 
     // return a function pointer
     filter_by_type
@@ -22,9 +22,12 @@ fn filter_by_type<S>(entry: &DirEntry<S>) -> bool
 where
     S: BytesStorage + 'static + Clone,
 {
-    let types = unsafe { TYPE_FILTER_TYPES.get().unwrap_unchecked() }; // safe because we initialised it in build_type_filter
+    // SAFETY: This is safe because `TYPE_FILTER_TYPES` is a `OnceLock` that is
+    // initialised exactly once in the `build_type_filter` function. The call to `get()`
+    // will succeed, and `unwrap_unchecked()` is safe because we know the value is present.
+    let types = unsafe { TYPE_FILTER_TYPES.get().unwrap_unchecked() }; // 
 
-    for type_char in types.iter().flat_map(|s| s.chars()) {
+    for type_char in types.iter().flat_map(|cha| cha.chars()) {
         match type_char {
             'd' => {
                 if entry.is_dir() {

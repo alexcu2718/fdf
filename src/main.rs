@@ -1,33 +1,27 @@
 //i use very strong lints.
-#![allow(clippy::all)]
+//I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
+//cargo clippy --all -- -W clippy::all -W clippy::pedantic -W clippy::restriction -W clippy::nursery -D warnings
 #![allow(clippy::absolute_paths)]
-#![allow(clippy::single_call_fn)]
+#![allow(clippy::single_call_fn)] //naturally in a main function youd excpect this
 #![allow(clippy::let_underscore_must_use)]
 #![allow(clippy::let_underscore_untyped)]
 #![allow(clippy::implicit_return)] //this one is dumb
 #![allow(clippy::as_underscore)] // this too
-#![allow(clippy::min_ident_chars)]
 #![allow(clippy::missing_docs_in_private_items)]
-#![allow(clippy::undocumented_unsafe_blocks)]
 #![allow(clippy::blanket_clippy_restriction_lints)]
 #![allow(clippy::absolute_paths)] //this ones dumb
-#![allow(clippy::impl_trait_in_params)]
-#![allow(clippy::arbitrary_source_item_ordering)]
-#![allow(clippy::unused_trait_names)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::missing_inline_in_public_items)]
+#![allow(clippy::arbitrary_source_item_ordering)] //stylistic
 #![allow(clippy::std_instead_of_alloc)] //this one is stupid
 #![allow(clippy::field_scoped_visibility_modifiers)]
 #![allow(clippy::pub_with_shorthand)]
-#![allow(clippy::redundant_pub_crate)]
 #![allow(clippy::allow_attributes)]
 #![allow(clippy::allow_attributes_without_reason)]
 #![allow(clippy::map_err_ignore)]
-#![allow(clippy::question_mark_used)] //dumb
-#![allow(clippy::semicolon_inside_block)] //dumb
-#![allow(clippy::must_use_candidate)] //dumb
-#![allow(clippy::semicolon_outside_block)] //dumb
-use clap::{ArgAction, CommandFactory, Parser, ValueHint, value_parser};
+#![allow(clippy::question_mark_used)] //dumb...just dumb
+#![allow(clippy::semicolon_inside_block)] //dumb/stylistic
+#![allow(clippy::must_use_candidate)] //dumb/stylistic
+#![allow(clippy::semicolon_outside_block)] //dumb/stylistic
+use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
 use std::env;
@@ -79,7 +73,7 @@ struct Args {
         help = "Enable case-sensitive matching, defaults to false"
     )]
     case_insensitive: bool,
-      #[arg(
+    #[arg(
         short='e',
         long = "extension",
         help = format!("filters based on extension, eg --extension .txt or -E txt"),
@@ -202,13 +196,16 @@ struct Args {
     ///   --size -10mb       Files smaller than 10 megabytes
     ///   --size +1gi        Files larger than 1 gibibyte
     ///   --size 500ki       Files exactly 500 kibibytes
-    #[arg(long="size", short = 'S',  allow_hyphen_values = true, value_name = "size",
+    #[arg(
+        long = "size",
+        short = 'S',
+        allow_hyphen_values = true,
+        value_name = "size",
         help = "Filter by size. Examples '10k' (exactly 10KB),'+1M' (>=1MB),'-1GB' (<= 1GB)\n",
         long_help,
         verbatim_doc_comment
-        )]
-    pub size: Option<String>,
-
+    )]
+    size: Option<String>,
 }
 
 #[allow(clippy::exit)]
@@ -246,19 +243,18 @@ fn main() -> Result<(), DirEntryError> {
         process_glob_regex(&start_pattern, args.glob)
     };
 
-    if args.depth.is_some_and(|d| d == 0) {
+    if args.depth.is_some_and(|depth| depth == 0) {
         eprintln!("Error: Depth cannot be 0. Exiting.");
         std::process::exit(1);
     }
 
-    let size_of_file = args.size.map_or(None, |file_size| {
+    let size_of_file = args.size.map(|file_size| {
         match SizeFilter::from_string(&file_size) {
-            Ok(filter) => Some(filter),
-            Err(e) => {
+            Ok(filter) => filter,
+            Err(err) => {
                 //todo! make these errors prettier
                 eprintln!(
-                    "Error parsing size filter, please check fdf --help '{}': {}",
-                    file_size, e
+                    "Error parsing size filter, please check fdf --help '{file_size}': {err}",
                 );
                 std::process::exit(1);
             }
@@ -292,7 +288,7 @@ fn main() -> Result<(), DirEntryError> {
 #[allow(clippy::exit)]
 #[allow(clippy::print_stderr)] //this is fine because it's CLI only
 fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> OsString {
-    let dir_to_use = args_directory.unwrap_or_else(|| generate_start_prefix());
+    let dir_to_use = args_directory.unwrap_or_else(generate_start_prefix);
     let path_check = Path::new(&dir_to_use);
 
     if !path_check.is_dir() {
@@ -304,11 +300,11 @@ fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> Os
         match path_check.canonicalize() {
             //stupid yank spelling.
             Ok(canonical_path) => std::path::PathBuf::into_os_string(canonical_path),
-            Err(e) => {
+            Err(err) => {
                 eprintln!(
                     "Failed to canonicalise path {} {}",
                     path_check.to_string_lossy(),
-                    e
+                    err
                 );
                 std::process::exit(1);
             }
@@ -325,8 +321,8 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
         return pattern.into();
     }
 
-    glob_to_regex(pattern).unwrap_or_else(|e| {
-        eprintln!("This can't be processed as a glob pattern error is  {e}"); //todo! fix these errors
+    glob_to_regex(pattern).unwrap_or_else(|err| {
+        eprintln!("This can't be processed as a glob pattern error is  {err}"); //todo! fix these errors
         std::process::exit(1)
     })
 }
@@ -334,7 +330,7 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
 fn generate_start_prefix() -> OsString {
     env::current_dir()
         .ok()
-        .map(|os_str| std::path::PathBuf::into_os_string(os_str))
+        .map(std::path::PathBuf::into_os_string)
         .or_else(|| env::var_os("HOME"))
         .unwrap_or_else(|| OsString::from("~"))
 }

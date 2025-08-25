@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[allow(clippy::missing_errors_doc)] //fixing errors later
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
+#[allow(clippy::as_conversions)]
 pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
     let (base, offset) = if sec >= 0 {
         (UNIX_EPOCH, Duration::new(sec as u64, nsec as u32))
@@ -41,6 +42,7 @@ pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
 #[inline]
 #[allow(clippy::undocumented_unsafe_blocks)] //not commenting all of this.
 #[allow(clippy::multiple_unsafe_ops_per_block)] //DIS
+#[allow(clippy::as_conversions)] //casting i32->usize is safe (64bit is all i care about)
 pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
@@ -188,6 +190,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 #[cfg(target_os = "linux")]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
+#[allow(clippy::as_conversions)]
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 /// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD.
 /// Constant time(and branchless)

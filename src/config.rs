@@ -119,6 +119,7 @@ impl SearchConfig {
     #[inline]
     #[must_use]
     #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::as_conversions)]
     pub fn matches_size<S>(&self, entry: &DirEntry<S>) -> bool
     where
         S: BytesStorage,

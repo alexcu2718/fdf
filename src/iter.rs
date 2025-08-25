@@ -222,6 +222,7 @@ where
     }
 
     #[inline]
+    #[allow(clippy::multiple_unsafe_ops_per_block)]
     #[allow(clippy::cast_sign_loss)] //this doesnt matter
     #[allow(clippy::cast_possible_truncation)] //doesnt matter on 64bit
     /// Prefetches the next likely entry in the buffer to keep the cache warm.

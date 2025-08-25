@@ -229,7 +229,8 @@ where
         }
     }
     #[inline]
-    #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::missing_errors_doc)] //TODO!
+    #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
     /// Converts a directory entry to a full, canonical path, resolving all symlinks.
     ///
     /// This is a **costly** operation as it involves a system call (`realpath`).

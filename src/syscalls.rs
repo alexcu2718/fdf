@@ -4,6 +4,7 @@ use crate::ValueType;
 #[inline]
 #[allow(clippy::inline_asm_x86_intel_syntax)]
 #[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 // x86_64-specific implementation

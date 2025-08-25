@@ -28,7 +28,8 @@
 
 use rayon::prelude::*;
 use std::{
-    ffi::{OsStr, OsString},  sync::mpsc::{channel as unbounded, Receiver, Sender}
+    ffi::{OsStr, OsString},
+    sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 #[macro_use]
 pub(crate) mod cursed_macros;
@@ -245,7 +246,8 @@ where
                 | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
                 | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
             ) => {} //TODO! add logging
-            Err(err) => unreachable!("Please report this error! {err}")        }
+               // Safety: we assume all error variants are covered above
+            Err(_) => unsafe{core::hint::unreachable_unchecked()     }  }
     }
 }
 

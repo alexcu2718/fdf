@@ -1,6 +1,6 @@
 # fdf – High-Performance POSIX File Finder
 
-**fdf** is an experimental, high-performance alternative to [`fd`](https://github.com/sharkdp/fd) and `find`, optimised for **regex** and **glob** matching with colourised output.  
+**fdf** is an experimental, high-performance alternative to [`fd`](https://github.com/sharkdp/fd) and [`find`](https://www.man7.org/linux/man-pages/man1/find.1.html), optimised for **regex** and **glob** matching with colourised output.  
 Originally a learning project in **advanced Rust**, **C**, and a little bit of **assembly**, it has evolved into a competitive, benchmarked tool for fast filesystem search.
 
 --*NOTE, THIS WILL BE RENAMED BEFORE A 1.0, MOSTLY BECAUSE I THOUGHT FD FASTER WAS A FUNNY NAME, SORRY! (awful sense of humour)*
@@ -140,7 +140,9 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
 I started this project because I found find slow and wanted to learn how to interface directly with the kernel.
 What began as a random experiment turned out to be a genuinely useful tool - one I'll probably use for the rest of my life to find files efficiently.
 
-At the core, this is about learning. When I began, I didn't even know C, so there are some rough ABI edges. But along the way, I've picked up low-level skills and this project has been really useful for that!
+At the core, this is about learning.
+
+When I began I had barely used Linux for a few months, I didn't even know C, so there are some rough ABI edges. But along the way, I've picked up low-level skills and this project has been really useful for that!
 
 ### Performance Motivation
 
@@ -151,11 +153,11 @@ Currently, filtering-before-allocation is partially implemented in the crate but
 
 ### Development Philosophy
 
-* Feature stability before breakage - I won't push breaking changes until I'm confident they're worth it.
+* Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.
 
 * Open to contributions - Once the codebase stabilises, I welcome others to add features if they're extremely inclined anyway!
 
-* Pragmatic focus - Some areas, like datetime filtering, are on hold simply because I rarely use them. They will in the future, especially if someone else is motivated to implement them!
+* Pragmatic focus - Some areas, like datetime filtering, are especially complex
 
 In short, this project is a personal exploration into performance, low-level programming, and building practical tools - with the side benefit that it's actually good at what it does.
 
@@ -179,8 +181,6 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 
 ### Feature Enhancements (Planned)
 
-**Size based filtering**: Search for files by size ()
-
 **DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt fix this, it's also complex to reproduce the time methodologies for all POSIX platforms because each one differs so much, the drawbacks of not using the stdlib!)
 
 **Extended File Types**: Support for searching device drivers, and other special files.
@@ -189,7 +189,7 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 
 ### Platform Expansion
 
-**Windows Support**: Acknowledged as a significant undertaking requiring architectural(because I used libc) changes, but valuable for both usability and learning Windows internals.
+**Windows Support**: Acknowledged as a significant undertaking an almost entire separate codebase(portability ain't fun), but valuable for both usability and learning Windows internals.
 
 ### Core Philosophy
 

@@ -18,7 +18,8 @@
 #![allow(clippy::pub_with_shorthand)] //this is *************
 #![allow(clippy::allow_attributes)]
 #![allow(clippy::allow_attributes_without_reason)] //broken lint
-#![allow(clippy::arithmetic_side_effects)] //a lot of the arithmetic side effects are simply we're we know usize->u16 is fine (just any indexing requires a usize)
+#![allow(clippy::arithmetic_side_effects)]
+//a lot of the arithmetic side effects are simply we're we know usize->u16 is fine (just any indexing requires a usize)
 #![allow(clippy::as_conversions)]
 #![allow(clippy::question_mark_used)] //super dumb
 #![allow(clippy::semicolon_if_nothing_returned)] //this is dumb
@@ -212,11 +213,6 @@ where
 
         match direntries {
             Ok(entries) => {
-
-                // Apply filters before partitioning 
-            let (dirs, mut files): (Vec<_>, Vec<_>) = entries
-                .filter(|entry| keep_hidden(entry) && 
-                (d_or_s_filter(entry) || file_filter(entry)))
                 // This boolean logic is designed for efficiency through short-circuiting.
                 // 1. We first check `keep_hidden`. If a file is hidden and `hide_hidden` is true,
                 //    the entire expression immediately evaluates to `false`, and we move to the next entry.
@@ -227,6 +223,9 @@ where
                 //    is not evaluated, which avoids an expensive call to `file_filter` on directories.
                 // 4. If the entry is not a directory/symlink, we then run the `file_filter`, which
                 //    contains the main logic for filtering files (e.g., by name, size, or content).
+            let (dirs, mut files): (Vec<_>, Vec<_>) = entries
+                .filter(|entry| keep_hidden(entry) &&
+                (d_or_s_filter(entry) || file_filter(entry)))
                 .partition(d_or_s_filter);
 
                 // Process directories in parallel
@@ -238,10 +237,9 @@ where
                     files.push(dir.clone()) //we have to clone here unfortunately because it's being used to keep the iterator going.
                     //luckily we're only cloning once, not cloning multiple!
                 }
-
+                //We do batch sending to minimise contention of threads
                 if !files.is_empty() {
-                    let _ = sender.send(files); //We do batch sending to minimise contention of threads
-                    
+                    let _ = sender.send(files);
                 }
             }
             Err(

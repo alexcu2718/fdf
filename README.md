@@ -116,7 +116,8 @@ Then this function, really nice way to avoid branch misses during dirent parsing
 
 ```rust
 
-//The code is explained better in the true function definition (I have to keep it short for the readme!)
+//The code is explained better in the true function definition
+// I have to keep it short for the readme!)
 //This is the little-endian implementation, see crate for modified version for big-endian
 // Only used on Linux systems, OpenBSD/macos systems store the name length trivially
 //(SIMD within a register, so no architecture dependence)
@@ -127,8 +128,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; 
     //reclen is always multiple of 8 so alignment is guaranteed (unaligned reads are expensive!)
     //endianness fix omitted for brevity. check source
-    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch
-    let candidate_pos = last_word | mask;//^
+    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch mask
+    let candidate_pos = last_word | mask;//
     let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // no branch SWAR
     reclen - DIRENT_HEADER_START - byte_pos
 }
@@ -198,7 +199,7 @@ The CLI will remain **simple** (avoiding overwhelming help menus(looking at you,
 
 ## Current Issues
 
-There's bugs I need to diagnose causing small differences when doing size difference, [check/run this script](https://github.com/alexcu2718/fdf/blob/main/test_size_difference.sh)
+There's bugs I need to diagnose causing small differences when doing size difference, [check/run this script](https://github.com/alexcu2718/fdf/blob/main/test_size_difference.sh), I'm pretty sure this is actually a bug in fd, going to investigate before pointing fingers!
 
 ## Installation
 

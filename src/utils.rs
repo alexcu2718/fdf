@@ -197,9 +197,10 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 ///
 // This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
 // It's the most efficient way to calculate the length(on Linux)
-// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching on the presence of null(kernel guaranteed)
+// It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching
 //
-// This is my own implementation of a constant-time strlen for dirents, which is an extremely common operation(probably one of THE hottest functions in this library
+// This is my own implementation of a constant-time strlen for dirents,
+// which is an extremely common operation(probably one of THE hottest functions in this library
 // and ignore/fd etc. So this is a big win!)
 ///                                   
 // Reference <https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte>
@@ -250,8 +251,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> u
     let mask: u64 = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes,
-    //we're bit manipulating the last word (a byte/u64) to find the first null byte
-    //this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
+    // we're bit manipulating the last word (a byte/u64) to find the first null byte
+    // this boils to a complexity of strlen over 8 bytes, which we then accomplish with a bit trick
     // Combine the word with our mask to ensure:
     // - Original name bytes remain unchanged
     // - Non-name bytes are set to 0xFF (guaranteed non-zero)

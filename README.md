@@ -197,7 +197,7 @@ The CLI will remain **simple** (avoiding overwhelming help menus(looking at you,
 
 ## Current Issues
 
-There's bugs I need to diagnose causing small differences when doing size difference, [check/run this script](https://github.com/alexcu2718/fdf/blob/main/test_test_size_difference.sh)
+There's bugs I need to diagnose causing small differences when doing size difference, [check/run this script](https://github.com/alexcu2718/fdf/blob/main/test_size_difference.sh)
 
 ## Installation
 

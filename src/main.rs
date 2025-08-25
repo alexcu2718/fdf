@@ -41,7 +41,6 @@ use fdf::size_filter::SizeFilter;
 mod type_config;
 use type_config::build_type_filter;
 
-//mirroring option in fd but adding unknown as well.
 const FILE_TYPES: &str = "d: Directory
 u: Unknown
 l: Symlink
@@ -61,43 +60,42 @@ struct Args {
     pattern: Option<String>,
     #[arg(
         value_name = "PATH",
-        help = format!("Path to search (defaults to current working directory )\n"),
+        help = format!("Path to search (defaults to current working directory)"),
         value_hint=ValueHint::DirPath,
         required=false,
         index=2
     )]
     directory: Option<OsString>,
     #[arg(
-        short = 'E',
-        long = "extension",
-        help = format!("filters based on extension, eg -E .txt or -E txt\n"),
-    )]
-    extension: Option<String>,
-
-    #[arg(
         short = 'H',
         long = "hidden",
-        help = "Shows hidden files eg .gitignore or .bashrc, defaults to off\n"
+        help = "Shows hidden files eg .gitignore or .bashrc, defaults to off"
     )]
     hidden: bool,
     #[arg(
         short = 's',
         long = "case-sensitive",
         default_value_t = true,
-        help = "Enable case-sensitive matching, defaults to false\n"
+        help = "Enable case-sensitive matching, defaults to false"
     )]
     case_insensitive: bool,
+      #[arg(
+        short='e',
+        long = "extension",
+        help = format!("filters based on extension, eg --extension .txt or -E txt"),
+    )]
+    extension: Option<String>,
     #[arg(
         short = 'j',
         long = "threads",
         default_value_t = env!("CPU_COUNT").parse::<usize>().unwrap_or(1),
-        help = "Number of threads to use, defaults to available threads\n",
+        help = "Number of threads to use, defaults to available threads available on your computer",
     )]
     thread_num: usize,
     #[arg(
         short = 'a',
         long = "absolute-path",
-        help = "Show absolute paths of results, defaults to false\n"
+        help = "Show absolute paths of results, defaults to false"
     )]
     absolute_path: bool,
 
@@ -105,7 +103,7 @@ struct Args {
         short = 'I',
         long = "include-dirs",
         default_value_t = false,
-        help = "Include directories, defaults to off\n"
+        help = "Include directories, defaults to off"
     )]
     keep_dirs: bool,
 
@@ -113,13 +111,13 @@ struct Args {
         short = 'L',
         long = "follow",
         default_value_t = false,
-        help = "Include symlinks in traversal,defaults to false\n"
+        help = "Include symlinks in traversal,defaults to false"
     )]
     follow_symlinks: bool,
-       #[arg(
+    #[arg(
         long = "nocolour",
         default_value_t = false,
-        help = "Disable colouring output when sending to terminal\n"
+        help = "Disable colouring output when sending to terminal"
     )]
     no_colour: bool,
     #[arg(
@@ -127,27 +125,27 @@ struct Args {
         long = "glob",
         required = false,
         default_value_t = false,
-        help = "Use a glob pattern,defaults to off\n"
+        help = "Use a glob pattern,defaults to off"
     )]
     glob: bool,
 
     #[arg(
         short = 'n',
         long = "max-results",
-        help = "Retrieves the first eg 10 results, '.cache' / -n 10\n"
+        help = "Retrieves the first eg 10 results, '.cache' / -n 10"
     )]
     top_n: Option<usize>,
     #[arg(
         short = 'd',
         long = "depth",
-        help = "Retrieves only traverse to x depth\n"
+        help = "Retrieves only traverse to x depth"
     )]
     depth: Option<u16>,
     #[arg(
         long = "generate",
         action = ArgAction::Set,
         value_parser = value_parser!(Shell),
-        help = "Generate shell completions\n"
+        help = "Generate shell completions"
     )]
     generate: Option<Shell>,
 
@@ -155,7 +153,8 @@ struct Args {
         short = 't',
         long = "type",
         required = false,
-        help = format!("Select type of files (can use multiple times).\n Available options are:\n{}", FILE_TYPES),
+        help="Filter by file type, eg -d (directory) -f(regular file)",
+        long_help = format!("Select type of files (can use multiple times).\n Available options are:\n{}", FILE_TYPES),
         value_delimiter = ',',
         num_args = 1..,
     )]
@@ -166,7 +165,7 @@ struct Args {
         long = "full-path",
         required = false,
         default_value_t = false,
-        help = "Use a full path for regex matching, default to false\n"
+        help = "Use a full path for regex matching, default to false"
     )]
     full_path: bool,
 
@@ -175,43 +174,41 @@ struct Args {
         long = "fixed-strings",
         required = false,
         default_value_t = false,
-        help = "Use a fixed string not a regex, defaults to false\n",
+        help = "Use a fixed string not a regex, defaults to false",
         conflicts_with = "glob"
     )]
     fixed_string: bool,
+    /// Filter by file size
+    ///
+    /// PREFIXES:
+    ///   +SIZE    Find files larger than SIZE
+    ///   -SIZE    Find files smaller than SIZE
+    ///    SIZE     Find files exactly SIZE (default)
+    ///
+    /// UNITS:
+    ///   b        Bytes (default if no unit specified)
+    ///   k, kb    Kilobytes (1000 bytes)
+    ///   ki, kib  Kibibytes (1024 bytes)
+    ///   m, mb    Megabytes (1000^2 bytes)
+    ///   mi, mib  Mebibytes (1024^2 bytes)
+    ///   g, gb    Gigabytes (1000^3 bytes)
+    ///   gi, gib  Gibibytes (1024^3 bytes)
+    ///   t, tb    Terabytes (1000^4 bytes)
+    ///   ti, tib  Tebibytes (1024^4 bytes)
+    ///
+    /// EXAMPLES:
+    ///   --size 100         Files exactly 100 bytes
+    ///   --size +1k         Files larger than 1000 bytes
+    ///   --size -10mb       Files smaller than 10 megabytes
+    ///   --size +1gi        Files larger than 1 gibibyte
+    ///   --size 500ki       Files exactly 500 kibibytes
+    #[arg(long="size", short = 'S',  allow_hyphen_values = true, value_name = "size",
+        help = "Filter by size. Examples '10k' (exactly 10KB),'+1M' (>=1MB),'-1GB' (<= 1GB)\n",
+        long_help,
+        verbatim_doc_comment
+        )]
+    pub size: Option<String>,
 
-    #[arg(
-        long = "size",
-        short = 'S',
-        required = false,
-        allow_hyphen_values = true,
-        help = "Filter by file size. Examples: '10k' (exactly 10KB), '+1M' (larger than 1MB)\n, '-500b' (smaller than 500 bytes)\n",
-        long_help = "Filter files by their size. The size can be specified with optional prefixes and units:
-
-        PREFIXES:
-        +SIZE    Find files larger than SIZE
-        -SIZE    Find files smaller than SIZE
-        SIZE     Find files exactly SIZE (default)
-
-        UNITS:
-        b        Bytes (default if no unit specified)
-        k, kb    Kilobytes (1000 bytes)
-        ki, kib  Kibibytes (1024 bytes)
-        m, mb    Megabytes (1000^2 bytes)
-        mi, mib  Mebibytes (1024^2 bytes)
-        g, gb    Gigabytes (1000^3 bytes)
-        gi, gib  Gibibytes (1024^3 bytes)
-        t, tb    Terabytes (1000^4 bytes)
-        ti, tib  Tebibytes (1024^4 bytes)
-
-        EXAMPLES:
-        --size 100         Files exactly 100 bytes
-        --size +1k         Files larger than 1000 bytes
-        --size -10mb       Files smaller than 10 megabytes
-        --size +1gi        Files larger than 1 gibibyte
-        --size 500ki       Files exactly 500 kibibytes"
-    )]
-    size: Option<String>,
 }
 
 #[allow(clippy::exit)]
@@ -259,7 +256,10 @@ fn main() -> Result<(), DirEntryError> {
             Ok(filter) => Some(filter),
             Err(e) => {
                 //todo! make these errors prettier
-                eprintln!("Error parsing size filter, please check fdf --help '{}': {}", file_size, e);
+                eprintln!(
+                    "Error parsing size filter, please check fdf --help '{}': {}",
+                    file_size, e
+                );
                 std::process::exit(1);
             }
         }
@@ -281,7 +281,7 @@ fn main() -> Result<(), DirEntryError> {
         finder = finder.with_type_filter(type_filter);
     }
 
-    let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n,args.no_colour);
+    let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n, args.no_colour);
 
     Ok(())
 }

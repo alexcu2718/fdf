@@ -1,7 +1,7 @@
 # fdf – High-Performance POSIX File Finder
 
 **fdf** is an experimental, high-performance alternative to [`fd`](https://github.com/sharkdp/fd) and `find`, optimised for **regex** and **glob** matching with colourised output.  
-Originally a learning project in **advanced Rust**, **C**, and **assembly**, it has evolved into a competitive, benchmarked tool for fast filesystem search.
+Originally a learning project in **advanced Rust**, **C**, and a little bit of **assembly**, it has evolved into a competitive, benchmarked tool for fast filesystem search.
 
 --*NOTE, THIS WILL BE RENAMED BEFORE A 1.0, MOSTLY BECAUSE I THOUGHT FD FASTER WAS A FUNNY NAME, SORRY! (awful sense of humour)*
 
@@ -29,9 +29,17 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 
  **Compiles but Limited Testing**: OpenBSD, NetBSD,  DragonflyBSD, Android(works on my phone!), Illumos/Solaris (x86_64)(QEMU tested)  (Not familiar with github actions for these ones)
 
- **Not Supported**: Windows (fundamental rewrite required due to architectural differences, will be done when I read through the API properly!)
+ **Not Supported**: Windows (fundamental rewrite required due to architectural differences(because of using libc), will be done when I read through the API properly!)
 
-## How to test
+### Testing methodology
+
+I have 60+ Rust tests and 15+ correctness benchmarks run via shell for testing discrepancies against fd.
+
+The rust tests can be  [Found here](https://github.com/alexcu2718/fdf/blob/main/src/test.rs) (also doc-comment tests not included*)
+
+My shell scripts do clone the llvm repo (sorry!) to give an accurate testing environment
+
+The rust tests are run via GitHub actions on the platforms supported.
 
 ```bash
 git clone https://github.com/alexcu2718/fdf /tmp/fdf_test
@@ -39,13 +47,11 @@ cd /tmp/fdf_test/fd_benchmarks
 ./run_all_tests_USE_ME.sh
 ```
 
-This executes a comprehensive suite of internal library, CLI tests, and benchmarks.
+This runs a comprehensive suite of internal library, CLI tests, and benchmarks.
 
 ## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
 
- **Full Repeatable Benchmarks:** [Found here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
-
-(There's 16 benchmark tests!)
+ **Full Repeatable Benchmarks:** [Found at the following link](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
 (Repeatable via the testing code seen above, they cover file type filtering, among many more!)
 
@@ -98,7 +104,7 @@ Summary
 ## Extra bits
 
 -cstr! :a macro  use a byte slice as a pointer (automatically initialise memory(no heap use), then add a **null terminator** for FFI use)
-(NOTE: THIS MAY CHANGE DUE TO IMPLICATIONS OF LLVM)
+(NOTE: THIS MAY CHANGE DUE TO IMPLICATIONS OF LLVM's probe-stacks (LLVM is the backend for compiling rust))
 
 -find_char_in_word: Find the first occurrence of a byte in a 64-bit word (Using SWAR(SIMD within a register)), a const fn
 
@@ -109,9 +115,9 @@ Then this function, really nice way to avoid branch misses during dirent parsing
 
 ```rust
 
-//The code is explained better in the true function definition (this is crate agnostic)
+//The code is explained better in the true function definition (I have to keep it short for the readme!)
 //This is the little-endian implementation, see crate for modified version for big-endian
-// Only used on Linux systems, OpenBSD/macos systems store the name length trivially (no clue on Windows because reading the API is AWFUL)
+// Only used on Linux systems, OpenBSD/macos systems store the name length trivially
 //(SIMD within a register, so no architecture dependence)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
     //the only true unsafe action here is dereferencing the pointer, that MUST be checked beforehand
@@ -185,17 +191,13 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 
 **Windows Support**: Acknowledged as a significant undertaking requiring architectural(because I used libc) changes, but valuable for both usability and learning Windows internals.
 
-### Tooling Exploration
-
-**Compile-Time Techniques**: Further development of `compile_time_ls_colours` to explore advanced metaprogramming, mostly because it's interesting (doubt I can add much to it now but I think I could use similar techniques elsewhere!)
-
 ### Core Philosophy
 
 The CLI will remain **simple** (avoiding overwhelming help menus(looking at you, ripgrep!)) and **efficient** (prioritising performance in both design and implementation).
 
 ## Current Issues
 
-There's bugs I need to diagnose causing small differences when doing size difference, fixing this shortly!
+There's bugs I need to diagnose causing small differences when doing size difference, [check/run this script](https://github.com/alexcu2718/fdf/blob/main/test_test_size_difference.sh)
 
 ## Installation
 
@@ -209,13 +211,6 @@ cargo build --release
 cargo install --git https://github.com/alexcu2718/fdf
 
 
-Usage
-Arguments
-PATTERN: Regular expression pattern to search for
-PATH: Directory to search (defaults to current directory )
-Basic Examples
-
-
 # Find all JPG files in the home directory (excluding hidden files)
 fdf . ~ -E jpg
 
@@ -223,7 +218,6 @@ fdf . ~ -E jpg
 fdf . /usr/local -E py -H
 
 ## Options 
-
 Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
 Arguments:
@@ -231,55 +225,46 @@ Arguments:
           Pattern to search for
 
   [PATH]
-          Path to search (defaults to current working directory )
-
+          Path to search (defaults to current working directory)
 
 Options:
-  -E, --extension <EXTENSION>
-          filters based on extension, eg -E .txt or -E txt
-
-
   -H, --hidden
           Shows hidden files eg .gitignore or .bashrc, defaults to off
-
 
   -s, --case-sensitive
           Enable case-sensitive matching, defaults to false
 
+  -e, --extension <EXTENSION>
+          filters based on extension, eg --extension .txt or -E txt
 
   -j, --threads <THREAD_NUM>
-          Number of threads to use, defaults to available threads
-
+          Number of threads to use, defaults to available threads available on your computer
 
           [default: <NUM_CORES>]
 
   -a, --absolute-path
           Show absolute paths of results, defaults to false
 
-
   -I, --include-dirs
           Include directories, defaults to off
-
 
   -L, --follow
           Include symlinks in traversal,defaults to false
 
+      --nocolour
+          Disable colouring output when sending to terminal
 
   -g, --glob
           Use a glob pattern,defaults to off
 
-
   -n, --max-results <TOP_N>
           Retrieves the first eg 10 results, '.cache' / -n 10
-
 
   -d, --depth <DEPTH>
           Retrieves only traverse to x depth
 
-
       --generate <GENERATE>
           Generate shell completions
-
 
           [possible values: bash, elvish, fish, powershell, zsh]
 
@@ -300,36 +285,34 @@ Options:
   -p, --full-path
           Use a full path for regex matching, default to false
 
-
   -F, --fixed-strings
           Use a fixed string not a regex, defaults to false
 
+  -S, --size <size>
+          Filter by file size
 
-  -S, --size <SIZE>
-          Filter files by their size. The size can be specified with optional prefixes and units:
+          PREFIXES:
+            +SIZE    Find files larger than SIZE
+            -SIZE    Find files smaller than SIZE
+             SIZE     Find files exactly SIZE (default)
 
-                  PREFIXES:
-                  +SIZE    Find files larger than SIZE
-                  -SIZE    Find files smaller than SIZE
-                  SIZE     Find files exactly SIZE (default)
+          UNITS:
+            b        Bytes (default if no unit specified)
+            k, kb    Kilobytes (1000 bytes)
+            ki, kib  Kibibytes (1024 bytes)
+            m, mb    Megabytes (1000^2 bytes)
+            mi, mib  Mebibytes (1024^2 bytes)
+            g, gb    Gigabytes (1000^3 bytes)
+            gi, gib  Gibibytes (1024^3 bytes)
+            t, tb    Terabytes (1000^4 bytes)
+            ti, tib  Tebibytes (1024^4 bytes)
 
-                  UNITS:
-                  b        Bytes (default if no unit specified)
-                  k, kb    Kilobytes (1000 bytes)
-                  ki, kib  Kibibytes (1024 bytes)
-                  m, mb    Megabytes (1000^2 bytes)
-                  mi, mib  Mebibytes (1024^2 bytes)
-                  g, gb    Gigabytes (1000^3 bytes)
-                  gi, gib  Gibibytes (1024^3 bytes)
-                  t, tb    Terabytes (1000^4 bytes)
-                  ti, tib  Tebibytes (1024^4 bytes)
-
-                  EXAMPLES:
-                  --size 100         Files exactly 100 bytes
-                  --size +1k         Files larger than 1000 bytes
-                  --size -10mb       Files smaller than 10 megabytes
-                  --size +1gi        Files larger than 1 gibibyte
-                  --size 500ki       Files exactly 500 kibibytes
+          EXAMPLES:
+            --size 100         Files exactly 100 bytes
+            --size +1k         Files larger than 1000 bytes
+            --size -10mb       Files smaller than 10 megabytes
+            --size +1gi        Files larger than 1 gibibyte
+            --size 500ki       Files exactly 500 kibibytes
 
   -h, --help
           Print help (see a summary with '-h')

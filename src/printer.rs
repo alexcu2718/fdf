@@ -36,7 +36,7 @@ where
 #[allow(clippy::single_call_fn)]
 #[inline]
 #[allow(clippy::missing_errors_doc)] //fix later TODO!
-pub fn write_paths_coloured<I, S>(paths: I, limit: Option<usize>,nocolour:bool) -> Result<()>
+pub fn write_paths_coloured<I, S>(paths: I, limit: Option<usize>, nocolour: bool) -> Result<()>
 where
     I: Iterator<Item = Vec<DirEntry<S>>>,
     S: BytesStorage + 'static + Clone,

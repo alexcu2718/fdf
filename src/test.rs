@@ -42,15 +42,13 @@ mod tests {
 
     #[test]
     fn test_path_methods() {
-        // Setup test directory and file
         let temp_dir = std::env::temp_dir();
         let test_file_path = temp_dir.join("parent/child.txt");
         let test_dir = test_file_path
             .parent()
             .expect("File path should have parent");
 
-        // Clean up from previous if errored
-        let _ = std::fs::remove_dir_all(test_dir);
+        let _ = std::fs::remove_dir_all(test_dir); 
         std::fs::create_dir_all(test_dir).expect("Failed to create test directory");
         std::fs::write(&test_file_path, "test").expect("Failed to write test file");
         let entry: DirEntry<Box<[u8]>> =
@@ -163,11 +161,11 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "linux")]
-    fn test_read_dir() {
+    fn test_getdents() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
         let _ = std::fs::create_dir(&dir_path);
-        //throwing the error because of the directory already exists
+        //throwing the error incase it already exists the directory already exists
 
         std::fs::write(dir_path.join("file1.txt"), "test1").unwrap();
         std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
@@ -301,7 +299,6 @@ mod tests {
         let dir_path = std::env::temp_dir().join("test_hidden");
         let _ = std::fs::create_dir_all(&dir_path);
 
-        // create visible and hidden files
         let _ = std::fs::File::create(dir_path.join("visible.txt"));
         let _ = std::fs::File::create(dir_path.join(".hidden"));
 
@@ -332,10 +329,9 @@ mod tests {
         let entry = DirEntry::<SlimmerBytes>::new(file_path.as_os_str()).unwrap();
 
         assert_eq!(entry.file_name(), b"testfile.txt");
-        let x = std::fs::remove_file(&file_path).is_ok(); //have to check the result to avoid no-op 
+        let x = std::fs::remove_file(&file_path).is_ok(); 
         assert!(x, "File should be removed successfully");
         let _ = std::fs::remove_dir_all(&new_dir);
-        //assert!(y.is_ok(), "Directory should be removed successfully");
     }
     #[test]
     fn base_len_test() {
@@ -362,7 +358,6 @@ mod tests {
         let temp_dir = std::env::temp_dir().join("test_full_path");
 
         let _ = std::fs::remove_dir_all(&temp_dir);
-        // delete it first etc, because this is a test
         let _ = std::fs::create_dir_all(&temp_dir);
 
         let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
@@ -461,7 +456,6 @@ mod tests {
         fs::write(dir_path.join("file2.txt"), "content")?;
         fs::create_dir(dir_path.join("subdir"))?;
 
-        // lean up automatically
 
         // init a DirEntry for testing
 
@@ -472,9 +466,7 @@ mod tests {
 
         // collect entries
         let mut entries = Vec::new();
-        //while let Some(entry) = iter.next() {
-        //   entries.push(entry);
-        // }
+     
 
         for entry in iter {
             entries.push(entry)
@@ -508,12 +500,12 @@ mod tests {
     fn test_handles_various_tests() -> Result<(), Box<dyn std::error::Error>> {
         // create empty directory
         let tdir = temp_dir().join("NOTAREALPATHLALALA");
-        let _ = fs::remove_dir_all(&tdir); //delete it first etc, because thi
+        let _ = fs::remove_dir_all(&tdir);
         let _ = fs::create_dir_all(&tdir);
 
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&tdir)?;
 
-        //PAY ATTENTION TO THE ! MARKS, HARD TO FUCKING SEE
+        //PAY ATTENTION TO THE ! MARKS, HARD TO ******** SEE
         assert_eq!(
             dir_entry.parent(),
             tdir.parent().unwrap().as_os_str().as_bytes()
@@ -541,12 +533,10 @@ mod tests {
     }
     #[test]
     fn test_dirname() {
-        // use a uniquely named temp directory
         let temp_dir = std::env::temp_dir();
         let test_dir = temp_dir.join("test_dirname");
         let file_path = test_dir.join("parent/child.txt");
 
-        // Cleanup any previous test runs (ignore errors)
         let _ = std::fs::remove_dir_all(&test_dir);
 
         // verify operations succeed
@@ -568,6 +558,7 @@ mod tests {
 
         assert!(!test_dir.exists(), "Test directory was not removed");
     }
+    //test iteration in a throw away env
     #[test]
     fn test_basic_iteration() {
         let dir_path = temp_dir().join("THROWAWAYANYTHING");

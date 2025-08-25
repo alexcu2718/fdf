@@ -28,9 +28,7 @@
 
 use rayon::prelude::*;
 use std::{
-    ffi::{OsStr, OsString},
-    //i use sync mpsc because it's faster than flume/crossbeam, didnt expect this!
-    sync::mpsc::{Receiver, Sender, channel as unbounded},
+    ffi::{OsStr, OsString},  sync::mpsc::{channel as unbounded, Receiver, Sender}
 };
 #[macro_use]
 pub(crate) mod cursed_macros;
@@ -243,13 +241,11 @@ where
                 }
             }
             Err(
-                DirEntryError::Success //this really shouldnt be here, fix this TODO!
-                | DirEntryError::TemporarilyUnavailable // can possibly get rid of this
+                DirEntryError::TemporarilyUnavailable // can possibly get rid of this
                 | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
                 | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
             ) => {} //TODO! add logging
-            Err(e) => eprintln!("Unexpected error: {e}"), //todo! unreachable unchecked maybe!
-        }
+            Err(err) => unreachable!("Please report this error! {err}")        }
     }
 }
 
@@ -368,8 +364,6 @@ where
             self.follow_symlinks,
             self.size_filter,
         )?;
-
-       
 
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
             {

@@ -1,7 +1,8 @@
 //this probably needs to be reworked to reduce struct size, it's on the todo, not important.
 //this is abit rough, but it's not too important. well.
+use core::fmt;
 use libc::{EACCES, EAGAIN, EINVAL, ELOOP, ENOENT, ENOTDIR};
-use std::{fmt, io};
+use std::io;
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]

@@ -115,22 +115,25 @@ it's defined in another github repo of mine at <https://github.com/alexcu2718/co
 Then this function, really nice way to avoid branch misses during dirent parsing (a really hot loop)
 
 ```rust
-
+#[cfg(not(target_os = "linux"))]
+use libc::dirent as dirent64;
+#[cfg(target_os = "linux")]
+use libc::dirent64;
 //The code is explained better in the true function definition
 // I have to keep it short for the readme!)
 //This is the little-endian implementation, see crate for modified version for big-endian
-// Only used on Linux systems, OpenBSD/macos systems store the name length trivially
+// Only used on Linux+Solaris+Illumos systems, OpenBSD/macos systems store the name length trivially
 //(SIMD within a register, so no architecture dependence)
-pub const unsafe fn dirent_const_time_strlen(dirent: *const libc::dirent64) -> usize {
+pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     //the only true unsafe action here is dereferencing the pointer, that MUST be checked beforehand
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(libc::dirent64, d_name) + 1;
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; 
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; 
     //reclen is always multiple of 8 so alignment is guaranteed (unaligned reads are expensive!)
     //endianness fix omitted for brevity. check source
     let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch mask
     let candidate_pos = last_word | mask;//
-    let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // no branch SWAR
+    let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // no branch SWAR (this is a private function to prevent abuse)
     reclen - DIRENT_HEADER_START - byte_pos
 }
 

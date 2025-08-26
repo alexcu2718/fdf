@@ -79,7 +79,7 @@ mod traits_and_conversions;
 pub use traits_and_conversions::BytePath;
 
 mod utils;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os = "illumos", target_os = "solaris"))]
 pub use utils::dirent_const_time_strlen;
 pub use utils::{strlen, unix_time_to_system_time};
 

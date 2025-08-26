@@ -140,7 +140,7 @@ jobs:
       - name: Test on Alpine in Docker
         if: matrix.os == 'alpine' && matrix.arch == 'x86_64'
         run: |
-          docker run --rm -i alpine:latest sh -c "
+          docker run --rm -i -v $PWD:/workspace -w /workspace alpine:latest sh -c "
             apk update &&
             apk add curl build-base bash &&
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
@@ -148,3 +148,4 @@ jobs:
             cargo build --verbose &&
             cargo test --verbose
           "
+

@@ -42,120 +42,109 @@ jobs:
             runner: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Test on Linux x86_64
-      if: matrix.os == 'linux' && matrix.arch == 'x86_64'
-      run: |
-        cargo build --verbose
-        cargo test --verbose
-    
-    - name: Test on macOS
-      if: matrix.os == 'macos'
-      run: |
-        cargo build --verbose
-        cargo test --verbose
-    
-    - name: Test on FreeBSD
-      if: matrix.os == 'freebsd'
-      uses: vmactions/freebsd-vm@v1
-      with:
-        usesh: true
-        mem: 2048
-        prepare: |
-          pkg install -y curl
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo '. ~/.cargo/env' >> ~/.profile
+      - uses: actions/checkout@v4
+
+      - name: Test on Linux x86_64
+        if: matrix.os == 'linux' && matrix.arch == 'x86_64'
         run: |
-          . ~/.cargo/env
           cargo build --verbose
           cargo test --verbose
 
-
-    - name: Test on OpenBSD
-      if: matrix.os == 'openbsd'
-      uses: vmactions/openbsd-vm@v1
-      with:
-        usesh: true
-        mem: 2048
-        prepare: |
-          pkg_add curl
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo '. ~/.cargo/env' >> ~/.profile
+      - name: Test on macOS
+        if: matrix.os == 'macos'
         run: |
-          . ~/.cargo/env
           cargo build --verbose
           cargo test --verbose
 
-    
+      - name: Test on FreeBSD
+        if: matrix.os == 'freebsd'
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          mem: 2048
+          prepare: |
+            pkg install -y curl
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            echo '. ~/.cargo/env' >> ~/.profile
+          run: |
+            . ~/.cargo/env
+            cargo build --verbose
+            cargo test --verbose
 
-    
+      - name: Test on OpenBSD
+        if: matrix.os == 'openbsd'
+        uses: vmactions/openbsd-vm@v1
+        with:
+          usesh: true
+          mem: 2048
+          prepare: |
+            pkg_add curl
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            echo '. ~/.cargo/env' >> ~/.profile
+          run: |
+            . ~/.cargo/env
+            cargo build --verbose
+            cargo test --verbose
 
-    
-    - name: Test on Linux s390x (big-endian)
-      if: matrix.os == 'linux' && matrix.arch == 's390x'
-      uses: uraimo/run-on-arch-action@v2
-      with:
-        arch: s390x
-        distro: ubuntu22.04
-        githubToken: ${{ github.token }}
-        install: |
-          apt-get update -q -y
-          apt-get install -q -y curl build-essential
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source ~/.cargo/env
+      - name: Test on Linux s390x (big-endian)
+        if: matrix.os == 'linux' && matrix.arch == 's390x'
+        uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: s390x
+          distro: ubuntu22.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y curl build-essential
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source ~/.cargo/env
+          run: |
+            source ~/.cargo/env
+            cargo build --verbose
+            cargo test --verbose
+
+      - name: Test on Linux RISC-V64
+        if: matrix.os == 'linux' && matrix.arch == 'riscv64'
+        uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: riscv64
+          distro: ubuntu22.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y curl build-essential
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source ~/.cargo/env
+          run: |
+            source ~/.cargo/env
+            cargo build --verbose
+            cargo test --verbose
+
+      - name: Test on Linux aarch64
+        if: matrix.os == 'linux' && matrix.arch == 'aarch64'
+        uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: aarch64
+          distro: ubuntu22.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y curl build-essential
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source ~/.cargo/env
+          run: |
+            source ~/.cargo/env
+            cargo build --verbose
+            cargo test --verbose
+
+      - name: Test on Alpine in Docker
+        if: matrix.os == 'alpine' && matrix.arch == 'x86_64'
         run: |
-          source ~/.cargo/env
-          cargo build --verbose
-          cargo test --verbose
-    
-    - name: Test on Linux RISC-V64
-      if: matrix.os == 'linux' && matrix.arch == 'riscv64'
-      uses: uraimo/run-on-arch-action@v2
-      with:
-        arch: riscv64
-        distro: ubuntu22.04
-        githubToken: ${{ github.token }}
-        install: |
-          apt-get update -q -y
-          apt-get install -q -y curl build-essential
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source ~/.cargo/env
-        run: |
-          source ~/.cargo/env
-          cargo build --verbose
-          cargo test --verbose
-    
-    - name: Test on Linux aarch64
-      if: matrix.os == 'linux' && matrix.arch == 'aarch64'
-      uses: uraimo/run-on-arch-action@v2
-      with:
-        arch: aarch64
-        distro: ubuntu22.04
-        githubToken: ${{ github.token }}
-        install: |
-          apt-get update -q -y
-          apt-get install -q -y curl build-essential
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source ~/.cargo/env
-        run: |
-          source ~/.cargo/env
-          cargo build --verbose
-          cargo test --verbose
-    
-    - name: Test on Alpine Linux x86_64
-      if: matrix.os == 'alpine' && matrix.arch == 'x86_64'
-      uses: uraimo/run-on-arch-action@v2
-      with:
-        arch: x86_64
-        distro: alpine
-        githubToken: ${{ github.token }}
-        install: |
-          apk update
-          apk add curl build-base
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source ~/.cargo/env
-        run: |
-          source ~/.cargo/env
-          cargo build --verbose
-          cargo test --verbose
+          docker run --rm -i alpine:latest sh -c "
+            apk update &&
+            apk add curl build-base bash &&
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
+            . /root/.cargo/env &&
+            cargo build --verbose &&
+            cargo test --verbose
+          "

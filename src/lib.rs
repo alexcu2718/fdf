@@ -221,7 +221,7 @@ where
                 //    a directory or a symlink we should follow. If it is, the right side (`file_filter`)
                 //    is not evaluated, which avoids an expensive call to `file_filter` on directories.
                 // 4. If the entry is not a directory/symlink, we then run the `file_filter`, which
-                //    contains the main logic for filtering files (e.g., by name, size, or content).
+                //    contains the main logic for filtering files (e.g., by name, size, filetype etc).
             let (dirs, mut files): (Vec<_>, Vec<_>) = entries
                 .filter(|entry| keep_hidden(entry) &&
                 (d_or_s_filter(entry) || file_filter(entry)))
@@ -234,9 +234,10 @@ where
                 //checking if we should send directories
                 if should_send_dir_or_symlink{
                     files.push(dir.clone()) //we have to clone here unfortunately because it's being used to keep the iterator going.
-                    //luckily we're only cloning once, not cloning multiple!
+                    //luckily we're only cloning 1 directory/symlink, not anything more than that.
                 }
-                //We do batch sending to minimise contention of threads
+                //We do batch sending to minimise contention of sending 
+                //as opposed to sending one at a time, which will cause tremendous locks
                 if !files.is_empty() {
                     let _ = sender.send(files);
                 }
@@ -246,8 +247,23 @@ where
                 | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
                 | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
             ) => {} //TODO! add logging
-               // Safety: we assume all error variants are covered above
-            Err(_) => unsafe{core::hint::unreachable_unchecked()     }  }
+             #[allow(unused_variables)] //this is for the debug build 
+            Err(err) => {
+            #[allow(clippy::panic)] //panic is only in debug. This should trigger any CI warnings i am using!
+            #[cfg(debug_assertions)]
+            {
+                // In debug mode, show the error and panic. this is extremely helpful for debugging potential issues
+                panic!("Unreachable directory entry error: {err:?}");
+            }
+            // In release mode, the compiler will use unreachable_unchecked().
+            // This provides a performance optimisation by assuming this code path is never taken.
+            // Safety: we assume all other error variants are covered and this is indeed unreachable.
+            #[cfg(not(debug_assertions))]
+            unsafe {
+                core::hint::unreachable_unchecked();
+            }
+                    }
+                }
     }
 }
 

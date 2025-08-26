@@ -37,6 +37,9 @@ jobs:
           - os: linux
             arch: aarch64
             runner: ubuntu-latest
+          - os: alpine
+            arch: x86_64
+            runner: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -133,6 +136,23 @@ jobs:
         install: |
           apt-get update -q -y
           apt-get install -q -y curl build-essential
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source ~/.cargo/env
+        run: |
+          source ~/.cargo/env
+          cargo build --verbose
+          cargo test --verbose
+    
+    - name: Test on Alpine Linux x86_64
+      if: matrix.os == 'alpine' && matrix.arch == 'x86_64'
+      uses: uraimo/run-on-arch-action@v2
+      with:
+        arch: x86_64
+        distro: alpine_latest
+        githubToken: ${{ github.token }}
+        install: |
+          apk update
+          apk add curl build-base
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           source ~/.cargo/env
         run: |

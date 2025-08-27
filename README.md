@@ -40,7 +40,7 @@ The implemented subset performs exceptionally well, surpassing fd in equivalent 
 
 I have 60+ Rust tests and 15+ correctness benchmarks run via shell for testing discrepancies against fd.
 
-Note: I cannot validate my code with miri (Rust's )
+Note: I cannot validate my code with miri (Rust's best undefined behaviour/ detector because of my libc calls/assembly, I do intensive tests for that reason, as well as a valgrind test script!  )
 
 The rust tests can be  [Found here](https://github.com/alexcu2718/fdf/blob/main/src/test.rs)
 

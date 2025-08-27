@@ -19,7 +19,7 @@ Contributions will be considered once features are stabilised and improved. This
 
 (Although if someone really wants to contribute, go nuts!)
 
-The implemented subset performs well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and learning how to program at a low level.
+The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and learning how to program at a low level.
 
 ## Platform Support Status (64 bit only, 32 bit not planned)
 
@@ -33,17 +33,22 @@ The implemented subset performs well, surpassing fd in equivalent feature sets, 
 
  These platforms don't support rust 2024 yet via github actions, I will add in checks when they do!
 
- **Not Supported**: Windows (fundamental rewrite required due to architectural differences(because of using libc), will be done when I read through the API properly!)
+ **Not Supported**: Windows (fundamental rewrite required due to architectural differences(because of using libc), will be done when I finish the POSIX feature set, the API is also terribly complex compared to POSIX, there's also the fact that Windows has some amazing tools for this already,
+ such as [`Everything`](https://www.voidtools.com/) )
 
 ### Testing methodology
 
 I have 60+ Rust tests and 15+ correctness benchmarks run via shell for testing discrepancies against fd.
 
-The rust tests can be  [Found here](https://github.com/alexcu2718/fdf/blob/main/src/test.rs) (also doc-comment tests not included*)
+Note: I cannot validate my code with miri (Rust's )
+
+The rust tests can be  [Found here](https://github.com/alexcu2718/fdf/blob/main/src/test.rs)
 
 My shell scripts do clone the llvm repo (sorry!) to give an accurate testing environment
 
 The rust tests are run via GitHub actions on the platforms supported.
+
+To run the full test suite yourself:
 
 ```bash
 git clone https://github.com/alexcu2718/fdf /tmp/fdf_test
@@ -57,14 +62,11 @@ This runs a comprehensive suite of internal library, CLI tests, and benchmarks.
 
  **Full Repeatable Benchmarks:** [Found at the following link](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
-(Repeatable via the testing code seen above, they cover file type filtering, among many more!)
+(Repeatable via the testing code seen above, they cover file type filtering,extension, filesizes, among many more!)
 
 Tests ran on my local system instead of the llvm-project (to give a good example)
 
 ```bash
-Running fdf vs fd benchmarks...
-Search root: /home/alexc
-
 Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
   Time (mean ± σ):     431.6 ms ±  10.6 ms    [User: 1307.7 ms, System: 3530.7 ms]
   Range (min … max):   414.7 ms … 446.1 ms    10 runs
@@ -89,7 +91,6 @@ Summary
   fdf '.' '/home/alexc' -HI ran
     1.70 ± 0.08 times faster than fd '.' '/home/alexc' -HI
 
-
 Benchmark 1: fdf '.' '/home/alexc' -HI --type d
   Time (mean ± σ):     461.8 ms ±   7.4 ms    [User: 1109.2 ms, System: 3674.4 ms]
   Range (min … max):   451.3 ms … 473.2 ms    10 runs
@@ -113,7 +114,7 @@ Summary
 -find_char_in_word: Find the first occurrence of a byte in a 64-bit word (Using SWAR(SIMD within a register)), a const fn
 
 -A black magic macro that can colour filepaths based on a compile time perfect hashmap
-it's defined in another github repo of mine at <https://github.com/alexcu2718/compile_time_ls_colours>
+it's defined in another github repo of mine at this [found here](https://github.com/alexcu2718/compile_time_ls_colours)
 
 Then this function, really nice way to avoid branch misses during dirent parsing (a really hot loop)
 
@@ -122,13 +123,15 @@ Then this function, really nice way to avoid branch misses during dirent parsing
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
+// This has a computational complexity of  O(1)!, truly constant time and a constant function!
 //The code is explained better in the true function definition
 // I have to keep it short for the readme!)
 //This is the little-endian implementation, see crate for modified version for big-endian
 // Only used on Linux+Solaris+Illumos systems, OpenBSD/macos systems store the name length trivially
 //(SIMD within a register, so no architecture dependence)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
-    //the only true unsafe action here is dereferencing the pointer, that MUST be checked beforehand
+    //the only true unsafe action here is dereferencing the pointer, 
+    //that MUST be checked before hand, hence why it's an unsafe function.
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; 
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; 
@@ -146,7 +149,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
 ## Why?
 
 I started this project because I found find slow and wanted to learn how to interface directly with the kernel.
-What began as a random experiment turned out to be a genuinely useful tool - one I'll probably use for the rest of my life to find files efficiently.
+What began as a random experiment turned out to be a genuinely useful tool - one I'll probably use for the rest of my life, which is much more interesting than a project I'd just create and forget about.
 
 At the core, this is about learning.
 
@@ -155,9 +158,9 @@ When I began I had barely used Linux for a few months, I didn't even know C, so 
 ### Performance Motivation
 
 Even though fdf is already faster than fd in all cases, I'm experimenting with filtering before allocation(I don't stop at good enough!)
-Rust's std::fs has some inefficiencies, notably more heap allocation and file descriptor manipulation than I'd like. Rewriting certain parts using libc was the ideal way to bypass that and learn in the process.
+Rust's std::fs has some inefficiencies, too much heap allocation, file descriptor manipulation, constant strlen calculations, usage of readdir (not optimal because it implicitly stat calls every file it sees!). Rewriting all of it  using libc was the ideal way to bypass that and learn in the process.
 
-Currently, filtering-before-allocation is partially implemented in the crate but not yet exposed via the CLI. If the results prove consistently performant, I'll integrate it into the public tool.
+Currently, filtering-before-allocation is partially implemented in the crate but not yet exposed via the CLI. If the results prove consistently performant, I'll integrate it into the public tool(I will probably leave this until I get datetime working sufficiently.)
 
 ### Development Philosophy
 
@@ -165,21 +168,23 @@ Currently, filtering-before-allocation is partially implemented in the crate but
 
 * Open to contributions - Once the codebase stabilises, I welcome others to add features if they're extremely inclined anyway!
 
-* Pragmatic focus - Some areas, like datetime filtering, are especially complex
+* Pragmatic focus - Some areas, like datetime filtering, are especially complex and need a lot of investigation!
 
 In short, this project is a personal exploration into performance, low-level programming, and building practical tools - with the side benefit that it's actually good at what it does.
 
 ## NECESSARY DISCLAIMERS
 
-I've directly taken code from <https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574> and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
+I've directly taken code from [fn-match, found at the link](https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574) and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
 Notably I modified it because it's quite old and has dependencies I was able to remove
 
 (I have emailed and received approval from the author above)
 
-I've also done so for here <https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161>
-I've found a much more rigorous way of doing some bit tricks via this
+I've also done so for some SWAR tricks from the standard library [(see link)](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161)
+I've found a much more rigorous way of doing some bit tricks via this.
 
-I enjoy relying on  validated work like stdlib to ideally 'covalidate' my work, aka less leaps of logic required for others to validate.
+I additionally emailed the author of memchr and got some nice tips, great guy, someone I respect whole heartedly!
+
+I believe referencing similar work helps to aid in validating complex algorithms!
 
 ## Future Plans
 
@@ -189,15 +194,19 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 
 ### Feature Enhancements (Planned)
 
-**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt fix this, it's also complex to reproduce the time methodologies for all POSIX platforms because each one differs so much, the drawbacks of not using the stdlib!)
+**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt  this, it's also complex to reproduce the time methodologies for all POSIX platforms because each one differs so much, the drawbacks of not using the stdlib!)
 
-**Extended File Types**: Support for searching device drivers, and other special files.
+**Extended File Types**: Support for searching device drivers, and other special files(this isn't difficult at all, just not a priority)
 
 **POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris (the other ones are embedded mostly, correct me if i'm wrong!)
 
 ### Platform Expansion
 
 **Windows Support**: Acknowledged as a significant undertaking an almost entire separate codebase(portability ain't fun), but valuable for both usability and learning Windows internals.
+
+## Enhance shell completions
+
+Meanwhile my shell completions are pretty good, I want to improve them a lot, this shouldn't be too bad.
 
 ### Core Philosophy
 
@@ -207,7 +216,7 @@ The CLI will remain **simple** (avoiding overwhelming help menus(looking at you,
 
 There's bugs I need to diagnose causing small differences when doing size difference, [check/run this script](https://github.com/alexcu2718/fdf/blob/main/test_size_difference.sh), I'm pretty sure this is actually a bug in fd, going to investigate before pointing fingers!
 
-## Installation
+## Installation and Usage
 
 ```bash
 # Clone & build
@@ -220,10 +229,18 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 
 # Find all JPG files in the home directory (excluding hidden files)
-fdf . ~ -E jpg
+fdf . ~ -e jpg
 
 # Find all  Python files in /usr/local (including hidden files)
-fdf . /usr/local -E py -H
+fdf . /usr/local -e py -H
+
+
+# Generate shell completions for Zsh/bash (also supports powershell/fish!)
+# For Zsh
+echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc
+
+# For Bash
+echo 'eval "$(fdf --generate bash)"' >> ~/.bashrc
 
 ## Options 
 Usage: fdf [OPTIONS] [PATTERN] [PATH]
@@ -355,8 +372,8 @@ Options:
 -- Unnecessary directory allocations  
 -- Non-essential memory operations  
 
-**5. MacOS/BSD(potentially) Specific Optimisations**
--- Implement an iterator using getattrlistbulk (this may be possible for bsd too?)
+**5. MacOS/BSD(s(potentially) Specific Optimisations**
+-- Implement an iterator using getattrlistbulk (this may be possible for bsd too? or perhaps just linking getdirentries for BSD systems)
 -- Test repo found at <https://github.com/alexcu2718/mac_os_getattrlistbulk_ls>
 -- This allows for much more efficient syscalls to get filesystem entries
--- (Admittedly I've been a bit half arsed to do this, will be done soon!)
+-- (Admittedly I've been a bit hesitant about this, because the API is quite complex and unwieldy!)

@@ -278,9 +278,15 @@ where
     ///
     /// ```
     pub fn to_full_path(self) -> Result<Self> {
+        #[cfg(not(target_env = "gnu"))]
+        //Essentially, because only glibc has a really optimised strlen function, i'd prefer to use this
+        use crate::strlen;
+        #[cfg(target_env = "gnu")]
+        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out why(curiosity, not pragmatism!)
+        use libc::strlen;
         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
         let ptr = unsafe {
-            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, core::ptr::null_mut())) //we've created this pointer, we need to be careful
+            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, core::ptr::null_mut())) //realpath implicitly mallocs, hence need to free.
         };
 
         if ptr.is_null() {
@@ -288,27 +294,39 @@ where
             return Err(std::io::Error::last_os_error().into());
         }
         // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
-        let full_path = unsafe { &*core::ptr::slice_from_raw_parts(ptr.cast(), libc::strlen(ptr)) }; //get length without null terminator (no ub check, this is why i do it this way)
-        // we're dereferencing a valid pointer here, it's fine.
-        //alignment is trivial, we use `libc::strlen` because it's probably the most optimal for possibly long paths
-        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out why(curiosity, not pragmatism!)
+        let full_path = unsafe { &*core::ptr::slice_from_raw_parts(ptr.cast(), strlen(ptr)) };
+        //get length without null terminator (no ub check, this is why i do it this way)
 
         let boxed = Self {
-            path: full_path.into(), //we're heap allocating here
+            path: full_path.into(), //we're heap allocating here, i wish we could've reused the malloc but this isnt TOO important performance wise
             file_type: self.file_type,
             inode: self.inode,
             depth: self.depth,
             file_name_index: full_path.file_name_index() as _,
-        }; //we need the length up to the filename INCLUDING
-        //including for slash, so eg ../hello/etc.txt has total len 16, then its base_len would be 16-7=9bytes
-        //so we subtract the filename length from the total length, probably could've been done more elegantly.
-        //TBD? not imperative.
+        };
+
         unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
         //free the pointer to stop leaking
 
         Ok(boxed)
     }
-    /*
+    /* (I spent a lot of time debating this function!)
+    https://man7.org/linux/man-pages/man3/realpath.3.html
+    DESCRIPTION         top
+
+       realpath() expands all symbolic links and resolves references to
+       /./, /../ and extra '/' characters in the null-terminated string
+       named by path to produce a canonicalized absolute pathname.  The
+       resulting pathname is stored as a null-terminated string, up to a
+       maximum of PATH_MAX bytes, in the buffer pointed to by
+       resolved_path.  The resulting path will have no symbolic link, /./
+       or /../ components.
+
+       If resolved_path is specified as NULL, then realpath() uses
+       malloc(3) to allocate a buffer of up to PATH_MAX bytes to hold the
+       resolved pathname, and returns a pointer to this buffer.  The
+       caller should deallocate this buffer using free(3).
+
 
 
         https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
@@ -380,7 +398,7 @@ where
     /// as the file name or path, it is a number that identifies the file on the
     /// It should be u32 on BSD's but I use u64 for consistency across platforms
     pub const fn ino(&self) -> u64 {
-        self.inode //illumos/solaris doesnt have inode revisit when doing compatibility TODO!
+        self.inode
     }
 
     #[inline]
@@ -431,9 +449,6 @@ where
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
         unsafe { self.get_unchecked(..core::cmp::max(self.file_name_index() - 1, 1)) }
-
-        //we need to be careful if it's root,im not a fan of this method but eh.
-        //theres probably a more elegant way. TODO!
     }
 
     #[inline]

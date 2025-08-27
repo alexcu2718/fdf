@@ -146,7 +146,7 @@ pub unsafe fn construct_path(
 // i wanted to make this const and separate the function
 // because only strlen isn't constant here :(
 unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
-    #[cfg(any(target_os = "linux",target_os = "illumos", target_os = "solaris"))]
+    #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
     {
         use crate::dirent_const_time_strlen;
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -172,8 +172,8 @@ unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "netbsd",
         target_os = "dragonfly",
         target_os = "macos",
-        target_os="illumos",
-        target_os="solaris"
+        target_os = "illumos",
+        target_os = "solaris"
     )))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -189,16 +189,16 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 /// */
 
 #[inline]
-#[cfg(any(target_os = "linux",target_os = "illumos", target_os = "solaris"))]
+#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
 #[allow(clippy::as_conversions)]
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
-/// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD.
+/// Const-fn strlen for dirent's `d_name` field using bit tricks, no SIMD, O(1)!
 /// Constant time(and branchless)
 ///
 // This function can't really be used in a const manner, I just took the win where I could! ( I thought it was cool too...)
-// It's the most efficient way to calculate the length(on Linux)
+// It's the most efficient way to calculate the length(on Linux/Illumos/Solaris)
 // It calculates the length of the `d_name` field in a `libc::dirent64` structure without branching
 //
 // This is my own implementation of a constant-time strlen for dirents,
@@ -219,7 +219,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 //
 /// # SAFETY
 /// The caller must uphold the following invariants:
-/// - The `dirent` pointer must point to a valid `libc::dirent64` structure
+/// - The `dirent` pointer must point to a valid `dirent64` structure
 pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     use crate::memchr_derivations::find_zero_byte_u64;
     const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
@@ -241,16 +241,15 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // SAFETY: The dirent struct is always a multiple of 8
     #[cfg(target_endian = "big")]
     let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le();
-    //TODO! this could probably be optimised, testing anything on bigendian is a fucking pain because it takes an ungodly time to compile.
-    // Special case: When processing the 3rd u64 word (index 2), we need to mask
+    //TODO! bigendian logic could be improved
+    // Special case: When processing the final word, we need to potentially mask
     // the non-name bytes  to avoid false null detection.
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
-    // The 0x00FF_FFFF mask preserves only the 3 bytes where the name could start.
+    // The 0x00FF_FFFF mask preserves only the bytes where the name could start.
     // Branchless masking: avoids branching by using a mask that is either 0 or 0x00FF_FFFF
-    // Special handling for 24-byte records
+    // we can expect false nulls at the start of the d_name
     // Mask out non-name bytes that could cause false null detection
-    // When the d_name is  4 bytes or fewer, the kernel places null bytes at the start of the d_name, we need to mask them out
-    // Similar logic applies to illumos/solaris
+    // When the d_name is  too short,, the kernel places null bytes at the start of the d_name, we need to mask them out
     let mask: u64 = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
     // The mask is applied to the last word to isolate the relevant bytes.
     // The last word is masked to isolate the relevant bytes,
@@ -272,3 +271,25 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // byte position.
     reclen - DIRENT_HEADER_START - byte_pos
 }
+
+/*
+https://linux.die.net/man/2/getdents64
+
+
+
+struct linux_dirent {
+    unsigned long  d_ino;     /* Inode number */
+    unsigned long  d_off;     /* Offset to next linux_dirent */
+    unsigned short d_reclen;  /* Length of this linux_dirent */
+    char           d_name[];  /* Filename (null-terminated) */
+                        /* length is actually (d_reclen - 2 -
+                           offsetof(struct linux_dirent, d_name) */  <-------this is the most important bit, we just need to be careful about padding!
+    /*
+    char           pad;       // Zero padding byte
+    char           d_type;    // File type (only since Linux 2.6.4;
+                              // offset is (d_reclen - 1))
+    */
+
+}
+
+*/

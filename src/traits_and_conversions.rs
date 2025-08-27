@@ -131,6 +131,7 @@ where
     #[allow(clippy::multiple_unsafe_ops_per_block)]
     fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
+        //TODO! change this to unsafe MAYBE?
         F: FnOnce(*const VT) -> R,
         VT: ValueType, // VT==ValueType is u8/i8
     {
@@ -195,15 +196,16 @@ where
     }
 
     #[inline]
+    #[allow(clippy::default_numeric_fallback)]
     unsafe fn open_fd(&self) -> Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
         const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
         self.as_cstr_ptr(|ptr| {
-            // SAFETY: we're only calling this on a directory
+            // SAFETY: the pointer is null terminated
             let fd = unsafe { libc::open(ptr, FLAGS) };
 
-            if fd < 0i32 {
+            if fd < 0 {
                 Err(std::io::Error::last_os_error().into())
             } else {
                 Ok(fd)

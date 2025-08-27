@@ -19,7 +19,7 @@ Contributions will be considered once features are stabilised and improved. This
 
 (Although if someone really wants to contribute, go nuts!)
 
-The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and learning how to program at a low level.
+The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and  to learn how to program at a low level.
 
 ## Platform Support Status (64 bit only, 32 bit not planned)
 

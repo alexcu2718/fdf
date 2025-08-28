@@ -81,7 +81,7 @@ pub use traits_and_conversions::BytePath;
 mod utils;
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
 pub use utils::dirent_const_time_strlen;
-pub use utils::{strlen, unix_time_to_system_time};
+pub use utils::{strlen, unix_time_to_datetime};
 
 mod glob;
 pub use glob::glob_to_regex;

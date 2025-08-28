@@ -1,30 +1,20 @@
-use crate::{DirEntryError, Result, buffer::ValueType};
-use core::time::Duration;
+use crate::buffer::ValueType;
+
+use chrono::{DateTime, Utc};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
-use std::time::{SystemTime, UNIX_EPOCH};
+
 /// Convert Unix timestamp (seconds + nanoseconds) to `SystemTime`
 /// Not in use currently, later.
-#[allow(clippy::missing_errors_doc)] //fixing errors later
+
+#[allow(clippy::missing_errors_doc)]
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::as_conversions)]
-pub fn unix_time_to_system_time(sec: i64, nsec: i32) -> Result<SystemTime> {
-    let (base, offset) = if sec >= 0 {
-        (UNIX_EPOCH, Duration::new(sec as u64, nsec as u32))
-    } else {
-        let sec_abs = sec.unsigned_abs();
-        (
-            UNIX_EPOCH + Duration::new(sec_abs, 0),
-            Duration::from_nanos(nsec as u64),
-        )
-    };
-
-    base.checked_sub(offset)
-        .or_else(|| UNIX_EPOCH.checked_sub(Duration::from_secs(0)))
-        .ok_or(DirEntryError::TimeError)
+pub fn unix_time_to_datetime(st: &libc::stat) -> Option<DateTime<Utc>> {
+    DateTime::from_timestamp(access_stat!(st, st_mtime), access_stat!(st, st_mtimensec))
 }
 
 /// Calculates the length of a null-terminated string pointed to by `ptr`,

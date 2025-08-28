@@ -1,9 +1,11 @@
-#![allow(clippy::missing_errors_doc)] //need to add these todo
+#![allow(clippy::missing_errors_doc)]
+use crate::unix_time_to_datetime;
+//need to add these todo
 use crate::{
     AlignedBuffer, BytesStorage, DirEntry, DirEntryError, FileType, LOCAL_PATH_MAX, PathBuffer,
     Result, access_dirent, buffer::ValueType, memchr_derivations::memrchr,
 };
-
+use chrono::{DateTime, Utc};
 use core::{fmt, mem::MaybeUninit, ops::Deref};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
@@ -13,7 +15,6 @@ use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 /// A trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.
@@ -77,7 +78,7 @@ where
     /// Gets file metadata via `lstat`
     fn get_lstat(&self) -> Result<stat>;
     /// Gets last modification time
-    fn modified_time(&self) -> Result<SystemTime>;
+    fn modified_time(&self) -> Result<DateTime<Utc>>;
     /// Converts to `&Path` (zero-cost on Unix)
     fn as_path(&self) -> &Path;
     /// Opens file descriptor for directory paths
@@ -231,12 +232,9 @@ where
     #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     #[allow(clippy::map_err_ignore)] //specify these later TODO!
-    fn modified_time(&self) -> Result<SystemTime> {
+    fn modified_time(&self) -> Result<DateTime<Utc>> {
         let s = self.get_lstat()?;
-        let modified_time = access_stat!(s, st_mtime);
-        let modified_seconds = access_stat!(s, st_mtimensec); //macro helps avoid funky aliasing on weird systems
-        crate::unix_time_to_system_time(modified_time, modified_seconds)
-            .map_err(|_| crate::DirEntryError::TimeError)
+        unix_time_to_datetime(&s).ok_or(DirEntryError::TimeError)
     }
 
     #[inline]

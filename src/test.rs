@@ -2,21 +2,28 @@
 mod tests {
     #![allow(unused_imports)]
     use crate::memchr_derivations::{find_char_in_word, find_zero_byte_u64};
+    use crate::size_filter::*;
     use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
-
-    use crate::size_filter::*;
-
+    use chrono::{Duration as ChronoDuration, Utc};
+    use filetime::{FileTime, set_file_times};
     use std::env::temp_dir;
     use std::fs;
     use std::fs::File;
+    use std::io::Write;
     use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::PermissionsExt;
     use std::os::unix::fs::symlink;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
-    use crate::utils::unix_time_to_system_time;
+    use crate::utils::unix_time_to_datetime;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    //helper func to save verbosity
+    fn as_bytes(path: &std::path::Path) -> &[u8] {
+        path.to_str().unwrap().as_bytes()
+    }
     #[allow(dead_code)]
     #[repr(C)]
     pub struct Dirent64 {
@@ -38,6 +45,224 @@ mod tests {
         let entry: DirEntry<Arc<[u8]>> = DirEntry::new(file_path.as_os_str()).unwrap();
         let _ = std::fs::remove_file(&file_path);
         assert_eq!(entry.file_name(), file_name.as_bytes());
+    }
+
+    #[test]
+    fn modified_time_fails_for_nonexistent_file() {
+        let tmp_dir = temp_dir();
+        let file_path = tmp_dir.join("nonexistent_file_should_fail.txt");
+
+        let result = as_bytes(&file_path).modified_time();
+
+        assert!(
+            result.is_err(),
+            "Expected error for nonexistent file, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_directory_traversal_permissions() {
+        let temp_dir = temp_dir().join("traversal_test");
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // no read permission
+        let no_read_dir = temp_dir.join("no_read");
+        fs::create_dir(&no_read_dir).unwrap();
+
+        let mut perms = fs::metadata(&no_read_dir).unwrap().permissions();
+        perms.set_mode(0o000);
+        fs::set_permissions(&no_read_dir, perms).unwrap();
+
+        let entry = DirEntry::<Arc<[u8]>>::new(&temp_dir).unwrap();
+        let iter = DirIter::new(&entry).unwrap();
+
+        let entries: Vec<_> = iter.collect();
+
+        let mut perms = fs::metadata(&no_read_dir).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&no_read_dir, perms).unwrap();
+        //cleanup code
+
+        fs::remove_dir_all(temp_dir).unwrap();
+        assert!(entries.len() == 1)
+    }
+
+    #[test]
+    fn test_find_char_edge_cases() {
+        let all_zeros = [0u8; 8];
+        assert_eq!(find_char_in_word(b'x', all_zeros), None);
+
+        let all_x = [b'x'; 8];
+        assert_eq!(find_char_in_word(b'x', all_x), Some(0));
+
+        let mixed = [b'a', b'b', 0, b'c', b'd', 0, b'e', b'f'];
+        assert_eq!(find_char_in_word(0, mixed), Some(2));
+    }
+
+    #[test]
+    fn test_permission_checks() {
+        let temp_dir = temp_dir().join("perm_test");
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let entry = DirEntry::<Arc<[u8]>>::new(&temp_dir).unwrap();
+
+        assert!(entry.exists());
+        assert!(entry.is_readable());
+        assert!(entry.is_writable());
+
+        fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    #[test]
+    fn modified_time_reflects_custom_timestamp() {
+        let tmp_dir = temp_dir();
+        let file_path = tmp_dir.join("modified_time_custom_test.txt");
+
+        {
+            let mut f = File::create(&file_path).expect("failed to create temp file");
+            writeln!(f, "test contents").unwrap();
+        }
+
+        // Jan 1, 2000 UTC
+        let custom_secs = 946684800; // seconds since epoch 
+        let custom_ft = FileTime::from_unix_time(custom_secs, 0);
+
+        // Apply custom time
+        set_file_times(&file_path, custom_ft, custom_ft).expect("failed to set file time");
+
+        let dt = as_bytes(&file_path)
+            .modified_time()
+            .expect("should return custom datetime");
+
+        assert_eq!(
+            dt.timestamp(),
+            custom_secs,
+            "Expected modified_time to equal custom timestamp"
+        );
+
+        fs::remove_file(file_path).ok();
+    }
+
+    #[test]
+    fn modified_time_updates_after_file_touch() {
+        let tmp_dir = temp_dir();
+        let file_path = tmp_dir.join("modified_time_update_test.txt");
+
+        {
+            let mut f = File::create(&file_path).expect("failed to create temp file");
+            writeln!(f, "initial contents").unwrap();
+        }
+
+        let first_time = as_bytes(&file_path)
+            .modified_time()
+            .expect("should get initial modified time");
+
+        // Sleep to ensure fs difference
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        {
+            let mut f = File::options()
+                .append(true)
+                .open(&file_path)
+                .expect("failed to reopen temp file");
+            writeln!(f, "new contents").unwrap();
+        }
+
+        let second_time = as_bytes(&file_path)
+            .modified_time()
+            .expect("should get updated modified time");
+
+        assert!(
+            second_time > first_time,
+            "Expected modified_time to increase after writing, but {:?} <= {:?}",
+            second_time,
+            first_time
+        );
+
+        fs::remove_file(file_path).ok();
+    }
+    #[test]
+    fn test_iterating_nested_structure() {
+        let dir = temp_dir().join("nested_struct");
+        let subdir = dir.join("sub");
+        fs::create_dir_all(&subdir).unwrap();
+        fs::write(subdir.join("file.txt"), "data").unwrap();
+
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
+        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+
+        assert_eq!(entries.len(), 1, "Top-level should contain only subdir");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_size_filter_edge_zero_and_large() {
+        let file_zero = temp_dir().join("zero_size.txt");
+        File::create(&file_zero).unwrap();
+        let entry = DirEntry::<Arc<[u8]>>::new(&file_zero).unwrap();
+        let metadata = entry.metadata().unwrap();
+        assert_eq!(metadata.len(), 0);
+
+        let filter = SizeFilter::Equals(0);
+        assert!(filter.is_within_size(metadata.len()));
+
+        let filter_large = SizeFilter::Min(10_000_000);
+        assert!(!filter_large.is_within_size(metadata.len()));
+
+        let _ = fs::remove_file(file_zero);
+    }
+
+    #[test]
+    fn test_symlink_properties() {
+        let dir = temp_dir().join("symlink_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let target = dir.join("target.txt");
+        fs::write(&target, "data").unwrap();
+        let link = dir.join("link.txt");
+        let _ = symlink(&target, &link);
+
+        let entry = DirEntry::<Arc<[u8]>>::new(&link).unwrap();
+        assert!(entry.exists());
+        assert!(entry.is_symlink());
+        assert_eq!(entry.file_name(), b"link.txt");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn modified_time_returns_valid_datetime_for_file() {
+        let tmp_dir = temp_dir();
+        let file_path = tmp_dir.join("modified_time_test.txt");
+
+        // Create file
+        {
+            let mut f = File::create(&file_path).expect("failed to create temp file");
+            writeln!(f, "hello world").unwrap();
+        }
+
+        let dt = as_bytes(&file_path)
+            .modified_time()
+            .expect("should return valid datetime");
+
+        // Sanity check: timestamp should be close to now
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let dt_timestamp = dt.timestamp();
+        assert!(
+            (now - dt_timestamp).abs() < 5,
+            "File modified_time too far from now: {:?} vs {:?}",
+            dt_timestamp,
+            now
+        );
+
+        // cleanup
+        fs::remove_file(file_path).ok();
     }
 
     #[test]
@@ -615,6 +840,138 @@ mod tests {
     }
 
     #[test]
+    fn test_size_filter_from_string() {
+        assert_eq!(SizeFilter::from_string("100"), Ok(SizeFilter::Equals(100)));
+        assert_eq!(SizeFilter::from_string("+100"), Ok(SizeFilter::Min(100)));
+        assert_eq!(SizeFilter::from_string("-100"), Ok(SizeFilter::Max(100)));
+
+        // Test unit parsing
+        assert_eq!(SizeFilter::from_string("1k"), Ok(SizeFilter::Equals(1000)));
+        assert_eq!(SizeFilter::from_string("1kb"), Ok(SizeFilter::Equals(1000)));
+        assert_eq!(SizeFilter::from_string("1ki"), Ok(SizeFilter::Equals(1024)));
+        assert_eq!(
+            SizeFilter::from_string("1kib"),
+            Ok(SizeFilter::Equals(1024))
+        );
+
+        assert_eq!(
+            SizeFilter::from_string("1m"),
+            Ok(SizeFilter::Equals(1_000_000))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1mb"),
+            Ok(SizeFilter::Equals(1_000_000))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1mi"),
+            Ok(SizeFilter::Equals(1_048_576))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1mib"),
+            Ok(SizeFilter::Equals(1_048_576))
+        );
+
+        assert_eq!(
+            SizeFilter::from_string("1g"),
+            Ok(SizeFilter::Equals(1_000_000_000))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1gb"),
+            Ok(SizeFilter::Equals(1_000_000_000))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1gi"),
+            Ok(SizeFilter::Equals(1_073_741_824))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1gib"),
+            Ok(SizeFilter::Equals(1_073_741_824))
+        );
+
+        assert_eq!(
+            SizeFilter::from_string("1t"),
+            Ok(SizeFilter::Equals(1_000_000_000_000))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1tb"),
+            Ok(SizeFilter::Equals(1_000_000_000_000))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1ti"),
+            Ok(SizeFilter::Equals(1_099_511_627_776))
+        );
+        assert_eq!(
+            SizeFilter::from_string("1tib"),
+            Ok(SizeFilter::Equals(1_099_511_627_776))
+        );
+
+        assert_eq!(SizeFilter::from_string("+1k"), Ok(SizeFilter::Min(1000)));
+        assert_eq!(
+            SizeFilter::from_string("-2m"),
+            Ok(SizeFilter::Max(2_000_000))
+        );
+
+        assert!(SizeFilter::from_string("abc").is_err());
+        assert!(SizeFilter::from_string("").is_err());
+        assert!(SizeFilter::from_string("1x").is_err()); // Invalid unit
+    }
+
+    #[test]
+    fn test_size_filter_matches() {
+        let temp_dir = temp_dir();
+        let file_path = temp_dir.join("size_test.txt");
+        let content = vec![0u8; 100]; // 100 bytes
+        fs::write(&file_path, content).unwrap();
+
+        let entry = DirEntry::<Arc<[u8]>>::new(&file_path).unwrap();
+        let metadata = entry.metadata().unwrap();
+
+        let filter = SizeFilter::Equals(100);
+        assert!(filter.is_within_size(metadata.len()));
+
+        let filter = SizeFilter::Min(99);
+        assert!(filter.is_within_size(metadata.len()));
+
+        let filter = SizeFilter::Min(100);
+        assert!(filter.is_within_size(metadata.len()));
+
+        let filter = SizeFilter::Min(101);
+        assert!(!filter.is_within_size(metadata.len()));
+
+        let filter = SizeFilter::Max(101);
+        assert!(filter.is_within_size(metadata.len()));
+
+        let filter = SizeFilter::Max(100);
+        assert!(filter.is_within_size(metadata.len()));
+
+        let filter = SizeFilter::Max(99);
+        assert!(!filter.is_within_size(metadata.len()));
+
+        fs::remove_file(file_path).unwrap();
+    }
+
+    #[test]
+    fn test_metadata_operations() {
+        let temp_dir = temp_dir();
+        let file_path = temp_dir.join("meta_test.txt");
+
+        {
+            let mut f = File::create(&file_path).unwrap();
+            writeln!(f, "test content").unwrap();
+        }
+
+        let entry = DirEntry::<Arc<[u8]>>::new(&file_path).unwrap();
+        let metadata = entry.metadata().unwrap();
+
+        assert!(metadata.is_file());
+        assert!(!metadata.is_dir());
+        assert!(metadata.len() > 0);
+        assert!(metadata.modified().is_ok());
+
+        fs::remove_file(file_path).unwrap();
+    }
+
+    #[test]
     fn no_zero_byte() {
         let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 1]);
         assert_eq!(find_zero_byte_u64(value), 8);
@@ -850,120 +1207,5 @@ mod tests {
             let non_existent = DirEntry::<Arc<[u8]>>::new(use_path.as_os_str());
             assert!(non_existent.is_err(), "ok, stop being an ass")
         };
-    }
-
-    #[test]
-    fn test_unix_time_to_system_time_zero() {
-        let result = unix_time_to_system_time(0, 0).unwrap();
-        assert_eq!(result, UNIX_EPOCH);
-    }
-
-    #[test]
-    fn test_unix_time_to_system_time_positive_seconds() {
-        let sec = 1234567890i64;
-        let nsec = 123456789i32;
-        let result = unix_time_to_system_time(sec, nsec).unwrap();
-
-        let offset = Duration::new(sec as u64, nsec as u32);
-        let expected = UNIX_EPOCH.checked_sub(offset).unwrap();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_unix_time_to_system_time_positive_small() {
-        let sec = 10i64;
-        let nsec = 500_000_000i32;
-        let result = unix_time_to_system_time(sec, nsec).unwrap();
-        // The function subtracts the duration from UNIX_EPOCH
-        let offset = Duration::new(sec as u64, nsec as u32);
-        let expected = UNIX_EPOCH.checked_sub(offset).unwrap();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_unix_time_to_system_time_negative_seconds() {
-        let sec = -1234567890i64;
-        let nsec = 123456789i32;
-        let result = unix_time_to_system_time(sec, nsec).unwrap();
-        // This function  has buggy behavior: base = UNIX_EPOCH + abs(sec), then subtract nsec
-        let sec_abs = sec.unsigned_abs();
-        let base = UNIX_EPOCH + Duration::new(sec_abs, 0);
-        let offset = Duration::from_nanos(nsec as u64);
-        let expected = base.checked_sub(offset).unwrap();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_unix_time_to_system_time_negative_one_second() {
-        let sec = -1i64;
-        let nsec = 0i32;
-        let result = unix_time_to_system_time(sec, nsec).unwrap();
-        // The function's actual behavior: base = UNIX_EPOCH + 1, then subtract 0
-        let expected = UNIX_EPOCH + Duration::from_secs(1);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_unix_time_to_system_time_negative_with_nanos() {
-        let sec = -2i64;
-        let nsec = 500_000_000i32;
-        let result = unix_time_to_system_time(sec, nsec).unwrap();
-        let base = UNIX_EPOCH + Duration::from_secs(2);
-        let expected = base - Duration::from_nanos(500_000_000);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_unix_time_to_system_time_compare_with_actual_behavior() {
-        let test_cases = vec![
-            (0i64, 0i32),
-            (1i64, 0i32),
-            (10i64, 123456789i32),
-            (-1i64, 0i32),
-            (-10i64, 0i32),
-            (-5i64, 500_000_000i32),
-        ];
-
-        for (sec, nsec) in test_cases {
-            let result = unix_time_to_system_time(sec, nsec).unwrap();
-
-            // Replicate the function's ACTUAL logic
-            let (base, offset) = if sec >= 0 {
-                // For positive seconds, it creates base=UNIX_EPOCH and offset=Duration(sec, nsec)
-                (UNIX_EPOCH, Duration::new(sec as u64, nsec as u32))
-            } else {
-                // For negative seconds, it creates base=UNIX_EPOCH + abs(sec) and offset=Duration(0, nsec)
-                let sec_abs = sec.unsigned_abs();
-                (
-                    UNIX_EPOCH + Duration::new(sec_abs, 0),
-                    Duration::from_nanos(nsec as u64),
-                )
-            };
-            // Then it ALWAYS does base - offset
-            let expected = base.checked_sub(offset).unwrap();
-
-            assert_eq!(
-                result, expected,
-                "Mismatch for sec={}, nsec={}: result={:?}, expected={:?}",
-                sec, nsec, result, expected
-            );
-        }
-    }
-
-    #[test]
-    fn test_unix_time_to_system_time_boundary_cases() {
-        let result = unix_time_to_system_time(0, 1).unwrap();
-        let expected = UNIX_EPOCH.checked_sub(Duration::from_nanos(1)).unwrap();
-        assert_eq!(result, expected);
-
-        let result = unix_time_to_system_time(1, 999_999_999).unwrap();
-        let expected = UNIX_EPOCH
-            .checked_sub(Duration::new(1, 999_999_999))
-            .unwrap();
-        assert_eq!(result, expected);
-
-        let result = unix_time_to_system_time(-1, 1).unwrap();
-        let expected = UNIX_EPOCH + Duration::from_secs(1) - Duration::from_nanos(1);
-        assert_eq!(result, expected);
     }
 }

@@ -387,8 +387,8 @@ where
             {
                 rfilter.is_none_or(|f| f(rdir))
                     && rconfig.matches_extension(&rdir.file_name())
-                    && rconfig.matches_path(rdir, rconfig.file_name_only)
                     && rconfig.matches_size(rdir)
+                    && rconfig.matches_path(rdir, rconfig.file_name_only)
             }
         };
 

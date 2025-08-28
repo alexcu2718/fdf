@@ -1,7 +1,6 @@
 # fdf – High-Performance POSIX File Finder
 
-**fdf** is an experimental, high-performance alternative to [`fd`](https://github.com/sharkdp/fd) and [`find`](https://www.man7.org/linux/man-pages/man1/find.1.html), optimised for **regex** and **glob** matching with colourised output.  
-Originally a learning project in **advanced Rust**, **C**, and a little bit of **assembly**, it has evolved into a competitive, benchmarked tool for fast filesystem search.
+fdf is a high-performance POSIX file finder written in Rust with heavy  C FFI and bits of assembly. It is designed as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks show fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct kernel interfacing. The project includes a comprehensive test suite and continuous integration across Linux, macOS, and BSD systems.
 
 --*NOTE, THIS WILL BE RENAMED BEFORE A 1.0, MOSTLY BECAUSE I THOUGHT FD FASTER WAS A FUNNY NAME, SORRY! (awful sense of humour)*
 
@@ -15,9 +14,9 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 ## Important Notes
 
-Contributions will be considered once features are stabilised and improved. This remains a learning/hobby project requiring *significant* development.
+Contributions will be considered once features are stabilised and improved. This remains project requiring *significant* development.
 
-(Although if someone really wants to contribute, go nuts!)
+I'm not too eager on advertising this anywhere until I've had a good baseline. (Although if someone really wants to contribute, go nuts!)
 
 The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and  to learn how to program at a low level.
 
@@ -25,16 +24,23 @@ The implemented subset performs exceptionally well, surpassing fd in equivalent 
 
 ### Automatically Tested via GitHub Actions CI/CD
 
- **Fully Supported & CI Tested**: Linux (x86_64, aarch64, s390x, RISC-V64,Alpine(MUSL)), macOS (Intel & Apple Silicon), FreeBSD(x86_64),
+**Fully Supported and CI Tested**  
 
- **Compiles but Limited Testing**: OpenBSD/NetBSD/DragonflyBSD(tested a few times, only minor fixes would even be needed if broken), Android(works on my phone!), Illumos/Solaris (x86_64)(QEMU tested for verification)
+- Linux (x86_64, aarch64, s390x, RISC-V64, Alpine MUSL)  
+- macOS (Intel and Apple Silicon)  
+- FreeBSD (x86_64)  
 
- (Side comment, I am running out of disk space for virtual machines!)
+**Compiles with Limited Testing**  
 
- These platforms don't support rust 2024 yet via github actions, I will add in checks when they do!
+- OpenBSD, NetBSD, DragonflyBSD (tested occasionally, only minor fixes expected if issues arise)  
+- Android (tested on device)  
+- Illumos and Solaris (x86_64, verified with QEMU)  
 
- **Not Supported**: Windows (fundamental rewrite required due to architectural differences(because of using libc), will be done when I finish the POSIX feature set, the API is also terribly complex compared to POSIX, there's also the fact that Windows has some amazing tools for this already,
- such as [`Everything`](https://www.voidtools.com/) )
+**Not Yet Supported**  
+
+- Windows: requires a significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Note that Windows already has highly effective tools such as [Everything](https://www.voidtools.com/).  
+
+*Note: GitHub Actions does not yet provide Rust 2024 support for some platforms. Checks will be added when available.*
 
 ### Testing methodology
 
@@ -80,13 +86,17 @@ Summary
   fdf -HI '.*[0-9].*(md|\.c)$' '/home/alexc' ran
     1.48 ± 0.05 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
 
-Benchmark 1: fdf '.' '/home/alexc' -HI
-  Time (mean ± σ):     462.1 ms ±  17.8 ms    [User: 1233.5 ms, System: 3694.2 ms]
-  Range (min … max):   432.4 ms … 491.3 ms    10 runs
+Benchmark 1: fdf -HI --size +1mb '' '/home/alexc'
+  Time (mean ± σ):     896.9 ms ±  16.1 ms    [User: 1276.2 ms, System: 8715.7 ms]
+  Range (min … max):   875.0 ms … 926.2 ms    10 runs
 
-Benchmark 2: fd '.' '/home/alexc' -HI
-  Time (mean ± σ):     786.6 ms ±  19.2 ms    [User: 4548.4 ms, System: 3941.3 ms]
-  Range (min … max):   743.8 ms … 808.5 ms    10 runs
+Benchmark 2: fd -HI --size +1mb '' '/home/alexc'
+  Time (mean ± σ):      1.732 s ±  0.006 s    [User: 5.082 s, System: 14.514 s]
+  Range (min … max):    1.721 s …  1.741 s    10 runs
+
+Summary
+  fdf -HI --size +1mb '' '/home/alexc' ran
+    1.93 ± 0.04 times faster than fd -HI --size +1mb '' '/home/alexc'
 
 Summary
   fdf '.' '/home/alexc' -HI ran
@@ -124,12 +134,14 @@ Then this function, really nice way to avoid branch misses during dirent parsing
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
+
 // This has a computational complexity of  O(1)!, truly constant time and a constant function!
-//The code is explained better in the true function definition
+//The code is explained better in the true function definition (at the bottom of src/utils.rs)
 // I have to keep it short for the readme!)
 //This is the little-endian implementation, see crate for modified version for big-endian
 // Only used on Linux+Solaris+Illumos systems, OpenBSD/macos systems store the name length trivially
 //(SIMD within a register, so no architecture dependence)
+#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))] 
 pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     //the only true unsafe action here is dereferencing the pointer, 
     //that MUST be checked before hand, hence why it's an unsafe function.
@@ -165,17 +177,17 @@ Currently, filtering-before-allocation is partially implemented in the crate but
 
 ### Development Philosophy
 
-* Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.
+** Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.
 
-* Open to contributions - Once the codebase stabilises, I welcome others to add features if they're extremely inclined anyway!
+** Open to contributions - Once the codebase stabilises, I welcome others to add features if they're extremely inclined anyway!
 
-* Pragmatic focus - Some areas, like datetime filtering, are especially complex and need a lot of investigation!
+** Pragmatic focus - Some areas, like datetime filtering, are especially complex and need a lot of investigation!
 
 In short, this project is a personal exploration into performance, low-level programming, and building practical tools - with the side benefit that it's actually good at what it does.
 
 ## NECESSARY DISCLAIMERS
 
-I've directly taken code from [fn-match, found at the link](https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574) and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
+I've directly taken code from [fnnmatch-regex, found at the link](https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574) and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
 Notably I modified it because it's quite old and has dependencies I was able to remove
 
 (I have emailed and received approval from the author above)
@@ -207,7 +219,7 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 
 ## Enhance shell completions
 
-Meanwhile my shell completions are pretty good, I want to improve them a lot, this shouldn't be too bad.
+Meanwhile my shell completions are pretty good, I want to improve them a lot, this shouldn't be too bad(famous last words)
 
 ### Core Philosophy
 

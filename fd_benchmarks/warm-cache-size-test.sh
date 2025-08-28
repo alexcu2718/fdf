@@ -7,7 +7,6 @@ OUTPUT_DIR="./bench_results"
 mkdir -p "$OUTPUT_DIR"
 # i don't use gitignore so -HI is equivalent on both tools
 
-echo "running size filtering test, these can take up to 2mins in worst case due to benchmarking multiple runs"
 COMMAND_FIND="fdf -HI --size +1mb '' '$SEARCH_ROOT'"
 COMMAND_FD="fd -HI --size +1mb '' '$SEARCH_ROOT'"
 

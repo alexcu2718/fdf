@@ -1,61 +1,52 @@
-# fdf – High-Performance POSIX File Finder
+# fdf - High-Performance POSIX File Finder
 
-fdf is a high-performance POSIX file finder written in Rust with heavy  C FFI and bits of assembly. It is designed as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks show fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct kernel interfacing. The project includes a comprehensive test suite and continuous integration across Linux, macOS, and BSD systems.
+[![Rust CI](https://github.com/alexcu2718/fdf/workflows/Rust/badge.svg)](https://github.com/alexcu2718/fdf/actions)
 
---*NOTE, THIS WILL BE RENAMED BEFORE A 1.0, MOSTLY BECAUSE I THOUGHT FD FASTER WAS A FUNNY NAME, SORRY! (awful sense of humour)*
+fdf is a high-performance POSIX file finder written in Rust with extensive C FFI and assembly optimisation. It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct kernel interfacing.
 
-[![Rust CI](https://github.com/alexcu2718/fdf/workflows/Rust/badge.svg)](<https://github.com/alexcu2718/fdf/actions>)
-
-Easily installed via:   (FULL INSTRUCTIONS FOUND TOWARDS BOTTOM OF PAGE)
+**Quick Installation:**
 
 ```bash
 cargo install --git https://github.com/alexcu2718/fdf
 ```
 
-## Important Notes
+## Project Status
 
-Contributions will be considered once features are stabilised and improved. This remains project requiring *significant* development.
+This is primarily a learning and performance exploration project. Whilst already useful and performant, it remains under active development towards a stable 1.0 release. The name 'fdf' is a temporary placeholder.
 
-I'm not too eager on advertising this anywhere until I've had a good baseline. (Although if someone really wants to contribute, go nuts!)
+The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers broader functionality. This project focuses on exploring hardware-specific code optimisation rather than replicating fd's complete feature set.
 
-The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers a broader range. The project focuses on exploring hardware-specific code optimisation rather than replicating fd's full functionality. Ultimately I wanted a really fast regex/glob tool for myself and  to learn how to program at a low level.
+## Platform Support (64-bit only)
 
-## Platform Support Status (64 bit only, 32 bit not planned)
+### Fully Supported and CI Tested
 
-### Automatically Tested via GitHub Actions CI/CD
+- Linux (x86_64, aarch64, s390x, RISC-V64, Alpine MUSL)
+- macOS (Intel and Apple Silicon)
+- FreeBSD (x86_64)
 
-**Fully Supported and CI Tested**  
+### Compiles with Limited Testing
 
-- Linux (x86_64, aarch64, s390x, RISC-V64, Alpine MUSL)  
-- macOS (Intel and Apple Silicon)  
-- FreeBSD (x86_64)  
+- OpenBSD, NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise)
+- Android (tested on device)
+- Illumos and Solaris (x86_64, verified with QEMU)
 
-**Compiles with Limited Testing**  
+### Not Yet Supported
 
-- OpenBSD, NetBSD, DragonflyBSD (tested occasionally, only minor fixes expected if issues arise)  
-- Android (tested on device)  
-- Illumos and Solaris (x86_64, verified with QEMU)  
+- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/).
 
-**Not Yet Supported**  
+*Note: GitHub Actions does not yet provide Rust 2024 support for some platforms. Additional checks will be added when available.*
 
-- Windows: requires a significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Note that Windows already has highly effective tools such as [Everything](https://www.voidtools.com/).  
+## Testing
 
-*Note: GitHub Actions does not yet provide Rust 2024 support for some platforms. Checks will be added when available.*
+The project includes comprehensive testing with 70+ Rust tests and 15+ correctness benchmarks comparing against fd.
 
-### Testing methodology
+Note: Miri validation (Rust's undefined behaviour detector) cannot be used due to the extensive libc calls and assembly code. Intensive testing and valgrind validation are used instead.
 
-I have 70+ Rust tests and 15+ correctness benchmarks run via shell for testing discrepancies against fd.
+- Rust tests: [Available here](https://github.com/alexcu2718/fdf/blob/main/src/test.rs)
+- Shell scripts clone the LLVM repository to provide an accurate testing environment
+- Tests run via GitHub Actions on all supported platforms
 
-Note: I cannot validate my code with miri (Rust's best undefined behaviour/ detector) because of my libc calls/assembly, I do intensive tests for that reason, as well as a valgrind test script!  )
-
-The rust tests can be  [Found here](https://github.com/alexcu2718/fdf/blob/main/src/test.rs)
-*(the doc tests are predictably, not there!)
-
-My shell scripts do clone the llvm repo (sorry!) to give an accurate testing environment
-
-The rust tests are run via GitHub actions on the platforms supported.
-
-To run the full test suite yourself:
+**Running the Full Test Suite:**
 
 ```bash
 git clone https://github.com/alexcu2718/fdf /tmp/fdf_test
@@ -63,71 +54,37 @@ cd /tmp/fdf_test/fd_benchmarks
 ./run_all_tests_USE_ME.sh
 ```
 
-This runs a comprehensive suite of internal library, CLI tests, and benchmarks.
+This executes a comprehensive suite of internal library tests, CLI tests, and benchmarks.
 
-## Cool bits(full benchmarks can be seen in speed_benchmarks.txt)
+## Performance Benchmarks
 
- **Full Repeatable Benchmarks:** [Found at the following link](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
+**Complete benchmarks:** [Available here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
-(Repeatable via the testing code seen above, they cover file type filtering,extension, filesizes, among many more!)
+The benchmarks are fully repeatable using the testing code above and cover file type filtering, extension matching, file sizes, and many other scenarios. The following results were obtained on a local system (rather than the LLVM project) to provide realistic usage examples:
 
-Tests ran on my local system instead of the llvm-project (to give a good example)
+| Test Case | fdf Time | fd Time | Speedup |
+|-----------|----------|---------|---------|
+| Regex pattern matching | 431.6ms | 636.7ms | 1.48x faster |
+| Files >1MB | 896.9ms | 1.732s | 1.93x faster |
+| General search | - | - | 1.70x faster |
+| Directory filtering | 461.8ms | 681.2ms | 1.48x faster |
 
-```bash
-Benchmark 1: fdf -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
-  Time (mean ± σ):     431.6 ms ±  10.6 ms    [User: 1307.7 ms, System: 3530.7 ms]
-  Range (min … max):   414.7 ms … 446.1 ms    10 runs
+## Current Issues
 
-Benchmark 2: fd -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
-  Time (mean ± σ):     636.7 ms ±  16.9 ms    [User: 3194.6 ms, System: 3780.9 ms]
-  Range (min … max):   615.1 ms … 661.5 ms    10 runs
+I haven't got quite the logic down for filesize filtering, it currently returns more results than expected, this due to broken symlinks
+but there's other issues I've found when trying to resolve these, quite a tricky one!
 
-Summary
-  fdf -HI '.*[0-9].*(md|\.c)$' '/home/alexc' ran
-    1.48 ± 0.05 times faster than fd -HI '.*[0-9].*(md|\.c)$' '/home/alexc'
+## Technical Highlights
 
-Benchmark 1: fdf -HI --size +1mb '' '/home/alexc'
-  Time (mean ± σ):     896.9 ms ±  16.1 ms    [User: 1276.2 ms, System: 8715.7 ms]
-  Range (min … max):   875.0 ms … 926.2 ms    10 runs
+### Key Optimisations
 
-Benchmark 2: fd -HI --size +1mb '' '/home/alexc'
-  Time (mean ± σ):      1.732 s ±  0.006 s    [User: 5.082 s, System: 14.514 s]
-  Range (min … max):    1.721 s …  1.741 s    10 runs
+- **cstr! macro**: Uses a byte slice as a pointer, automatically initialising memory (no heap allocation) and adding a null terminator for FFI use
+- **find_char_in_word**: Locates the first occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
+- **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)
 
-Summary
-  fdf -HI --size +1mb '' '/home/alexc' ran
-    1.93 ± 0.04 times faster than fd -HI --size +1mb '' '/home/alexc'
+### Constant-Time Directory Entry Processing
 
-Summary
-  fdf '.' '/home/alexc' -HI ran
-    1.70 ± 0.08 times faster than fd '.' '/home/alexc' -HI
-
-Benchmark 1: fdf '.' '/home/alexc' -HI --type d
-  Time (mean ± σ):     461.8 ms ±   7.4 ms    [User: 1109.2 ms, System: 3674.4 ms]
-  Range (min … max):   451.3 ms … 473.2 ms    10 runs
-
-Benchmark 2: fd '.' '/home/alexc' -HI --type d
-  Time (mean ± σ):     681.2 ms ±  32.4 ms    [User: 3697.3 ms, System: 3784.3 ms]
-  Range (min … max):   639.6 ms … 720.7 ms    10 runs
-
-Summary
-  fdf '.' '/home/alexc' -HI --type d ran
-    1.48 ± 0.07 times faster than fd '.' '/home/alexc' -HI --type d
-
-
-```
-
-## Extra bits
-
--cstr! :a macro  use a byte slice as a pointer (automatically initialise memory(no heap use), then add a **null terminator** for FFI use)
-(NOTE: THIS MAY CHANGE DUE TO IMPLICATIONS OF LLVM's probe-stacks (LLVM is the backend for compiling rust))
-
--find_char_in_word: Find the first occurrence of a byte in a 64-bit word (Using SWAR(SIMD within a register)), a const fn
-
--A black magic macro that can colour filepaths based on a compile time perfect hashmap
-it's defined in another github repo of mine at this [found here](https://github.com/alexcu2718/compile_time_ls_colours)
-
-Then this function, really nice way to avoid branch misses during dirent parsing (a really hot loop)
+The following function provides an elegant solution to avoid branch mispredictions during directory entry parsing (a performance-critical loop):
 
 ```rust
 #[cfg(not(target_os = "linux"))]
@@ -135,24 +92,21 @@ use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
 
-// This has a computational complexity of  O(1)!, truly constant time and a constant function!
-//The code is explained better in the true function definition (at the bottom of src/utils.rs)
-// I have to keep it short for the readme!)
-//This is the little-endian implementation, see crate for modified version for big-endian
-// Only used on Linux+Solaris+Illumos systems, OpenBSD/macos systems store the name length trivially
-//(SIMD within a register, so no architecture dependence)
+// Computational complexity: O(1) - truly constant time
+// This is the little-endian implementation; see source for big-endian version
+// Used on Linux/Solaris/Illumos systems; OpenBSD/macOS store name length trivially
+// SIMD within a register, so no architecture dependence
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))] 
 pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
-    //the only true unsafe action here is dereferencing the pointer, 
-    //that MUST be checked before hand, hence why it's an unsafe function.
+    // The only unsafe action is dereferencing the pointer
+    // This MUST be validated beforehand
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name) + 1;
     let reclen = unsafe { (*dirent).d_reclen as usize }; 
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; 
-    //reclen is always multiple of 8 so alignment is guaranteed (unaligned reads are expensive!)
-    //endianness fix omitted for brevity. check source
-    let mask = 0x00FF_FFFFu64 * ((reclen ==24) as u64); //no branch mask
-    let candidate_pos = last_word | mask;//
-    let byte_pos = 7 -  find_zero_byte_u64(candidate_pos) ; // no branch SWAR (this is a private function to prevent abuse)
+    // reclen is always multiple of 8 so alignment is guaranteed
+    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // branchless mask
+    let candidate_pos = last_word | mask;
+    let byte_pos = 7 - find_zero_byte_u64(candidate_pos); // branchless SWAR
     reclen - DIRENT_HEADER_START - byte_pos
 }
 
@@ -185,7 +139,7 @@ Currently, filtering-before-allocation is partially implemented in the crate but
 
 In short, this project is a personal exploration into performance, low-level programming, and building practical tools - with the side benefit that it's actually good at what it does.
 
-## NECESSARY DISCLAIMERS
+## Acknowledgements/Disclaimers
 
 I've directly taken code from [fnnmatch-regex, found at the link](https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574) and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
 Notably I modified it because it's quite old and has dependencies I was able to remove
@@ -224,10 +178,6 @@ Meanwhile my shell completions are pretty good, I want to improve them a lot, th
 ### Core Philosophy
 
 The CLI will remain **simple** (avoiding overwhelming help menus(looking at you, ripgrep!)) and **efficient** (prioritising performance in both design and implementation).
-
-## Current Issues
-
-There's bugs I need to diagnose causing small differences when doing size difference, [check/run this script](https://github.com/alexcu2718/fdf/blob/main/test_size_difference.sh), I'm pretty sure this is actually a bug in fd, going to investigate before pointing fingers!
 
 ## Installation and Usage
 

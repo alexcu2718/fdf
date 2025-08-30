@@ -277,7 +277,7 @@ where
     /// fs::remove_file(&target_path).unwrap();
     ///
     /// ```
-    pub fn to_full_path(self) -> Result<Self> {
+        pub fn to_full_path(&self) -> Result<Self> {
         #[cfg(not(target_env = "gnu"))]
         //Essentially, because only glibc has a really optimised strlen function, i'd prefer to use this
         use crate::strlen;
@@ -296,10 +296,15 @@ where
         // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
         let full_path = unsafe { &*core::ptr::slice_from_raw_parts(ptr.cast(), strlen(ptr)) };
         //get length without null terminator (no ub check, this is why i do it this way)
-
+      
+        let file_type=if self.is_symlink(){ //if it's a symlink, we need to resolve it.
+            FileType::from_bytes(full_path)
+        }else{
+            self.file_type()
+        };
         let boxed = Self {
             path: full_path.into(), //we're heap allocating here, i wish we could've reused the malloc but this isnt TOO important performance wise
-            file_type: self.file_type,
+            file_type,
             inode: self.inode,
             depth: self.depth,
             file_name_index: full_path.file_name_index() as _,

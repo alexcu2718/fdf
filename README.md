@@ -61,6 +61,7 @@ This executes a comprehensive suite of internal library tests, CLI tests, and be
 **Complete benchmarks:** [Available here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
 
 The benchmarks are fully repeatable using the testing code above and cover file type filtering, extension matching, file sizes, and many other scenarios. The following results were obtained on a local system (rather than the LLVM project) to provide realistic usage examples:
+(These are tests done via hyperfine and summarised to save space here.)
 
 | Test Case | fdf Time | fd Time | Speedup |
 |-----------|----------|---------|---------|
@@ -69,10 +70,6 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 | General search | - | - | 1.70x faster |
 | Directory filtering | 461.8ms | 681.2ms | 1.48x faster |
 
-## Current Issues
-
-I haven't got quite the logic down for filesize filtering, it currently returns more results than expected, this due to broken symlinks
-but there's other issues I've found when trying to resolve these, quite a tricky one!
 
 ## Technical Highlights
 

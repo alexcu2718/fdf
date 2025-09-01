@@ -124,15 +124,26 @@ impl SearchConfig {
     where
         S: BytesStorage,
     {
-        if let Some(filter_size) = self.size_filter {
-            if !(entry.is_regular_file() || entry.is_symlink()) {
-                return false;
-            }
-            entry
+        let Some(filter_size) = self.size_filter else {
+            return true;
+        };
+
+        match () {
+            () if entry.is_regular_file() => entry
                 .size()
-                .is_ok_and(|file_size| filter_size.is_within_size(file_size as u64))
-        } else {
-            true
+                .ok()
+                .is_some_and(|file_size| filter_size.is_within_size(file_size as u64)),
+
+            () if entry.is_symlink() => {
+                entry //if symlink then check realpath to see if its broken/not a regular file
+                    .to_full_path()
+                    .ok()
+                    .filter(DirEntry::is_regular_file)
+                    .and_then(|_| entry.size().ok())
+                    .is_some_and(|file_size| filter_size.is_within_size(file_size as u64))
+            }
+
+            () => false,
         }
     }
 

@@ -23,17 +23,14 @@
 #![allow(clippy::semicolon_outside_block)] //dumb/stylistic
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
+use fdf::printer::write_paths_coloured;
+use fdf::size_filter::SizeFilter;
 use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 use std::path::Path;
 use std::str;
-
-use fdf::printer::write_paths_coloured;
-use fdf::size_filter::SizeFilter;
-mod type_config;
-use type_config::build_type_filter;
 
 const FILE_TYPES: &str = "d: Directory
 u: Unknown
@@ -148,12 +145,9 @@ struct Args {
         long = "type",
         required = false,
         help="Filter by file type, eg -d (directory) -f(regular file)",
-        long_help = format!("Select type of files (can use multiple times).\n Available options are:\n{}", FILE_TYPES),
-        value_delimiter = ',',
-        num_args = 1..,
+        long_help = format!("Select type of files.\n Available options are:\n{}", FILE_TYPES),
     )]
-    type_of: Option<Vec<String>>,
-
+    type_of: Option<String>,
     #[arg(
         short = 'p',
         long = "full-path",
@@ -206,6 +200,25 @@ struct Args {
         verbatim_doc_comment
     )]
     size: Option<String>,
+}
+
+fn parse_file_type(type_char: &str) -> Result<char, String> {
+    match type_char.chars().next() {
+        Some('d') => Ok('d'),
+        Some('u') => Ok('u'),
+        Some('l') => Ok('l'),
+        Some('f') => Ok('f'),
+        Some('p') => Ok('p'),
+        Some('c') => Ok('c'),
+        Some('b') => Ok('b'),
+        Some('s') => Ok('s'),
+        Some('e') => Ok('e'),
+        Some('x') => Ok('x'),
+        Some(not_valid) => Err(format!(
+            "Invalid file type: '{not_valid}'. See --help for valid types."
+        )),
+        None => Err("Empty file type argument".into()),
+    }
 }
 
 #[allow(clippy::exit)]
@@ -261,7 +274,17 @@ fn main() -> Result<(), DirEntryError> {
         }
     });
 
-    let mut finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
+    let type_filter = args
+        .type_of
+        .map(|type_str| match parse_file_type(&type_str) {
+            Ok(file_type) => file_type,
+            Err(err) => {
+                eprintln!("Error parsing file type: {err}");
+                std::process::exit(1);
+            }
+        });
+
+    let finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)
@@ -270,12 +293,8 @@ fn main() -> Result<(), DirEntryError> {
         .max_depth(args.depth)
         .follow_symlinks(args.follow_symlinks)
         .filter_by_size(size_of_file)
+        .type_filter(type_filter)
         .build()?;
-
-    if let Some(types) = args.type_of {
-        let type_filter = build_type_filter(&types);
-        finder = finder.with_type_filter(type_filter);
-    }
 
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n, args.no_colour);
 

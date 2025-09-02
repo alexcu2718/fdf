@@ -288,6 +288,7 @@ where
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter<S>>,
     pub(crate) size_filter: Option<SizeFilter>,
+    pub(crate) file_type: Option<char>,
 }
 
 impl<S> FinderBuilder<S>
@@ -308,6 +309,7 @@ where
             follow_symlinks: false,
             filter: None,
             size_filter: None,
+            file_type: None,
         }
     }
     #[must_use]
@@ -368,6 +370,12 @@ where
         self
     }
 
+    #[must_use]
+    pub const fn type_filter(mut self, filter: Option<char>) -> Self {
+        self.file_type = filter;
+        self
+    }
+
     /// Build the Finder instance
     #[allow(clippy::missing_errors_doc)] //TODO! add error docs here
     pub fn build(self) -> Result<Finder<S>> {
@@ -381,11 +389,13 @@ where
             self.max_depth,
             self.follow_symlinks,
             self.size_filter,
+            self.file_type,
         )?;
 
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
             {
                 rfilter.is_none_or(|f| f(rdir))
+                    && rconfig.matches_type(rdir)
                     && rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_size(rdir)
                     && rconfig.matches_path(rdir, rconfig.file_name_only)

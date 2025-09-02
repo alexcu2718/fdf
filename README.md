@@ -70,7 +70,6 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 | General search | - | - | 1.70x faster |
 | Directory filtering | 461.8ms | 681.2ms | 1.48x faster |
 
-
 ## Technical Highlights
 
 ### Key Optimisations
@@ -225,7 +224,7 @@ Options:
   -j, --threads <THREAD_NUM>
           Number of threads to use, defaults to available threads available on your computer
 
-          [default: <NUM_CORES>]
+          [default: <MAX_NUM_THREADS>]
 
   -a, --absolute-path
           Show absolute paths of results, defaults to false
@@ -253,8 +252,8 @@ Options:
 
           [possible values: bash, elvish, fish, powershell, zsh]
 
-  -t, --type <TYPE_OF>...
-          Select type of files (can use multiple times).
+  -t, --type <TYPE_OF>
+          Select type of files.
            Available options are:
           d: Directory
           u: Unknown

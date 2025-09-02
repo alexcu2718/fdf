@@ -231,9 +231,10 @@ where
     #[inline]
     #[allow(clippy::missing_errors_doc)] //TODO!
     #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
-    /// Converts a directory entry to a full, canonical path, resolving all symlinks.
+    /// Converts a directory entry to a full, canonical path, resolving all symlinks
     ///
     /// This is a **costly** operation as it involves a system call (`realpath`).
+    /// If the filetype is a symlink, it invokes a stat call to find the realtype, otherwise stat is not called.
     ///
     /// # Errors
     ///

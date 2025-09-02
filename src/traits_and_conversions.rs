@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 // FFI methods require paths shorter than `LOCAL_PATH_MAX` (default 4096/1024 (Linux/non Linux (POSIX STILL))
 pub trait BytePath<T>
 where
-    T: Deref<Target = [u8]>,
+    T: Deref<Target = [u8]> + ?Sized,
 {
     /// Converts path to a C-compatible string pointer, executes a closure with it,
     /// Does not heap allocate.
@@ -70,7 +70,6 @@ where
     /// assert_eq!(filename.extension(), Some(&b"txt"[..]));
     /// ```
     fn extension(&self) -> Option<&[u8]>;
-
     /// Checks if file extension matches given bytes (case-insensitive)
     fn matches_extension(&self, ext: &[u8]) -> bool;
     /// Gets file size in bytes
@@ -93,7 +92,6 @@ where
     fn file_name_index(&self) -> u16;
     /// Converts to `&OsStr` (zero-cost)
     fn as_os_str(&self) -> &OsStr;
-
     /// Checks file existence (`access(F_OK)`)
     fn exists(&self) -> bool;
     /// Creates directory entry from self
@@ -117,7 +115,6 @@ where
     /// # Safety
     /// Requires valid UTF-8 bytes (true on Unix)
     unsafe fn as_str_unchecked(&self) -> &str;
-
     /// Converts to string with invalid UTF-8 replaced
     fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>;
     /// Converts to owned `PathBuf`
@@ -336,7 +333,6 @@ where
     S: BytesStorage,
 {
     //i might need to change this to show other metadata.
-    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string_lossy())
     }

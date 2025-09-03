@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.6.3"
+version = "0.6.4"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"
@@ -13,17 +13,14 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
 [dependencies]
-chrono = { version = "0.4.41", default-features = false, features = ["std", "libc", "alloc"] }
-clap = { version = "4.5.41", features = ["derive"] }
+chrono = { version = "0.4.41", default-features = false, features = ["std", "alloc"] }
+clap = { version = "4.5.47", features = ["derive"] }
 clap_complete = "4.5.55"
 compile_time_ls_colours = "0.4.1"
-libc = { version = "0.2.175", features = ["const-extern-fn"] }
+libc = { version = "0.2.175" }
 rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf"] }
-[target.'cfg(target_os = "linux")'.dependencies]
-slimmer_box = "0.6.5"
-mimalloc = "0.1.43"
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "linux",target_os="macos"))'.dependencies]
 slimmer_box = "0.6.5"
 mimalloc = "0.1.43"
 

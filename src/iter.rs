@@ -35,7 +35,6 @@ where
     S: BytesStorage,
 {
     #[inline]
-    #[allow(clippy::single_call_fn)]
     //internal function to read the directory entries
     //it is used by the new function to initialise the iterator.
     /// Returns a either
@@ -80,8 +79,6 @@ where
     /// It takes a `DirEntry<S>` which contains the directory path and other metadata.
     /// It initialises the iterator by opening the directory and preparing the path buffer.
     /// Utilises libc's `opendir` and `readdir64` for directory reading.
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::single_call_fn)]
     pub(crate) fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
         let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)
@@ -223,8 +220,6 @@ where
 
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)]
-    #[allow(clippy::cast_sign_loss)] //this doesnt matter
-    #[allow(clippy::cast_possible_truncation)] //doesnt matter on 64bit
     /// Prefetches the next likely entry in the buffer to keep the cache warm.
     pub(crate) fn prefetch_next_entry(&self) {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -239,8 +234,6 @@ where
         }
     }
     #[inline]
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)] //not an issue on 64bit
     /// Checks if the buffer is empty
     pub const fn is_buffer_not_empty(&self) -> bool {
         self.offset < self.remaining_bytes as _

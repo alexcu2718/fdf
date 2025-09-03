@@ -7,9 +7,8 @@ use libc::dirent as dirent64;
 use libc::dirent64;
 
 #[allow(clippy::missing_errors_doc)]
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_sign_loss)]
 #[must_use]
+#[inline]
 pub const fn unix_time_to_datetime(st: &libc::stat) -> Option<DateTime<Utc>> {
     DateTime::from_timestamp(access_stat!(st, st_mtime), access_stat!(st, st_mtimensec))
 }
@@ -29,7 +28,6 @@ pub const fn unix_time_to_datetime(st: &libc::stat) -> Option<DateTime<Utc>> {
 #[inline]
 #[allow(clippy::undocumented_unsafe_blocks)] //not commenting all of this.
 #[allow(clippy::multiple_unsafe_ops_per_block)] //DIS
-#[allow(clippy::as_conversions)] //casting i32->usize is safe (64bit is all i care about)
 pub unsafe fn strlen<T>(ptr: *const T) -> usize
 where
     T: ValueType,
@@ -127,8 +125,7 @@ pub unsafe fn construct_path(
 
 #[inline]
 #[must_use]
-#[allow(clippy::missing_const_for_fn)]
-#[allow(clippy::single_call_fn)]
+#[allow(clippy::missing_const_for_fn)] //strlen isnt const yet the others two are
 ///a utility function for breaking down the config spaghetti that is platform specific optimisations
 // i wanted to make this const and separate the function
 // because only strlen isn't constant here :(
@@ -180,7 +177,6 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
-#[allow(clippy::as_conversions)]
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 /// Returns the length of a `dirent64::d_name` string in constant time using
 /// SWAR (SIMD within a register) bit tricks.
@@ -217,6 +213,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
 
     // SAFETY: `dirent` must be a valid pointer to an initialised dirent64 (trivially shown by)
     // Accessing `d_reclen` is safe because the struct is kernel-provided.
+    #[allow(clippy::as_conversions)]
     let reclen = unsafe { (*dirent).d_reclen } as usize; // do not use byte_offset here
 
     debug_assert!(

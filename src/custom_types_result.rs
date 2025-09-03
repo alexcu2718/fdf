@@ -1,5 +1,4 @@
-use crate::const_from_env;
-use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
+use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig, const_from_env};
 use core::ops::Deref;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use slimmer_box::SlimmerBox;
@@ -92,12 +91,8 @@ impl<S: BytesStorage> OsBytes<S> {
 
     #[inline]
     #[must_use]
-    #[allow(clippy::transmute_ptr_to_ptr)]
-    /// Returns a reference to the underlying bytes as an `OsStr`.
-    /// This is unsafe because it assumes the bytes are valid UTF-8. but as this is on linux its fine.
     pub fn as_os_str(&self) -> &OsStr {
-        // SAFETY: transmute is safe because osstr <=> bytes on POSIX (NOT windows)
-        unsafe { core::mem::transmute(self.as_bytes()) }
+        std::os::unix::ffi::OsStrExt::from_bytes(&self.bytes)
     }
 }
 

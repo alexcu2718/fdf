@@ -30,7 +30,7 @@ pub struct SearchConfig {
     /// a size filter
     pub(crate) size_filter: Option<SizeFilter>,
     /// a type filter
-    pub(crate) type_filter: Option<char>,
+    pub(crate) type_filter: Option<u8>,
 }
 
 impl SearchConfig {
@@ -40,7 +40,6 @@ impl SearchConfig {
     #[allow(clippy::fn_params_excessive_bools)]
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::single_call_fn)]
     pub(crate) fn new(
         pattern: impl AsRef<str>,
         hide_hidden: bool,
@@ -51,7 +50,7 @@ impl SearchConfig {
         depth: Option<u16>,
         follow_symlinks: bool,
         size_filter: Option<SizeFilter>,
-        type_filter: Option<char>,
+        type_filter: Option<u8>,
     ) -> Result<Self> {
         let patt = pattern.as_ref();
         // If pattern is "." or empty, we do not filter by regex, this avoids building a regex (even if its trivial cost)
@@ -129,8 +128,6 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::as_conversions)]
     /// Applies the size filter to a directory entry if configured.
     /// Works differently for regular files vs symlinks (resolves symlinks first).
     pub fn matches_size<S>(&self, entry: &DirEntry<S>) -> bool
@@ -162,8 +159,6 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::as_conversions)]
     /// Applies a type filter (single-character code for file type)
     /// Supports common file types: file, dir, symlink, device, pipe, etc
     pub fn matches_type<S>(&self, entry: &DirEntry<S>) -> bool
@@ -175,16 +170,16 @@ impl SearchConfig {
         };
 
         match type_filter {
-            'f' => entry.is_regular_file(),
-            'd' => entry.is_dir(),
-            'l' => entry.is_symlink(),
-            'p' => entry.is_pipe(),
-            'c' => entry.is_char_device(),
-            'b' => entry.is_block_device(),
-            's' => entry.is_socket(),
-            'u' => entry.is_unknown(),
-            'x' => entry.is_executable(),
-            'e' => entry.is_empty(),
+            b'f' => entry.is_regular_file(),
+            b'd' => entry.is_dir(),
+            b'l' => entry.is_symlink(),
+            b'p' => entry.is_pipe(),
+            b'c' => entry.is_char_device(),
+            b'b' => entry.is_block_device(),
+            b's' => entry.is_socket(),
+            b'u' => entry.is_unknown(),
+            b'x' => entry.is_executable(),
+            b'e' => entry.is_empty(),
             _ => false,
         }
     }

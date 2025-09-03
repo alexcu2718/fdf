@@ -19,7 +19,6 @@ pub enum DirEntryError {
     Utf8Error(core::str::Utf8Error),
     BrokenPipe(io::Error),
     OSerror(io::Error),
-    Success, // this is used to indicate a successful operation, not an error
     AccessDenied(io::Error),
     WriteError(io::Error),
     RayonError(rayon::ThreadPoolBuildError),
@@ -38,7 +37,6 @@ impl From<io::Error> for DirEntryError {
         // map OS error codes to variants
         if let Some(code) = error.raw_os_error() {
             match code {
-                0 => Self::Success,                     // no error, operation was successful
                 EAGAIN => Self::TemporarilyUnavailable, // EAGAIN is not a fatal error, just try again later
                 EINVAL | ENOENT => Self::InvalidPath,
                 ENOTDIR => Self::NotADirectory,
@@ -58,14 +56,13 @@ impl From<core::str::Utf8Error> for DirEntryError {
         Self::Utf8Error(e)
     }
 }
-#[allow(clippy::pattern_type_mismatch)] //bug
+
 impl fmt::Display for DirEntryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPath => write!(f, "Invalid path, neither a file nor a directory"),
             Self::InvalidStat => write!(f, "Invalid file stat"),
             Self::TimeError => write!(f, "Invalid time conversion"),
-            Self::Success => write!(f, "Operation was successful"),
             Self::TemporarilyUnavailable => {
                 write!(f, "Operation temporarily unavailable, retry later")
             }
@@ -82,8 +79,7 @@ impl fmt::Display for DirEntryError {
         }
     }
 }
-#[allow(clippy::pattern_type_mismatch)] //bug
-#[allow(clippy::wildcard_enum_match_arm)]
+
 impl core::error::Error for DirEntryError {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {

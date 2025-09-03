@@ -9,8 +9,6 @@ const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
 const RESET: &[u8] = b"\x1b[0m";
 
 #[inline]
-#[allow(clippy::single_call_fn)]
-#[allow(clippy::wildcard_enum_match_arm)]
 fn extension_colour<S>(entry: &DirEntry<S>) -> &[u8]
 where
     S: BytesStorage + 'static + Clone,
@@ -33,7 +31,6 @@ where
     }
 }
 
-#[allow(clippy::single_call_fn)]
 #[inline]
 #[allow(clippy::missing_errors_doc)] //fix later TODO!
 pub fn write_paths_coloured<I, S>(paths: I, limit: Option<usize>, nocolour: bool) -> Result<()>

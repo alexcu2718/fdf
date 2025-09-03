@@ -1,26 +1,3 @@
-//i use very strong lints.
-//I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
-//cargo clippy --all -- -W clippy::all -W clippy::pedantic -W clippy::restriction -W clippy::nursery -D warnings
-#![allow(clippy::absolute_paths)]
-#![allow(clippy::single_call_fn)] //naturally in a main function youd excpect this
-#![allow(clippy::let_underscore_must_use)]
-#![allow(clippy::let_underscore_untyped)]
-#![allow(clippy::implicit_return)] //this one is dumb
-#![allow(clippy::as_underscore)] // this too
-#![allow(clippy::missing_docs_in_private_items)]
-#![allow(clippy::blanket_clippy_restriction_lints)]
-#![allow(clippy::absolute_paths)] //this ones dumb
-#![allow(clippy::arbitrary_source_item_ordering)] //stylistic
-#![allow(clippy::std_instead_of_alloc)] //this one is stupid
-#![allow(clippy::field_scoped_visibility_modifiers)]
-#![allow(clippy::pub_with_shorthand)]
-#![allow(clippy::allow_attributes)]
-#![allow(clippy::allow_attributes_without_reason)]
-#![allow(clippy::map_err_ignore)]
-#![allow(clippy::question_mark_used)] //dumb...just dumb
-#![allow(clippy::semicolon_inside_block)] //dumb/stylistic
-#![allow(clippy::must_use_candidate)] //dumb/stylistic
-#![allow(clippy::semicolon_outside_block)] //dumb/stylistic
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::printer::write_paths_coloured;
@@ -202,18 +179,18 @@ struct Args {
     size: Option<String>,
 }
 
-fn parse_file_type(type_char: &str) -> Result<char, String> {
+fn parse_file_type(type_char: &str) -> Result<u8, String> {
     match type_char.chars().next() {
-        Some('d') => Ok('d'),
-        Some('u') => Ok('u'),
-        Some('l') => Ok('l'),
-        Some('f') => Ok('f'),
-        Some('p') => Ok('p'),
-        Some('c') => Ok('c'),
-        Some('b') => Ok('b'),
-        Some('s') => Ok('s'),
-        Some('e') => Ok('e'),
-        Some('x') => Ok('x'),
+        Some('d') => Ok(b'd'),
+        Some('u') => Ok(b'u'),
+        Some('l') => Ok(b'l'),
+        Some('f') => Ok(b'f'),
+        Some('p') => Ok(b'p'),
+        Some('c') => Ok(b'c'),
+        Some('b') => Ok(b'b'),
+        Some('s') => Ok(b's'),
+        Some('e') => Ok(b'e'),
+        Some('x') => Ok(b'x'),
         Some(not_valid) => Err(format!(
             "Invalid file type: '{not_valid}'. See --help for valid types."
         )),
@@ -334,7 +311,6 @@ fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> Os
 }
 #[allow(clippy::exit)]
 #[allow(clippy::print_stderr)]
-#[allow(clippy::single_call_fn)]
 fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     if !args_glob {
         return pattern.into();
@@ -345,7 +321,7 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
         std::process::exit(1)
     })
 }
-#[allow(clippy::single_call_fn)]
+
 fn generate_start_prefix() -> OsString {
     env::current_dir()
         .ok()

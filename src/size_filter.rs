@@ -39,12 +39,10 @@ pub enum SizeFilter {
 }
 
 impl SizeFilter {
-    #[allow(clippy::single_call_fn)]
     #[allow(clippy::missing_errors_doc)] //private function not doing this
     pub fn from_string(s: &str) -> Result<Self, ParseSizeError> {
         Self::parse_args(s).ok_or(ParseSizeError::InvalidFormat)
     }
-    #[allow(clippy::single_call_fn)]
     fn parse_args(start: &str) -> Option<Self> {
         let s = start.trim();
         if s.is_empty() {
@@ -69,7 +67,6 @@ impl SizeFilter {
             _ => None,
         }
     }
-    #[allow(clippy::single_call_fn)]
     fn parse_size_parts(start: &str) -> Option<(u64, String)> {
         let s = start.trim().to_lowercase();
         let ref_s = s.as_str();
@@ -89,7 +86,6 @@ impl SizeFilter {
 
         Some((quantity, unit_str.into()))
     }
-    #[allow(clippy::single_call_fn)]
     fn unit_multiplier(unit: &str) -> Option<u64> {
         let unit_lower = unit.trim().to_lowercase();
         match unit_lower.as_ref() {
@@ -105,7 +101,6 @@ impl SizeFilter {
             _ => None,
         }
     }
-    #[allow(clippy::single_call_fn)]
     #[must_use]
     pub const fn is_within_size(&self, size: u64) -> bool {
         match *self {

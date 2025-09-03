@@ -1,9 +1,7 @@
 // honestly i should probably delete this and rely on just libc but I ideally would like to not dynamically link glibc in future on  Linux
-#![allow(clippy::items_after_statements)] //clippy goes a bit stupid on this, maybe i should investigate it, or maybe im la-z
+
 use crate::ValueType;
 #[inline]
-#[allow(clippy::inline_asm_x86_intel_syntax)]
-#[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -121,7 +119,6 @@ pub unsafe fn close_asm(fd: i32) {
 }
 
 #[inline]
-#[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 /// Close directory using direct assembly instructions
 /// # Safety
@@ -170,7 +167,6 @@ pub unsafe fn close_asm(fd: i32) {
 }
 
 #[inline]
-#[allow(clippy::inline_asm_x86_intel_syntax)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 /// Reads directory entries using `getdents64` syscall (no libc) for `x86_64/aarm64` (failing that, libc)
 ///

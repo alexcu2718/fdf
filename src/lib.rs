@@ -1,31 +1,3 @@
-//library imports
-//I USE A VERY STRICT CLIPPY TEST, check clippy_test.sh (i will eventually clean these up)
-//cargo clippy --all -- -W clippy::all -W clippy::pedantic -W clippy::restriction -W clippy::nursery -D warnings
-
-#![allow(clippy::implicit_return)] //this too
-#![allow(clippy::as_underscore)] //this is dumb
-#![allow(clippy::min_ident_chars)] //i could fix this
-#![allow(clippy::missing_docs_in_private_items)]
-#![allow(clippy::undocumented_unsafe_blocks)] //there's A LOT OF UNSAFE!, THIS WILL TAKE A WHILE
-#![allow(clippy::blanket_clippy_restriction_lints)] //well...
-#![allow(clippy::absolute_paths)] //dumb (this makes writing cross compatibility easier, stupid lint.)
-#![allow(clippy::arbitrary_source_item_ordering)] //stylistic nazis
-#![allow(clippy::missing_inline_in_public_items)] //not all items need inlining fffs
-#![allow(clippy::std_instead_of_alloc)] //this one is plain broken
-#![allow(clippy::unseparated_literal_suffix)] //very dumb
-#![allow(clippy::pub_use)] //STYLISTIC again
-#![allow(clippy::field_scoped_visibility_modifiers)]
-#![allow(clippy::pub_with_shorthand)] //this is *************
-#![allow(clippy::allow_attributes)]
-#![allow(clippy::allow_attributes_without_reason)] //broken lint
-#![allow(clippy::arithmetic_side_effects)]
-//a lot of the arithmetic side effects are simply we're we know usize->u16 is fine (just any indexing requires a usize)
-#![allow(clippy::as_conversions)]
-#![allow(clippy::question_mark_used)] //super dumb
-#![allow(clippy::semicolon_if_nothing_returned)] //this is dumb
-#![allow(clippy::missing_trait_methods)] //this one too
-#![allow(clippy::semicolon_inside_block)] //this one is really dumb
-
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
@@ -140,31 +112,23 @@ where
     pub fn traverse(self) -> Result<Receiver<Vec<DirEntry<S>>>> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry<S>>>) = unbounded();
 
-        // we have to arbitrarily construct a direntry to start the search.
-        let construct_dir = DirEntry::new(&self.root);
-        // check if the directory exists and is traversible
-        // traversible meaning directory/symlink, we follow symlinks as it's the starting filepath
-        // but henceforth we do not follow symlinks unless specified in the config
-        // this is to prevent infinite loops and other issues.
-        match construct_dir {
-            Ok(entry) if entry.is_traversible() => {
-                // spawn the search in a new thread.
-                rayon::spawn(move || {
-                    self.process_directory(entry, &sender);
-                });
+        // try to construct the starting directory entry
+        let entry = DirEntry::new(&self.root)?;
 
-                //return receiver
-                Ok(receiver)
-            }
-            _ => Err(DirEntryError::InvalidPath),
-            //fix this error (it can also be permission denied, maybe some others, TEST THIS!) TODO
+        // only continue if it is traversible
+        if entry.is_traversible() {
+            // spawn the search in a new thread
+            rayon::spawn(move || {
+                self.process_directory(entry, &sender);
+            });
+
+            Ok(receiver)
+        } else {
+            Err(DirEntryError::InvalidPath)
         }
     }
+
     #[inline]
-    #[allow(clippy::let_underscore_untyped)]
-    #[allow(clippy::let_underscore_must_use)]
-    #[allow(clippy::print_stderr)] //TODO, REMOVE THIS WHEN SATISIFIED
-    #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
     /// Recursively processes a directory, sending found files to a channel.
     ///
     /// This method uses a depth-first traversal with `rayon` to process directories
@@ -233,6 +197,7 @@ where
                 });
                 //checking if we should send directories
                 if should_send_dir_or_symlink{
+                    #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
                     files.push(dir.clone()) //we have to clone here unfortunately because it's being used to keep the iterator going.
                     //luckily we're only cloning 1 directory/symlink, not anything more than that.
                 }
@@ -247,9 +212,8 @@ where
                 | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
                 | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
             ) => {} //TODO! add logging
-             #[allow(unused_variables)] //this is for the debug build 
             Err(err) => {
-            #[allow(clippy::panic)] //panic is only in debug. This should trigger any CI warnings i am using!
+            #[allow(clippy::panic,unused_variables)] //panic is only in debug. This should trigger any CI warnings i am using!
             #[cfg(debug_assertions)]
             {
                 // In debug mode, show the error and panic. this is extremely helpful for debugging potential issues
@@ -288,7 +252,7 @@ where
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter<S>>,
     pub(crate) size_filter: Option<SizeFilter>,
-    pub(crate) file_type: Option<char>,
+    pub(crate) file_type: Option<u8>, //u8= a length one byte string , aka b"f" or b"s"
 }
 
 impl<S> FinderBuilder<S>
@@ -371,7 +335,7 @@ where
     }
 
     #[must_use]
-    pub const fn type_filter(mut self, filter: Option<char>) -> Self {
+    pub const fn type_filter(mut self, filter: Option<u8>) -> Self {
         self.file_type = filter;
         self
     }

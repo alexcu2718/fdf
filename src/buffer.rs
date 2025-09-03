@@ -159,8 +159,6 @@ where
     // the main idea is to avoid dynamically linking glibc eventually.
     // A RISC-V implementation is currently pending(might do others because i'm learning assembly)
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::single_call_fn)]
     #[cfg(target_os = "linux")]
     pub unsafe fn getdents(&mut self, fd: i32) -> i64 {
         unsafe { crate::syscalls::getdents_asm(fd, self.as_mut_ptr(), SIZE) }

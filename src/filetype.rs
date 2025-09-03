@@ -221,7 +221,6 @@ impl FileType {
     /// - `path_start`: The path to examine
     #[must_use]
     #[inline]
-    #[allow(clippy::filetype_is_file)] //stupid
     pub fn from_path<P: AsRef<Path>>(path_start: P) -> Self {
         Path::new(path_start.as_ref())
             .symlink_metadata()
@@ -248,30 +247,9 @@ impl FileType {
     pub const fn from_stat(stat: &libc::stat) -> Self {
         Self::from_mode(stat.st_mode)
     }
-
-    /* commented out as not currently necessary
-    #[must_use]
-    #[inline]
-    /// Returns the corresponding libc dirent d_type value
-    ///
-    /// This is useful for converting back to the raw d_type value,
-    /// for example when constructing dirent-like structures.
-    pub const fn d_type_value(&self) -> u8 {
-        match self {
-            Self::RegularFile => DT_REG,
-            Self::Directory => DT_DIR,
-            Self::BlockDevice => DT_BLK,
-            Self::CharDevice => DT_CHR,
-            Self::Pipe => DT_FIFO,
-            Self::Symlink => DT_LNK,
-            Self::Socket => DT_SOCK,
-            Self::Unknown => DT_UNKNOWN,
-        }
-    }*/
 }
 
 impl core::fmt::Display for FileType {
-    #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
             Self::BlockDevice => write!(f, "Block device"),
@@ -287,7 +265,6 @@ impl core::fmt::Display for FileType {
 }
 
 impl From<libc::stat> for FileType {
-    #[inline]
     /// Converts a `libc::stat` directly to a `FileType`
     fn from(stat: libc::stat) -> Self {
         Self::from_stat(&stat)

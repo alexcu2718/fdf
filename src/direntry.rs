@@ -174,7 +174,6 @@ where
     }
     #[inline]
     #[must_use]
-    #[allow(clippy::wildcard_enum_match_arm)]
     /// Checks if the entry is empty.
     ///
     /// For files, it checks if the size is zero. For directories, it checks if there are no entries.

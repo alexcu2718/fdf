@@ -1,4 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
 #![allow(dead_code)] //some traits are not used yet in full implementation but are used in tests/for future CLI/lib use
 use crate::unix_time_to_datetime;
 //need to add these todo
@@ -24,7 +23,6 @@ pub trait BytePath<T>
 where
     T: Deref<Target = [u8]> + ?Sized,
 {
-
     fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
         F: FnOnce(*const VT) -> R,
@@ -78,7 +76,6 @@ where
     unsafe fn as_str_unchecked(&self) -> &str;
     /// Converts to string with invalid UTF-8 replaced
     fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>;
-  
 }
 
 impl<T> BytePath<T> for T
@@ -109,7 +106,9 @@ where
         unsafe { core::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len()) };
         // SAFETY: The destination is `c_path_buf` offset by `self.len()`, which is a valid index
         #[allow(clippy::multiple_unsafe_ops_per_block)]
-        unsafe { c_path_buf.add(self.len()).write(0) }; // Null terminate the string
+        unsafe {
+            c_path_buf.add(self.len()).write(0)
+        }; // Null terminate the string
 
         func(c_path_buf.cast::<_>())
     }
@@ -136,8 +135,6 @@ where
         DirEntry::<S>::new(self.as_os_str())
     }
 
-
-
     #[inline]
     fn matches_extension(&self, ext: &[u8]) -> bool {
         self.extension()
@@ -150,7 +147,6 @@ where
     }
 
     #[inline]
-    #[allow(clippy::default_numeric_fallback)]
     unsafe fn open_fd(&self) -> Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
@@ -182,9 +178,7 @@ where
     }
 
     #[inline]
-    #[allow(clippy::cast_possible_truncation)] //it's fine here because i32 is  plenty
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    #[allow(clippy::map_err_ignore)] //specify these later TODO!
     fn modified_time(&self) -> Result<DateTime<Utc>> {
         let s = self.get_lstat()?;
         unix_time_to_datetime(&s).ok_or(DirEntryError::TimeError)
@@ -197,7 +191,6 @@ where
     }
 
     #[inline]
-    #[allow(clippy::transmute_ptr_to_ptr)]
     ///cheap conversion from byte slice to `OsStr`
     fn as_os_str(&self) -> &OsStr {
         std::os::unix::ffi::OsStrExt::from_bytes(self)
@@ -219,10 +212,9 @@ where
     }
 
     #[inline]
-    #[allow(clippy::missing_errors_doc)]
     /// Returns the std definition of metadata for easy validation/whatever purposes.
     fn metadata(&self) -> Result<std::fs::Metadata> {
-        std::fs::metadata(self.as_os_str()).map_err(core::convert::Into::into) 
+        std::fs::metadata(self.as_os_str()).map_err(core::convert::Into::into)
     }
 
     #[inline]
@@ -233,8 +225,6 @@ where
     }
 
     #[inline]
-    #[allow(clippy::missing_errors_doc)]
-  //  #[allow(clippy::map_err_ignore)] //specify these later TODO!
     fn to_std_file_type(&self) -> Result<std::fs::FileType> {
         //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it
@@ -277,7 +267,6 @@ where
 
     /// Get the length of the basename of a path (up to and including the last '/')
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
     fn file_name_index(&self) -> u16 {
         memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
     }
@@ -363,7 +352,6 @@ where
 
 ///A constructor for making accessing the buffer, filename indexes, depths of the parent path while inside the iterator.
 /// More documentation TBD
-#[allow(clippy::cast_possible_truncation)] //no truncation issue (reclen is always under u16, casting to and  from a usize is lossless)
 pub trait DirentConstructor<S: BytesStorage> {
     fn path_buffer(&mut self) -> &mut PathBuffer;
     fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.

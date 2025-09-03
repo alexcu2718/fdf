@@ -212,12 +212,12 @@ where
                 | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
                 | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
             ) => {} //TODO! add logging
-            Err(err) => {
-            #[allow(clippy::panic,unused_variables)] //panic is only in debug. This should trigger any CI warnings i am using!
+            Err(_err) => {
+            #[allow(clippy::panic)] //panic is only in debug. This should trigger any CI warnings i am using!
             #[cfg(debug_assertions)]
             {
                 // In debug mode, show the error and panic. this is extremely helpful for debugging potential issues
-                panic!("Unreachable directory entry error: {err:?}");
+                panic!("Unreachable directory entry error: {_err:?}");
             }
             // In release mode, the compiler will use unreachable_unchecked().
             // This provides a performance optimisation by assuming this code path is never taken.

@@ -81,29 +81,26 @@ fn make_dirent(name: &str) -> LibcDirent64 {
 
 fn bench_strlen(c: &mut Criterion) {
     eprintln!("if testing on macos/bsd, this may break, will test soon");
-    // First create all test cases
-    let length_groups = [
-        ("tiny (1-4)", "a"),
-        ("small (5-16)", "file.txt"),
-        ("medium (17-64)", "config_files/settings/default.json"),
+
+    // Base patterns
+    let length_groups = vec![
+        ("tiny (1-4)", "a".to_string()),
+        ("small (5-16)", "file.txt".to_string()),
+        ("medium (17-64)", "config_files/settings/default.json".to_string()),
         (
             "large (65-128)",
-            "very_long_directory_name/with_subfolders/and_a_very_long_filename.txt",
+            "very_long_directory_name/with_subfolders/and_a_very_long_filename.txt"
+                .to_string(),
         ),
-        ("xlarge (129-255)", &"a".repeat(200)),
-        ("max length (255)", &"b".repeat(255)),
+        ("xlarge (129-255)", "a".repeat(200)),
+        ("max length (255)", "b".repeat(255)),
     ];
 
-    let all_entries: Vec<_> = length_groups
-        .iter()
-        .map(|(_, name)| make_dirent(name))
-        .collect();
-
-    //  make separate benchmark groups one at a time
+    // --- Group 1: per-length comparison with only the 6 base entries ---
     {
         let mut group = c.benchmark_group("strlen_by_length");
 
-        for (size_name, name) in length_groups {
+        for (size_name, name) in &length_groups {
             let entry = make_dirent(name);
             let byte_len = name.len();
 
@@ -120,22 +117,30 @@ fn bench_strlen(c: &mut Criterion) {
                 &entry,
                 |b, e| {
                     b.iter(|| unsafe {
-                        black_box(libc::strlen(black_box(e.d_name.as_ptr() as *const _)))
+                        black_box(libc::strlen(e.d_name.as_ptr() as *const _))
                     })
                 },
             );
 
             group.bench_with_input(BenchmarkId::new("asm_strlen", size_name), &entry, |b, e| {
                 b.iter(|| unsafe {
-                    black_box(asm_strlen(black_box(e.d_name.as_ptr() as *const _)))
+                    black_box(asm_strlen(e.d_name.as_ptr() as *const _))
                 })
             });
         }
         group.finish();
     }
 
-    //  create the batch comparison group
+    // --- Group 2: batch comparison with 6000 entries ---
     {
+  
+        let mut all_entries = Vec::new();
+        for _i in 0..1000 {
+            for (_, name) in &length_groups {
+                all_entries.push(make_dirent(name));
+            }
+        }
+
         let mut batch_group = c.benchmark_group("strlen_batch_comparison");
         batch_group.throughput(Throughput::Elements(all_entries.len() as u64));
 
@@ -144,10 +149,10 @@ fn bench_strlen(c: &mut Criterion) {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(dirent_const_time_strlen(black_box(entry as *const _)))
+                        black_box(dirent_const_time_strlen(entry as *const _))
                     };
                 }
-                black_box(total) //make sure compiler does not optimise this away
+                black_box(total)
             })
         });
 
@@ -156,18 +161,19 @@ fn bench_strlen(c: &mut Criterion) {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(libc::strlen(black_box(entry.d_name.as_ptr() as *const _)))
+                        black_box(libc::strlen(entry.d_name.as_ptr() as *const _))
                     };
                 }
-                black_box(total) //make sure compiler does not optimise this away
+                black_box(total)
             })
         });
+
         batch_group.bench_function("asm_strlen_batch", |b| {
             b.iter(|| {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(asm_strlen(black_box(entry.d_name.as_ptr() as *const _)))
+                        black_box(asm_strlen(entry.d_name.as_ptr() as *const _))
                     };
                 }
                 black_box(total)

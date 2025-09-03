@@ -1,4 +1,5 @@
 #![allow(clippy::missing_errors_doc)]
+#![allow(dead_code)] //some traits are not used yet in full implementation but are used in tests/for future CLI/lib use
 use crate::unix_time_to_datetime;
 //need to add these todo
 use crate::{
@@ -18,57 +19,17 @@ use std::path::{Path, PathBuf};
 
 /// A trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.
-///
-// # Safety
-// Several methods contain unsafe blocks assuming valid UTF-8 paths (Unix convention).
-// FFI methods require paths shorter than `LOCAL_PATH_MAX` (default 4096/1024 (Linux/non Linux (POSIX STILL))
+/// Explicitly non public to prevent abuse/safety reasons
 pub trait BytePath<T>
 where
     T: Deref<Target = [u8]> + ?Sized,
 {
-    /// Converts path to a C-compatible string pointer, executes a closure with it,
-    /// Does not heap allocate.
-    ///
-    /// Creates a null-terminated copy in a stack buffer, passing the pointer to `f`.
-    /// The pointer type (`*const VT`) is automatically inferred as `u8` or `i8`.
-    ///
-    /// # Arguments
-    /// * `func` - Closure receiving the temporary C string pointer
-    ///
-    /// # Panics
-    /// In debug mode if path length exceeds `LOCAL_PATH_MAX`
-    ///
-    /// # Example
-    /// ```
-    /// use fdf::BytePath;
-    /// let path: &[u8] = b"abc";
-    /// let length = path.as_cstr_ptr(|ptr:*const u8| {
-    ///     // Simulate a bad strlen
-    ///     unsafe {
-    ///         let mut len = 0;
-    ///         while *ptr.add(len) != 0 {
-    ///             len += 1;
-    ///         }
-    ///         len
-    ///     }
-    /// });
-    /// assert_eq!(length, 3);
-    /// ```
+
     fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
         F: FnOnce(*const VT) -> R,
-        VT: ValueType; // VT==ValueType 
+        VT: ValueType; // VT=i8/u8
 
-    /// Gets file extension from byte path (without dot)
-    ///
-    /// Returns `None` if no extension found.
-    ///
-    /// # Example
-    /// ```
-    /// use fdf::BytePath;
-    /// let filename:&[u8]=b"file.txt";
-    /// assert_eq!(filename.extension(), Some(&b"txt"[..]));
-    /// ```
     fn extension(&self) -> Option<&[u8]>;
     /// Checks if file extension matches given bytes (case-insensitive)
     fn matches_extension(&self, ext: &[u8]) -> bool;
@@ -117,8 +78,7 @@ where
     unsafe fn as_str_unchecked(&self) -> &str;
     /// Converts to string with invalid UTF-8 replaced
     fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>;
-    /// Converts to owned `PathBuf`
-    fn to_path(&self) -> PathBuf;
+  
 }
 
 impl<T> BytePath<T> for T
@@ -126,7 +86,6 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
-    #[allow(clippy::multiple_unsafe_ops_per_block)]
     fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
         //TODO! change this to unsafe MAYBE?
@@ -148,7 +107,8 @@ where
         // SAFETY: The source (`self`) and destination (`c_path_buf`) pointers are known not to overlap,
         // and the length is guaranteed to be less than or equal to the destination's capacity (`LOCAL_PATH_MAX`).
         unsafe { core::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len()) };
-        // SAFETY: The destination is `c_path_buf` offset by `self.len()`, which is a valid index since
+        // SAFETY: The destination is `c_path_buf` offset by `self.len()`, which is a valid index
+        #[allow(clippy::multiple_unsafe_ops_per_block)]
         unsafe { c_path_buf.add(self.len()).write(0) }; // Null terminate the string
 
         func(c_path_buf.cast::<_>())
@@ -176,10 +136,7 @@ where
         DirEntry::<S>::new(self.as_os_str())
     }
 
-    fn to_path(&self) -> PathBuf {
-        // Convert the byte slice to a PathBuf
-        self.as_os_str().into()
-    }
+
 
     #[inline]
     fn matches_extension(&self, ext: &[u8]) -> bool {
@@ -188,7 +145,6 @@ where
     }
 
     #[inline]
-    #[allow(clippy::cast_sign_loss)] //it's safe to cast here because we're dealing with file sizes which are always positive
     fn size(&self) -> Result<i64> {
         self.get_lstat().map(|s| s.st_size as _)
     }
@@ -264,10 +220,9 @@ where
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    #[allow(clippy::map_err_ignore)] //specify these later TODO
     /// Returns the std definition of metadata for easy validation/whatever purposes.
     fn metadata(&self) -> Result<std::fs::Metadata> {
-        std::fs::metadata(self.as_os_str()).map_err(|_| crate::DirEntryError::MetadataError) //TODO! provide a more specialised error
+        std::fs::metadata(self.as_os_str()).map_err(core::convert::Into::into) 
     }
 
     #[inline]
@@ -279,19 +234,19 @@ where
 
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    #[allow(clippy::map_err_ignore)] //specify these later TODO!
+  //  #[allow(clippy::map_err_ignore)] //specify these later TODO!
     fn to_std_file_type(&self) -> Result<std::fs::FileType> {
         //  can't directly create a std::fs::FileType,
         // we need to make a system call to get it
         std::fs::symlink_metadata(self.as_path())
             .map(|m| m.file_type())
-            .map_err(|_| crate::DirEntryError::MetadataError)
+            .map_err(core::convert::Into::into)
     }
 
     #[inline]
     ///checks if the file exists, this, makes a syscall
     fn exists(&self) -> bool {
-        // SAFETY: The path is guaranteed to be a filepath (when used internally)
+        // SAFETY: The path is guaranteed to be be null terminated
         unsafe { self.as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
     }
 
@@ -310,7 +265,7 @@ where
     /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
     #[allow(clippy::missing_panics_doc)]
     unsafe fn as_str_unchecked(&self) -> &str {
-        // SAFETY: This should not panic as unix paths are guaranteed utf8
+        // SAFETY: The caller must ensure the path is valid utf8 before hand
         unsafe { core::str::from_utf8_unchecked(self) }
     }
 
@@ -355,7 +310,7 @@ where
 {
     #[inline]
     fn from(entry: DirEntry<S>) -> Self {
-        entry.to_path()
+        entry.as_os_str().into()
     }
 }
 impl<S> TryFrom<&[u8]> for DirEntry<S>

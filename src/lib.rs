@@ -76,7 +76,7 @@ pub(crate) use custom_types_result::PathBuffer;
 pub(crate) use custom_types_result::SyscallBuffer;
 
 mod traits_and_conversions;
-pub use traits_and_conversions::BytePath;
+pub(crate) use traits_and_conversions::BytePath;
 
 mod utils;
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]

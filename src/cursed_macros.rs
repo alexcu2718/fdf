@@ -1,6 +1,5 @@
 #![allow(unused_macros)]
 
-#[allow(clippy::doc_markdown)]
 #[macro_export]
 ///A helper macro to safely access dirent(64 on linux)'s
 /// fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
@@ -10,7 +9,7 @@
 /// - The field name must be a valid field of the 'dirent-type' struct.
 ///
 /// # Field Aliases
-/// - On BSD systems (FreeBSD, OpenBSD, NetBSD, DragonFly), `d_ino` is aliased to `d_fileno`
+/// - On BSD systems (FreeBSD, OpenBSD, etc ), `d_ino` is aliased to `d_fileno`
 /// - On Linux, `d_reclen` is used to access the record length directly,
 /// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
 /// - The other fields are accessed normally, as raw pointers to the field
@@ -158,17 +157,52 @@ macro_rules! access_stat {
 }
 
 #[macro_export]
-/// A macro to create a C-style *str pointer from a byte slice (does not allocate!)
-/// Returns a pointer to a null-terminated C-style *const _ (type inferred by caller, i8 or u8)
+/// Creates a null-terminated C-style string pointer from a byte slice without allocation.
+///
+/// This macro provides two variants for creating stack-allocated C-strings:
+/// 1. Default variant using `LOCAL_PATH_MAX` buffer size
+/// 2. Custom variant allowing specification of buffer size
+///
+/// Both variants return a pointer to a null-terminated string in a properly aligned buffer.
+/// The pointer type (`*const i8` or `*const u8`) is inferred by the calling context.
+///
+/// # Safety
+///
+/// The returned pointer is only valid for the current scope. The underlying buffer
+/// will be destroyed when the current block exits. Using the pointer after the
+/// current statement is undefined behavior.
+///
+/// # Panics
+///
+/// In debug builds, panics if the input byte slice length exceeds the buffer capacity.
+///
+/// # Variants
+///
+/// ## Default Variant (`cstr!(bytes)`)
+///
+/// Uses the default buffer size defined by `LOCAL_PATH_MAX`.
+///
+/// ## Custom Variant (`cstr!(bytes, size)`)
+///
+/// Allows specifying a custom buffer size as a compile-time constant.
+/// This avoids potential issue of stack clashes!
 ///
 /// # Examples
 ///
+/// ## Default variant examples
 ///
-/// Works with different pointer types:
+/// Basic usage with type inference:
 /// ```
 /// # use fdf::cstr;
-/// let as_i8 = unsafe{ cstr!(b"hello")} as *const i8;
-/// let as_u8 = unsafe{cstr!(b"world")} as *const u8;
+///
+/// let s:*const u8 = unsafe { cstr!(b"hello") };
+/// ```
+///
+/// Working with different pointer types:
+/// ```
+/// # use fdf::cstr;
+/// let as_i8 = unsafe { cstr!(b"hello") } as *const i8;
+/// let as_u8 = unsafe { cstr!(b"world") } as *const u8;
 /// unsafe {
 ///     assert_eq!(*as_i8.offset(0), b'h' as i8);
 ///     assert_eq!(*as_u8.offset(0), b'w' as u8);
@@ -178,12 +212,12 @@ macro_rules! access_stat {
 /// Proper null termination:
 /// ```
 /// # use fdf::cstr;
-/// let s:*const u8 = unsafe{cstr!(b"test")};
+/// let s: *const u8 = unsafe { cstr!(b"test") };
 /// unsafe {
-///     assert_eq!(*s.offset(0), b't' );
-///     assert_eq!(*s.offset(1), b'e' );
-///     assert_eq!(*s.offset(2), b's' );
-///     assert_eq!(*s.offset(3), b't' );
+///     assert_eq!(*s.offset(0), b't');
+///     assert_eq!(*s.offset(1), b'e');
+///     assert_eq!(*s.offset(2), b's');
+///     assert_eq!(*s.offset(3), b't');
 ///     assert_eq!(*s.offset(4), 0);
 /// }
 /// ```
@@ -191,18 +225,54 @@ macro_rules! access_stat {
 /// Empty string case:
 /// ```
 /// # use fdf::cstr;
-/// let empty:*const u8 = unsafe{cstr!(b"")};
+/// let empty: *const u8 = unsafe { cstr!(b"") };
 /// unsafe {
 ///     assert_eq!(*empty.offset(0), 0);
 /// }
 /// ```
 ///
-/// The macro will panic in debug mode if the input exceeds `LOCAL_PATH_MAX`: (Simplified example)
+/// ## Custom variant examples
+///
+/// Using custom buffer size:
+/// ```
+/// # use fdf::cstr;
+/// let custom: *const u8 = unsafe { cstr!(b"custom", 100) };
+/// ```
+///
+/// Custom size with different pointer types:
+/// ```
+/// # use fdf::cstr;
+/// let as_i8 = unsafe { cstr!(b"hello", 50) } as *const i8;
+/// let as_u8 = unsafe { cstr!(b"world", 50) } as *const u8;
+/// unsafe {
+///     assert_eq!(*as_i8.offset(0), b'h' as i8);
+///     assert_eq!(*as_u8.offset(0), b'w' as u8);
+/// }
+/// ```
+///
+/// ## Error cases
+///
+/// Debug mode length checking (default variant):
 /// ```should_panic
 /// # use fdf::cstr;
 /// let long_string = [b'a'; 5000];
-/// let will_crash:*const u8 = unsafe{cstr!(&long_string)}; // will crash yay!
+/// let will_crash:*const u8 = unsafe { cstr!(&long_string) };
 /// ```
+///
+/// Debug mode length checking (custom variant):
+/// ```should_panic
+/// # use fdf::cstr;
+/// let long_string = [b'a'; 100];
+/// let will_crash_again:*const u8 = unsafe { cstr!(&long_string, 50) };
+/// ```
+///
+/// # Notes
+///
+/// - Uses `AlignedBuffer` internally for proper alignment (rounds to next )
+/// - In release builds, length checks are omitted for performance
+/// - The pointer type is cast to the caller's expected type using `cast::<_>()`
+/// - The buffer is automatically cleaned up when the scope exits
+/// - For custom variant, the buffer size must be a compile-time constant
 macro_rules! cstr {
     ($bytes:expr) => {{
         // Debug assert to check test builds for unexpected conditions
@@ -220,10 +290,27 @@ macro_rules! cstr {
         //let caller choose cast
         c_path_buf.cast::<_>()
     }};
+    // Secondary implementation for a custom length (eg, set to 256 for filenames when calling fstat)   (I don't like fstat!)
+    ($bytes:expr, $n:expr) => {{
+
+
+        core::debug_assert!($bytes.len() < $n); //Debug just for test builds, this is obviously a very unsafe macro!
+
+        let mut c_path_buf_start = $crate::AlignedBuffer::<u8, { $n }>::new();
+        let c_path_buf = c_path_buf_start.as_mut_ptr();
+
+        core::ptr::copy_nonoverlapping($bytes.as_ptr(), c_path_buf, $bytes.len());
+        c_path_buf.add($bytes.len()).write(0);
+
+        c_path_buf.cast::<_>()
+    }};
+
+
+
+
 }
 
 #[doc(hidden)]
-#[allow(clippy::too_long_first_doc_paragraph)]
 /// A macro to skip . and .. entries when traversing a directory.
 ///
 /// ## Usage

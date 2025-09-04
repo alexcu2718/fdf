@@ -212,6 +212,7 @@ where
                 | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
                 | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
             ) => {} //TODO! add logging
+            #[allow(clippy::used_underscore_binding)]
             Err(_err) => {
             #[allow(clippy::panic)] //panic is only in debug. This should trigger any CI warnings i am using!
             #[cfg(debug_assertions)]

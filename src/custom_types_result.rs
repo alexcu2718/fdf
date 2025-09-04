@@ -110,7 +110,13 @@ pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S
 ///generic filter function type for directory entries
 pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-/// This is a type alias for a boxed slice of bytes with a slimmer size representation on Linux/macos, 10 bytes not 16
+/// A space-optimized byte container for Linux and macOS systems.
+///
+/// This type alias provides a memory-efficient alternative to `Box<[u8]>` on
+/// supported platforms, reducing the storage overhead from 16 bytes to 10 bytes
+/// per allocation while maintaining the same functionality
+/// This helps with cache affinity
+/// Defaults to Box for non-macOS/Linux
 pub type SlimmerBytes = SlimmerBox<[u8], u16>;
 #[cfg(not(any(target_os = "linux", target_os = "macos")))] // If not on Linux/macos, we use a regular Box
 pub type SlimmerBytes = Box<[u8]>;

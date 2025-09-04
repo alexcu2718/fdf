@@ -6,9 +6,13 @@ use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
 
-#[allow(clippy::missing_errors_doc)]
 #[must_use]
 #[inline]
+/// Converts Unix timestamp metadata from a `stat` structure to a UTC `DateTime`.
+///
+/// This function extracts the modification time from a `libc::stat` structure and
+/// converts it to a `DateTime<Utc>` object. It handles both the seconds and
+/// nanoseconds components of the Unix timestamp.
 pub const fn unix_time_to_datetime(st: &libc::stat) -> Option<DateTime<Utc>> {
     DateTime::from_timestamp(access_stat!(st, st_mtime), access_stat!(st, st_mtimensec))
 }

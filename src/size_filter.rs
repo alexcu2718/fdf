@@ -1,12 +1,12 @@
-pub(crate) const KILO: u64 = 1000;
-pub(crate) const MEGA: u64 = KILO * 1000;
-pub(crate) const GIGA: u64 = MEGA * 1000;
-pub(crate) const TERA: u64 = GIGA * 1000;
+pub const KILO: u64 = 1000;
+pub const MEGA: u64 = KILO * 1000;
+pub const GIGA: u64 = MEGA * 1000;
+pub const TERA: u64 = GIGA * 1000;
 
-pub(crate) const KIBI: u64 = 1024;
-pub(crate) const MEBI: u64 = KIBI * 1024;
-pub(crate) const GIBI: u64 = MEBI * 1024;
-pub(crate) const TEBI: u64 = GIBI * 1024;
+pub const KIBI: u64 = 1024;
+pub const MEBI: u64 = KIBI * 1024;
+pub const GIBI: u64 = MEBI * 1024;
+pub const TEBI: u64 = GIBI * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::exhaustive_enums)]

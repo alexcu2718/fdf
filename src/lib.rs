@@ -162,7 +162,7 @@ where
                 INODE_CACHE
                     .lock()
                     .expect("Mutex poisoned, this is unexpected! Please make an issue about this!")
-                    .insert(stat.st_ino) //returns false if inode already exists
+                    .insert(access_stat!(stat, st_ino)) //returns false if inode already exists
             });
         }
 

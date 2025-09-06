@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.6.4"
+version = "0.6.5"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"
@@ -13,7 +13,7 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
 [dependencies]
-chrono = { version = "0.4.41", default-features = false, features = ["std", "alloc"] }
+chrono = { version = "0.4.41", default-features = false, features = ["std"] }
 clap = { version = "4.5.47", features = ["derive"] }
 clap_complete = "4.5.55"
 compile_time_ls_colours = "0.4.1"
@@ -32,6 +32,15 @@ criterion = { version = "0.7.0", features = [
 ] }
 filetime = "0.2"
 
+[profile.dev]
+opt-level = 0       
+debug = true        
+overflow-checks = true 
+lto = false         
+codegen-units = 16   
+panic = "unwind"   
+incremental = true   
+
 
 [profile.release]
 opt-level = 3
@@ -40,7 +49,7 @@ strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
-
+overflow-checks = false
 
 [[bench]]
 name = "dirent_bench"

@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 
 llvm_link=https://github.com/llvm/llvm-project
 LLVM=/tmp/llvm-project

@@ -35,6 +35,8 @@ where
     fn size(&self) -> Result<i64>;
     /// Gets file metadata via `lstat`
     fn get_lstat(&self) -> Result<stat>;
+    /// Gets file metadata via `stat`
+    fn get_stat(&self) -> Result<stat>;
     /// Gets last modification time
     fn modified_time(&self) -> Result<DateTime<Utc>>;
     /// Converts to `&Path` (zero-cost on Unix)
@@ -61,8 +63,7 @@ where
     fn is_readable(&self) -> bool;
     /// Checks write permission (`access(W_OK)`)
     fn is_writable(&self) -> bool;
-    /// Gets standard filesystem metadata
-    fn metadata(&self) -> Result<std::fs::Metadata>;
+
     /// Splits path into components (split on '/')
     fn components(&self) -> impl Iterator<Item = &[u8]>;
     /// Gets standard filesystem metadata
@@ -178,6 +179,20 @@ where
     }
 
     #[inline]
+    fn get_stat(&self) -> Result<stat> {
+        let mut stat_buf = MaybeUninit::<stat>::uninit();
+        // SAFETY: We know the path is valid
+        let res = self.as_cstr_ptr(|ptr| unsafe { stat(ptr, stat_buf.as_mut_ptr()) });
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know it's been initialised properly
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(crate::DirEntryError::InvalidStat)
+        }
+    }
+
+    #[inline]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     fn modified_time(&self) -> Result<DateTime<Utc>> {
         let s = self.get_lstat()?;
@@ -209,12 +224,6 @@ where
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
         // SAFETY: The path is guaranteed to be a filepath (when used internally)
         unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
-    }
-
-    #[inline]
-    /// Returns the std definition of metadata for easy validation/whatever purposes.
-    fn metadata(&self) -> Result<std::fs::Metadata> {
-        std::fs::metadata(self.as_os_str()).map_err(core::convert::Into::into)
     }
 
     #[inline]

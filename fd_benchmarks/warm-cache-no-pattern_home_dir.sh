@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 source "prelude.sh"
 source "new_prelude.sh"

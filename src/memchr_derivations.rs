@@ -195,9 +195,6 @@ const fn memchr_aligned(x: u8, text: &[u8]) -> Option<usize> {
 
             // Find the byte after the point the body loop stopped.
 
-            // FIXME(const-hack): Use `?` instead.
-
-            // FIXME(const-hack, fee1-dead): use range slicing
 
             let slice =
 
@@ -537,8 +534,6 @@ const fn memchr_naive(x: u8, text: &[u8]) -> Option<usize> {
     let mut i = 0;
 
 
-    // FIXME(const-hack): Replace with `text.iter().pos(|c| *c == x)`.
-
     while i < text.len() {
 
         if text[i] == x {
@@ -641,10 +636,6 @@ fn memchr_aligned(x: u8, text: &[u8]) -> Option<usize> {
 
 
             // Find the byte after the point the body loop stopped.
-
-            // FIXME(const-hack): Use `?` instead.
-
-            // FIXME(const-hack, fee1-dead): use range slicing
 
             let slice =
 

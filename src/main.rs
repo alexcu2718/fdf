@@ -1,8 +1,7 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
-use fdf::printer::write_paths_coloured;
-use fdf::size_filter::SizeFilter;
-use fdf::{DirEntryError, Finder, SlimmerBytes, glob_to_regex};
+
+use fdf::{DirEntryError, Finder, SizeFilter, SlimmerBytes, glob_to_regex, write_paths_coloured};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;

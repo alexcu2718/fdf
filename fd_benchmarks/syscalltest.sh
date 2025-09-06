@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+
 set -euo pipefail
 source "new_prelude.sh"
 FDF="fdf"

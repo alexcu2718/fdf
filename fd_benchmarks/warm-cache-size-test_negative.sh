@@ -26,8 +26,8 @@ hyperfine \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-size-home_negative.md"
 
 
-eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_size_home.lst"
-eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_size_home.lst"
+eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_size_home_negative.lst"
+eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_size_home_negative.lst"
 
 diff -u "$OUTPUT_DIR/fd_size_home_.lst" "$OUTPUT_DIR/fdf_size_home_negative.lst" > "$OUTPUT_DIR/fd_diff_size_home_negative.md"
 

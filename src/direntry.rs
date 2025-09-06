@@ -423,10 +423,12 @@ where
 
     #[inline]
     #[must_use]
-    ///Checks if the file is a directory or symlink, this is a cost free check
-    pub const fn is_traversible(&self) -> bool {
-        //this is a cost free check, we just check if the file type is a directory or symlink
-        matches!(self.file_type, FileType::Directory | FileType::Symlink)
+    ///Checks if the file is a directory or symlink,
+    pub fn is_traversible(&self) -> bool {
+        self.file_type == FileType::Directory
+            || self
+                .get_stat()
+                .is_ok_and(|ent| FileType::from_stat(&ent) == FileType::Directory)
     }
 
     #[inline]
@@ -528,7 +530,6 @@ where
         DirIter::new(self)
     }
     #[inline]
-    #[allow(clippy::missing_errors_doc)] //fixing errors l
     #[allow(clippy::cast_possible_truncation)] // truncation not a concern
     #[cfg(target_os = "linux")]
     /// Low-level directory iterator using the `getdents64` system call.

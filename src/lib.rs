@@ -6,10 +6,11 @@ use std::{
 #[macro_use]
 pub(crate) mod cursed_macros;
 
-pub mod size_filter;
+mod size_filter;
 
-use size_filter::SizeFilter;
-pub mod printer;
+pub use size_filter::SizeFilter;
+mod printer;
+pub use printer::write_paths_coloured;
 mod temp_dirent;
 #[cfg(target_os = "linux")]
 pub use temp_dirent::TempDirent;
@@ -62,6 +63,10 @@ pub use config::SearchConfig;
 mod filetype;
 pub use filetype::FileType;
 
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
+/// A cache to hold inodes for directories and symlinks
+static INODE_CACHE: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 //miri doesnt support custom allocators
@@ -129,6 +134,52 @@ where
     }
 
     #[inline]
+    #[allow(clippy::expect_used)] //This needs more testing (shouldn't panic but good to check!)
+    fn directory_or_symlink_filter(&self, dir: &DirEntry<S>) -> bool {
+        // Handle normal directories first
+        if dir.is_dir() {
+            if !self.search_config.follow_symlinks {
+                return true; //Do not cause any locks if not traversing symlinks
+                // This avoid synchronisation overhead (it's unnecessary for directories only traversal)
+            }
+
+            INODE_CACHE
+                .lock()
+                .expect("Mutex poisoned, this is unexpected! Please make an issue about this!")
+                .insert(dir.ino());
+            return true; //return true regardless
+        }
+
+        // Handle symlinks pointing to directories
+        // If it's a symlink, insertion can return false, if the inode already exists
+        // FIXME/tightenup this logic!
+        if self.search_config.follow_symlinks && dir.is_symlink() {
+            return dir.get_stat().is_ok_and(|stat| {
+                if FileType::from_stat(&stat) != FileType::Directory {
+                    return false;
+                }
+
+                INODE_CACHE
+                    .lock()
+                    .expect("Mutex poisoned, this is unexpected! Please make an issue about this!")
+                    .insert(stat.st_ino) //returns false if inode already exists
+            });
+        }
+
+        false
+    }
+
+    #[inline]
+    fn keep_hidden(&self, dir: &DirEntry<S>) -> bool {
+        !self.search_config.hide_hidden || !dir.is_hidden()
+    }
+
+    #[inline]
+    fn file_filter(&self, dir: &DirEntry<S>) -> bool {
+        (self.custom_filter)(&self.search_config, dir, self.filter)
+    }
+
+    #[inline]
     /// Recursively processes a directory, sending found files to a channel.
     ///
     /// This method uses a depth-first traversal with `rayon` to process directories
@@ -138,16 +189,10 @@ where
     /// * `dir` - The `DirEntry` representing the directory to process.
     /// * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
-        let config = &self.search_config;
-        //the filter for keeping files/dirs (as appropriate), this could be a function TODO-MAYBE
-        let file_filter = |file_entry: &DirEntry<S>| -> bool {
-            (self.custom_filter)(config, file_entry, self.filter)
-        };
-
         let should_send_dir_or_symlink =//CHECK IF WE SHOULD SEND DIRS
-            config.keep_dirs && file_filter(&dir) && dir.depth() != 0; //dont send root directory
+            self.search_config.keep_dirs && self.file_filter(&dir) && dir.depth() != 0; //dont send root directory
 
-        if config.depth.is_some_and(|d| dir.depth >= d) {
+        if self.search_config.depth.is_some_and(|d| dir.depth >= d) {
             if should_send_dir_or_symlink {
                 let _ = sender.send(vec![dir]);
             } //have to put into a vec, this doesnt matter because this only happens when we depth limit
@@ -168,11 +213,6 @@ where
         //these lambdas make the code a bit easier to follow, i might define them as functions later, TODO-MAYBE!
         //directory or symlink lambda
         // Keep all directories (and symlinks if following them)
-        let d_or_s_filter = |myentry: &DirEntry<S>| -> bool {
-            myentry.is_dir() || config.follow_symlinks && myentry.is_symlink()
-        };
-        let keep_hidden =
-            |hfile: &DirEntry<S>| -> bool { !config.hide_hidden || !hfile.is_hidden() };
 
         match direntries {
             Ok(entries) => {
@@ -180,16 +220,16 @@ where
                 // 1. We first check `keep_hidden`. If a file is hidden and `hide_hidden` is true,
                 //    the entire expression immediately evaluates to `false`, and we move to the next entry.
                 // 2. If the entry is not hidden (or `hide_hidden` is false), we then check
-                //    `(d_or_s_filter(entry) || file_filter(entry))`.
+                //    `(self.directory_or_symlink_filter(entry) || self.file_filter(entry))`.
                 // 3. This part uses another short-circuit. `d_or_s_filter` checks if the entry is
                 //    a directory or a symlink we should follow. If it is, the right side (`file_filter`)
                 //    is not evaluated, which avoids an expensive call to `file_filter` on directories.
                 // 4. If the entry is not a directory/symlink, we then run the `file_filter`, which
                 //    contains the main logic for filtering files (e.g., by name, size, filetype etc).
             let (dirs, mut files): (Vec<_>, Vec<_>) = entries
-                .filter(|entry| keep_hidden(entry) &&
-                (d_or_s_filter(entry) || file_filter(entry)))
-                .partition(d_or_s_filter);
+                .filter(|entry| self.keep_hidden(entry) &&
+                (self.directory_or_symlink_filter(entry) || self.file_filter(entry)))
+                .partition(|ent| self.directory_or_symlink_filter(ent));
 
                 // Process directories in parallel
                 dirs.into_par_iter().for_each(|dirnt| {
@@ -210,7 +250,8 @@ where
             Err(
                 DirEntryError::TemporarilyUnavailable // can possibly get rid of this
                 | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
-                | DirEntryError::InvalidPath, //naturally this will happen  due to  quirks like seen in /proc
+                | DirEntryError::InvalidPath //naturally this will happen  due to  quirks like seen in /proc
+                | DirEntryError::TooManySymbolicLinks
             ) => {} //TODO! add logging
             #[allow(clippy::used_underscore_binding)]
             Err(_err) => {
@@ -218,7 +259,7 @@ where
             #[cfg(debug_assertions)]
             {
                 // In debug mode, show the error and panic. this is extremely helpful for debugging potential issues
-                panic!("Unreachable directory entry error: {_err:?}");
+                panic!("Unreachable directory entry error: {_err:?} at path {}",dir.to_string_lossy());
             }
             // In release mode, the compiler will use unreachable_unchecked().
             // This provides a performance optimisation by assuming this code path is never taken.

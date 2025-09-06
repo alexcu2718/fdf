@@ -202,7 +202,7 @@ mod tests {
         let file_zero = temp_dir().join("zero_size.txt");
         File::create(&file_zero).unwrap();
         let entry = DirEntry::<Arc<[u8]>>::new(&file_zero).unwrap();
-        let metadata = entry.metadata().unwrap();
+        let metadata = std::fs::metadata(entry).unwrap();
         assert_eq!(metadata.len(), 0);
 
         let filter = SizeFilter::Equals(0);
@@ -924,7 +924,7 @@ mod tests {
         fs::write(&file_path, content).unwrap();
 
         let entry = DirEntry::<Arc<[u8]>>::new(&file_path).unwrap();
-        let metadata = entry.metadata().unwrap();
+        let metadata = std::fs::metadata(entry).unwrap();
 
         let filter = SizeFilter::Equals(100);
         assert!(filter.is_within_size(metadata.len()));
@@ -961,7 +961,7 @@ mod tests {
         }
 
         let entry = DirEntry::<Arc<[u8]>>::new(&file_path).unwrap();
-        let metadata = entry.metadata().unwrap();
+        let metadata = std::fs::metadata(entry).unwrap();
 
         assert!(metadata.is_file());
         assert!(!metadata.is_dir());

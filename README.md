@@ -16,6 +16,8 @@ This is primarily a learning and performance exploration project. Whilst already
 
 The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers broader functionality. This project focuses on exploring hardware-specific code optimisation rather than replicating fd's complete feature set.
 
+While the CLI is usable, the internal library is NOT suggested for use(except for trivial operations like getdents/readdir). I've done a lot of work to document but it requires a lot of cleanup too!
+
 ## Platform Support (64-bit only)
 
 ### Fully Supported and CI Tested

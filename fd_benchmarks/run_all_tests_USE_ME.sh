@@ -1,8 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 cd "$(dirname "$0" )" || exit
 
-echo "This script will clone llvm-project into /tmp for testing/validation purposes"
-read -rp "Do you want to run speed/correctness benchmarks for the llvm project? [y/n] " run_benchmarks
+LLVM_DIR="/tmp/llvm-project"
+
+# Check if llvm-project already exists
+if [[ -d "$LLVM_DIR" ]]; then
+    run_benchmarks="y"
+else
+    echo "This script will clone llvm-project into $LLVM_DIR for testing/validation purposes."
+    read -rp "Do you want to run speed/correctness benchmarks for the llvm project? [y/n] " run_benchmarks
+fi
+
 if [[ "$run_benchmarks" =~ ^[Yy]$ ]]; then
     for script in ./warm*.sh; do
         if [[ "$script" != *"_home_dir"* ]]; then
@@ -17,13 +26,13 @@ else
 fi
 
 ##quick hack to delete it in case people complain 
-if [[ -d /tmp/llvm-project ]]; then
-    read -rp "/tmp/llvm-project exists. Delete it? [y/n]: " delete_confirm
+if [[ -d "$LLVM_DIR" ]]; then
+    read -rp "$LLVM_DIR exists. Delete it? [y/n]: " delete_confirm
     if [[ "$delete_confirm" =~ ^[Yy]$ ]]; then
-        rm -rf /tmp/llvm-project
-        echo "Deleted /tmp/llvm-project."
+        rm -rf "$LLVM_DIR"
+        echo "Deleted $LLVM_DIR."
     else
-        echo "Keeping /tmp/llvm-project."
+        echo "Keeping $LLVM_DIR."
     fi
 fi
 

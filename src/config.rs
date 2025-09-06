@@ -130,6 +130,7 @@ impl SearchConfig {
     #[must_use]
     /// Applies the size filter to a directory entry if configured.
     /// Works differently for regular files vs symlinks (resolves symlinks first).
+    // stat doesn't work oddly enough!
     pub fn matches_size<S>(&self, entry: &DirEntry<S>) -> bool
     where
         S: BytesStorage,
@@ -147,6 +148,8 @@ impl SearchConfig {
             FileType::Symlink => {
                 entry
                     // If symlink, resolve to full path and check if it points to a regular file
+                    // for some reason stat calls dont work!
+                    // Luckily this is not a big issue because there really arent that many symlinks on a system.
                     .to_full_path()
                     .ok()
                     .filter(DirEntry::is_regular_file)
@@ -197,6 +200,7 @@ impl SearchConfig {
             !dir.file_name().contains(&b'/'),
             "file_name contains a directory separator"
         );
+
         self.regex_match.as_ref().is_none_or(|reg| {
             reg.is_match(if !full_path {
                 dir.file_name() //this is the likelier path so we choose it first

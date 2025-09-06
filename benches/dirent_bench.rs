@@ -80,8 +80,6 @@ fn make_dirent(name: &str) -> LibcDirent64 {
 }
 
 fn bench_strlen(c: &mut Criterion) {
-
-   
     let length_groups = [
         ("tiny (1-4)", "a"),
         ("small (5-16)", "file.txt"),

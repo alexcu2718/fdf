@@ -109,7 +109,7 @@ pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S
 ///generic filter function type for directory entries
 pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-/// A space-optimized byte container for Linux and macOS systems.
+/// A space-optimised byte container for Linux and macOS systems.
 ///
 /// This type alias provides a memory-efficient alternative to `Box<[u8]>` on
 /// supported platforms, reducing the storage overhead from 16 bytes to 10 bytes

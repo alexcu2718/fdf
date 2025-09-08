@@ -282,7 +282,7 @@ fn main() -> Result<(), DirEntryError> {
 #[allow(clippy::exit)]
 #[allow(clippy::print_stderr)] //this is fine because it's CLI only
 fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> OsString {
-    let dir_to_use = args_directory.unwrap_or_else(generate_start_prefix);
+    let dir_to_use = args_directory.unwrap_or_else(||OsString::from(&"."));
     let path_check = Path::new(&dir_to_use);
 
     if !path_check.is_dir() {
@@ -320,10 +320,4 @@ fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
     })
 }
 
-fn generate_start_prefix() -> OsString {
-    env::current_dir()
-        .ok()
-        .map(std::path::PathBuf::into_os_string)
-        .or_else(|| env::var_os("HOME"))
-        .unwrap_or_else(|| OsString::from("~"))
-}
+

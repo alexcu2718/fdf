@@ -33,9 +33,8 @@ fn extension_colour<S>(entry: &DirEntry<S>) -> &[u8]
 where
     S: BytesStorage + 'static + Clone,
 {
-    // check if it's a symlink and use  LS_COLORS symlink color
+    // check if it's a symlink and use  LS_COLORS symlink colour
     match entry.file_type() {
-        // Handle symlinks first (they override directory status)
         FileType::Symlink => file_type_colour!(symlink),
         FileType::Directory => file_type_colour!(directory),
         FileType::BlockDevice => file_type_colour!(block_device),
@@ -57,7 +56,7 @@ where
     S: BytesStorage + 'static + Clone,
 {
     let std_out = stdout();
-    let use_colors = std_out.is_terminal();
+    let use_colours = std_out.is_terminal();
 
     let mut writer = BufWriter::new(std_out.lock());
 
@@ -66,7 +65,7 @@ where
     let check_std_colours = nocolour || /*arbitrary feature request  */
         std::env::var("FDF_NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
 
-    if use_colors && !check_std_colours {
+    if use_colours && !check_std_colours {
         for path in paths.flatten().take(limit_opt) {
             writer.write_all(extension_colour(&path))?;
             writer.write_all(&path)?;

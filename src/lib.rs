@@ -3,7 +3,7 @@
 //! `fdf` is a Rust library designed for efficient, parallel directory traversal
 //! with extensive filtering capabilities. It leverages Rayon for parallel processing
 //! and uses platform-specific optimisations for maximum performance.
-//! 
+//!
 //! **This will be renamed before a 1.0!**
 //!
 //! ## Features
@@ -31,7 +31,7 @@
 //!   memory allocation performance
 //! - Batched result delivery to minimise channel contention
 //! - Zero-copy path handling where possible
-//! - Avoids unnecessary `stat` calls through careful API design 
+//! - Avoids unnecessary `stat` calls through careful API design
 //!
 //! ## Platform Support
 //!
@@ -91,7 +91,6 @@
 //!     }
 //! }
 //! ```
-
 
 use rayon::prelude::*;
 use std::{

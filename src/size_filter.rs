@@ -30,11 +30,31 @@ impl core::fmt::Display for ParseSizeError {
 
 impl core::error::Error for ParseSizeError {}
 
+/// A filter for file sizes based on various comparison operations.
+///
+/// # Examples
+///
+/// ```
+/// use fdf::SizeFilter;
+///
+/// // Files larger than 1MB
+/// let filter = SizeFilter::from_string("+1MB").unwrap();
+/// assert!(filter.is_within_size(2_000_000)); // 2MB passes
+/// assert!(!filter.is_within_size(500_000));  // 500KB fails
+///
+/// // Files exactly 500 bytes
+/// let filter = SizeFilter::from_string("500").unwrap();
+/// assert!(filter.is_within_size(500));
+/// assert!(!filter.is_within_size(501));
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(clippy::exhaustive_enums)]
 pub enum SizeFilter {
+    /// Maximum size (inclusive): files must be <= this size
     Max(u64),
+    /// Minimum size (inclusive): files must be >= this size  
     Min(u64),
+    /// Exact size: files must be exactly this size
     Equals(u64),
 }
 

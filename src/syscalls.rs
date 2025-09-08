@@ -1,5 +1,5 @@
 // honestly i should probably delete this and rely on just libc but I ideally would like to not dynamically link glibc in future on  Linux
-
+#![allow(clippy::undocumented_unsafe_blocks)] //can comment all of this later
 use crate::ValueType;
 #[inline]
 #[allow(clippy::multiple_unsafe_ops_per_block)]

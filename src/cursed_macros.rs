@@ -327,6 +327,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]
         #[allow(clippy::multiple_unsafe_ops_per_block)]
+        // SAFETY: when calling this macro, the pointer has already been ensured to be non null
         unsafe {
             let d_type = access_dirent!($entry, d_type);
 

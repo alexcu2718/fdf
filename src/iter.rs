@@ -1,5 +1,3 @@
-#![allow(clippy::cast_possible_wrap)]
-
 use crate::{
     AlignedBuffer, BytePath as _, DirEntry, DirEntryError as Error, LOCAL_PATH_MAX, PathBuffer,
     Result, custom_types_result::BytesStorage, traits_and_conversions::DirentConstructor as _,
@@ -41,6 +39,7 @@ where
     /// Success => mutpointer to the DIR structure.
     /// Or one of many errors (permissions/etc/ ) that I haven't documented yet. They are handled explicitly however. (essentially my errortype converts from errno)
     pub(crate) fn open_dir(direntry: &DirEntry<S>) -> Result<*mut DIR> {
+        // SAFETY: we are passing a null terminated directory to opendir, this is fine.
         let dir = direntry.as_cstr_ptr(|ptr| unsafe { opendir(ptr) });
         // This function reads the directory entries and populates the iterator.
         // It is called when the iterator is created or when it needs to be reset.
@@ -55,6 +54,8 @@ where
     /// This function reads the directory entries and populates the iterator.
     /// It is called when the iterator is created or when it needs to be reset.
     pub fn get_next_entry(&mut self) -> Option<*const dirent64> {
+        //maybe use NonNull here? TODO  (so i dont forget this)
+        // SAFETY: The dir is ensured to be valid before calling
         let d: *const dirent64 = unsafe { readdir(self.dir) };
         //we have to check for nulls here because we're not 'buffer climbing', aka readdir has abstracted this interface.
         //we do 'buffer climb' (word i just made up) in getdents, which is why this equivalent function does not check the null in my
@@ -67,8 +68,8 @@ where
     #[inline]
     /// A function to construction a `DirEntry` from the buffer+dirent
     ///
-    /// This doesn't need unsafe because the pointer is already checked to not be null before it can be used here.
     pub fn construct_direntry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
+        // SAFETY:  This doesn't need unsafe because the pointer is already checked to not be null before it can be used here.
         unsafe { self.construct_entry(drnt) }
     }
 
@@ -82,6 +83,7 @@ where
     pub(crate) fn new(dir_path: &DirEntry<S>) -> Result<Self> {
         let dir = Self::open_dir(dir_path)?; //read the directory and get the pointer to the DIR structure.
         let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)
+        // SAFETY:This pointer is forcefully null terminated and below PATH_MAX (system dependent)
         let base_len = unsafe { path_buffer.init_from_direntry(dir_path) };
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)
@@ -115,7 +117,6 @@ where
 {
     type Item = DirEntry<T>;
     #[inline]
-    #[allow(clippy::ptr_as_ptr)] //we're aligned so raw pointer as casts are fine.
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
             return None;
@@ -124,7 +125,7 @@ where
         loop {
             let entry = self.get_next_entry()?; //read the next entry from the directory, this is a pointer to the dirent structure.
             //and early return if none
-
+            // SAFETY: we know the pointer is not null therefor the operations in this macro are fine to use.
             skip_dot_or_dot_dot_entries!(entry, continue); //we provide the continue here to make it explicit.
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
@@ -142,6 +143,7 @@ where
     #[inline]
     fn drop(&mut self) {
         if !self.dir.is_null() {
+            // SAFETY: we've checked it's not null and we need to close it to prevent the fd staying open
             unsafe { closedir(self.dir) };
         }
     }
@@ -190,6 +192,7 @@ where
     /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
     #[inline]
     fn drop(&mut self) {
+        // SAFETY: we've know the fd is valid and we're closing it as our drop impl
         unsafe { libc::close(self.fd) }; //this doesn't return an error code anyway, fuggedaboutit
         //unsafe { close_asm(self.fd) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
@@ -205,21 +208,25 @@ where
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
     /// the pointer is valid and that we don't read past the end of the buffer.
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
-        // This is only used in the iterator implementation, so we can safely assume that the pointer
+        // SAFETY: This is only used in the iterator implementation, so we can safely assume that the pointer
         // is valid and that we don't read past the end of the buffer.
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
+        // SAFETY: we've checked it's not null
         self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         d //return the pointer
     }
     #[inline]
     /// This is a syscall that fills the buffer (stack allocated) and resets the internal offset counter to 0.
     pub unsafe fn getdents_syscall(&mut self) {
+        // SAFETY: the file descriptor is valid for the duration of this iterator
         self.remaining_bytes = unsafe { self.buffer.getdents(self.fd) };
         self.offset = 0;
     }
 
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::undocumented_unsafe_blocks)] //comment these later TODO!
     /// Prefetches the next likely entry in the buffer to keep the cache warm.
     pub(crate) fn prefetch_next_entry(&self) {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -234,12 +241,14 @@ where
         }
     }
     #[inline]
+    #[allow(clippy::cast_sign_loss)]
     /// Checks if the buffer is empty
     pub const fn is_buffer_not_empty(&self) -> bool {
         self.offset < self.remaining_bytes as _
     }
 
     #[inline]
+    #[allow(clippy::undocumented_unsafe_blocks)] //comment these later TODO!
     /// Prefetches the start of the buffer to keep the cache warm.
     pub(crate) fn prefetch_next_buffer(&self) {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -271,13 +280,14 @@ where
         loop {
             // If we have remaining data in buffer, process it
             if self.is_buffer_not_empty() {
-                //we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
+                // SAFETY: we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
                 let d: *const libc::dirent64 = unsafe { self.next_getdents_pointer() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache this is a no-op on non-x86_64*/
-
+                // SAFETY: we know the pointer is not null therefor the operations in this macro are fine to use.
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
+                // SAFETY: As the above safety comment states
                 let entry = unsafe { self.construct_entry(d) }; //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
 
                 return Some(entry);
@@ -286,6 +296,7 @@ where
 
             self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-x86_64
             // issue a syscall once out of entries
+            // SAFETY: the file descriptor is still open and is valid to call
             unsafe { self.getdents_syscall() }; //fill up the buffer again once out  of loop
 
             if self.is_end_of_directory() {

@@ -1,4 +1,5 @@
 #![doc(hidden)]
+#![allow(clippy::min_ident_chars)]
 //#! BIG EXPLANATION
 //#! I WANTED TO USE THIS CRATE FOR GLOB MATCHING, BUT I DIDNT WANT TO USE THE FULL DEPENDENCY. SO I REMOVED EVERY DEPENDENCY :)
 //#! we've isolated the code here to be not reliant on any library.

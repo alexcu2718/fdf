@@ -7,7 +7,7 @@ use libc::{
 
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[allow(
+#[expect(
     clippy::exhaustive_enums,
     reason = "This is exhaustive (there aren't anymore filetypes than this)"
 )]
@@ -27,8 +27,6 @@ use std::{os::unix::fs::FileTypeExt as _, path::Path};
 /// let dir_type = FileType::from_dtype(DT_DIR);
 /// assert!(dir_type.is_dir());
 ///
-/// // Check if a file type is traversible
-/// assert!(dir_type.is_traversible());
 /// ```
 ///
 pub enum FileType {
@@ -138,16 +136,6 @@ impl FileType {
         matches!(*self, Self::Unknown)
     }
 
-    /// Returns true if the file type is traversible (directory or symlink)
-    ///
-    /// This is useful for determining whether a directory entry can be
-    /// explored further during filesystem traversal.
-    #[inline]
-    #[must_use]
-    pub const fn is_traversible(&self) -> bool {
-        matches!(*self, Self::Directory | Self::Symlink)
-    }
-
     #[must_use]
     #[inline]
     /// Fallback method to determine file type when `d_type` is unavailable or `DT_UNKNOWN`
@@ -221,6 +209,7 @@ impl FileType {
     /// - `path_start`: The path to examine
     #[must_use]
     #[inline]
+    #[allow(clippy::filetype_is_file)] //dumb lint
     pub fn from_path<P: AsRef<Path>>(path_start: P) -> Self {
         Path::new(path_start.as_ref())
             .symlink_metadata()
@@ -250,16 +239,17 @@ impl FileType {
 }
 
 impl core::fmt::Display for FileType {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    #[allow(clippy::renamed_function_params)]
+    fn fmt(&self, func: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
-            Self::BlockDevice => write!(f, "Block device"),
-            Self::CharDevice => write!(f, "Character device"),
-            Self::Directory => write!(f, "Directory"),
-            Self::Pipe => write!(f, "FIFO"),
-            Self::Symlink => write!(f, "Symlink"),
-            Self::RegularFile => write!(f, "Regular file"),
-            Self::Socket => write!(f, "Socket"),
-            Self::Unknown => write!(f, "Unknown"),
+            Self::BlockDevice => write!(func, "Block device"),
+            Self::CharDevice => write!(func, "Character device"),
+            Self::Directory => write!(func, "Directory"),
+            Self::Pipe => write!(func, "FIFO"),
+            Self::Symlink => write!(func, "Symlink"),
+            Self::RegularFile => write!(func, "Regular file"),
+            Self::Socket => write!(func, "Socket"),
+            Self::Unknown => write!(func, "Unknown"),
         }
     }
 }

@@ -1,3 +1,82 @@
+//! A high-performance, parallel directory traversal and file search library.
+//!
+//! This library provides efficient file system traversal with features including:
+//! - Parallel directory processing using Rayon
+//! - Low-level system calls for optimal performance on supported platforms
+//! - Flexible filtering by name, size, type, and custom criteria
+//! - Symbolic link handling with cycle detection
+//! - Cross-platform support with platform-specific optimisations
+//!
+//! # Examples
+//! Simple file search example
+//! ```no_run
+//! use fdf::{Finder, SearchConfig};
+//! use std::sync::Arc;
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path", "*.txt")
+//!         .build()
+//!         .expect("Failed to build finder");
+//!
+//!     let receiver = finder.traverse()
+//!         .expect("Failed to start traversal");
+//!
+//!     let mut file_count = 0;
+//!     let mut batch_count = 0;
+//!
+//!     for batch in receiver {
+//!         batch_count += 1;
+//!         for entry in batch {
+//!             file_count += 1;
+//!             println!("Found: {:?}", entry);
+//!         }
+//!     }
+//!
+//!     println!("Discovered {} files in {} batches", file_count, batch_count);
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! Advanced file search example
+//! ```no_run
+//! use fdf::{Finder, SizeFilter, FileTypeFilter};
+//! use std::sync::Arc;
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path", "*.txt")
+//!         .keep_hidden(false)
+//!         .case_insensitive(true)
+//!         .keep_dirs(true)
+//!         .max_depth(Some(5))
+//!         .follow_symlinks(false)
+//!         .filter_by_size(Some(SizeFilter::Min(1024)))
+//!         .type_filter(Some(FileTypeFilter::File))
+//!         .show_errors(true)
+//!         .build()
+//!         .map_err(|e| format!("Failed to build finder: {}", e))?;
+//!
+//!     let receiver = finder.traverse()
+//!         .map_err(|e| format!("Failed to start traversal: {}", e))?;
+//!
+//!     let mut file_count = 0;
+//!
+//!     for batch in receiver {
+//!         for entry in batch {
+//!             file_count += 1;
+//!             println!("{:?}  )",
+//!                 entry,
+//!             
+//!             );
+//!         }
+//!     }
+//!
+//!     println!("Search completed! Found {} files", file_count);
+//!
+//!     Ok(())
+//! }
+//! ```
+
 use crate::{
     BytePath as _, DirIter, OsBytes, Result, custom_types_result::BytesStorage, filetype::FileType,
 };
@@ -115,15 +194,22 @@ where
     /// ```
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
+        // SAFETY: we forcefully null terminate the path
         self.is_regular_file()
-            && unsafe { self.as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0i32) }
+            && unsafe { self.as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0) }
     }
 
-    ///cost free check for block devices
+    /// Cost free check for block devices
     #[inline]
     #[must_use]
     pub const fn is_block_device(&self) -> bool {
         self.file_type.is_block_device()
+    }
+    #[inline]
+    #[must_use]
+    // Converts to a lossy string for ease of use
+    pub fn to_string_lossy(&self) -> std::borrow::Cow<'_, str> {
+        String::from_utf8_lossy(self.as_bytes())
     }
 
     ///Cost free check for character devices
@@ -174,6 +260,10 @@ where
     }
     #[inline]
     #[must_use]
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "We're only matching on relevant types"
+    )]
     /// Checks if the entry is empty.
     ///
     /// For files, it checks if the size is zero. For directories, it checks if there are no entries.
@@ -228,7 +318,6 @@ where
         }
     }
     #[inline]
-    #[allow(clippy::missing_errors_doc)] //TODO!
     #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
     /// Converts a directory entry to a full, canonical path, resolving all symlinks
     ///
@@ -310,7 +399,7 @@ where
             depth: self.depth,
             file_name_index: full_path.file_name_index() as _,
         };
-
+        // SAFETY: the pointer points to valid malloc'ed memory(we have checked for null), it is safe to free it now
         unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
         //free the pointer to stop leaking
 
@@ -356,27 +445,14 @@ where
     //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned,
     //so in my case, because it's 10 bytes, we're looking for an 8 byte reference, so it doesnt work
     #[must_use]
-    ///Cost free conversion to bytes (because it is already is bytes)
+    /// Cost free conversion to bytes (because it is already is bytes)
     pub fn as_bytes(&self) -> &[u8] {
         self
     }
 
     #[inline]
-    #[cfg(target_os = "linux")]
-    pub fn to_temp_dirent(&self) -> crate::TempDirent<'_, S> {
-        crate::TempDirent {
-            path: self.path.as_bytes(),
-            inode: self.inode,
-            file_type: self.file_type,
-            file_name_index: self.file_name_index as _,
-            depth: self.depth as _,
-            _marker: core::marker::PhantomData::<S>,
-        }
-    }
-
-    #[inline]
     #[must_use]
-    ///returns the file type of the file (eg directory, regular file, etc)
+    /// Returns the file type of the file (eg directory, regular file, etc)
     pub const fn file_type(&self) -> FileType {
         self.file_type
     }
@@ -392,6 +468,11 @@ where
     #[must_use]
     ///Returns the name of the file (as bytes)
     pub fn file_name(&self) -> &[u8] {
+        debug_assert!(
+            self.len() >= self.file_name_index(),
+            "this should always be equal or below (equal only when root)"
+        );
+        // SAFETY: the index is below the length of the path trivially
         unsafe { self.get_unchecked(self.file_name_index()..) }
     }
 
@@ -409,7 +490,7 @@ where
 
     #[inline]
     #[must_use]
-    ///Applies a filter condition
+    /// Applies a filter condition
     pub fn filter<F: Fn(&Self) -> bool>(&self, func: F) -> bool {
         func(self)
     }
@@ -423,26 +504,39 @@ where
 
     #[inline]
     #[must_use]
-    ///Checks if the file is a directory or symlink,
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "This is exhaustive because only checking traversible types"
+    )]
+    /// Checks if the file is a directory or symlink (but internally a directory)
     pub fn is_traversible(&self) -> bool {
-        self.file_type == FileType::Directory
-            || self
+        match self.file_type {
+            FileType::Directory => true,
+            FileType::Symlink => self
                 .get_stat()
-                .is_ok_and(|ent| FileType::from_stat(&ent) == FileType::Directory)
+                .is_ok_and(|ent| FileType::from_stat(&ent) == FileType::Directory),
+            _ => false,
+        }
     }
 
     #[inline]
     #[must_use]
     ///checks if the file is hidden eg .gitignore
     pub fn is_hidden(&self) -> bool {
+        debug_assert!(
+            self.file_name_index() < self.as_bytes().len(),
+            "trivial assert"
+        );
+        // SAFETY: the index is below the length of the path trivially
         unsafe { *self.get_unchecked(self.file_name_index()) == b'.' } //we use the base_len as a way to index to filename immediately, this means
         //we can store a full path and still get the filename without copying.
         //this is safe because we know that the base_len is always less than the length of the path
     }
     #[inline]
     #[must_use]
-    ///returns the directory name of the file (as bytes) or failing that (/ is problematic) will return the full path,
+    /// Returns the directory name of the file (as bytes)
     pub fn dirname(&self) -> &[u8] {
+        // SAFETY: the index is below the length of the path trivially
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as above, its very useful and cheap
                 .get_unchecked(..self.file_name_index() - 1)
@@ -456,14 +550,63 @@ where
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
+        // SAFETY: the index is below the length of the path trivially
         unsafe { self.get_unchecked(..core::cmp::max(self.file_name_index() - 1, 1)) }
     }
 
     #[inline]
-    #[allow(clippy::missing_errors_doc)]
-    ///Creates a new `DirEntry` from a path
-    /// Rreturns a `Result<DirEntry, DirEntryError>`.
-    /// This will error if path isn't valid/permission problems etc.
+    /// Creates a new [`DirEntry`] from the given path.
+    ///
+    /// This constructor attempts to resolve metadata for the provided path using
+    /// a `lstat` call. If successful, it initialises a `DirEntry` with the path,
+    /// file type, inode, and some derived metadata such as depth and file name index.
+    ///
+    ///
+    /// - `DirEntryError::InvalidStat` if the underlying `lstat` call fails. (aka permissions/file doesnt exist)
+    ///
+    /// # Examples
+    /// ```
+    /// use fdf::DirEntry;
+    /// use std::env;
+    /// use std::sync::Arc; // example container type
+    ///
+    /// # fn main() -> Result<(), fdf::DirEntryError> {
+    /// // Use the system temporary directory
+    /// let tmp = env::temp_dir();
+    ///
+    /// // Create a DirEntry from the temporary directory path
+    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(tmp)?;
+    ///
+    /// println!("inode: {}", entry.ino());
+    ///  Ok(())
+    /// }
+    /// ```
+    ///
+    ///
+    ///
+    /// # Errors
+    ///
+    /// The following returns an `InvalidStat` error when the file doesn't exist:
+    ///
+    /// ```
+    /// use fdf::{DirEntry, DirEntryError};
+    /// use std::sync::Arc;
+    /// use std::fs;
+    ///
+    /// // Verify the path doesn't exist first
+    /// let nonexistent_path = "/definitely/not/a/real/file/lalalalalalalalalalalal";
+    /// assert!(!fs::metadata(nonexistent_path).is_ok());
+    ///
+    /// // This will return an InvalidStat error because the file does not exist
+    /// let result = DirEntry::<Arc<[u8]>>::new(nonexistent_path);
+    /// match result {
+    ///     Ok(_) => panic!("Expected InvalidStat error"),
+    ///     Err(DirEntryError::InvalidStat) => {}, // Expected error
+    ///     Err(_) => panic!("Expected InvalidStat error, got different error"),
+    /// }
+    /// # // The test passes if we reach this point without panicking
+    /// # Ok::<(), DirEntryError>(())
+    /// ```
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
         let path_ref = path.as_ref().as_bytes();
 
@@ -525,12 +668,10 @@ where
     /// fs::remove_dir_all(&temp_dir).unwrap();
     /// ```
     #[inline]
-    #[allow(clippy::missing_errors_doc)]
     pub fn readdir(&self) -> Result<impl Iterator<Item = Self>> {
         DirIter::new(self)
     }
     #[inline]
-    #[allow(clippy::cast_possible_truncation)] // truncation not a concern
     #[cfg(target_os = "linux")]
     /// Low-level directory iterator using the `getdents64` system call.
     ///
@@ -586,15 +727,18 @@ where
     /// fs::remove_dir_all(&temp_dir).unwrap();
     /// ```
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
+        use crate::SyscallBuffer;
         use crate::iter::DirEntryIterator;
+        // SAFETY: We're  null terminating the filepath and it's below `LOCAL_PATH_MAX` (4096/1024 system dependent)
         let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
         let mut path_buffer = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
+        // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
         let path_len = unsafe { path_buffer.init_from_direntry(self) };
         //TODO! make this more ergonomic
-
+        let buffer = SyscallBuffer::new();
         Ok(DirEntryIterator {
             fd,
-            buffer: crate::SyscallBuffer::new(),
+            buffer,
             path_buffer,
             file_name_index: path_len as _,
             parent_depth: self.depth,

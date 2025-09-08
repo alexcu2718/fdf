@@ -1,5 +1,5 @@
 #![allow(dead_code)] //some traits are not used yet in full implementation but are used in tests/for future CLI/lib use
-use crate::unix_time_to_datetime;
+use crate::modified_unix_time_to_datetime;
 //need to add these todo
 use crate::{
     AlignedBuffer, BytesStorage, DirEntry, DirEntryError, FileType, LOCAL_PATH_MAX, PathBuffer,
@@ -196,7 +196,7 @@ where
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     fn modified_time(&self) -> Result<DateTime<Utc>> {
         let s = self.get_lstat()?;
-        unix_time_to_datetime(&s).ok_or(DirEntryError::TimeError)
+        modified_unix_time_to_datetime(&s).ok_or(DirEntryError::TimeError)
     }
 
     #[inline]

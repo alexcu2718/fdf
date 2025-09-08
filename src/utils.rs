@@ -8,12 +8,16 @@ use libc::dirent64;
 
 #[must_use]
 #[inline]
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "We need to cast into the appropriate type for chrono"
+)]
 /// Converts Unix timestamp metadata from a `stat` structure to a UTC `DateTime`.
 ///
 /// This function extracts the modification time from a `libc::stat` structure and
 /// converts it to a `DateTime<Utc>` object. It handles both the seconds and
 /// nanoseconds components of the Unix timestamp.
-pub const fn unix_time_to_datetime(st: &libc::stat) -> Option<DateTime<Utc>> {
+pub const fn modified_unix_time_to_datetime(st: &libc::stat) -> Option<DateTime<Utc>> {
     DateTime::from_timestamp(access_stat!(st, st_mtime), access_stat!(st, st_mtimensec))
 }
 
@@ -171,8 +175,8 @@ unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
 }
 
 /*
-Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
-// (c) [Alexander Curtis .
+Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
+// (c) Alexander Curtis .
 // My Cat Diavolo is cute.
 //
 */
@@ -182,7 +186,7 @@ Const-time `strlen` for `dirent64::d_name` using SWAR bit tricks.
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
-/// Returns the length of a `dirent64::d_name` string in constant time using
+/// Returns the length of a `dirent64's d_name` string in constant time using
 /// SWAR (SIMD within a register) bit tricks.
 ///
 /// This function avoids branching and SIMD instructions, achieving O(1) time
@@ -215,9 +219,9 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // We add 1 since we calculate backwards from the header boundary.
     const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name) + 1;
 
-    // SAFETY: `dirent` must be a valid pointer to an initialised dirent64 (trivially shown by)
     // Accessing `d_reclen` is safe because the struct is kernel-provided.
-    #[allow(clippy::as_conversions)]
+    // SAFETY: `dirent` must be a valid pointer to an initialised dirent64 (trivially shown by)
+    #[expect(clippy::as_conversions, reason = "Casting u16 to usize is safe")]
     let reclen = unsafe { (*dirent).d_reclen } as usize; // do not use byte_offset here
 
     debug_assert!(
@@ -228,10 +232,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // Read the last 8 bytes of the struct as a u64.
     // This works because dirents are always 8-byte aligned.
     #[cfg(target_endian = "little")]
+    // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
     let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
 
     // For big-endian targets, convert to little-endian for uniform handling.
     #[cfg(target_endian = "big")]
+    // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
     let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le();
     // TODO: big-endian logic could be further optimised. Very much a minor nit.
 

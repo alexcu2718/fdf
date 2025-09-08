@@ -28,6 +28,7 @@ pub enum DirEntryError {
 }
 
 impl From<io::Error> for DirEntryError {
+    #[allow(clippy::wildcard_enum_match_arm)]
     fn from(error: io::Error) -> Self {
         // handle specific error kinds first
         if error.kind() == io::ErrorKind::BrokenPipe {
@@ -58,6 +59,7 @@ impl From<core::str::Utf8Error> for DirEntryError {
 }
 
 impl fmt::Display for DirEntryError {
+    #[allow(clippy::pattern_type_mismatch)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPath => write!(f, "Invalid path, neither a file nor a directory"),
@@ -81,6 +83,8 @@ impl fmt::Display for DirEntryError {
 }
 
 impl core::error::Error for DirEntryError {
+    #[allow(clippy::wildcard_enum_match_arm)]
+    #[allow(clippy::pattern_type_mismatch)] //stupid
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Self::Utf8Error(e) => Some(e),

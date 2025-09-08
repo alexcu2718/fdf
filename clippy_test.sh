@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+#a lot of these lints are...naturally...extremely pedantic.
 cargo clippy --all -- \
   -W clippy::all \
   -W clippy::pedantic \
@@ -17,7 +19,6 @@ cargo clippy --all -- \
   -A clippy::as_underscore \
   -A clippy::min_ident_chars \
   -A clippy::missing_docs_in_private_items \
-  -A clippy::undocumented_unsafe_blocks \
   -A clippy::blanket_clippy_restriction_lints \
   -A clippy::absolute_paths \
   -A clippy::arbitrary_source_item_ordering \
@@ -34,9 +35,5 @@ cargo clippy --all -- \
   -A clippy::let_underscore_must_use \
   -A clippy::let_underscore_untyped \
   -A clippy::missing_docs_in_private_items \
-  -A clippy::wildcard_enum_match_arm \
   -A clippy::inline_asm_x86_intel_syntax \
-  -A clippy::items_after_statements \
-  -A clippy::filetype_is_file \
-  -A clippy::pattern_type_mismatch \
-  -A clippy::cast_sign_loss
+  -A clippy::items_after_statements 

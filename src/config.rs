@@ -3,8 +3,136 @@ use crate::traits_and_conversions::BytePath as _;
 
 use crate::{DirEntry, DirEntryError, FileType, Result, custom_types_result::BytesStorage};
 use regex::bytes::{Regex, RegexBuilder};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// File type filter for directory traversal
+#[expect(clippy::exhaustive_enums, reason = "This list is exhaustive")]
+pub enum FileTypeFilter {
+    /// Regular file
+    File,
+    /// Directory
+    Directory,
+    /// Symbolic link
+    Symlink,
+    /// Named pipe (FIFO)
+    Pipe,
+    /// Character device
+    CharDevice,
+    /// Block device
+    BlockDevice,
+    /// Socket
+    Socket,
+    /// Unknown file type
+    Unknown,
+    /// Executable file
+    Executable,
+    /// Empty file
+    Empty,
+}
+
+impl FileTypeFilter {
+    /// Converts the file type filter to its corresponding byte representation
+    ///
+    /// This provides backward compatibility with legacy systems and protocols
+    /// that use single-byte codes to represent file types.
+    ///
+    /// # Returns
+    /// A `u8` value representing the file type:
+    /// - `b'f'` for regular files
+    /// - `b'd'` for directories  
+    /// - `b'l'` for symbolic links
+    /// - `b'p'` for named pipes (FIFOs)
+    /// - `b'c'` for character devices
+    /// - `b'b'` for block devices
+    /// - `b's'` for sockets
+    /// - `b'u'` for unknown file types
+    /// - `b'x'` for executable files
+    /// - `b'e'` for empty files
+    ///
+    /// # Examples
+    /// ```
+    /// # use fdf::FileTypeFilter;
+    /// let filter = FileTypeFilter::File;
+    /// assert_eq!(filter.as_byte(), b'f');
+    ///
+    /// let filter = FileTypeFilter::Directory;
+    /// assert_eq!(filter.as_byte(), b'd');
+    /// ```
+    #[must_use]
+    pub const fn as_byte(self) -> u8 {
+        match self {
+            Self::File => b'f',
+            Self::Directory => b'd',
+            Self::Symlink => b'l',
+            Self::Pipe => b'p',
+            Self::CharDevice => b'c',
+            Self::BlockDevice => b'b',
+            Self::Socket => b's',
+            Self::Unknown => b'u',
+            Self::Executable => b'x',
+            Self::Empty => b'e',
+        }
+    }
+
+    /// Parses a character into a `FileTypeFilter`
+    ///
+    /// This method converts a single character into the corresponding file type filter,
+    /// which is useful for parsing command-line arguments or configuration files.
+    ///
+    /// # Parameters
+    /// - `c`: The character to parse into a file type filter
+    ///
+    /// # Returns
+    /// - `Ok(FileTypeFilter)` if the character represents a valid file type
+    /// - `Err(String)` with an error message if the character is invalid
+    ///
+    /// # Supported Characters
+    /// - `'d'` - Directory
+    /// - `'u'` - Unknown file type  
+    /// - `'l'` - Symbolic link
+    /// - `'f'` - Regular file
+    /// - `'p'` - Named pipe (FIFO)
+    /// - `'c'` - Character device
+    /// - `'b'` - Block device
+    /// - `'s'` - Socket
+    /// - `'e'` - Empty file
+    /// - `'x'` - Executable file
+    ///
+    /// # Examples
+    /// ```
+    /// # use fdf::FileTypeFilter;
+    /// assert!(FileTypeFilter::from_char('d').is_ok());
+    /// assert!(FileTypeFilter::from_char('f').is_ok());
+    /// assert!(FileTypeFilter::from_char('z').is_err()); // Invalid character
+    ///
+    /// let filter = FileTypeFilter::from_char('l').unwrap();
+    /// assert!(matches!(filter, FileTypeFilter::Symlink));
+    /// ```
+    ///
+    /// # Errors
+    /// Returns an error if the character does not correspond to any known file type.
+    /// The error message includes the invalid character and suggests using `--help`
+    /// to see valid types.
+    pub fn from_char(c: char) -> core::result::Result<Self, String> {
+        match c {
+            'd' => Ok(Self::Directory),
+            'u' => Ok(Self::Unknown),
+            'l' => Ok(Self::Symlink),
+            'f' => Ok(Self::File),
+            'p' => Ok(Self::Pipe),
+            'c' => Ok(Self::CharDevice),
+            'b' => Ok(Self::BlockDevice),
+            's' => Ok(Self::Socket),
+            'e' => Ok(Self::Empty),
+            'x' => Ok(Self::Executable),
+            _ => Err(format!(
+                "Invalid file type: '{c}'. See --help for valid types."
+            )),
+        }
+    }
+}
 #[derive(Clone, Debug)]
-#[allow(clippy::struct_excessive_bools)] //shutup:
+#[expect(clippy::struct_excessive_bools, reason = "It's a CLI tool.")]
 /// This struct holds the configuration for searching directories.
 ///
 ///
@@ -30,7 +158,9 @@ pub struct SearchConfig {
     /// a size filter
     pub(crate) size_filter: Option<SizeFilter>,
     /// a type filter
-    pub(crate) type_filter: Option<u8>,
+    pub(crate) type_filter: Option<FileTypeFilter>,
+    ///if true, then we show errors during traversal
+    pub(crate) show_errors: bool,
 }
 
 impl SearchConfig {
@@ -38,7 +168,6 @@ impl SearchConfig {
     // Builds a regex matcher if a valid pattern is provided, otherwise stores None
     // Returns an error if the regex compilation fails
     #[allow(clippy::fn_params_excessive_bools)]
-    #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         pattern: impl AsRef<str>,
@@ -50,7 +179,8 @@ impl SearchConfig {
         depth: Option<u16>,
         follow_symlinks: bool,
         size_filter: Option<SizeFilter>,
-        type_filter: Option<u8>,
+        type_filter: Option<FileTypeFilter>,
+        show_errors: bool,
     ) -> Result<Self> {
         let patt = pattern.as_ref();
         // If pattern is "." or empty, we do not filter by regex, this avoids building a regex (even if its trivial cost)
@@ -78,6 +208,7 @@ impl SearchConfig {
             follow_symlinks,
             size_filter,
             type_filter,
+            show_errors,
         })
     }
 
@@ -103,66 +234,49 @@ impl SearchConfig {
             .as_ref()
             .is_none_or(|ext| entry.matches_extension(ext))
     }
-    #[inline]
-    #[must_use]
-    #[cfg(target_os = "linux")] //FOR EXPERIMENTAL REASONS, ITS LINUX ONLY FOR NOW (EASE OF TESTING)
-    #[allow(clippy::if_not_else)] // this is a stylistic choice to avoid unnecessary else branches
-    pub(crate) fn matches_path_internal(
-        &self,
-        dir: &[u8],
-        full_path: bool,
-        path_len: usize,
-    ) -> bool {
-        debug_assert!(path_len <= dir.len(), "path_len is greater than dir length");
-
-        self.regex_match.as_ref().is_none_or(|reg| {
-            reg.is_match(if !full_path {
-                // SAFETY: path_len is guaranteed to be <= dir.len()
-                // so slicing with get_unchecked(path_len..) is always within bounds.
-                unsafe { dir.get_unchecked(path_len..) }
-            } else {
-                dir
-            })
-        })
-    }
 
     #[inline]
     #[must_use]
-    /// Applies the size filter to a directory entry if configured.
-    /// Works differently for regular files vs symlinks (resolves symlinks first).
-    // stat doesn't work oddly enough!
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "Only checking regular files"
+    )]
+    #[allow(clippy::cast_sign_loss)] //signloss dont matter here
+    /// Applies the configured size filter to a directory entry, if any.
+    /// For regular files the size is checked directly.
+    /// For symlinks, the target is resolved first and then checked if it is a regular file.
+    /// Other file types are ignored.
     pub fn matches_size<S>(&self, entry: &DirEntry<S>) -> bool
     where
         S: BytesStorage,
     {
         let Some(filter_size) = self.size_filter else {
-            return true; // No size filter configured
+            return true; // No filter means always match
         };
 
-        #[allow(clippy::wildcard_enum_match_arm)]
         match entry.file_type() {
             FileType::RegularFile => entry
                 .size()
                 .ok()
-                .is_some_and(|file_size| filter_size.is_within_size(file_size as u64)),
+                .is_some_and(|sz| filter_size.is_within_size(sz as _)),
+
             FileType::Symlink => {
-                entry
-                    // If symlink, resolve to full path and check if it points to a regular file
-                    // for some reason stat calls dont work!
-                    // Luckily this is not a big issue because there really arent that many symlinks on a system.
-                    .to_full_path()
-                    .ok()
-                    .filter(DirEntry::is_regular_file)
-                    .and_then(|_| entry.size().ok())
-                    .is_some_and(|file_size| filter_size.is_within_size(file_size as u64))
+                if let Ok(path) = entry.to_full_path() {
+                    if path.is_regular_file() {
+                        if let Ok(sz) = entry.size() {
+                            return filter_size.is_within_size(sz as _);
+                        }
+                    }
+                }
+                false
             }
-            _ => false, // Other file types are not size-filtered
+
+            _ => false,
         }
     }
-
     #[inline]
     #[must_use]
-    /// Applies a type filter (single-character code for file type)
+    /// Applies a type filter using `FileTypeFilter` enum
     /// Supports common file types: file, dir, symlink, device, pipe, etc
     pub fn matches_type<S>(&self, entry: &DirEntry<S>) -> bool
     where
@@ -173,17 +287,16 @@ impl SearchConfig {
         };
 
         match type_filter {
-            b'f' => entry.is_regular_file(),
-            b'd' => entry.is_dir(),
-            b'l' => entry.is_symlink(),
-            b'p' => entry.is_pipe(),
-            b'c' => entry.is_char_device(),
-            b'b' => entry.is_block_device(),
-            b's' => entry.is_socket(),
-            b'u' => entry.is_unknown(),
-            b'x' => entry.is_executable(),
-            b'e' => entry.is_empty(),
-            _ => false,
+            FileTypeFilter::File => entry.is_regular_file(),
+            FileTypeFilter::Directory => entry.is_dir(),
+            FileTypeFilter::Symlink => entry.is_symlink(),
+            FileTypeFilter::Pipe => entry.is_pipe(),
+            FileTypeFilter::CharDevice => entry.is_char_device(),
+            FileTypeFilter::BlockDevice => entry.is_block_device(),
+            FileTypeFilter::Socket => entry.is_socket(),
+            FileTypeFilter::Unknown => entry.is_unknown(),
+            FileTypeFilter::Executable => entry.is_executable(),
+            FileTypeFilter::Empty => entry.is_empty(),
         }
     }
 

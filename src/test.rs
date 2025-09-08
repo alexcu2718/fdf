@@ -17,7 +17,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
-    use crate::utils::unix_time_to_datetime;
+    use crate::utils::modified_unix_time_to_datetime;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     //helper func to save verbosity

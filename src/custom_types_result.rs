@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub type Result<T> = core::result::Result<T, DirEntryError>;
 
 const_from_env!(
-    /// The maximum length of a local path, set to 4096 by default, but can be customised via environment variable.
+    /// The maximum length of a local path, set to 4096/1024 (Linux/Non-Linux respectively) by default, but can be customised via environment variable.
     LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", libc::PATH_MAX
 ); //set to PATH_MAX, but allow trivial customisation!
 
@@ -25,12 +25,10 @@ pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
 #[cfg(target_os = "linux")] //we only use a buffer for syscalls on linux because of stable ABI
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
-///  a trait that all storage types must implement (for our main types) (so the user can use their own types if they want)
+///  A trait that all storage types must implement (for our main types) (so the user can use their own types if they want)
 pub trait BytesStorage: Deref<Target = [u8]> {
     fn from_slice(bytes: &[u8]) -> Self;
 }
-// Define a trait for types that can be converted to a byte slice
-// This allows us to use different storage types like Arc, Box, Vec, and SlimmerBox
 
 // BytesStorage for SlimmerBox
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -91,11 +89,12 @@ impl<S: BytesStorage> OsBytes<S> {
 
     #[inline]
     #[must_use]
+    /// Returns a reference to the underlying bytes as  `&OsStr`
     pub fn as_os_str(&self) -> &OsStr {
         std::os::unix::ffi::OsStrExt::from_bytes(&self.bytes)
     }
 }
-
+// SAFETY: Safe to send because any access is read only
 unsafe impl<S> Send for OsBytes<S> where S: Send + BytesStorage + 'static {}
 
 impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {

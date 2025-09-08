@@ -1,3 +1,98 @@
+//! # fdf - A High-Performance Parallel File System Traversal Library
+//!
+//! `fdf` is a Rust library designed for efficient, parallel directory traversal
+//! with extensive filtering capabilities. It leverages Rayon for parallel processing
+//! and uses platform-specific optimisations for maximum performance.
+//! 
+//! **This will be renamed before a 1.0!**
+//!
+//! ## Features
+//!
+//! - **Parallel Processing**: Utilises Rayon's work-stealing scheduler for concurrent
+//!   directory traversal
+//! - **Platform Optimisations**: Linux-specific `getdents` system calls for optimal
+//!   performance, with fallbacks for other platforms
+//! - **Flexible Filtering**: Support for multiple filtering criteria:
+//!   - File name patterns (regex), glob to be added shortly(CLI only for now)
+//!   - File size ranges
+//!   - File types (regular, directory, symlink, etc.)
+//!   - File extensions
+//!   - Hidden file handling
+//!   - Custom filter functions
+//! - **Memory Efficiency**: Multiple storage backends (Vec, Arc, Box, `SlimmerBytes` )
+//!   for different memory/performance trade-offs
+//! - **Cycle Detection**: Automatic symlink cycle prevention using inode caching
+//! - **Depth Control**: Configurable maximum search depth
+//! - **Error Handling**: Configurable error reporting with detailed diagnostics
+//!
+//! ## Performance Characteristics
+//!
+//! - Uses mimalloc as global allocator on supported platforms for improved
+//!   memory allocation performance
+//! - Batched result delivery to minimise channel contention
+//! - Zero-copy path handling where possible
+//! - Avoids unnecessary `stat` calls through careful API design 
+//!
+//! ## Platform Support
+//!
+//! - **Linux**: Optimised with direct `getdents` system calls
+//! - **macOS/BSD**: Standard `readdir` with potential for future `getattrlistbulk` optimisation
+//! - **Other Unix-like**: Fallback to standard library functions
+//! - **Windows**: Not currently supported (PRs welcome!)
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use fdf::{Finder, SlimmerBytes,DirEntryError,DirEntry};
+//! use std::sync::mpsc::Receiver;
+//!
+//! fn find_files() -> Result<Receiver<Vec<DirEntry<SlimmerBytes>>>, DirEntryError> {
+//!     let finder = Finder::<SlimmerBytes>::init("/path/to/search", "*.rs")
+//!         .keep_hidden(false)
+//!         .max_depth(Some(3))
+//!         .follow_symlinks(true)
+//!         .build()?;
+//!
+//!     finder.traverse()
+//! }
+//! ```
+//!
+//! ## Storage Backends
+//!
+//! The library supports multiple storage types through the `BytesStorage` trait:
+//!
+//! - `Vec<u8>`: Standard vector storage
+//! - `Arc<[u8]>`: Shared ownership for reduced copying
+//! - `Box<[u8]>`: Owned boxed slice
+//! - `SlimmerBytes`: Custom optimised storage type
+//!
+//! ## Safety Considerations
+//!
+//! - **Symlink Following**: Enabled by `follow_symlinks(true)`, but use with caution
+//!   to avoid infinite recursion (though we have guards against this!)
+//! - **Depth Limits**: Always consider setting `max_depth` for large directory trees
+//! - **Error Handling**: Use `show_errors(true)` to get diagnostic information about
+//!   permission errors and other issues
+//!
+//! ## Examples
+//!
+//! ### Basic Usage
+//! ```rust
+//! # use fdf::{Finder, SlimmerBytes};
+//! let receiver = Finder::<SlimmerBytes>::init(".", ".*txt")
+//!     .build()
+//!     .unwrap()
+//!     .traverse()
+//!     .unwrap();
+//!
+//! for batch in receiver {
+//!     for entry in batch {
+//!         println!("Found: {}", entry.to_string_lossy());
+//!     }
+//! }
+//! ```
+
+
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
@@ -9,16 +104,9 @@ pub(crate) mod cursed_macros;
 mod size_filter;
 
 pub use size_filter::SizeFilter;
-mod printer;
-pub use printer::write_paths_coloured;
-mod temp_dirent;
-#[cfg(target_os = "linux")]
-pub use temp_dirent::TempDirent;
 
 mod iter;
 pub(crate) use iter::DirIter;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-mod direntry_filter;
 
 #[cfg(target_os = "linux")]
 mod syscalls;
@@ -39,34 +127,30 @@ pub use error::DirEntryError;
 
 mod custom_types_result;
 
-pub use custom_types_result::{
-    BUFFER_SIZE, BytesStorage, DirEntryFilter, FilterType, LOCAL_PATH_MAX, OsBytes, Result,
-    SlimmerBytes,
-};
-
-pub(crate) use custom_types_result::PathBuffer;
 #[cfg(target_os = "linux")]
 pub(crate) use custom_types_result::SyscallBuffer;
+pub use custom_types_result::{
+    BUFFER_SIZE, BytesStorage, LOCAL_PATH_MAX, OsBytes, Result, SlimmerBytes,
+};
+pub(crate) use custom_types_result::{DirEntryFilter, FilterType, PathBuffer};
 
 mod traits_and_conversions;
 pub(crate) use traits_and_conversions::BytePath;
-
 mod utils;
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
 pub use utils::dirent_const_time_strlen;
-pub use utils::{strlen, unix_time_to_datetime};
+pub use utils::{modified_unix_time_to_datetime, strlen};
 
 mod glob;
 pub use glob::glob_to_regex;
 mod config;
-pub use config::SearchConfig;
+pub use config::{FileTypeFilter, SearchConfig};
 mod filetype;
 pub use filetype::FileType;
 
-use std::collections::HashSet;
-use std::sync::{LazyLock, Mutex};
-/// A cache to hold inodes for directories and symlinks
-static INODE_CACHE: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
+use dashmap::DashSet;
+use std::sync::LazyLock;
+
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 //miri doesnt support custom allocators
@@ -77,10 +161,11 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 // The `Finder` struct is the main entry point for the file search.
 // Its methods are exposed for building the search configuration
 #[derive(Debug)]
-/// A struct to find files in a directory.
+/// Creates a new `FinderBuilder` with required fields.
 ///
-/// This is the core component of the library. It is responsible for
-/// configuring and executing the parallel directory traversal
+/// # Arguments
+/// * `root` - The root directory to search
+/// * `pattern` - The glob pattern to match files against
 pub struct Finder<S>
 where
     S: BytesStorage,
@@ -112,8 +197,25 @@ where
     }
 
     #[inline]
-    #[allow(clippy::missing_errors_doc)]
-    /// Traverse the directory and return a receiver for the entries.
+    /// Traverse the directory tree starting from the root and return a receiver for the found entries.
+    ///
+    /// This method initiates a parallel directory traversal using Rayon. The traversal runs in a
+    /// background thread and sends batches of directory entries through an unbounded channel.
+    ///
+    /// # Returns
+    /// Returns a `Receiver<Vec<DirEntry<S>>>` that will receive batches of directory entries
+    /// as they are found during the traversal. The receiver can be used to iterate over the
+    /// results as they become available.
+    ///
+    /// # Errors
+    /// Returns `Err(DirEntryError::InvalidPath)` if:
+    /// - The root path cannot be converted to a `DirEntry`
+    /// - The root directory is not traversible (e.g., not a directory or inaccessible(usually permissions based))
+    ///
+    /// # Performance Notes
+    /// - Uses an unbounded channel to avoid blocking the producer thread
+    /// - Entries are sent in batches to minimize channel contention
+    /// - Traversal runs in parallel using Rayon's work-stealing scheduler
     pub fn traverse(self) -> Result<Receiver<Vec<DirEntry<S>>>> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry<S>>>) = unbounded();
 
@@ -129,40 +231,34 @@ where
 
             Ok(receiver)
         } else {
-            Err(DirEntryError::InvalidPath)
+            Err(DirEntryError::NotADirectory)
         }
     }
 
     #[inline]
-    #[allow(clippy::expect_used)] //This needs more testing (shouldn't panic but good to check!)
     fn directory_or_symlink_filter(&self, dir: &DirEntry<S>) -> bool {
+        /// A cache to hold inodes for directories and symlinks
+        /// Use a lock free Hashset to accomplish this
+        static INODE_CACHE: LazyLock<DashSet<u64>> = LazyLock::new(DashSet::new);
+
         // Handle normal directories first
         if dir.is_dir() {
             if !self.search_config.follow_symlinks {
-                return true; //Do not cause any locks if not traversing symlinks
-                // This avoid synchronisation overhead (it's unnecessary for directories only traversal)
+                return true; // Do not cause any cache operations if not traversing symlinks
             }
-
-            INODE_CACHE
-                .lock()
-                .expect("Mutex poisoned, this is unexpected! Please make an issue about this!")
-                .insert(dir.ino());
-            return true; //return true regardless
+            INODE_CACHE.insert(dir.ino());
+            return true;
         }
 
         // Handle symlinks pointing to directories
-        // If it's a symlink, insertion can return false, if the inode already exists
-        // FIXME/tightenup this logic!
+        //Check if it's a directory and not already in the cache, then apply the file filter
+        // This is quite cheap because there are so few in a system anyway
+        // TODO! this could be optimised, it's just very tricky!
         if self.search_config.follow_symlinks && dir.is_symlink() {
             return dir.get_stat().is_ok_and(|stat| {
-                if FileType::from_stat(&stat) != FileType::Directory {
-                    return false;
-                }
-
-                INODE_CACHE
-                    .lock()
-                    .expect("Mutex poisoned, this is unexpected! Please make an issue about this!")
-                    .insert(access_stat!(stat, st_ino)) //returns false if inode already exists
+                FileType::from_stat(&stat) == FileType::Directory
+                    && INODE_CACHE.insert(access_stat!(stat, st_ino))
+                    && self.file_filter(dir)
             });
         }
 
@@ -178,8 +274,11 @@ where
     fn file_filter(&self, dir: &DirEntry<S>) -> bool {
         (self.custom_filter)(&self.search_config, dir, self.filter)
     }
-
     #[inline]
+    #[expect(
+        clippy::print_stderr,
+        reason = "only enabled if explicitly requested or a very unusual error!"
+    )]
     /// Recursively processes a directory, sending found files to a channel.
     ///
     /// This method uses a depth-first traversal with `rayon` to process directories
@@ -189,29 +288,35 @@ where
     /// * `dir` - The `DirEntry` representing the directory to process.
     /// * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
-        let should_send_dir_or_symlink =//CHECK IF WE SHOULD SEND DIRS
-            self.search_config.keep_dirs && self.file_filter(&dir) && dir.depth() != 0; //dont send root directory
+        let should_send_dir_or_symlink = // If we've gotten here, the dir must be a directory!
+        self.search_config.keep_dirs && self.file_filter(&dir) && dir.depth() != 0; // don't send root directory
 
-        if self.search_config.depth.is_some_and(|d| dir.depth >= d) {
+        if self
+            .search_config
+            .depth
+            .is_some_and(|depth| dir.depth >= depth)
+        {
             if should_send_dir_or_symlink {
                 let _ = sender.send(vec![dir]);
-            } //have to put into a vec, this doesnt matter because this only happens when we depth limit
-            //i purposely ignore the result here because of pipe errors/other errors (like  -n 10 ) that i should probably log.
-            //TODO-MAYBE
+            } // have to put into a vec, this doesn't matter because this only happens when we depth limit
+            // I purposely ignore the result here because of pipe errors/other errors (like -n 10) that I should probably log.
+            // TODO-MAYBE
 
             return; // stop processing this directory if depth limit is reached
         }
+
         #[cfg(target_os = "linux")]
-        //linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
-        let direntries = dir.getdents(); //additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
+        // linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
+        let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
+
         #[cfg(not(target_os = "linux"))]
-        let direntries = dir.readdir(); //in theory i can use getattrlistbulk on macos, this has  a LOT of complexity!
-        //https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5 TODO!
+        let direntries = dir.readdir(); // in theory I can use getattrlistbulk on macos, this has a LOT of complexity!
+        // https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5 TODO!
         // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls
         // THIS REQUIRES A LOT MORE WORK TO VALIDATE SAFETY BEFORE I CAN USE IT, IT'S ALSO VERY ROUGH SINCE MACOS API IS TERRIBLE
 
-        //these lambdas make the code a bit easier to follow, i might define them as functions later, TODO-MAYBE!
-        //directory or symlink lambda
+        // These lambdas make the code a bit easier to follow, I might define them as functions later, TODO-MAYBE!
+        // directory or symlink lambda
         // Keep all directories (and symlinks if following them)
 
         match direntries {
@@ -221,55 +326,53 @@ where
                 //    the entire expression immediately evaluates to `false`, and we move to the next entry.
                 // 2. If the entry is not hidden (or `hide_hidden` is false), we then check
                 //    `(self.directory_or_symlink_filter(entry) || self.file_filter(entry))`.
-                // 3. This part uses another short-circuit. `d_or_s_filter` checks if the entry is
+                // 3. This part uses another short-circuit. checks if the entry is
                 //    a directory or a symlink we should follow. If it is, the right side (`file_filter`)
                 //    is not evaluated, which avoids an expensive call to `file_filter` on directories.
                 // 4. If the entry is not a directory/symlink, we then run the `file_filter`, which
                 //    contains the main logic for filtering files (e.g., by name, size, filetype etc).
-            let (dirs, mut files): (Vec<_>, Vec<_>) = entries
-                .filter(|entry| self.keep_hidden(entry) &&
-                (self.directory_or_symlink_filter(entry) || self.file_filter(entry)))
-                .partition(|ent| self.directory_or_symlink_filter(ent));
+                let (dirs, mut files): (Vec<_>, Vec<_>) = entries
+                    .filter(|entry| {
+                        self.keep_hidden(entry)
+                            && (self.directory_or_symlink_filter(entry) || self.file_filter(entry))
+                    })
+                    .partition(|ent| self.directory_or_symlink_filter(ent));
 
                 // Process directories in parallel
                 dirs.into_par_iter().for_each(|dirnt| {
-                    self.process_directory( dirnt, sender);
+                    self.process_directory(dirnt, sender);
                 });
-                //checking if we should send directories
-                if should_send_dir_or_symlink{
-                    #[allow(clippy::redundant_clone)] //we have to clone here at onne point, compiler doesnt like it because we're not using the result
-                    files.push(dir.clone()) //we have to clone here unfortunately because it's being used to keep the iterator going.
-                    //luckily we're only cloning 1 directory/symlink, not anything more than that.
+
+                // checking if we should send directories
+                if should_send_dir_or_symlink {
+                    #[expect(
+                        clippy::redundant_clone,
+                        reason = "we have to clone here unfortunately because it's being used to keep the iterator going."
+                    )]
+                    files.push(dir.clone());
+                    // luckily we're only cloning 1 directory/symlink, not anything more than that.
                 }
-                //We do batch sending to minimise contention of sending 
-                //as opposed to sending one at a time, which will cause tremendous locks
+
+                // We do batch sending to minimise contention of sending
+                // as opposed to sending one at a time, which will cause tremendous locks
                 if !files.is_empty() {
                     let _ = sender.send(files);
                 }
             }
             Err(
-                DirEntryError::TemporarilyUnavailable // can possibly get rid of this
-                | DirEntryError::AccessDenied(_) //this will occur, i should probably provide an option to  display errors TODO!
-                | DirEntryError::InvalidPath //naturally this will happen  due to  quirks like seen in /proc
-                | DirEntryError::TooManySymbolicLinks
-            ) => {} //TODO! add logging
-            #[allow(clippy::used_underscore_binding)]
-            Err(_err) => {
-            #[allow(clippy::panic)] //panic is only in debug. This should trigger any CI warnings i am using!
-            #[cfg(debug_assertions)]
-            {
-                // In debug mode, show the error and panic. this is extremely helpful for debugging potential issues
-                panic!("Unreachable directory entry error: {_err:?} at path {}",dir.to_string_lossy());
-            }
-            // In release mode, the compiler will use unreachable_unchecked().
-            // This provides a performance optimisation by assuming this code path is never taken.
-            // Safety: we assume all other error variants are covered and this is indeed unreachable.
-            #[cfg(not(debug_assertions))]
-            unsafe {
-                core::hint::unreachable_unchecked();
-            }
-                    }
+                err @ (DirEntryError::TemporarilyUnavailable
+                | DirEntryError::AccessDenied(_)
+                | DirEntryError::InvalidPath
+                | DirEntryError::TooManySymbolicLinks),
+            ) => {
+                if self.search_config.show_errors {
+                    eprintln!("Error accessing {}: {}", dir.to_string_lossy(), err);
                 }
+            }
+            Err(err) => {
+                eprintln!("Unspecified directory entry error at {dir}: {err}. Please report this.",);
+            }
+        }
     }
 }
 
@@ -278,7 +381,10 @@ where
 /// This builder allows you to set various options such as hiding hidden files, case sensitivity,
 /// keeping directories in results, matching file extensions, setting maximum search depth,
 /// following symlinks, and applying a custom filter function.
-#[allow(clippy::struct_excessive_bools)] //NATURALLY ANY BUILDER WILL CONTAIN A LOT OF BOOLS FFS
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Naturally a builder will contain many bools"
+)]
 pub struct FinderBuilder<S>
 where
     S: BytesStorage,
@@ -294,14 +400,19 @@ where
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter<S>>,
     pub(crate) size_filter: Option<SizeFilter>,
-    pub(crate) file_type: Option<u8>, //u8= a length one byte string , aka b"f" or b"s"
+    pub(crate) file_type: Option<FileTypeFilter>,
+    pub(crate) show_errors: bool,
 }
 
 impl<S> FinderBuilder<S>
 where
     S: BytesStorage + 'static + Clone + Send,
 {
-    /// Create a new `FinderBuilder` with required fields
+    /// Creates a new `FinderBuilder` with required fields.
+    ///
+    /// # Arguments
+    /// * `root` - The root directory to search
+    /// * `pattern` - The glob pattern to match files against
     pub fn new<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> Self {
         Self {
             root: root.as_ref().to_owned(),
@@ -316,6 +427,7 @@ where
             filter: None,
             size_filter: None,
             file_type: None,
+            show_errors: false,
         }
     }
     #[must_use]
@@ -337,7 +449,7 @@ where
         self
     }
     #[must_use]
-    /// Set whether to use short pathss in regex matching, defaults to true
+    /// Set whether to use short paths in regex matching, defaults to true
     pub const fn file_name_only(mut self, short_path: bool) -> Self {
         self.file_name_only = short_path;
         self
@@ -356,13 +468,16 @@ where
     }
 
     #[must_use]
-    /// Set maximum search depth
+    /// Sets size-based filtering criteria.
     pub const fn filter_by_size(mut self, size_of: Option<SizeFilter>) -> Self {
         self.size_filter = size_of;
         self
     }
 
-    /// Set whether to follow symlinks, defaults to false. Careful for recursion!
+    /// Sets whether to follow symlinks (default: false).
+    ///
+    /// # Warning
+    /// Enabling this may cause infinite recursion, although there are protections in place against it!
     #[must_use]
     pub const fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
         self.follow_symlinks = follow_symlinks;
@@ -377,13 +492,26 @@ where
     }
 
     #[must_use]
-    pub const fn type_filter(mut self, filter: Option<u8>) -> Self {
+    /// Sets file type filtering.
+    pub const fn type_filter(mut self, filter: Option<FileTypeFilter>) -> Self {
         self.file_type = filter;
         self
     }
 
-    /// Build the Finder instance
-    #[allow(clippy::missing_errors_doc)] //TODO! add error docs here
+    #[must_use]
+    /// Set whether to show errors during traversal, defaults to false
+    pub const fn show_errors(mut self, show_errors: bool) -> Self {
+        self.show_errors = show_errors;
+        self
+    }
+
+    /// Builds the Finder instance with the configured options.
+    ///
+    /// # Returns
+    /// A `Result` containing the configured `Finder` instance
+    ///
+    /// # Errors
+    /// Returns an error if the search pattern cannot be compiled to a valid regex
     pub fn build(self) -> Result<Finder<S>> {
         let search_config = SearchConfig::new(
             self.pattern,
@@ -396,11 +524,12 @@ where
             self.follow_symlinks,
             self.size_filter,
             self.file_type,
+            self.show_errors,
         )?;
 
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
             {
-                rfilter.is_none_or(|f| f(rdir))
+                rfilter.is_none_or(|func| func(rdir))
                     && rconfig.matches_type(rdir)
                     && rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_size(rdir)

@@ -1,13 +1,15 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 
-use fdf::{DirEntryError, Finder, SizeFilter, SlimmerBytes, glob_to_regex, write_paths_coloured};
+mod printer;
+use printer::write_paths_coloured;
+
+use fdf::{DirEntryError, FileTypeFilter, Finder, SizeFilter, SlimmerBytes, glob_to_regex};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 use std::path::Path;
 use std::str;
-
 const FILE_TYPES: &str = "d: Directory
 u: Unknown
 l: Symlink
@@ -142,6 +144,14 @@ struct Args {
         conflicts_with = "glob"
     )]
     fixed_string: bool,
+
+    #[arg(
+        long = "show-errors",
+        required = false,
+        default_value_t = false,
+        help = "Show errors when traversing"
+    )]
+    show_errors: bool,
     /// Filter by file size
     ///
     /// PREFIXES:
@@ -178,23 +188,11 @@ struct Args {
     size: Option<String>,
 }
 
-fn parse_file_type(type_char: &str) -> Result<u8, String> {
-    match type_char.chars().next() {
-        Some('d') => Ok(b'd'),
-        Some('u') => Ok(b'u'),
-        Some('l') => Ok(b'l'),
-        Some('f') => Ok(b'f'),
-        Some('p') => Ok(b'p'),
-        Some('c') => Ok(b'c'),
-        Some('b') => Ok(b'b'),
-        Some('s') => Ok(b's'),
-        Some('e') => Ok(b'e'),
-        Some('x') => Ok(b'x'),
-        Some(not_valid) => Err(format!(
-            "Invalid file type: '{not_valid}'. See --help for valid types."
-        )),
-        None => Err("Empty file type argument".into()),
-    }
+fn parse_file_type(type_char: &str) -> core::result::Result<FileTypeFilter, String> {
+    type_char.chars().next().map_or_else(
+        || Err("Empty file type argument".into()),
+        FileTypeFilter::from_char,
+    )
 }
 
 #[allow(clippy::exit)]
@@ -270,6 +268,7 @@ fn main() -> Result<(), DirEntryError> {
         .follow_symlinks(args.follow_symlinks)
         .filter_by_size(size_of_file)
         .type_filter(type_filter)
+        .show_errors(args.show_errors)
         .build()?;
 
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n, args.no_colour);

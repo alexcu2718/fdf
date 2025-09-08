@@ -122,7 +122,7 @@ When I began I had barely used Linux for a few months, I didn't even know C, so 
 
 ### Performance Motivation
 
-Even though fdf is already faster than fd in all cases, I'm experimenting with filtering before allocation(I don't stop at good enough!)
+Even though fdf is already faster than fd in all cases, I'm planning to experiment with filtering before allocation(I don't stop at good enough!)
 Rust's std::fs has some inefficiencies, too much heap allocation, file descriptor manipulation, constant strlen calculations, usage of readdir (not optimal because it implicitly stat calls every file it sees!). Rewriting all of it  using libc was the ideal way to bypass that and learn in the process.
 
 Currently, filtering-before-allocation is partially implemented in the crate but not yet exposed via the CLI. If the results prove consistently performant, I'll integrate it into the public tool(I will probably leave this until I get datetime working sufficiently.)
@@ -139,7 +139,7 @@ In short, this project is a personal exploration into performance, low-level pro
 
 ## Acknowledgements/Disclaimers
 
-I've directly taken code from [fnnmatch-regex, found at the link](https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574) and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
+I've directly taken code from [fnmatch-regex, found at the link](https://docs.rs/fnmatch-regex/latest/src/fnmatch_regex/glob.rs.html#3-574) and modified it so I could convert globs to regex patterns trivially, this simplifies the string filtering model by delegating it to rust's extremely fast regex crate.
 Notably I modified it because it's quite old and has dependencies I was able to remove
 
 (I have emailed and received approval from the author above)
@@ -226,7 +226,7 @@ Options:
   -j, --threads <THREAD_NUM>
           Number of threads to use, defaults to available threads available on your computer
 
-          [default: <MAX_NUM_THREADS>]
+          [default: <NUM_THREADS>]
 
   -a, --absolute-path
           Show absolute paths of results, defaults to false
@@ -273,6 +273,9 @@ Options:
 
   -F, --fixed-strings
           Use a fixed string not a regex, defaults to false
+
+      --show-errors
+          Show errors when traversing
 
   -S, --size <size>
           Filter by file size
@@ -330,8 +333,7 @@ Options:
 
 **4. Allocation-Optimised Iterator Adaptor**  
 -- Design filter mechanism avoiding:  
--- Unnecessary directory allocations  
--- Non-essential memory operations  
+-- Unnecessary directory allocations(via a closure with a function called on readdir/getdent)
 
 **5. MacOS/BSD(s(potentially) Specific Optimisations**
 -- Implement an iterator using getattrlistbulk (this may be possible for bsd too? or perhaps just linking getdirentries for BSD systems)

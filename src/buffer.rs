@@ -17,7 +17,7 @@ pub trait ValueType: sealed::Sealed {}
 impl ValueType for i8 {}
 impl ValueType for u8 {}
 
-/// A highly optimized, aligned buffer for system call operations
+/// A highly optimised, aligned buffer for system call operations
 ///
 /// This buffer provides memory-aligned storage with several key features:
 /// - Guaranteed 8-byte alignment required by various system calls
@@ -109,6 +109,10 @@ where
 {
     #[inline]
     #[must_use]
+    /// Creates a new uninitialised aligned buffer
+    ///
+    /// The buffer will have 8-byte alignment but its contents will be uninitialised.
+    /// You must initialised the buffer before accessing its contents.
     pub const fn new() -> Self {
         Self {
             data: MaybeUninit::uninit(),
@@ -117,27 +121,37 @@ where
 
     #[inline]
     #[must_use]
+    /// Returns a mutable pointer to the buffer's data
     pub const fn as_mut_ptr(&mut self) -> *mut T {
         self.data.as_mut_ptr().cast()
     }
 
     #[inline]
     #[must_use]
+    /// Returns a const pointer to the buffer's data
     pub const fn as_ptr(&self) -> *const T {
         self.data.as_ptr().cast()
     }
 
+    /// Returns a slice of the buffer's contents
+    ///
     /// # Safety
-    /// The buffer must be initialised before calling this
+    /// The buffer must be fully initialised before calling this method.
+    /// Accessing uninitialised memory is undefined behavior.
     #[inline]
     pub const unsafe fn as_slice(&self) -> &[T] {
+        // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { &*self.data.as_ptr() }
     }
 
+    /// Returns a mutable slice of the buffer's contents
+    ///
     /// # Safety
-    /// The buffer must be initialised before calling this
+    /// The buffer must be fully initialised before calling this method.
+    /// Accessing uninitialised memory is undefined behavior.
     #[inline]
     pub const unsafe fn as_mut_slice(&mut self) -> &mut [T] {
+        // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { &mut *self.data.as_mut_ptr() }
     }
 
@@ -161,23 +175,32 @@ where
     #[inline]
     #[cfg(target_os = "linux")]
     pub unsafe fn getdents(&mut self, fd: i32) -> i64 {
+        // SAFETY: Caller must ensure:
+        // - fd is a valid open file descriptor
+        // - Buffer is properly aligned and sized
+        // - Buffer memory is valid and accessible
         unsafe { crate::syscalls::getdents_asm(fd, self.as_mut_ptr(), SIZE) }
     }
 
     /// Returns a reference to a subslice without doing bounds checking
     ///
     /// # Safety
-    /// The caller must ensure the range is within the initialised portion
-    /// of the buffer. Accessing out-of-bounds or uninitialised memory is undefined behavior.
+    ///
+    /// The caller must ensure:
+    /// - The buffer is fully initialised
+    /// - The range is within the bounds of the buffer (0..SIZE)
+    /// - The range does not access uninitialised memory
     #[inline]
     pub unsafe fn get_unchecked<R>(&self, range: R) -> &R::Output
     where
         R: SliceIndex<[T]>,
     {
+        // SAFETY: Caller must ensure the buffer is initialised and range is valid
         unsafe { self.as_slice().get_unchecked(range) }
     }
 
     #[inline]
+    #[allow(clippy::undocumented_unsafe_blocks)] //too lazy to comment all of this, will do later.
     /// Initialises the buffer with directory path contents
     ///
     /// This method prepares the buffer for directory traversal operations by
@@ -192,7 +215,6 @@ where
     /// # Safety
     /// The caller must ensure:
     /// - The buffer is zeroed and has sufficient capacity (at least `LOCAL_PATH_MAX`) (4096 on Linux or 1024 on non-Linux (dependent on `libc::PATH_MAX`))
-    /// - The directory path is valid UTF-8 or compatible with the expected encoding
     pub(crate) unsafe fn init_from_direntry<S>(&mut self, dir_path: &crate::DirEntry<S>) -> usize
     where
         S: crate::BytesStorage,
@@ -211,7 +233,8 @@ where
 
         base_len
     }
-
+    /// Returns a mutable reference to a subslice without doing bounds checking
+    ///
     /// # Safety
     /// The range must be within initialised portion of the buffer
     #[inline]
@@ -219,6 +242,7 @@ where
     where
         R: SliceIndex<[T]>,
     {
+        // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { self.as_mut_slice().get_unchecked_mut(range) }
     }
 
@@ -229,6 +253,7 @@ where
     /// before calling this method. Accessing uninitialised memory is undefined behavior.
     #[inline]
     const unsafe fn assume_init(&self) -> &[T; SIZE] {
+        // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { &*self.data.as_ptr() }
     }
 
@@ -239,6 +264,7 @@ where
     /// before calling this method. Accessing uninitialised memory is undefined behavior
     #[inline]
     const unsafe fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
+        // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { &mut *self.data.as_mut_ptr() }
     }
 }

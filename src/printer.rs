@@ -1,6 +1,6 @@
-use crate::BytesStorage;
-use crate::{BytePath as _, DirEntry, FileType, Result};
 use compile_time_ls_colours::file_type_colour;
+use core::ops::Deref;
+use fdf::{BytesStorage, DirEntry, FileType, Result, memrchr};
 use std::io::{BufWriter, IsTerminal as _, Write as _, stdout};
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
@@ -9,6 +9,26 @@ const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
 const RESET: &[u8] = b"\x1b[0m";
 
 #[inline]
+//copy paste of a trait fn (to avoid exporting it publicly)
+fn extension<T>(bfile: &T) -> Option<&[u8]>
+where
+    T: Deref<Target = [u8]>,
+{
+    // SAFETY: bfile.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
+    memrchr(b'.', unsafe { bfile.get_unchecked(..bfile.len() - 1) }) //exclude cases where the . is the final character
+        // SAFETY: The `pos` comes from `memrchr` which searches a slice of `bfile`.
+        // The slice `..bfile.len() - 1` is a subslice of `self`.
+        // Therefore, `pos` is a valid index into `bfile`.
+        // `pos + 1` is also guaranteed to be a valid index.
+        // We do this to avoid any runtime checks
+        .map(|pos| unsafe { bfile.get_unchecked(pos + 1..) })
+}
+
+#[inline]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "We're only matching on relevant types"
+)]
 fn extension_colour<S>(entry: &DirEntry<S>) -> &[u8]
 where
     S: BytesStorage + 'static + Clone,
@@ -25,9 +45,7 @@ where
         //executable isn't here because it requires a stat call, i might add it. doesnt affect performance since printing is the bottleneck
 
         // for all other  files, color by extension
-        _ => entry
-            .extension()
-            .map_or(RESET, |pos| file_type_colour!(pos)),
+        _ => extension(entry).map_or(RESET, |pos| file_type_colour!(pos)),
     }
 }
 

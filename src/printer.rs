@@ -43,7 +43,7 @@ where
         FileType::Pipe => file_type_colour!(pipe),
         //executable isn't here because it requires a stat call, i might add it. doesnt affect performance since printing is the bottleneck
 
-        // for all other  files, color by extension
+        // for all other  files, colour by extension
         _ => extension(entry).map_or(RESET, |pos| file_type_colour!(pos)),
     }
 }

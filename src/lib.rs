@@ -23,6 +23,7 @@
 //!   for different memory/performance trade-offs
 //! - **Cycle Detection**: Automatic symlink cycle prevention using inode caching
 //! - **Depth Control**: Configurable maximum search depth
+//! - **Path Canonicalisation**: Optional path resolution to absolute paths
 //! - **Error Handling**: Configurable error reporting with detailed diagnostics
 //!
 //! ## Performance Characteristics
@@ -51,6 +52,7 @@
 //!         .keep_hidden(false)
 //!         .max_depth(Some(3))
 //!         .follow_symlinks(true)
+//!         .canonicalise_root(true)  // Resolve the root to a full path
 //!         .build()?;
 //!
 //!     finder.traverse()
@@ -95,6 +97,7 @@
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
+    path::{Path, PathBuf},
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 #[macro_use]
@@ -402,6 +405,7 @@ where
     pub(crate) file_type: Option<FileTypeFilter>,
     pub(crate) show_errors: bool,
     pub(crate) use_glob: bool,
+    pub(crate) canonicalise: bool,
 }
 
 impl<S> FinderBuilder<S>
@@ -429,6 +433,7 @@ where
             file_type: None,
             show_errors: false,
             use_glob: false,
+            canonicalise: false,
         }
     }
     #[must_use]
@@ -513,14 +518,37 @@ where
         self
     }
 
+    #[must_use]
+    /// Set whether to canonicalise (resolve absolute path) the root directory, defaults to false
+    pub const fn canonicalise_root(mut self, canonicalise: bool) -> Self {
+        self.canonicalise = canonicalise;
+        self
+    }
+
+    #[must_use]
+    /// Set whether to escape any regexs in the string, defaults to false
+    pub fn fixed_string(mut self, fixed_string: bool) -> Self {
+        if fixed_string {
+            self.pattern = regex::escape(&self.pattern);
+        }
+
+        self
+    }
+
     /// Builds the Finder instance with the configured options.
     ///
     /// # Returns
     /// A `Result` containing the configured `Finder` instance
     ///
     /// # Errors
-    /// Returns an error if the search pattern cannot be compiled to a valid regex
+    /// Returns an error if:
+    /// - The search pattern cannot be compiled to a valid regex
+    /// - The root path is not a directory
+    /// - The root path cannot be canonicalised (when canonicalise is enabled)
     pub fn build(self) -> Result<Finder<S>> {
+        // Resolve and validate the root directory
+        let resolved_root = self.resolve_directory()?;
+
         let search_config = SearchConfig::new(
             self.pattern,
             self.hide_hidden,
@@ -547,10 +575,47 @@ where
         };
 
         Ok(Finder {
-            root: self.root,
+            root: resolved_root,
             search_config,
             filter: self.filter,
             custom_filter: lambda,
         })
+    }
+
+    /// Resolves and validates the root directory path.
+    ///
+    /// This function handles:
+    /// - Default to current directory (".") if root is empty
+    /// - Validates that the path is a directory
+    /// - Optionally canonicalises the path if canonicalise flag is set
+    ///
+    /// # Returns
+    /// Returns the resolved directory path as an `OsString`
+    ///
+    /// # Errors
+    /// Returns `DirEntryError::NotADirectory` if the path is not a directory
+    /// Returns `DirEntryError::InvalidPath` if canonicalisation fails
+    fn resolve_directory(&self) -> Result<OsString> {
+        let dir_to_use = if self.root.is_empty() {
+            OsString::from(".")
+        } else {
+            self.root.clone()
+        };
+
+        let path_check = Path::new(&dir_to_use);
+
+        if !path_check.is_dir() {
+            return Err(DirEntryError::NotADirectory);
+        }
+
+        if self.canonicalise {
+            path_check
+                .canonicalize()
+                .map_or(Err(DirEntryError::InvalidPath), |canonical_path| {
+                    Ok(PathBuf::into_os_string(canonical_path))
+                })
+        } else {
+            Ok(dir_to_use)
+        }
     }
 }

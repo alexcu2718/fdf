@@ -8,7 +8,6 @@ use fdf::{DirEntryError, FileTypeFilter, Finder, SizeFilter, SlimmerBytes};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
-use std::path::Path;
 use std::str;
 const FILE_TYPES: &str = "d: Directory
 u: Unknown
@@ -198,8 +197,6 @@ fn main() -> Result<(), DirEntryError> {
         .build_global()
         .map_err(DirEntryError::RayonError)?;
 
-    let path = resolve_directory(args.directory, args.absolute_path);
-
     if let Some(generator) = args.generate {
         let mut cmd = Args::command();
         let bin_name = cmd.get_name().to_owned();
@@ -216,12 +213,6 @@ fn main() -> Result<(), DirEntryError> {
         },
         core::clone::Clone::clone,
     );
-
-    let pattern = if args.fixed_string {
-        regex::escape(&start_pattern)
-    } else {
-        start_pattern
-    };
 
     if args.depth.is_some_and(|depth| depth == 0) {
         eprintln!("Error: Depth cannot be 0. Exiting.");
@@ -257,10 +248,13 @@ fn main() -> Result<(), DirEntryError> {
         )
     });
 
-    let finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
+    let path = args.directory.unwrap_or_else(|| OsString::from("."));
+    let finder: Finder<SlimmerBytes> = Finder::init(&path, &start_pattern)
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)
+        .fixed_string(args.fixed_string)
+        .canonicalise_root(args.absolute_path)
         .file_name_only(!args.full_path)
         .extension_match(args.extension)
         .max_depth(args.depth)
@@ -274,36 +268,4 @@ fn main() -> Result<(), DirEntryError> {
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n, args.no_colour);
 
     Ok(())
-}
-
-#[allow(clippy::must_use_candidate)]
-///simple function to resolve the directory to use.
-#[allow(clippy::single_call_fn)]
-#[allow(clippy::exit)]
-#[allow(clippy::print_stderr)] //this is fine because it's CLI only
-fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> OsString {
-    let dir_to_use = args_directory.unwrap_or_else(|| OsString::from(&"."));
-    let path_check = Path::new(&dir_to_use);
-
-    if !path_check.is_dir() {
-        eprintln!("{} is not a directory", dir_to_use.to_string_lossy());
-        std::process::exit(1);
-    }
-
-    if canonicalise {
-        match path_check.canonicalize() {
-            //stupid yank spelling.
-            Ok(canonical_path) => std::path::PathBuf::into_os_string(canonical_path),
-            Err(err) => {
-                eprintln!(
-                    "Failed to canonicalise path {} {}",
-                    path_check.to_string_lossy(),
-                    err
-                );
-                std::process::exit(1);
-            }
-        }
-    } else {
-        dir_to_use
-    }
 }

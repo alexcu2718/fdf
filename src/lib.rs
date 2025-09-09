@@ -346,7 +346,7 @@ where
                 if should_send_dir_or_symlink {
                     #[expect(
                         clippy::redundant_clone,
-                        reason = "we have to clone here unfortunately because it's being used to keep the iterator going."
+                        reason = "we have to clone here unfortunately because it's being used to keep the iterator going. We don't want to collect a whole allocation!"
                     )]
                     files.push(dir.clone());
                     // luckily we're only cloning 1 directory/symlink, not anything more than that.
@@ -401,6 +401,7 @@ where
     pub(crate) size_filter: Option<SizeFilter>,
     pub(crate) file_type: Option<FileTypeFilter>,
     pub(crate) show_errors: bool,
+    pub(crate) use_glob: bool,
 }
 
 impl<S> FinderBuilder<S>
@@ -427,6 +428,7 @@ where
             size_filter: None,
             file_type: None,
             show_errors: false,
+            use_glob: false,
         }
     }
     #[must_use]
@@ -498,6 +500,13 @@ where
     }
 
     #[must_use]
+    /// Sets a glob pattern for regex matching, not a regex.
+    pub const fn use_glob(mut self, use_glob: bool) -> Self {
+        self.use_glob = use_glob;
+        self
+    }
+
+    #[must_use]
     /// Set whether to show errors during traversal, defaults to false
     pub const fn show_errors(mut self, show_errors: bool) -> Self {
         self.show_errors = show_errors;
@@ -524,6 +533,7 @@ where
             self.size_filter,
             self.file_type,
             self.show_errors,
+            self.use_glob,
         )?;
 
         let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
@@ -532,7 +542,7 @@ where
                     && rconfig.matches_type(rdir)
                     && rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_size(rdir)
-                    && rconfig.matches_path(rdir, rconfig.file_name_only)
+                    && rconfig.matches_path(rdir, !rconfig.file_name_only)
             }
         };
 

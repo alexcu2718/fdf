@@ -1,3 +1,4 @@
+use crate::glob_to_regex;
 use crate::size_filter::SizeFilter;
 use crate::traits_and_conversions::BytePath as _;
 
@@ -174,20 +175,34 @@ impl SearchConfig {
         hide_hidden: bool,
         case_insensitive: bool,
         keep_dirs: bool,
-        file_name_only: bool,
+        filenameonly: bool,
         extension_match: Option<Box<[u8]>>,
         depth: Option<u16>,
         follow_symlinks: bool,
         size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,
         show_errors: bool,
+        use_glob: bool,
     ) -> Result<Self> {
         let patt = pattern.as_ref();
+
+        let file_name_only = if patt.contains('/') {
+            false //Over ride because if it's got a slash, it's gotta be a full path
+        } else {
+            filenameonly
+        };
+
+        let pattern_to_use = if use_glob {
+            glob_to_regex(patt).map_err(DirEntryError::GlobToRegexError)?
+        } else {
+            patt.into()
+        };
+
         // If pattern is "." or empty, we do not filter by regex, this avoids building a regex (even if its trivial cost)
-        let regex_match = if patt == "." || patt.is_empty() {
+        let regex_match = if pattern_to_use == "." || pattern_to_use.is_empty() {
             None
         } else {
-            let reg = RegexBuilder::new(patt)
+            let reg = RegexBuilder::new(&pattern_to_use)
                 .case_insensitive(case_insensitive)
                 .dot_matches_new_line(false)
                 .build();

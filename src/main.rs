@@ -4,7 +4,7 @@ use clap_complete::aot::{Shell, generate};
 mod printer;
 use printer::write_paths_coloured;
 
-use fdf::{DirEntryError, FileTypeFilter, Finder, SizeFilter, SlimmerBytes, glob_to_regex};
+use fdf::{DirEntryError, FileTypeFilter, Finder, SizeFilter, SlimmerBytes};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
@@ -188,13 +188,6 @@ struct Args {
     size: Option<String>,
 }
 
-fn parse_file_type(type_char: &str) -> core::result::Result<FileTypeFilter, String> {
-    type_char.chars().next().map_or_else(
-        || Err("Empty file type argument".into()),
-        FileTypeFilter::from_char,
-    )
-}
-
 #[allow(clippy::exit)]
 #[allow(clippy::print_stderr)]
 fn main() -> Result<(), DirEntryError> {
@@ -227,7 +220,7 @@ fn main() -> Result<(), DirEntryError> {
     let pattern = if args.fixed_string {
         regex::escape(&start_pattern)
     } else {
-        process_glob_regex(&start_pattern, args.glob)
+        start_pattern
     };
 
     if args.depth.is_some_and(|depth| depth == 0) {
@@ -248,27 +241,34 @@ fn main() -> Result<(), DirEntryError> {
         }
     });
 
-    let type_filter = args
-        .type_of
-        .map(|type_str| match parse_file_type(&type_str) {
-            Ok(file_type) => file_type,
-            Err(err) => {
-                eprintln!("Error parsing file type: {err}");
+    let type_filter = args.type_of.map(|type_str| {
+        type_str.chars().next().map_or_else(
+            || {
+                eprintln!("Error: Empty file type argument");
                 std::process::exit(1);
-            }
-        });
+            },
+            |c| match FileTypeFilter::from_char(c) {
+                Ok(filter) => filter,
+                Err(err) => {
+                    eprintln!("Error parsing file type: {err}");
+                    std::process::exit(1);
+                }
+            },
+        )
+    });
 
     let finder: Finder<SlimmerBytes> = Finder::init(&path, &pattern)
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)
-        .file_name_only(args.full_path)
+        .file_name_only(!args.full_path)
         .extension_match(args.extension)
         .max_depth(args.depth)
         .follow_symlinks(args.follow_symlinks)
         .filter_by_size(size_of_file)
         .type_filter(type_filter)
         .show_errors(args.show_errors)
+        .use_glob(args.glob)
         .build()?;
 
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n, args.no_colour);
@@ -306,16 +306,4 @@ fn resolve_directory(args_directory: Option<OsString>, canonicalise: bool) -> Os
     } else {
         dir_to_use
     }
-}
-#[allow(clippy::exit)]
-#[allow(clippy::print_stderr)]
-fn process_glob_regex(pattern: &str, args_glob: bool) -> String {
-    if !args_glob {
-        return pattern.into();
-    }
-
-    glob_to_regex(pattern).unwrap_or_else(|err| {
-        eprintln!("This can't be processed as a glob pattern error is  {err}"); //todo! fix these errors
-        std::process::exit(1)
-    })
 }

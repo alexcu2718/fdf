@@ -18,6 +18,7 @@ pub enum DirEntryError {
     TemporarilyUnavailable, // this is used to indicate that the operation should be retried later(however in this case its because proc/sys etc are private etc)
     Utf8Error(core::str::Utf8Error),
     BrokenPipe(io::Error),
+    GlobToRegexError(crate::glob::Error),
     OSerror(io::Error),
     AccessDenied(io::Error),
     WriteError(io::Error),
@@ -71,6 +72,7 @@ impl fmt::Display for DirEntryError {
             Self::MetadataError => write!(f, "Metadata error"),
             Self::Utf8Error(e) => write!(f, "UTF-8 conversion error: {e}"),
             Self::BrokenPipe(e) => write!(f, "Broken pipe: {e}"),
+            Self::GlobToRegexError(e) => write!(f, "Glob to regex conversion error {e}"),
             Self::OSerror(e) => write!(f, "OS error: {e}"),
             Self::RayonError(e) => write!(f, "Rayon error: {e}"),
             Self::WriteError(e) => write!(f, "Write error: {e}"),

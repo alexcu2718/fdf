@@ -3,3 +3,4 @@ perf*
 **/*.md
 **/*.lst
 bench_results/*
+*.out

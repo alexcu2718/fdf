@@ -268,6 +268,11 @@ where
     }
 
     #[inline]
+    fn should_send_dir(&self, dir: &DirEntry<S>) -> bool {
+        self.search_config.keep_dirs && self.file_filter(&dir) && dir.depth() != 0
+    }
+
+    #[inline]
     fn keep_hidden(&self, dir: &DirEntry<S>) -> bool {
         !self.search_config.hide_hidden || !dir.is_hidden()
     }
@@ -276,6 +281,12 @@ where
     fn file_filter(&self, dir: &DirEntry<S>) -> bool {
         (self.custom_filter)(&self.search_config, dir, self.filter)
     }
+
+    #[expect(
+        clippy::redundant_clone,
+        reason = "we have to clone when sending dirs because it's being used to keep the iterator going.
+         We don't want to collect an unnecessary vector, then into_iter and partition it,rather clone 1 directory than make an another vec!"
+    )]
     #[inline]
     #[expect(
         clippy::print_stderr,
@@ -290,36 +301,18 @@ where
     /// * `dir` - The `DirEntry` representing the directory to process.
     /// * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
-        let should_send_dir_or_symlink = // If we've gotten here, the dir must be a directory!
-        self.search_config.keep_dirs && self.file_filter(&dir) && dir.depth() != 0; // don't send root directory
+        let should_send_dir_or_symlink = self.should_send_dir(&dir); // If we've gotten here, the dir must be a directory!
 
-        if self
-            .search_config
-            .depth
-            .is_some_and(|depth| dir.depth >= depth)
-        {
-            if should_send_dir_or_symlink {
-                let _ = sender.send(vec![dir]);
-            } // have to put into a vec, this doesn't matter because this only happens when we depth limit
-            // I purposely ignore the result here because of pipe errors/other errors (like -n 10) that I should probably log.
-            // TODO-MAYBE
-
-            return; // stop processing this directory if depth limit is reached
-        }
+        handle_depth_limit!(self, dir, should_send_dir_or_symlink, sender); // a convenience macro to clear up code here
 
         #[cfg(target_os = "linux")]
         // linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
 
         #[cfg(not(target_os = "linux"))]
-        let direntries = dir.readdir(); // in theory I can use getattrlistbulk on macos, this has a LOT of complexity!
-        // https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5 TODO!
+        let direntries = dir.readdir(); // in theory I can use getattrlistbulk on macos(bsd potentially?), this has a LOT of complexity!
         // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls
         // THIS REQUIRES A LOT MORE WORK TO VALIDATE SAFETY BEFORE I CAN USE IT, IT'S ALSO VERY ROUGH SINCE MACOS API IS TERRIBLE
-
-        // These lambdas make the code a bit easier to follow, I might define them as functions later, TODO-MAYBE!
-        // directory or symlink lambda
-        // Keep all directories (and symlinks if following them)
 
         match direntries {
             Ok(entries) => {
@@ -347,32 +340,19 @@ where
 
                 // checking if we should send directories
                 if should_send_dir_or_symlink {
-                    #[expect(
-                        clippy::redundant_clone,
-                        reason = "we have to clone here unfortunately because it's being used to keep the iterator going. We don't want to collect a whole allocation!"
-                    )]
                     files.push(dir.clone());
                     // luckily we're only cloning 1 directory/symlink, not anything more than that.
                 }
 
                 // We do batch sending to minimise contention of sending
                 // as opposed to sending one at a time, which will cause tremendous locks
-                if !files.is_empty() {
-                    let _ = sender.send(files);
-                }
-            }
-            Err(
-                err @ (DirEntryError::TemporarilyUnavailable
-                | DirEntryError::AccessDenied(_)
-                | DirEntryError::InvalidPath
-                | DirEntryError::TooManySymbolicLinks),
-            ) => {
-                if self.search_config.show_errors {
-                    eprintln!("Error accessing {}: {}", dir.to_string_lossy(), err);
-                }
+                send_files_if_not_empty!(self, files, sender); // a convenience macro to simplify the code 
             }
             Err(err) => {
-                eprintln!("Unspecified directory entry error at {dir}: {err}. Please report this.",);
+                if self.search_config.show_errors {
+                    eprintln!("Error accessing {}: {}", dir.to_string_lossy(), err);
+                    //TODO! replace with logging eventually
+                }
             }
         }
     }

@@ -155,7 +155,6 @@ pub struct SearchConfig {
     ///if true, then we only match against the file name, otherwise we match against the full path when regexing
     pub(crate) depth: Option<u16>,
     ///the maximum depth to search, if None then no limit
-    pub(crate) follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
     /// a size filter
     pub(crate) size_filter: Option<SizeFilter>,
     /// a type filter
@@ -178,7 +177,6 @@ impl SearchConfig {
         filenameonly: bool,
         extension_match: Option<Box<[u8]>>,
         depth: Option<u16>,
-        follow_symlinks: bool,
         size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,
         show_errors: bool,
@@ -220,7 +218,6 @@ impl SearchConfig {
             extension_match,
             file_name_only,
             depth,
-            follow_symlinks,
             size_filter,
             type_filter,
             show_errors,

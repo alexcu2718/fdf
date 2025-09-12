@@ -579,7 +579,7 @@ mod tests {
         let _ = std::fs::remove_file(&file_path);
     }
     #[test]
-    fn test_full_path() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_full_path() {
         let temp_dir = std::env::temp_dir().join("test_full_path");
 
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -587,22 +587,26 @@ mod tests {
 
         let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
 
-        let file_path = DirEntry::<SlimmerBytes>::new(".")?.to_full_path()?;
+        let file_path = DirEntry::<SlimmerBytes>::new(".")
+            .unwrap()
+            .to_full_path()
+            .expect("should not fail");
 
         let my_path: Box<[u8]> = file_path.as_bytes().into();
 
-        let my_path_std: std::path::PathBuf = std::path::Path::new(".").canonicalize()?;
+        let my_path_std: std::path::PathBuf = std::path::Path::new(".")
+            .canonicalize()
+            .expect("should not fail");
         let bytes_std: &[u8] = my_path_std.as_os_str().as_bytes();
         assert_eq!(&*my_path, bytes_std);
 
         assert_eq!(file_path.is_dir(), my_path_std.is_dir());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
-        Ok(())
     }
     #[test]
     #[cfg(not(target_os = "macos"))] //enable this test on macos and see why ive disabled it. **** stupid
-    fn test_from_bytes() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_from_bytes() {
         //this is a mess of code but works lol to demonstrate infallibility(or idealllllllyyyyyyyyy...(ik its not))
         // Create a unique temp directory for this test
         let temp_dir = std::env::temp_dir().join("test_full_path_fdf");
@@ -610,19 +614,20 @@ mod tests {
 
         // Set up test file
         let test_file = temp_dir.join("test_file_fdf.txt");
-        std::fs::write(&test_file, "test content")?;
+        let _ = std::fs::write(&test_file, "test content");
 
         // Get canonical paths for comparison
-        let test_file_canon = std::fs::canonicalize(&test_file)?;
+        let test_file_canon = std::fs::canonicalize(&test_file).unwrap();
         let test_file_bytes = test_file_canon.as_os_str().as_bytes();
 
         // Test directory entry
 
-        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)?
+        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)
+            .expect("why did this fail? ")
             .to_full_path()
             .unwrap();
 
-        let canonical_path = temp_dir.canonicalize()?;
+        let canonical_path = temp_dir.canonicalize().unwrap();
 
         // Compare paths at byte level
         let dir_bytes = dir_entry.as_os_str();
@@ -634,11 +639,11 @@ mod tests {
         assert_eq!(
             dir_bytes.as_bytes(),
             canonical_bytes.as_bytes(),
-            "Path bytes should matchh"
+            "Path bytes should match"
         );
 
         // iteration
-        let mut entries = dir_entry.readdir()?.into_iter().collect::<Vec<_>>();
+        let mut entries = dir_entry.readdir().unwrap().into_iter().collect::<Vec<_>>();
 
         assert!(
             !entries.is_empty(),
@@ -663,13 +668,10 @@ mod tests {
         // Clean up
         let a = std::fs::remove_dir_all(temp_dir);
         assert!(a.is_ok(), "Should remove temp directory successfully");
-
-        Ok(())
     }
 
     #[test]
-    #[clippy::allow(while)]
-    fn test_iterator() -> core::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_iterator() {
         // make a unique test directory inside temp_dir
         let unique_id = "fdf_iterator_test";
         let dir_path: PathBuf = temp_dir().join(unique_id);
@@ -677,16 +679,16 @@ mod tests {
         let _ = fs::create_dir(dir_path.as_path());
 
         // create test files and subdirectory
-        fs::write(dir_path.join("file1.txt"), "content")?;
-        fs::write(dir_path.join("file2.txt"), "content")?;
-        fs::create_dir(dir_path.join("subdir"))?;
+        fs::write(dir_path.join("file1.txt"), "content").unwrap();
+        fs::write(dir_path.join("file2.txt"), "content").unwrap();
+        fs::create_dir(dir_path.join("subdir")).unwrap();
 
         // init a DirEntry for testing
 
-        let dir_entry = DirEntry::<SlimmerBytes>::new(&dir_path)?;
+        let dir_entry = DirEntry::<SlimmerBytes>::new(&dir_path).unwrap();
 
         // get iterator
-        let iter = dir_entry.readdir()?;
+        let iter = dir_entry.readdir().unwrap();
 
         // collect entries
         let mut entries = Vec::new();
@@ -715,18 +717,16 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir_path.as_path());
-
-        Ok(())
     }
 
     #[test]
-    fn test_handles_various_tests() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_handles_various_tests() {
         // create empty directory
         let tdir = temp_dir().join("NOTAREALPATHLALALA");
         let _ = fs::remove_dir_all(&tdir);
         let _ = fs::create_dir_all(&tdir);
 
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&tdir)?;
+        let dir_entry = DirEntry::<Arc<[u8]>>::new(&tdir).unwrap();
 
         //PAY ATTENTION TO THE ! MARKS, HARD TO ******** SEE
         assert_eq!(
@@ -751,8 +751,6 @@ mod tests {
         assert!(!dir_entry.is_hidden(), "Directory should be not hidden");
         assert!(!dir_entry.is_symlink(), "Directory should be not symlink");
         let _ = fs::remove_dir_all(&tdir);
-
-        Ok(())
     }
     #[test]
     fn test_dirname() {

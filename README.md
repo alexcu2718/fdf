@@ -72,6 +72,12 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 | General search | - | - | 1.70x faster |
 | Directory filtering | 461.8ms | 681.2ms | 1.48x faster |
 
+## Current Issues
+
+I've disabled symlink traversal due to infinite loop issues that require deep thought.
+
+The issue ultimately being how to do so without sacrificing performance/accuracy, I've put an example of how fd would fail to escape an infinite loop of symlinks, in recursive_symlink_fs_test.sh. It's a tricky one to solve and I'd rather limit it until I have an elegant solution!
+
 ## Technical Highlights
 
 ### Key Optimisations
@@ -226,16 +232,11 @@ Options:
   -j, --threads <THREAD_NUM>
           Number of threads to use, defaults to available threads available on your computer
 
-          [default: <NUM_THREADS>]
-
   -a, --absolute-path
           Show absolute paths of results, defaults to false
 
   -I, --include-dirs
           Include directories, defaults to off
-
-  -L, --follow
-          Include symlinks in traversal,defaults to false
 
       --nocolour
           Disable colouring output when sending to terminal

@@ -74,7 +74,7 @@ struct Args {
         help = "Include directories, defaults to off"
     )]
     keep_dirs: bool,
-
+    /*
     #[arg(
         short = 'L',
         long = "follow",
@@ -82,6 +82,8 @@ struct Args {
         help = "Include symlinks in traversal,defaults to false"
     )]
     follow_symlinks: bool,
+    */
+    //Commented out until satisfactory issue to symlink issue is solved.
     #[arg(
         long = "nocolour",
         default_value_t = false,
@@ -258,7 +260,6 @@ fn main() -> Result<(), DirEntryError> {
         .file_name_only(!args.full_path)
         .extension_match(args.extension)
         .max_depth(args.depth)
-        .follow_symlinks(args.follow_symlinks)
         .filter_by_size(size_of_file)
         .type_filter(type_filter)
         .show_errors(args.show_errors)

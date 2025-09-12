@@ -4,7 +4,6 @@
 //! - Parallel directory processing using Rayon
 //! - Low-level system calls for optimal performance on supported platforms
 //! - Flexible filtering by name, size, type, and custom criteria
-//! - Symbolic link handling with cycle detection
 //! - Cross-platform support with platform-specific optimisations
 //!
 //! # Examples
@@ -49,7 +48,6 @@
 //!         .case_insensitive(true)
 //!         .keep_dirs(true)
 //!         .max_depth(Some(5))
-//!         .follow_symlinks(false)
 //!         .filter_by_size(Some(SizeFilter::Min(1024)))
 //!         .type_filter(Some(FileTypeFilter::File))
 //!         .show_errors(true)

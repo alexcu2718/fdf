@@ -21,7 +21,6 @@
 //!   - Custom filter functions
 //! - **Memory Efficiency**: Multiple storage backends (Vec, Arc, Box, `SlimmerBytes` )
 //!   for different memory/performance trade-offs
-//! - **Cycle Detection**: Automatic symlink cycle prevention using inode caching
 //! - **Depth Control**: Configurable maximum search depth
 //! - **Path Canonicalisation**: Optional path resolution to absolute paths
 //! - **Error Handling**: Configurable error reporting with detailed diagnostics
@@ -51,7 +50,6 @@
 //!     let finder = Finder::<SlimmerBytes>::init("/path/to/search", "*.rs")
 //!         .keep_hidden(false)
 //!         .max_depth(Some(3))
-//!         .follow_symlinks(true)
 //!         .canonicalise_root(true)  // Resolve the root to a full path
 //!         .build()?;
 //!
@@ -70,8 +68,6 @@
 //!
 //! ## Safety Considerations
 //!
-//! - **Symlink Following**: Enabled by `follow_symlinks(true)`, but use with caution
-//!   to avoid infinite recursion (though we have guards against this!)
 //! - **Depth Limits**: Always consider setting `max_depth` for large directory trees
 //! - **Error Handling**: Use `show_errors(true)` to get diagnostic information about
 //!   permission errors and other issues
@@ -97,7 +93,7 @@
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
-    path::{Path, PathBuf},
+    path::Path,
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 #[macro_use]
@@ -149,9 +145,6 @@ mod config;
 pub use config::{FileTypeFilter, SearchConfig};
 mod filetype;
 pub use filetype::FileType;
-
-use dashmap::DashSet;
-use std::sync::LazyLock;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
@@ -224,7 +217,7 @@ where
         // try to construct the starting directory entry
         let entry = DirEntry::new(&self.root)?;
 
-        // only continue if it is traversible
+        // only continue if it is traversible (we can start on a symlink or a dir)
         if entry.is_traversible() {
             // spawn the search in a new thread
             rayon::spawn(move || {
@@ -238,38 +231,8 @@ where
     }
 
     #[inline]
-    fn directory_or_symlink_filter(&self, dir: &DirEntry<S>) -> bool {
-        /// A cache to hold inodes for directories and symlinks
-        /// Use a lock free Hashset to accomplish this
-        static INODE_CACHE: LazyLock<DashSet<u64>> = LazyLock::new(DashSet::new);
-
-        // Handle normal directories first
-        if dir.is_dir() {
-            if !self.search_config.follow_symlinks {
-                return true; // Do not cause any cache operations if not traversing symlinks
-            }
-            INODE_CACHE.insert(dir.ino());
-            return true;
-        }
-
-        // Handle symlinks pointing to directories
-        //Check if it's a directory and not already in the cache, then apply the file filter
-        // This is quite cheap because there are so few in a system anyway
-        // TODO! this could be optimised, it's just very tricky!
-        if self.search_config.follow_symlinks && dir.is_symlink() {
-            return dir.get_stat().is_ok_and(|stat| {
-                FileType::from_stat(&stat) == FileType::Directory
-                    && INODE_CACHE.insert(access_stat!(stat, st_ino))
-                    && self.file_filter(dir)
-            });
-        }
-
-        false
-    }
-
-    #[inline]
     fn should_send_dir(&self, dir: &DirEntry<S>) -> bool {
-        self.search_config.keep_dirs && self.file_filter(&dir) && dir.depth() != 0
+        self.search_config.keep_dirs && self.file_filter(dir) && dir.depth() != 0
     }
 
     #[inline]
@@ -301,9 +264,9 @@ where
     /// * `dir` - The `DirEntry` representing the directory to process.
     /// * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
-        let should_send_dir_or_symlink = self.should_send_dir(&dir); // If we've gotten here, the dir must be a directory!
+        let should_send_dir = self.should_send_dir(&dir); // If we've gotten here, the dir must be a directory!
 
-        handle_depth_limit!(self, dir, should_send_dir_or_symlink, sender); // a convenience macro to clear up code here
+        handle_depth_limit!(self, dir, should_send_dir, sender); // a convenience macro to clear up code here
 
         #[cfg(target_os = "linux")]
         // linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
@@ -316,22 +279,16 @@ where
 
         match direntries {
             Ok(entries) => {
-                // This boolean logic is designed for efficiency through short-circuiting.
-                // 1. We first check `keep_hidden`. If a file is hidden and `hide_hidden` is true,
-                //    the entire expression immediately evaluates to `false`, and we move to the next entry.
-                // 2. If the entry is not hidden (or `hide_hidden` is false), we then check
-                //    `(self.directory_or_symlink_filter(entry) || self.file_filter(entry))`.
-                // 3. This part uses another short-circuit. checks if the entry is
-                //    a directory or a symlink we should follow. If it is, the right side (`file_filter`)
-                //    is not evaluated, which avoids an expensive call to `file_filter` on directories.
-                // 4. If the entry is not a directory/symlink, we then run the `file_filter`, which
-                //    contains the main logic for filtering files (e.g., by name, size, filetype etc).
+                // Filtering strategy designed to handle symlinks safely and efficiently:
+                // 1. First check hidden status - skip early if hidden and not wanted
+                // 2. For directories/symlinks: only check `is_dir()` to avoid recursion issues
+                //    (we don't resolve symlinks here to prevent infinite loops)
+                // 3. For files: run the full `file_filter` which may check content, metadata, etc.
                 let (dirs, mut files): (Vec<_>, Vec<_>) = entries
                     .filter(|entry| {
-                        self.keep_hidden(entry)
-                            && (self.directory_or_symlink_filter(entry) || self.file_filter(entry))
+                        self.keep_hidden(entry) && (entry.is_dir() || self.file_filter(entry))
                     })
-                    .partition(|ent| self.directory_or_symlink_filter(ent));
+                    .partition(DirEntry::is_dir);
 
                 // Process directories in parallel
                 dirs.into_par_iter().for_each(|dirnt| {
@@ -339,9 +296,9 @@ where
                 });
 
                 // checking if we should send directories
-                if should_send_dir_or_symlink {
+                if should_send_dir {
                     files.push(dir.clone());
-                    // luckily we're only cloning 1 directory/symlink, not anything more than that.
+                    // luckily we're only cloning 1 directory here
                 }
 
                 // We do batch sending to minimise contention of sending
@@ -379,7 +336,6 @@ where
     pub(crate) file_name_only: bool,
     pub(crate) extension_match: Option<Box<[u8]>>,
     pub(crate) max_depth: Option<u16>,
-    pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter<S>>,
     pub(crate) size_filter: Option<SizeFilter>,
     pub(crate) file_type: Option<FileTypeFilter>,
@@ -407,7 +363,6 @@ where
             file_name_only: true,
             extension_match: None,
             max_depth: None,
-            follow_symlinks: false,
             filter: None,
             size_filter: None,
             file_type: None,
@@ -457,16 +412,6 @@ where
     /// Sets size-based filtering criteria.
     pub const fn filter_by_size(mut self, size_of: Option<SizeFilter>) -> Self {
         self.size_filter = size_of;
-        self
-    }
-
-    /// Sets whether to follow symlinks (default: false).
-    ///
-    /// # Warning
-    /// Enabling this may cause infinite recursion, although there are protections in place against it!
-    #[must_use]
-    pub const fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
-        self.follow_symlinks = follow_symlinks;
         self
     }
 
@@ -537,7 +482,6 @@ where
             self.file_name_only,
             self.extension_match,
             self.max_depth,
-            self.follow_symlinks,
             self.size_filter,
             self.file_type,
             self.show_errors,
@@ -592,7 +536,7 @@ where
             path_check
                 .canonicalize()
                 .map_or(Err(DirEntryError::InvalidPath), |canonical_path| {
-                    Ok(PathBuf::into_os_string(canonical_path))
+                    Ok(canonical_path.into())
                 })
         } else {
             Ok(dir_to_use)

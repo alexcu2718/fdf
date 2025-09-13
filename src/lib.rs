@@ -97,9 +97,15 @@
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
-    path::{Path, PathBuf},
+    os::unix::ffi::OsStrExt as _,
+    os::unix::fs::MetadataExt as _,
+    fs::metadata,
+    path::Path,
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
+
+
+
 #[macro_use]
 pub(crate) mod cursed_macros;
 
@@ -172,12 +178,13 @@ pub struct Finder<S>
 where
     S: BytesStorage,
 {
-    pub(crate) root: OsString,
-    pub(crate) search_config: SearchConfig,
-    pub(crate) filter: Option<DirEntryFilter<S>>,
+    pub(crate) root: OsString, //starting directory
+    pub(crate) search_config: SearchConfig, //a config to hold the search criteria
+    pub(crate) filter: Option<DirEntryFilter<S>>,  
     pub(crate) custom_filter: FilterType<S>,
+    pub(crate) starting_filesystem: Option<u64>, //Check if we're only sticking to same filesystem
 }
-///The Finder struct is used to find files in a directory.
+///The Finder struct is used to find files in your filesystem
 impl<S> Finder<S>
 //S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
 where
@@ -189,6 +196,8 @@ where
     pub fn init<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> FinderBuilder<S> {
         FinderBuilder::new(root, pattern)
     }
+
+
 
     #[must_use]
     #[inline]
@@ -238,48 +247,73 @@ where
     }
 
     #[inline]
+    /// Determines if a directory should be sent through the channel
+    fn should_send_dir(&self, dir: &DirEntry<S>) -> bool {
+        self.search_config.keep_dirs && self.file_filter(dir) && dir.depth() != 0
+    }
+
+    #[inline]
+    /// Determines if a directory should be traversed
+    fn should_traverse(&self, dir: &DirEntry<S>) -> bool {
+        dir.is_dir() // I don't use .is_traversible because I don't want to call a stat on a symlink if unnecessary
+            || (self.search_config.follow_symlinks
+                && dir.is_symlink()
+                && dir
+                    .get_stat() //resolving via stat, not lstat!
+                    .is_ok_and(|ent| FileType::from_stat(&ent) == FileType::Directory))
+    }
+
+
+    #[inline]
+    /// Filters out hidden files if configured to do so
+    fn keep_hidden(&self, dir: &DirEntry<S>) -> bool {
+        !self.search_config.hide_hidden || !dir.is_hidden()
+        // Some efficient boolean shortcircuits here to avoid checking
+    }
+
+    #[inline]
+    /// Applies custom file filtering logic
+    fn file_filter(&self, dir: &DirEntry<S>) -> bool {
+        (self.custom_filter)(&self.search_config, dir, self.filter)
+    }
+
+    #[inline]
     fn directory_or_symlink_filter(&self, dir: &DirEntry<S>) -> bool {
-        /// A cache to hold inodes for directories and symlinks
-        /// Use a lock free Hashset to accomplish this
-        static INODE_CACHE: LazyLock<DashSet<u64>> = LazyLock::new(DashSet::new);
+        // Note: access_stat is just a convenient macro to access stat structs by being independent (eg, casts ino to u64 on bsd  systems)
+        // Cache to hold (device, inode) pairs for directories and symlinks
+        // Use dashset to avoid RwLock Hashset (this is lock free and concurrent!)
+        static INODE_CACHE: LazyLock<DashSet<(u64, u64)>> = LazyLock::new(DashSet::new);
 
-        // Handle normal directories first
+        // Normal directories
         if dir.is_dir() {
-            if !self.search_config.follow_symlinks {
-                return true; // Do not cause any cache operations if not traversing symlinks
+            if !self.search_config.follow_symlinks && self.starting_filesystem.is_none() {
+                return true; // cheap fast-path, avoid stat/cache ops (this is the most likely 
+                //use case because it's simple and most people don't want to follow symlinks!)
             }
-            INODE_CACHE.insert(dir.ino());
-            return true;
-        }
-
-        // Handle symlinks pointing to directories
-        //Check if it's a directory and not already in the cache, then apply the file filter
-        // This is quite cheap because there are so few in a system anyway
-        // TODO! this could be optimised, it's just very tricky!
-        if self.search_config.follow_symlinks && dir.is_symlink() {
             return dir.get_stat().is_ok_and(|stat| {
-                FileType::from_stat(&stat) == FileType::Directory
-                    && INODE_CACHE.insert(access_stat!(stat, st_ino))
-                    && self.file_filter(dir)
+                // get the device number
+                let dev = access_stat!(stat, st_dev);
+                // Check same filesystem if enabled
+                self.starting_filesystem.is_none_or(|start_dev| dev == start_dev)
+                    && INODE_CACHE.insert((dev, access_stat!(stat, st_ino))) //returns a bool (false if cant be inserted (aka we've traversed it))
             });
         }
 
-        false
-    }
+        // Symlinks that may point to directories
+        if self.search_config.follow_symlinks && dir.is_symlink() {
+            return dir.get_stat().is_ok_and(|stat| {
+                FileType::from_stat(&stat) == FileType::Directory &&
+             // check it's a directory( we called stat, not lstat, so we're resolving the link)
+            !dir.to_full_path().is_ok_and(|fullpath| fullpath.starts_with(self.root.as_bytes())) && //could prebuild a regex into a lazylock here?
+             // Check if resolved path differs from root 
+            // if so, it means the directory traversal strategy will reach it anyway so we skip it 
+            self.starting_filesystem.is_none_or(|start_dev| start_dev==access_stat!(stat, st_dev)) && 
+            // Check filesystem boundary ^
+            INODE_CACHE.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
+            });
+        }
 
-    #[inline]
-    fn should_send_dir(&self, dir: &DirEntry<S>) -> bool {
-        self.search_config.keep_dirs && self.file_filter(&dir) && dir.depth() != 0
-    }
-
-    #[inline]
-    fn keep_hidden(&self, dir: &DirEntry<S>) -> bool {
-        !self.search_config.hide_hidden || !dir.is_hidden()
-    }
-
-    #[inline]
-    fn file_filter(&self, dir: &DirEntry<S>) -> bool {
-        (self.custom_filter)(&self.search_config, dir, self.filter)
+        false //not followable 
     }
 
     #[expect(
@@ -290,7 +324,7 @@ where
     #[inline]
     #[expect(
         clippy::print_stderr,
-        reason = "only enabled if explicitly requested or a very unusual error!"
+        reason = "only enabled if explicitly requested"
     )]
     /// Recursively processes a directory, sending found files to a channel.
     ///
@@ -301,37 +335,31 @@ where
     /// * `dir` - The `DirEntry` representing the directory to process.
     /// * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
     fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
+        if !self.directory_or_symlink_filter(&dir) {
+            return; //check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info
+        }
+
         let should_send_dir_or_symlink = self.should_send_dir(&dir); // If we've gotten here, the dir must be a directory!
 
         handle_depth_limit!(self, dir, should_send_dir_or_symlink, sender); // a convenience macro to clear up code here
 
         #[cfg(target_os = "linux")]
-        // linux with getdents (only linux has stable ABI, so we can lower down to assembly here, not for any other system tho)
+        // linux with getdents (only linux has stable ABI, so we can lower down to assembly/syscalls here, not for any other system tho)
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
-
         #[cfg(not(target_os = "linux"))]
         let direntries = dir.readdir(); // in theory I can use getattrlistbulk on macos(bsd potentially?), this has a LOT of complexity!
-        // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls
-        // THIS REQUIRES A LOT MORE WORK TO VALIDATE SAFETY BEFORE I CAN USE IT, IT'S ALSO VERY ROUGH SINCE MACOS API IS TERRIBLE
+        // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls (I'll get around to this eventually)
+        // I could get getdirentries alternatively for bsd
+     
 
         match direntries {
             Ok(entries) => {
-                // This boolean logic is designed for efficiency through short-circuiting.
-                // 1. We first check `keep_hidden`. If a file is hidden and `hide_hidden` is true,
-                //    the entire expression immediately evaluates to `false`, and we move to the next entry.
-                // 2. If the entry is not hidden (or `hide_hidden` is false), we then check
-                //    `(self.directory_or_symlink_filter(entry) || self.file_filter(entry))`.
-                // 3. This part uses another short-circuit. checks if the entry is
-                //    a directory or a symlink we should follow. If it is, the right side (`file_filter`)
-                //    is not evaluated, which avoids an expensive call to `file_filter` on directories.
-                // 4. If the entry is not a directory/symlink, we then run the `file_filter`, which
-                //    contains the main logic for filtering files (e.g., by name, size, filetype etc).
                 let (dirs, mut files): (Vec<_>, Vec<_>) = entries
                     .filter(|entry| {
                         self.keep_hidden(entry)
-                            && (self.directory_or_symlink_filter(entry) || self.file_filter(entry))
+                            && (self.should_traverse(entry) || self.file_filter(entry))
                     })
-                    .partition(|ent| self.directory_or_symlink_filter(ent));
+                    .partition(|ent| self.should_traverse(ent));
 
                 // Process directories in parallel
                 dirs.into_par_iter().for_each(|dirnt| {
@@ -386,6 +414,8 @@ where
     pub(crate) show_errors: bool,
     pub(crate) use_glob: bool,
     pub(crate) canonicalise: bool,
+    pub(crate) same_filesystem: bool,
+    pub(crate) thread_count:usize
 }
 
 impl<S> FinderBuilder<S>
@@ -398,6 +428,7 @@ where
     /// * `root` - The root directory to search
     /// * `pattern` - The glob pattern to match files against
     pub fn new<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> Self {
+        let thread_count=env!("CPU_COUNT").parse::<usize>().unwrap_or(1); //set default threadcount
         Self {
             root: root.as_ref().to_owned(),
             pattern: pattern.as_ref().to_owned(),
@@ -414,6 +445,8 @@ where
             show_errors: false,
             use_glob: false,
             canonicalise: false,
+            same_filesystem: false,
+            thread_count
         }
     }
     #[must_use]
@@ -514,6 +547,22 @@ where
 
         self
     }
+    #[must_use]
+    /// Set how many threads rayon is to use
+    pub const fn thread_count(mut self, threads: Option<usize>) -> Self {
+    if let Some(num) = threads {
+        self.thread_count = num;
+    }
+    self
+}
+
+
+    #[must_use]
+    /// Set whether to follow the same filesystem as root
+    pub const fn same_filesystem(mut self, yesorno: bool) -> Self {
+        self.same_filesystem = yesorno;
+        self
+    }
 
     /// Builds the Finder instance with the configured options.
     ///
@@ -527,7 +576,19 @@ where
     /// - The root path cannot be canonicalised (when canonicalise is enabled)
     pub fn build(self) -> Result<Finder<S>> {
         // Resolve and validate the root directory
-        let resolved_root = self.resolve_directory()?;
+        let resolved_root= self.resolve_directory()?;
+        let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(self.thread_count)
+        .build_global(); //Skip the error, it only errors if it's already been initialised
+
+
+        let starting_filesystem = if self.same_filesystem {
+            // Get the filesystem ID of the root directory directly
+            let metadata = metadata(&resolved_root)?;
+            Some(metadata.dev()) // dev() returns the filesystem ID on Unix
+        } else {
+            None
+        };
 
         let search_config = SearchConfig::new(
             self.pattern,
@@ -559,9 +620,9 @@ where
             search_config,
             filter: self.filter,
             custom_filter: lambda,
+            starting_filesystem
         })
     }
-
     /// Resolves and validates the root directory path.
     ///
     /// This function handles:
@@ -592,7 +653,7 @@ where
             path_check
                 .canonicalize()
                 .map_or(Err(DirEntryError::InvalidPath), |canonical_path| {
-                    Ok(PathBuf::into_os_string(canonical_path))
+                    Ok(canonical_path.into())
                 })
         } else {
             Ok(dir_to_use)

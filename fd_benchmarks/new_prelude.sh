@@ -7,7 +7,7 @@ LLVM=/tmp/llvm-project
 fdf_location=/tmp/fdf_test
 
 fdf_repo=https://github.com/alexcu2718/fdf
-
+alias sort='sort --parallel=$(nproc)' #speed up sorting speed
 SEARCH_ROOT="$LLVM"
 #basically unsetting the default search root
 

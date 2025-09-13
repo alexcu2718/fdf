@@ -72,6 +72,23 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 | General search | - | - | 1.70x faster |
 | Directory filtering | 461.8ms | 681.2ms | 1.48x faster |
 
+## Distinctions from fd/find
+
+My method of resolving symlinks differs quite a bit, naturally I've had to adopt a slightly different approach.
+
+*(I do hold the belief that following symlinks is not often wise, but I've included it for sake of completeness!)
+
+So basically, when following symlinks, you can expect slightly different behaviour.
+
+I've put an example of how fd would fail to escape an infinite loop of symlinks, in recursive_symlink_fs_test.sh.
+
+Thus, when traversing symlinks, your computer should never hang, it may produce more results than expected, for this reason I suggest using
+the flag --same-file-system when traversing symlinks, fd and find don't handle them too well without these flags either.
+
+My own computer will not terminate when following symlinks, this is due to  the existence of ~/.steam. ~/.wine and /sys /proc etc.
+
+It's my personal opinion that a program should always terminate regardless so I've put in defences against it, just a different implementation.
+
 ## Technical Highlights
 
 ### Key Optimisations
@@ -82,7 +99,7 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 
 ### Constant-Time Directory Entry Processing
 
-The following function provides an elegant solution to avoid branch mispredictions during directory entry parsing (a performance-critical loop):
+The following function provides an elegant solution to avoid branch mispredictions/SIMD instructions during directory entry parsing (a performance-critical loop):
 
 ```rust
 #[cfg(not(target_os = "linux"))]
@@ -91,7 +108,7 @@ use libc::dirent as dirent64;
 use libc::dirent64;
 
 // Computational complexity: O(1) - truly constant time
-// This is the little-endian implementation; see source for big-endian version
+// This is the little-endian implementation; see source for big-endian version(with better explanations!)
 // Used on Linux/Solaris/Illumos systems; OpenBSD/macOS store name length trivially
 // SIMD within a register, so no architecture dependence
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))] 
@@ -159,9 +176,9 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 
 ### Feature Enhancements (Planned)
 
-**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt  this, it's also complex to reproduce the time methodologies for all POSIX platforms because each one differs so much, the drawbacks of not using the stdlib!)
+** API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!)
 
-**Extended File Types**: Support for searching device drivers, and other special files(this isn't difficult at all, just not a priority)
+**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt  this, admittedly I've been focusing on tidying up the API a lot)
 
 **POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris (the other ones are embedded mostly, correct me if i'm wrong!)
 
@@ -226,7 +243,6 @@ Options:
   -j, --threads <THREAD_NUM>
           Number of threads to use, defaults to available threads available on your computer
 
-          [default: <NUM_THREADS>]
 
   -a, --absolute-path
           Show absolute paths of results, defaults to false
@@ -254,20 +270,6 @@ Options:
 
           [possible values: bash, elvish, fish, powershell, zsh]
 
-  -t, --type <TYPE_OF>
-          Select type of files.
-           Available options are:
-          d: Directory
-          u: Unknown
-          l: Symlink
-          f: Regular File
-          p: Pipe
-          c: Char Device
-          b: Block Device
-          s: Socket
-          e: Empty
-          x: Executable
-
   -p, --full-path
           Use a full path for regex matching, default to false
 
@@ -276,6 +278,9 @@ Options:
 
       --show-errors
           Show errors when traversing
+
+      --same-file-system
+          Only traverse the same filesystem as the starting directory
 
   -S, --size <size>
           Filter by file size
@@ -302,6 +307,20 @@ Options:
             --size -10mb       Files smaller than 10 megabytes
             --size +1gi        Files larger than 1 gibibyte
             --size 500ki       Files exactly 500 kibibytes
+
+  -t, --type <TYPE_OF>
+          Select type of files.
+           Available options are:
+          d: Directory
+          u: Unknown
+          l: Symlink
+          f: Regular File
+          p: Pipe
+          c: Char Device
+          b: Block Device
+          s: Socket
+          e: Empty
+          x: Executable
 
   -h, --help
           Print help (see a summary with '-h')
@@ -335,7 +354,7 @@ Options:
 -- Design filter mechanism avoiding:  
 -- Unnecessary directory allocations(via a closure with a function called on readdir/getdent)
 
-**5. MacOS/BSD(s(potentially) Specific Optimisations**
+**5. MacOS/*BSD((potentially) Specific Optimisations)**
 -- Implement an iterator using getattrlistbulk (this may be possible for bsd too? or perhaps just linking getdirentries for BSD systems)
 -- Test repo found at <https://github.com/alexcu2718/mac_os_getattrlistbulk_ls>
 -- This allows for much more efficient syscalls to get filesystem entries

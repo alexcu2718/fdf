@@ -15,14 +15,13 @@ pub enum DirEntryError {
     InvalidStat,
     TimeError,
     MetadataError,
-    TemporarilyUnavailable, // this is used to indicate that the operation should be retried later(however in this case its because proc/sys etc are private etc)
+    TemporarilyUnavailable, 
     Utf8Error(core::str::Utf8Error),
     BrokenPipe(io::Error),
     GlobToRegexError(crate::glob::Error),
     OSerror(io::Error),
     AccessDenied(io::Error),
     WriteError(io::Error),
-    RayonError(rayon::ThreadPoolBuildError),
     RegexError(regex::Error),
     NotADirectory,
     TooManySymbolicLinks,
@@ -74,24 +73,11 @@ impl fmt::Display for DirEntryError {
             Self::BrokenPipe(e) => write!(f, "Broken pipe: {e}"),
             Self::GlobToRegexError(e) => write!(f, "Glob to regex conversion error {e}"),
             Self::OSerror(e) => write!(f, "OS error: {e}"),
-            Self::RayonError(e) => write!(f, "Rayon error: {e}"),
             Self::WriteError(e) => write!(f, "Write error: {e}"),
             Self::AccessDenied(e) => write!(f, "Access denied: {e}"),
             Self::RegexError(e) => write!(f, "Regex error: {e}"),
             Self::NotADirectory => write!(f, "Not a directory"),
             Self::TooManySymbolicLinks => write!(f, "Too many symbolic links"),
-        }
-    }
-}
-
-impl core::error::Error for DirEntryError {
-    #[allow(clippy::wildcard_enum_match_arm)]
-    #[allow(clippy::pattern_type_mismatch)] //stupid
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            Self::Utf8Error(e) => Some(e),
-            Self::BrokenPipe(e) | Self::OSerror(e) => Some(e),
-            _ => None,
         }
     }
 }

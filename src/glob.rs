@@ -57,8 +57,6 @@ use core::fmt;
 use core::mem;
 use std::vec::IntoIter as VecIntoIter;
 
-//use regex::Regex;
-
 /// Error type for glob pattern operations
 #[allow(clippy::error_impl_error)]
 #[derive(Debug)]
@@ -68,7 +66,7 @@ pub enum Error {
     /// An unclosed character class
     UnclosedClass,
     /// A feature that is not yet implemented
-    NotImplemented(String),
+    NotImplemented(Box<str>),
     /// A range where the start character is after the end one
     ReversedRange(char, char),
     /// A dash after a range in a character class
@@ -76,7 +74,7 @@ pub enum Error {
     /// An unclosed alternation
     UnclosedAlternation,
     /// An invalid regular expression was generated from the pattern
-    InvalidRegex(String, String),
+    InvalidRegex(Box<str>),
 }
 #[allow(clippy::error_impl_error)]
 #[allow(clippy::pattern_type_mismatch)] //bug
@@ -93,8 +91,8 @@ impl fmt::Display for Error {
                 write!(f, "Range after range: {start}-{end}")
             }
             Self::UnclosedAlternation => write!(f, "Unclosed alternation"),
-            Self::InvalidRegex(pattern, error) => {
-                write!(f, "Invalid regex pattern '{pattern}': {error}")
+            Self::InvalidRegex(message) => {
+                write!(f, "Invalid regex: {message}")
             }
         }
     }
@@ -510,9 +508,10 @@ where
     fn handle_class_range(&mut self, mut acc: ClassAccumulator, start: char) -> StringResult {
         match self.pattern.next() {
             Some(chr) => match chr {
-                '\\' => Err(Error::NotImplemented(format!(
-                    "FIXME: handle class range end escape with {acc:?} start {start:?}"
-                ))),
+                '\\' => Err(Error::NotImplemented(
+                    format!("FIXME: handle class range end escape with {acc:?} start {start:?}")
+                        .into(),
+                )),
                 ']' => {
                     acc.items.push(ClassItem::Char(start));
                     acc.items.push(ClassItem::Char('-'));
@@ -579,7 +578,7 @@ where
                     Ok(None)
                 }
                 '[' => Err(Error::NotImplemented(
-                    "FIXME: alternate character class".to_owned(),
+                    "FIXME: alternate character class".into(),
                 )),
                 other => {
                     current.push(other);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-echo -e "IMPORTANT: Open a NEW TERMINAL SESSION due to potential weird terminal issues.\n"
-echo -e "It is highly recommended to open a NEW TERMINAL SESSION after running this script.\n"
+echo -e "IMPORTANT: PLEASE DELETE THE FILE THE FILE \n  OTHERWISE YOU'LL HAVE SOME FUNKY effects trying to do anything in this directory!\n"
+
 
 TEST_DIR="looptest"
 LOOP_DIR="test_loops"
@@ -15,7 +15,7 @@ rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR" || exit 1
 
-# Create directory structure with recursive symlinks
+# Create directory structure with recursive symlinks (these are all fake files )
 mkdir -p \
     bin \
     usr/bin \
@@ -37,14 +37,14 @@ ln -sf "$(cd .. && pwd)"      ".wine/dosdevices/z:/home"
 ln -sf .. loopdir
 ln -sf /  root_link
 
-echo "This is a script to find  expose an infinite loop issue found in fd (I had it too, needed to fix it!)."
+echo "This is a script to find  expose an infinite loop issue found in fd"
 echo "fd may not terminate due to symlinks similar to those in ~/.steam or ~/.wine."
 echo "This is an issue on my own PC, but you can emulate it with this"
 echo "On most systems this will be fine, but on some it will show loop issues."
 
 cd "$ORIGINAL_DIR" || exit 1
 
-echo "Testing fd with recursive symlinks (timeout: 30 seconds)..."
+echo -e "\n Testing fd with recursive symlinks (timeout: 30 seconds)..."
 if timeout 30 fd '.' -HIL "$LOOP_DIR/$TEST_DIR" --type l >/dev/null 2>&1; then
     echo "fd completed successfully within 10 seconds"
 else
@@ -58,7 +58,6 @@ else
 fi
 
 
-
 if [ -d "$LOOP_DIR" ]; then
     read -p "Remove $LOOP_DIR directory? (y/N): " remove_answer
     case "$remove_answer" in
@@ -70,17 +69,6 @@ if [ -d "$LOOP_DIR" ]; then
         *)
             echo "Keeping $LOOP_DIR directory for inspection."
             echo "You can examine it at: $(pwd)/$LOOP_DIR"
-            ;;
-    esac
-    
-    read -p "Reset terminal? (y/N): " reset_answer
-    case "$reset_answer" in
-        [yY])
-            echo "Resetting terminal..."
-            reset
-            ;;
-        *)
-            echo "Terminal not reset."
             ;;
     esac
 else

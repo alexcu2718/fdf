@@ -9,16 +9,6 @@ use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 use std::str;
-const FILE_TYPES: &str = "d: Directory
-u: Unknown
-l: Symlink
-f: Regular File
-p: Pipe
-c: Char Device
-b: Block Device
-s: Socket
-e: Empty
-x: Executable";
 
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -56,10 +46,9 @@ struct Args {
     #[arg(
         short = 'j',
         long = "threads",
-        default_value_t = env!("CPU_COUNT").parse::<usize>().unwrap_or(1),
         help = "Number of threads to use, defaults to available threads available on your computer",
     )]
-    thread_num: usize,
+    thread_num: Option<usize>,
     #[arg(
         short = 'a',
         long = "absolute-path",
@@ -118,14 +107,6 @@ struct Args {
     generate: Option<Shell>,
 
     #[arg(
-        short = 't',
-        long = "type",
-        required = false,
-        help="Filter by file type, eg -d (directory) -f(regular file)",
-        long_help = format!("Select type of files.\n Available options are:\n{}", FILE_TYPES),
-    )]
-    type_of: Option<String>,
-    #[arg(
         short = 'p',
         long = "full-path",
         required = false,
@@ -151,6 +132,14 @@ struct Args {
         help = "Show errors when traversing"
     )]
     show_errors: bool,
+    #[arg(
+        long = "same-file-system",
+        alias="one-file-system", //alias for fd for easier use
+        required = false,
+        default_value_t = false,
+        help = "Only traverse the same filesystem as the starting directory"
+    )]
+    same_file_system: bool,
     /// Filter by file size
     ///
     /// PREFIXES:
@@ -185,17 +174,35 @@ struct Args {
         verbatim_doc_comment
     )]
     size: Option<String>,
+    /// Filter by file type, eg -d (directory) -f (regular file)
+    ///
+    /// Available options are:
+    /// d: Directory
+    /// u: Unknown
+    /// l: Symlink
+    /// f: Regular File
+    /// p: Pipe
+    /// c: Char Device
+    /// b: Block Device
+    /// s: Socket
+    /// e: Empty
+    /// x: Executable
+    #[arg(
+        short = 't',
+        long = "type",
+        required = false,
+        help="Filter by file type, eg -d (directory) -f(regular file)",
+        verbatim_doc_comment
+    )]
+    type_of: Option<String>,
 }
 
-#[allow(clippy::exit)]
-#[allow(clippy::print_stderr)]
+#[allow(clippy::exit)] //exiting for cli use
+#[expect(clippy::print_stderr,reason="Similar to above")]
 fn main() -> Result<(), DirEntryError> {
     let args = Args::parse();
 
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(args.thread_num)
-        .build_global()
-        .map_err(DirEntryError::RayonError)?;
+
 
     if let Some(generator) = args.generate {
         let mut cmd = Args::command();
@@ -263,6 +270,8 @@ fn main() -> Result<(), DirEntryError> {
         .type_filter(type_filter)
         .show_errors(args.show_errors)
         .use_glob(args.glob)
+        .same_filesystem(args.same_file_system)
+        .thread_count(args.thread_num)
         .build()?;
 
     let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n, args.no_colour);

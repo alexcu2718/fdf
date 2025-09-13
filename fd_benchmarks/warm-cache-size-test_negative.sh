@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 source "prelude.sh"
 source "new_prelude.sh"
@@ -29,18 +29,19 @@ hyperfine \
 eval "$COMMAND_FD" | sort > "$OUTPUT_DIR/fd_size_home_negative.lst"
 eval "$COMMAND_FIND" | sort > "$OUTPUT_DIR/fdf_size_home_negative.lst"
 
-diff -u "$OUTPUT_DIR/fd_size_home_.lst" "$OUTPUT_DIR/fdf_size_home_negative.lst" > "$OUTPUT_DIR/fd_diff_size_home_negative.md"
+
+diff -u "$OUTPUT_DIR/fd_size_home_negative.lst" "$OUTPUT_DIR/fdf_size_home_negative.lst" > "$OUTPUT_DIR/fd_diff_size_home_negative.md"
 
 differences=$(comm -3 "$OUTPUT_DIR/fd_size_home_negative.lst" "$OUTPUT_DIR/fdf_size_home_negative.lst" | wc -l)
 echo "Total files differing: $differences"
 
 if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fd:"
-  comm -23 "$OUTPUT_DIR/fd_size_home.lst" "$OUTPUT_DIR/fdf_size_home_negative.lst"
-  
+  comm -23 "$OUTPUT_DIR/fd_size_home_negative.lst" "$OUTPUT_DIR/fdf_size_home_negative.lst"
+
   echo -e "\nFiles only in fdf:"
-  comm -13 "$OUTPUT_DIR/fd_size_home.lst" "$OUTPUT_DIR/fdf_size_home_negative.lst"
-  
+  comm -13 "$OUTPUT_DIR/fd_size_home_negative.lst" "$OUTPUT_DIR/fdf_size_home_negative.lst"
+
 else
   echo "No differences found in direct execution"
 fi

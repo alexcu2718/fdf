@@ -97,14 +97,12 @@
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
+    fs::metadata,
     os::unix::ffi::OsStrExt as _,
     os::unix::fs::MetadataExt as _,
-    fs::metadata,
     path::Path,
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
-
-
 
 #[macro_use]
 pub(crate) mod cursed_macros;
@@ -154,10 +152,8 @@ pub use glob::glob_to_regex;
 mod config;
 pub use config::{FileTypeFilter, SearchConfig};
 mod filetype;
-pub use filetype::FileType;
-
 use dashmap::DashSet;
-use std::sync::LazyLock;
+pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
@@ -178,11 +174,13 @@ pub struct Finder<S>
 where
     S: BytesStorage,
 {
-    pub(crate) root: OsString, //starting directory
+    pub(crate) root: OsString,              //starting directory
     pub(crate) search_config: SearchConfig, //a config to hold the search criteria
-    pub(crate) filter: Option<DirEntryFilter<S>>,  
+    pub(crate) filter: Option<DirEntryFilter<S>>,
     pub(crate) custom_filter: FilterType<S>,
     pub(crate) starting_filesystem: Option<u64>, //Check if we're only sticking to same filesystem
+    pub(crate) inode_cache: Option<DashSet<(u64, u64)>>, //        // Cache to hold (device, inode) pairs for directories and symlinks
+                                                         // Use dashset to avoid RwLock Hashset (this is lock free and concurrent!)
 }
 ///The Finder struct is used to find files in your filesystem
 impl<S> Finder<S>
@@ -196,8 +194,6 @@ where
     pub fn init<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> FinderBuilder<S> {
         FinderBuilder::new(root, pattern)
     }
-
-
 
     #[must_use]
     #[inline]
@@ -263,7 +259,6 @@ where
                     .is_ok_and(|ent| FileType::from_stat(&ent) == FileType::Directory))
     }
 
-
     #[inline]
     /// Filters out hidden files if configured to do so
     fn keep_hidden(&self, dir: &DirEntry<S>) -> bool {
@@ -280,22 +275,23 @@ where
     #[inline]
     fn directory_or_symlink_filter(&self, dir: &DirEntry<S>) -> bool {
         // Note: access_stat is just a convenient macro to access stat structs by being independent (eg, casts ino to u64 on bsd  systems)
-        // Cache to hold (device, inode) pairs for directories and symlinks
-        // Use dashset to avoid RwLock Hashset (this is lock free and concurrent!)
-        static INODE_CACHE: LazyLock<DashSet<(u64, u64)>> = LazyLock::new(DashSet::new);
-
         // Normal directories
         if dir.is_dir() {
-            if !self.search_config.follow_symlinks && self.starting_filesystem.is_none() {
+            if self.inode_cache.is_none() {
+                //this cache only exists if on same filesystem or following symlinks to prevent recursion
                 return true; // cheap fast-path, avoid stat/cache ops (this is the most likely 
-                //use case because it's simple and most people don't want to follow symlinks!)
+                //use case because it's simple and most people don't want to follow symlinks or use same-file-system!)
             }
             return dir.get_stat().is_ok_and(|stat| {
                 // get the device number
                 let dev = access_stat!(stat, st_dev);
                 // Check same filesystem if enabled
-                self.starting_filesystem.is_none_or(|start_dev| dev == start_dev)
-                    && INODE_CACHE.insert((dev, access_stat!(stat, st_ino))) //returns a bool (false if cant be inserted (aka we've traversed it))
+                self.starting_filesystem
+                    .is_none_or(|start_dev| dev == start_dev)
+                    && self
+                        .inode_cache
+                        .as_ref()
+                        .is_none_or(|cache| cache.insert((dev, access_stat!(stat, st_ino)))) //returns a bool (false if cant be inserted (aka we've traversed it))
             });
         }
 
@@ -304,12 +300,12 @@ where
             return dir.get_stat().is_ok_and(|stat| {
                 FileType::from_stat(&stat) == FileType::Directory &&
              // check it's a directory( we called stat, not lstat, so we're resolving the link)
-            !dir.to_full_path().is_ok_and(|fullpath| fullpath.starts_with(self.root.as_bytes())) && //could prebuild a regex into a lazylock here?
+            dir.to_full_path().is_ok_and(|fullpath| !fullpath.starts_with(self.root.as_bytes())) &&
              // Check if resolved path differs from root 
             // if so, it means the directory traversal strategy will reach it anyway so we skip it 
-            self.starting_filesystem.is_none_or(|start_dev| start_dev==access_stat!(stat, st_dev)) && 
+            self.starting_filesystem.is_none_or(|start_dev| start_dev==access_stat!(stat, st_dev)) &&
             // Check filesystem boundary ^
-            INODE_CACHE.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
+            self.inode_cache.as_ref().is_none_or(|cache| cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))))
             });
         }
 
@@ -322,10 +318,7 @@ where
          We don't want to collect an unnecessary vector, then into_iter and partition it,rather clone 1 directory than make an another vec!"
     )]
     #[inline]
-    #[expect(
-        clippy::print_stderr,
-        reason = "only enabled if explicitly requested"
-    )]
+    #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
     /// Recursively processes a directory, sending found files to a channel.
     ///
     /// This method uses a depth-first traversal with `rayon` to process directories
@@ -350,7 +343,6 @@ where
         let direntries = dir.readdir(); // in theory I can use getattrlistbulk on macos(bsd potentially?), this has a LOT of complexity!
         // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls (I'll get around to this eventually)
         // I could get getdirentries alternatively for bsd
-     
 
         match direntries {
             Ok(entries) => {
@@ -415,7 +407,7 @@ where
     pub(crate) use_glob: bool,
     pub(crate) canonicalise: bool,
     pub(crate) same_filesystem: bool,
-    pub(crate) thread_count:usize
+    pub(crate) thread_count: usize,
 }
 
 impl<S> FinderBuilder<S>
@@ -428,7 +420,7 @@ where
     /// * `root` - The root directory to search
     /// * `pattern` - The glob pattern to match files against
     pub fn new<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> Self {
-        let thread_count=env!("CPU_COUNT").parse::<usize>().unwrap_or(1); //set default threadcount
+        let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1); //set default threadcount
         Self {
             root: root.as_ref().to_owned(),
             pattern: pattern.as_ref().to_owned(),
@@ -446,7 +438,7 @@ where
             use_glob: false,
             canonicalise: false,
             same_filesystem: false,
-            thread_count
+            thread_count,
         }
     }
     #[must_use]
@@ -550,12 +542,11 @@ where
     #[must_use]
     /// Set how many threads rayon is to use
     pub const fn thread_count(mut self, threads: Option<usize>) -> Self {
-    if let Some(num) = threads {
-        self.thread_count = num;
+        if let Some(num) = threads {
+            self.thread_count = num;
+        }
+        self
     }
-    self
-}
-
 
     #[must_use]
     /// Set whether to follow the same filesystem as root
@@ -576,11 +567,11 @@ where
     /// - The root path cannot be canonicalised (when canonicalise is enabled)
     pub fn build(self) -> Result<Finder<S>> {
         // Resolve and validate the root directory
-        let resolved_root= self.resolve_directory()?;
+        let resolved_root = self.resolve_directory()?;
         let _ = rayon::ThreadPoolBuilder::new()
-        .num_threads(self.thread_count)
-        .build_global(); //Skip the error, it only errors if it's already been initialised
-
+            .num_threads(self.thread_count)
+            .build_global(); //Skip the error, it only errors if it's already been initialised
+        //we do this to avoid passing pools to every iterator (shared access locks etc.)
 
         let starting_filesystem = if self.same_filesystem {
             // Get the filesystem ID of the root directory directly
@@ -615,12 +606,16 @@ where
             }
         };
 
+        let inode_cache: Option<DashSet<(u64, u64)>> =
+            (self.same_filesystem || self.follow_symlinks).then(DashSet::new);
+
         Ok(Finder {
             root: resolved_root,
             search_config,
             filter: self.filter,
             custom_filter: lambda,
-            starting_filesystem
+            starting_filesystem,
+            inode_cache,
         })
     }
     /// Resolves and validates the root directory path.

@@ -15,7 +15,7 @@ pub enum DirEntryError {
     InvalidStat,
     TimeError,
     MetadataError,
-    TemporarilyUnavailable, 
+    TemporarilyUnavailable,
     Utf8Error(core::str::Utf8Error),
     BrokenPipe(io::Error),
     GlobToRegexError(crate::glob::Error),

@@ -46,7 +46,7 @@ struct Args {
     #[arg(
         short = 'j',
         long = "threads",
-        help = "Number of threads to use, defaults to available threads available on your computer",
+        help = "Number of threads to use, defaults to available threads available on your computer"
     )]
     thread_num: Option<usize>,
     #[arg(
@@ -95,6 +95,7 @@ struct Args {
     #[arg(
         short = 'd',
         long = "depth",
+        alias = "max-depth",
         help = "Retrieves only traverse to x depth"
     )]
     depth: Option<u16>,
@@ -191,18 +192,16 @@ struct Args {
         short = 't',
         long = "type",
         required = false,
-        help="Filter by file type, eg -d (directory) -f(regular file)",
+        help = "Filter by file type, eg -d (directory) -f(regular file)",
         verbatim_doc_comment
     )]
     type_of: Option<String>,
 }
 
 #[allow(clippy::exit)] //exiting for cli use
-#[expect(clippy::print_stderr,reason="Similar to above")]
+#[expect(clippy::print_stderr, reason = "Similar to above")]
 fn main() -> Result<(), DirEntryError> {
     let args = Args::parse();
-
-
 
     if let Some(generator) = args.generate {
         let mut cmd = Args::command();
@@ -213,13 +212,10 @@ fn main() -> Result<(), DirEntryError> {
         return Ok(());
     }
 
-    let start_pattern = args.pattern.as_ref().map_or_else(
-        || {
-            eprintln!("Error: No pattern provided. Exiting.");
-            std::process::exit(1);
-        },
-        core::clone::Clone::clone,
-    );
+    let start_pattern = args
+        .pattern
+        .as_ref()
+        .map_or_else(|| ".".into(), core::clone::Clone::clone);
 
     if args.depth.is_some_and(|depth| depth == 0) {
         eprintln!("Error: Depth cannot be 0. Exiting.");

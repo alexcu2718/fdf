@@ -44,10 +44,10 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use fdf::{Finder, SlimmerBytes,DirEntryError,DirEntry};
+//! use fdf::{Finder, SlimmerBytes,DirEntry,SearchConfigError};
 //! use std::sync::mpsc::Receiver;
 //!
-//! fn find_files() -> Result<Receiver<Vec<DirEntry<SlimmerBytes>>>, DirEntryError> {
+//! fn find_files() -> Result<Receiver<Vec<DirEntry<SlimmerBytes>>>, SearchConfigError> {
 //!     let finder = Finder::<SlimmerBytes>::init("/path/to/search", "*.rs")
 //!         .keep_hidden(false)
 //!         .max_depth(Some(3))
@@ -119,6 +119,9 @@ mod syscalls;
 #[cfg(target_os = "linux")]
 pub use syscalls::{close_asm, getdents_asm, open_asm};
 
+mod printer;
+pub(crate) use printer::write_paths_coloured;
+
 mod buffer;
 mod test;
 pub use buffer::{AlignedBuffer, ValueType};
@@ -129,7 +132,7 @@ mod direntry;
 pub use direntry::DirEntry;
 
 mod error;
-pub use error::DirEntryError;
+pub use error::{DirEntryError, SearchConfigError};
 
 mod custom_types_result;
 
@@ -164,23 +167,33 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 // The `Finder` struct is the main entry point for the file search.
 // Its methods are exposed for building the search configuration
-#[derive(Debug)]
-/// Creates a new `FinderBuilder` with required fields.
+
+/// The main entry point for file system search operations.
 ///
-/// # Arguments
-/// * `root` - The root directory to search
-/// * `pattern` - The glob pattern to match files against
+/// `Finder` provides a high-performance, parallel file system traversal API
+/// with configurable filtering and search criteria. It uses Rayon for parallel
+/// execution and provides both synchronous and asynchronous result handling.
+///
+/// # Type Parameters
+/// - `S`: Bytes storage type implementing [`BytesStorage`] (e.g., `Vec<u8>`, `Arc<[u8]>`)
+#[derive(Debug)]
 pub struct Finder<S>
 where
     S: BytesStorage,
 {
-    pub(crate) root: OsString,              //starting directory
-    pub(crate) search_config: SearchConfig, //a config to hold the search criteria
+    /// Root directory path for the search operation
+    pub(crate) root: OsString,
+    /// Configuration for search criteria and filtering options
+    pub(crate) search_config: SearchConfig,
+    /// Optional custom filter function for advanced entry filtering
     pub(crate) filter: Option<DirEntryFilter<S>>,
+    /// Internal filter logic combining all filtering criteria
     pub(crate) custom_filter: FilterType<S>,
-    pub(crate) starting_filesystem: Option<u64>, //Check if we're only sticking to same filesystem
-    pub(crate) inode_cache: Option<DashSet<(u64, u64)>>, //        // Cache to hold (device, inode) pairs for directories and symlinks
-                                                         // Use dashset to avoid RwLock Hashset (this is lock free and concurrent!)
+    /// Filesystem device ID for same-filesystem constraint (optional)
+    pub(crate) starting_filesystem: Option<u64>,
+    /// Cache for (device, inode) pairs to prevent duplicate traversal with symlinks
+    /// Uses `DashSet` for lock-free concurrent access
+    pub(crate) inode_cache: Option<DashSet<(u64, u64)>>,
 }
 ///The Finder struct is used to find files in your filesystem
 impl<S> Finder<S>
@@ -195,14 +208,6 @@ where
         FinderBuilder::new(root, pattern)
     }
 
-    #[must_use]
-    #[inline]
-    /// Set a filter function to filter out entries.
-    pub fn with_type_filter(mut self, filter: DirEntryFilter<S>) -> Self {
-        self.filter = Some(filter);
-        self
-    }
-
     #[inline]
     /// Traverse the directory tree starting from the root and return a receiver for the found entries.
     ///
@@ -215,19 +220,21 @@ where
     /// results as they become available.
     ///
     /// # Errors
-    /// Returns `Err(DirEntryError::InvalidPath)` if:
-    /// - The root path cannot be converted to a `DirEntry`
-    /// - The root directory is not traversible (e.g., not a directory or inaccessible(usually permissions based))
+    /// Returns `Err(SearchConfigError)` if:
+    /// - The root path cannot be converted to a `DirEntry` (`TraversalError`)
+    /// - The root directory is not traversible (`NotADirectory`)
+    /// - The root directory is inaccessible due to permissions (`TraversalError`)
+    ///
     ///
     /// # Performance Notes
     /// - Uses an unbounded channel to avoid blocking the producer thread
-    /// - Entries are sent in batches to minimize channel contention
+    /// - Entries are sent in batches to minimise channel contention
     /// - Traversal runs in parallel using Rayon's work-stealing scheduler
-    pub fn traverse(self) -> Result<Receiver<Vec<DirEntry<S>>>> {
+    pub fn traverse(self) -> core::result::Result<Receiver<Vec<DirEntry<S>>>, SearchConfigError> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry<S>>>) = unbounded();
 
         // try to construct the starting directory entry
-        let entry = DirEntry::new(&self.root)?;
+        let entry = DirEntry::new(&self.root).map_err(SearchConfigError::TraversalError)?;
 
         // only continue if it is traversible
         if entry.is_traversible() {
@@ -238,9 +245,11 @@ where
 
             Ok(receiver)
         } else {
-            Err(DirEntryError::NotADirectory)
+            Err(SearchConfigError::NotADirectory)
         }
     }
+
+    // fn print_results(self)
 
     #[inline]
     /// Determines if a directory should be sent through the channel
@@ -249,14 +258,24 @@ where
     }
 
     #[inline]
-    /// Determines if a directory should be traversed
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "Exhaustive on traversible types"
+    )]
+    /// Determines if a directory should be traversed and caches the result
     fn should_traverse(&self, dir: &DirEntry<S>) -> bool {
-        dir.is_dir() // I don't use .is_traversible because I don't want to call a stat on a symlink if unnecessary
-            || (self.search_config.follow_symlinks
-                && dir.is_symlink()
-                && dir
-                    .get_stat() //resolving via stat, not lstat!
-                    .is_ok_and(|ent| FileType::from_stat(&ent) == FileType::Directory))
+        match dir.file_type {
+            // Regular directory - always traversible
+            FileType::Directory => true,
+
+            // Symlink - check if we should follow and if it points to a directory(the result is cached so the call isn't required each time.)
+            FileType::Symlink if self.search_config.follow_symlinks => {
+                dir.check_symlink_traversibility()
+            }
+
+            // All other file types or symlinks we don't follow
+            _ => false,
+        }
     }
 
     #[inline]
@@ -273,43 +292,72 @@ where
     }
 
     #[inline]
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "Exhaustive on traversible types"
+    )]
+    /// Advanced filtering for directories and symlinks with filesystem constraints.
+    ///
+    /// Handles same-filesystem constraints, inode caching, and symlink resolution
+    /// to prevent infinite loops and duplicate traversal.
     fn directory_or_symlink_filter(&self, dir: &DirEntry<S>) -> bool {
-        // Note: access_stat is just a convenient macro to access stat structs by being independent (eg, casts ino to u64 on bsd  systems)
-        // Normal directories
-        if dir.is_dir() {
-            if self.inode_cache.is_none() {
-                //this cache only exists if on same filesystem or following symlinks to prevent recursion
-                return true; // cheap fast-path, avoid stat/cache ops (this is the most likely 
-                //use case because it's simple and most people don't want to follow symlinks or use same-file-system!)
-            }
-            return dir.get_stat().is_ok_and(|stat| {
-                // get the device number
-                let dev = access_stat!(stat, st_dev);
+        match dir.file_type {
+            // Normal directories
+            FileType::Directory => {
+                if self.inode_cache.is_none() {
+                    // Fast path: no cache means no filesystem constraints
+                    return true;
+                }
+
+                dir.get_stat().is_ok_and(|stat| {
                 // Check same filesystem if enabled
-                self.starting_filesystem
-                    .is_none_or(|start_dev| dev == start_dev)
-                    && self
-                        .inode_cache
-                        .as_ref()
-                        .is_none_or(|cache| cache.insert((dev, access_stat!(stat, st_ino)))) //returns a bool (false if cant be inserted (aka we've traversed it))
-            });
-        }
+                self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
+                // Check if we've already traversed this inode
+                self.inode_cache.as_ref().is_none_or(|cache| {
+                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
+                })
+            })
+            }
 
-        // Symlinks that may point to directories
-        if self.search_config.follow_symlinks && dir.is_symlink() {
-            return dir.get_stat().is_ok_and(|stat| {
+            // Symlinks that may point to directories
+            FileType::Symlink if self.search_config.follow_symlinks => {
+                dir.get_stat().is_ok_and(|stat| {
                 FileType::from_stat(&stat) == FileType::Directory &&
-             // check it's a directory( we called stat, not lstat, so we're resolving the link)
-            dir.to_full_path().is_ok_and(|fullpath| !fullpath.starts_with(self.root.as_bytes())) &&
-             // Check if resolved path differs from root 
-            // if so, it means the directory traversal strategy will reach it anyway so we skip it 
-            self.starting_filesystem.is_none_or(|start_dev| start_dev==access_stat!(stat, st_dev)) &&
-            // Check filesystem boundary ^
-            self.inode_cache.as_ref().is_none_or(|cache| cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))))
-            });
-        }
+                // Check filesystem boundary
+                self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
+                // Check if we've already traversed this inode
+                self.inode_cache.as_ref().is_none_or(|cache| {
+                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
+                }) &&
+                // Ensure resolved path differs from root to avoid redundant traversal
+                dir.to_full_path().is_ok_and(|fullpath| !fullpath.starts_with(self.root.as_bytes()))
+            })
+            }
 
-        false //not followable 
+            // All other file types (files, non-followed symlinks, etc.)
+            _ => false,
+        }
+    }
+    #[inline]
+    /// Prints search results to stdout with optional coloring and count limiting.
+    ///
+    /// This is a convenience method that handles the entire search, result collection,
+    /// and formatted output in one call.
+    ///
+    /// # Arguments
+    /// * `use_colours` - Enable ANSI color output for better readability (it's always off if output does not support colours)
+    /// * `result_count` - Optional limit on the number of results to display
+    ///
+    /// # Errors
+    /// Either:
+    /// Returns [`SearchConfigError::TraversalError`] if the search operation fails
+    /// Returns [`SearchConfigError::IOError`] if the search operation fails
+    pub fn print_results(
+        self,
+        use_colours: bool,
+        result_count: Option<usize>,
+    ) -> core::result::Result<(), SearchConfigError> {
+        write_paths_coloured(self.traverse()?.iter(), result_count, use_colours)
     }
 
     #[expect(
@@ -555,17 +603,22 @@ where
         self
     }
 
-    /// Builds the Finder instance with the configured options.
+    /// Builds a [`Finder`] instance with the configured options.
+    ///
+    /// This method performs validation of all configuration parameters and
+    /// initialises the necessary components for file system traversal.
     ///
     /// # Returns
-    /// A `Result` containing the configured `Finder` instance
+    /// Returns `Ok(Finder<S>)` on successful configuration, or
+    /// `Err(SearchConfigError)` if any validation fails.
     ///
     /// # Errors
     /// Returns an error if:
-    /// - The search pattern cannot be compiled to a valid regex
-    /// - The root path is not a directory
-    /// - The root path cannot be canonicalised (when canonicalise is enabled)
-    pub fn build(self) -> Result<Finder<S>> {
+    /// - The root path is not a directory or cannot be accessed
+    /// - The root path cannot be canonicalised (when enabled)
+    /// - The search pattern cannot be compiled to a valid regular expression
+    /// - File system metadata cannot be retrieved (for same-filesystem tracking)
+    pub fn build(self) -> core::result::Result<Finder<S>, SearchConfigError> {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
         let _ = rayon::ThreadPoolBuilder::new()
@@ -618,6 +671,7 @@ where
             inode_cache,
         })
     }
+
     /// Resolves and validates the root directory path.
     ///
     /// This function handles:
@@ -629,9 +683,9 @@ where
     /// Returns the resolved directory path as an `OsString`
     ///
     /// # Errors
-    /// Returns `DirEntryError::NotADirectory` if the path is not a directory
-    /// Returns `DirEntryError::InvalidPath` if canonicalisation fails
-    fn resolve_directory(&self) -> Result<OsString> {
+    /// Returns `SearchConfigError::NotADirectory` if the path is not a directory
+    /// Returns `SearchConfigError::IoError` if canonicalisation fails
+    fn resolve_directory(&self) -> core::result::Result<OsString, SearchConfigError> {
         let dir_to_use = if self.root.is_empty() {
             OsString::from(".")
         } else {
@@ -641,15 +695,14 @@ where
         let path_check = Path::new(&dir_to_use);
 
         if !path_check.is_dir() {
-            return Err(DirEntryError::NotADirectory);
+            return Err(SearchConfigError::NotADirectory);
         }
 
         if self.canonicalise {
             path_check
                 .canonicalize()
-                .map_or(Err(DirEntryError::InvalidPath), |canonical_path| {
-                    Ok(canonical_path.into())
-                })
+                .map(core::convert::Into::into)
+                .map_err(SearchConfigError::IoError)
         } else {
             Ok(dir_to_use)
         }

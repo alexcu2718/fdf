@@ -2,7 +2,7 @@ use crate::glob_to_regex;
 use crate::size_filter::SizeFilter;
 use crate::traits_and_conversions::BytePath as _;
 
-use crate::{DirEntry, DirEntryError, FileType, Result, custom_types_result::BytesStorage};
+use crate::{DirEntry, FileType, SearchConfigError, custom_types_result::BytesStorage};
 use regex::bytes::{Regex, RegexBuilder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,7 +183,7 @@ impl SearchConfig {
         type_filter: Option<FileTypeFilter>,
         show_errors: bool,
         use_glob: bool,
-    ) -> Result<Self> {
+    ) -> core::result::Result<Self, SearchConfigError> {
         let patt = pattern.as_ref();
 
         let file_name_only = if patt.contains('/') {
@@ -193,7 +193,7 @@ impl SearchConfig {
         };
 
         let pattern_to_use = if use_glob {
-            glob_to_regex(patt).map_err(DirEntryError::GlobToRegexError)?
+            glob_to_regex(patt).map_err(SearchConfigError::GlobToRegexError)?
         } else {
             patt.into()
         };
@@ -208,7 +208,7 @@ impl SearchConfig {
                 .build();
 
             if let Err(regerror) = reg {
-                return Err(DirEntryError::RegexError(regerror));
+                return Err(SearchConfigError::RegexError(regerror));
             }
             reg.ok()
         };

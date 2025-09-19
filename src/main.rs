@@ -1,10 +1,7 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 
-mod printer;
-use printer::write_paths_coloured;
-
-use fdf::{DirEntryError, FileTypeFilter, Finder, SizeFilter, SlimmerBytes};
+use fdf::{FileTypeFilter, Finder, LOCAL_PATH_MAX, SearchConfigError, SizeFilter, SlimmerBytes};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
@@ -200,7 +197,12 @@ struct Args {
 
 #[allow(clippy::exit)] //exiting for cli use
 #[expect(clippy::print_stderr, reason = "Similar to above")]
-fn main() -> Result<(), DirEntryError> {
+fn main() -> Result<(), SearchConfigError> {
+    if LOCAL_PATH_MAX < libc::PATH_MAX as usize {
+        eprintln!("We do not expect LOCAL_PATH_MAX to be less than PATH_MAX");
+        std::process::exit(1);
+    }
+
     let args = Args::parse();
 
     if let Some(generator) = args.generate {
@@ -270,7 +272,6 @@ fn main() -> Result<(), DirEntryError> {
         .thread_count(args.thread_num)
         .build()?;
 
-    let _ = write_paths_coloured(finder.traverse()?.iter(), args.top_n, args.no_colour);
-
+    finder.print_results(args.no_colour, args.top_n)?;
     Ok(())
 }

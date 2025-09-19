@@ -80,7 +80,7 @@
 use crate::{
     BytePath as _, DirIter, OsBytes, Result, custom_types_result::BytesStorage, filetype::FileType,
 };
-
+use core::cell::Cell;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
 
 /// A struct representing a directory entry with minimal memory overhead.
@@ -147,7 +147,7 @@ where
     pub(crate) file_type: FileType,
 
     /// Inode number of the file.
-    pub(crate) inode: u64,
+    pub(crate) inode: u64, //8 bytes
     //
     /// Depth of the directory entry relative to the root.
     ///
@@ -156,9 +156,10 @@ where
     /// Offset in the path buffer where the file name starts.
     ///
     /// This helps quickly extract the file name from the full path.
-    pub(crate) file_name_index: u16,
-    // 23 bytes in total if using slimmerbox (default for CLI on macos/Linux)
-    //this is to save 1 byte to make sure the `Result`/`Option` enum is minimised (optimisation trick)
+    pub(crate) file_name_index: u16, //2
+    ///
+    /// `None` means not computed yet, `Some(bool)` means cached result.
+    pub(crate) is_traversible_cache: Cell<Option<bool>>, //1
 }
 
 impl<S> DirEntry<S>
@@ -388,7 +389,7 @@ where
 
         let file_type = if self.is_symlink() {
             //if it's a symlink, we need to resolve it.
-            FileType::from_bytes(full_path)
+            FileType::from_bytes(full_path) //Doesn't matter this internally calls lstat, it's resolved anyway
         } else {
             self.file_type()
         };
@@ -398,6 +399,7 @@ where
             inode: self.inode,
             depth: self.depth,
             file_name_index: full_path.file_name_index() as _,
+            is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)), //we can check it's traversibility directly here because of it being resolved
         };
         // SAFETY: the pointer points to valid malloc'ed memory(we have checked for null), it is safe to free it now
         unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
@@ -512,11 +514,30 @@ where
     pub fn is_traversible(&self) -> bool {
         match self.file_type {
             FileType::Directory => true,
-            FileType::Symlink => self
-                .get_stat()
-                .is_ok_and(|ent| FileType::from_stat(&ent) == FileType::Directory),
+            FileType::Symlink => self.check_symlink_traversibility(),
             _ => false,
         }
+    }
+
+    /// Checks if a symlink points to a traversible directory, caching the result.
+    #[inline]
+    pub(crate) fn check_symlink_traversibility(&self) -> bool {
+        // Return cached result if available
+        debug_assert!(
+            self.file_type() == FileType::Symlink,
+            "we only expect symlinks to use this function(hence private)"
+        );
+        if let Some(cached) = self.is_traversible_cache.get() {
+            return cached;
+        }
+
+        // Compute and cache the result
+        let is_traversible = self
+            .get_stat()
+            .is_ok_and(|entry| FileType::from_stat(&entry) == FileType::Directory);
+
+        self.is_traversible_cache.set(Some(is_traversible));
+        is_traversible
     }
 
     #[inline]
@@ -619,6 +640,7 @@ where
             inode,
             depth: 0,
             file_name_index: path_ref.file_name_index(),
+            is_traversible_cache: Cell::new(None), //no need to check
         })
     }
 

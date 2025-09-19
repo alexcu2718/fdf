@@ -6,6 +6,7 @@ use crate::{
     Result, access_dirent, buffer::ValueType, memchr_derivations::memrchr,
 };
 use chrono::{DateTime, Utc};
+use core::cell::Cell;
 use core::{fmt, mem::MaybeUninit, ops::Deref};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
@@ -15,7 +16,6 @@ use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
-
 /// A trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.
 /// Explicitly non public to prevent abuse/safety reasons
@@ -355,6 +355,7 @@ where
             .field("file_type", &self.file_type)
             .field("file_name_index", &self.file_name_index)
             .field("inode", &self.inode)
+            .field("traversible_cache", &self.is_traversible_cache)
             .finish()
     }
 }
@@ -384,6 +385,7 @@ pub trait DirentConstructor<S: BytesStorage> {
             inode,
             depth: self.parent_depth() + 1,
             file_name_index: base_len as _,
+            is_traversible_cache: Cell::new(None), //don't set unless we know we need to
         }
     }
 }

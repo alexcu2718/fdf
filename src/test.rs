@@ -1142,6 +1142,30 @@ mod tests {
         //(basically  trying to avoid the same segfault issue seen previously....)
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_root_linux_symlinks() {
+        // Quick test for symlink recursion detection
+        use crate::Finder;
+        let start_path: &[u8] = b"/";
+        let pattern: &str = ".";
+
+        let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str(), &pattern)
+            .keep_hidden(true)
+            .keep_dirs(true)
+            .follow_symlinks(true)
+            .build()
+            .unwrap();
+
+        let result = finder.traverse().unwrap().into_iter();
+
+        let collected: Vec<_> = result.collect();
+
+        assert!(collected.len() > 3);
+        //a fairly arbitirary assert, this is to make sure that the result isnt no-opped away.
+        //(basically  trying to avoid the same segfault issue seen previously....)
+    }
+
     #[test]
     #[allow(unused)]
     fn test_home() {
@@ -1153,6 +1177,28 @@ mod tests {
             let finder: Finder<SlimmerBytes> =
                 Finder::init(home_dir.unwrap().as_os_str(), &pattern)
                     .keep_hidden(true)
+                    .keep_dirs(true)
+                    .build()
+                    .unwrap();
+
+            let result = finder.traverse().unwrap().into_iter();
+
+            let collected: Vec<_> = std::hint::black_box(result.collect());
+        }
+    }
+
+    #[test]
+    #[allow(unused)]
+    fn test_home_symlink() {
+        use crate::Finder;
+        let pattern: &str = ".";
+        let home_dir = std::env::home_dir();
+
+        if home_dir.is_some() {
+            let finder: Finder<SlimmerBytes> =
+                Finder::init(home_dir.unwrap().as_os_str(), &pattern)
+                    .keep_hidden(true)
+                    .follow_symlinks(true)
                     .keep_dirs(true)
                     .build()
                     .unwrap();

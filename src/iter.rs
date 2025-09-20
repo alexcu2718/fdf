@@ -1,8 +1,4 @@
-#[cfg(target_os = "linux")]
-use crate::{
-    BytePath as _,
-    Result, traits_and_conversions::DirentConstructor as _,
-};
+
 use core::marker::PhantomData;
 use libc::{DIR, closedir, opendir};
 #[cfg(not(target_os = "linux"))]
@@ -10,7 +6,7 @@ use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir}; //use readdir64 on linux
 
-use crate::{custom_types_result::BytesStorage,PathBuffer,DirEntryError as Error,DirEntry,AlignedBuffer,LOCAL_PATH_MAX};
+use crate::{custom_types_result::BytesStorage,PathBuffer,Result,DirEntryError as Error,DirEntry,AlignedBuffer,LOCAL_PATH_MAX,traits_and_conversions::DirentConstructor as _,BytePath as _};
 /// An iterator over directory entries from readdir (or 64 )via libc
 /// General POSIX compliant directory iterator.
 /// S is a type that implements `BytesStorage`, which is used to store the path bytes.

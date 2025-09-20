@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 use crate::{
     AlignedBuffer, BytePath as _, DirEntry, DirEntryError as Error, LOCAL_PATH_MAX, PathBuffer,
     Result, custom_types_result::BytesStorage, traits_and_conversions::DirentConstructor as _,
@@ -240,6 +241,28 @@ where
             }
         }
     }
+    #[inline]
+    pub(crate) fn from_direntry(dir: &DirEntry<S>) -> Result<impl Iterator<Item = DirEntry<S>>> {
+        use crate::SyscallBuffer;
+        // SAFETY: We're  null terminating the filepath and it's below `LOCAL_PATH_MAX` (4096/1024 system dependent)
+        let fd = unsafe { dir.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
+        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
+        // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
+        let path_len = unsafe { path_buffer.init_from_direntry(dir) };
+        //TODO! make this more ergonomic
+        let buffer = SyscallBuffer::new();
+        Ok(Self {
+            fd,
+            buffer,
+            path_buffer,
+            file_name_index: path_len as _,
+            parent_depth: dir.depth,
+            offset: 0,
+            remaining_bytes: 0,
+            _marker: core::marker::PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
+        })
+    }
+
     #[inline]
     #[allow(clippy::cast_sign_loss)]
     /// Checks if the buffer is empty

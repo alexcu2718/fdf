@@ -145,8 +145,6 @@ When I began I had barely used Linux for a few months, I didn't even know C, so 
 Even though fdf is already faster than fd in all cases, I'm planning to experiment with filtering before allocation(I don't stop at good enough!)
 Rust's std::fs has some inefficiencies, too much heap allocation, file descriptor manipulation, constant strlen calculations, usage of readdir (not optimal because it implicitly stat calls every file it sees!). Rewriting all of it  using libc was the ideal way to bypass that and learn in the process.
 
-Currently, filtering-before-allocation is partially implemented in the crate but not yet exposed via the CLI. If the results prove consistently performant, I'll integrate it into the public tool(I will probably leave this until I get datetime working sufficiently.)
-
 ### Development Philosophy
 
 ** Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.
@@ -238,7 +236,7 @@ Options:
           Shows hidden files eg .gitignore or .bashrc, defaults to off
 
   -S, --sort
-          Sort the entries alphabetically
+          Sort the entries alphabetically (this has quite the performance cost)
 
   -s, --case-sensitive
           Enable case-sensitive matching, defaults to false

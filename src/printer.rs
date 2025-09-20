@@ -64,7 +64,7 @@ where
         if use_color {
             for path in iter_paths {
                 writer.write_all(extension_colour(path))?;
-                writer.write_all(&path)?;
+                writer.write_all(path)?;
                 writer.write_all(if path.is_dir() {
                     NEWLINE_CRLF_RESET
                 } else {
@@ -73,7 +73,7 @@ where
             }
         } else {
             for path in iter_paths {
-                writer.write_all(&path)?;
+                writer.write_all(path)?;
                 writer.write_all(if path.is_dir() { NEWLINE_CRLF } else { NEWLINE })?;
             }
         }

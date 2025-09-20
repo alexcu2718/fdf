@@ -749,24 +749,7 @@ where
     /// fs::remove_dir_all(&temp_dir).unwrap();
     /// ```
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
-        use crate::SyscallBuffer;
         use crate::iter::DirEntryIterator;
-        // SAFETY: We're  null terminating the filepath and it's below `LOCAL_PATH_MAX` (4096/1024 system dependent)
-        let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
-        let mut path_buffer = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
-        // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
-        let path_len = unsafe { path_buffer.init_from_direntry(self) };
-        //TODO! make this more ergonomic
-        let buffer = SyscallBuffer::new();
-        Ok(DirEntryIterator {
-            fd,
-            buffer,
-            path_buffer,
-            file_name_index: path_len as _,
-            parent_depth: self.depth,
-            offset: 0,
-            remaining_bytes: 0,
-            _marker: core::marker::PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
-        })
+        DirEntryIterator::from_direntry(self)
     }
 }

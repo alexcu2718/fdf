@@ -27,6 +27,14 @@ struct Args {
         help = "Shows hidden files eg .gitignore or .bashrc, defaults to off"
     )]
     hidden: bool,
+
+    #[arg(
+        short = 'S',
+        long = "sort",
+        help = "Sort the entries alphabetically (this has quite the performance cost)",
+        default_value_t = false
+    )]
+    sort: bool,
     #[arg(
         short = 's',
         long = "case-sensitive",
@@ -35,9 +43,9 @@ struct Args {
     )]
     case_insensitive: bool,
     #[arg(
-        short='e',
+        short = 'e',
         long = "extension",
-        help = format!("filters based on extension, eg --extension .txt or -E txt"),
+        help = "filters based on extension, eg --extension .txt or -E txt"
     )]
     extension: Option<String>,
     #[arg(
@@ -272,6 +280,6 @@ fn main() -> Result<(), SearchConfigError> {
         .thread_count(args.thread_num)
         .build()?;
 
-    finder.print_results(args.no_colour, args.top_n)?;
+    finder.print_results(args.no_colour, args.top_n, args.sort)?;
     Ok(())
 }

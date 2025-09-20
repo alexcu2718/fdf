@@ -249,7 +249,28 @@ where
         }
     }
 
-    // fn print_results(self)
+    #[inline]
+    /// Prints search results to stdout with optional coloring and count limiting.
+    ///
+    /// This is a convenience method that handles the entire search, result collection,
+    /// and formatted output in one call.
+    ///
+    /// # Arguments
+    /// * `use_colours` - Enable ANSI color output for better readability (it's always off if output does not support colours)
+    /// * `result_count` - Optional limit on the number of results to display
+    ///
+    /// # Errors
+    /// Either:
+    /// Returns [`SearchConfigError::TraversalError`] if the search operation fails
+    /// Returns [`SearchConfigError::IOError`] if the search operation fails
+    pub fn print_results(
+        self,
+        use_colours: bool,
+        result_count: Option<usize>,
+        sort: bool,
+    ) -> core::result::Result<(), SearchConfigError> {
+        write_paths_coloured(self.traverse()?.iter(), result_count, use_colours, sort)
+    }
 
     #[inline]
     /// Determines if a directory should be sent through the channel
@@ -337,27 +358,6 @@ where
             // All other file types (files, non-followed symlinks, etc.)
             _ => false,
         }
-    }
-    #[inline]
-    /// Prints search results to stdout with optional coloring and count limiting.
-    ///
-    /// This is a convenience method that handles the entire search, result collection,
-    /// and formatted output in one call.
-    ///
-    /// # Arguments
-    /// * `use_colours` - Enable ANSI color output for better readability (it's always off if output does not support colours)
-    /// * `result_count` - Optional limit on the number of results to display
-    ///
-    /// # Errors
-    /// Either:
-    /// Returns [`SearchConfigError::TraversalError`] if the search operation fails
-    /// Returns [`SearchConfigError::IOError`] if the search operation fails
-    pub fn print_results(
-        self,
-        use_colours: bool,
-        result_count: Option<usize>,
-    ) -> core::result::Result<(), SearchConfigError> {
-        write_paths_coloured(self.traverse()?.iter(), result_count, use_colours)
     }
 
     #[expect(

@@ -80,14 +80,17 @@ My method of resolving symlinks differs quite a bit, naturally I've had to adopt
 
 So basically, when following symlinks, you can expect slightly different behaviour.
 
-I've put an example of how fd would fail to escape an infinite loop of symlinks, in recursive_symlink_fs_test.sh.
+I've put an example of how fd(and find) would fail to escape an infinite loop of symlinks, found at this link
+ [recursive_symlink_fs_test.sh](https://github.com/alexcu2718/fdf/blob/main/recursive_symlink_fs_test.sh)
 
 Thus, when traversing symlinks, your computer should never hang, it may produce more results than expected, for this reason I suggest using
 the flag --same-file-system when traversing symlinks, fd and find don't handle them too well without these flags either.
 
-My own computer will not terminate when following symlinks, this is due to  the existence of ~/.steam. ~/.wine and /sys /proc etc.
+My own computer will not terminate when following symlinks, this is due to  the existence of ~/.steam. ~/.wine,/sys,/proc etc.
 
 It's my personal opinion that a program should always terminate regardless so I've put in defences against it, just a different implementation.
+
+(Realistically, between the choices of never terminating or more results than expected, which is better?)
 
 ## Technical Highlights
 
@@ -207,10 +210,10 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 
 # Find all JPG files in the home directory (excluding hidden files)
-fdf . ~ -e jpg
+fdf -e jpg '.' ~ 
 
 # Find all  Python files in /usr/local (including hidden files)
-fdf . /usr/local -e py -H
+fdf -e py -H . /usr/local 
 
 
 # Generate shell completions for Zsh/bash (also supports powershell/fish!)
@@ -234,6 +237,9 @@ Options:
   -H, --hidden
           Shows hidden files eg .gitignore or .bashrc, defaults to off
 
+  -S, --sort
+          Sort the entries alphabetically
+
   -s, --case-sensitive
           Enable case-sensitive matching, defaults to false
 
@@ -242,7 +248,6 @@ Options:
 
   -j, --threads <THREAD_NUM>
           Number of threads to use, defaults to available threads available on your computer
-
 
   -a, --absolute-path
           Show absolute paths of results, defaults to false
@@ -309,8 +314,9 @@ Options:
             --size 500ki       Files exactly 500 kibibytes
 
   -t, --type <TYPE_OF>
-          Select type of files.
-           Available options are:
+          Filter by file type, eg -d (directory) -f (regular file)
+
+          Available options are:
           d: Directory
           u: Unknown
           l: Symlink

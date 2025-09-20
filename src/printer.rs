@@ -1,6 +1,6 @@
-use compile_time_ls_colours::file_type_colour;
-
 use crate::{BytePath as _, BytesStorage, DirEntry, FileType, SearchConfigError};
+use compile_time_ls_colours::file_type_colour;
+use rayon::prelude::*;
 use std::io::{BufWriter, IsTerminal as _, Write as _, stdout};
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
@@ -18,7 +18,7 @@ where
     S: BytesStorage + 'static + Clone,
 {
     // check if it's a symlink and use  LS_COLORS symlink colour
-    match entry.file_type() {
+    match entry.file_type {
         FileType::Symlink => file_type_colour!(symlink),
         FileType::Directory => file_type_colour!(directory),
         FileType::BlockDevice => file_type_colour!(block_device),
@@ -39,48 +39,65 @@ pub fn write_paths_coloured<I, S>(
     paths: I,
     limit: Option<usize>,
     nocolour: bool,
+    sort: bool,
 ) -> Result<(), SearchConfigError>
 where
     I: Iterator<Item = Vec<DirEntry<S>>>,
-    S: BytesStorage + 'static + Clone,
+    S: BytesStorage + 'static + Clone + Send,
 {
     let std_out = stdout();
     let use_colours = std_out.is_terminal();
-
     let mut writer = BufWriter::new(std_out.lock());
+    let true_limit = limit.unwrap_or(usize::MAX);
 
-    let limit_opt: usize = limit.unwrap_or(usize::MAX);
+    let check_std_colours =
+        nocolour || std::env::var("FDF_NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
+    let use_color = use_colours && !check_std_colours;
+    //sorting is a very computationally expensive operation alas because it requires alot of operations!
+    // Included for completeness (I will probably need to rewrite all of this eventually)
+    if sort {
+        let mut collected: Vec<_> = paths.flatten().collect();
+        collected.par_sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
 
-    let check_std_colours = nocolour || /*arbitrary feature request  */
-        std::env::var("FDF_NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
+        let iter_paths = collected.iter().take(true_limit);
 
-    if use_colours && !check_std_colours {
-        for path in paths.flatten().take(limit_opt) {
-            writer.write_all(extension_colour(&path))?;
-            writer.write_all(&path)?;
-            // add a trailing slash+newline for directories
-            if path.is_dir() {
-                writer.write_all(NEWLINE_CRLF_RESET)?;
+        if use_color {
+            for path in iter_paths {
+                writer.write_all(extension_colour(path))?;
+                writer.write_all(&path)?;
+                writer.write_all(if path.is_dir() {
+                    NEWLINE_CRLF_RESET
+                } else {
+                    NEWLINE_RESET
+                })?;
             }
-            // add a trailing newline for files
-            else {
-                writer.write_all(NEWLINE_RESET)?;
+        } else {
+            for path in iter_paths {
+                writer.write_all(&path)?;
+                writer.write_all(if path.is_dir() { NEWLINE_CRLF } else { NEWLINE })?;
             }
         }
     } else {
-        for path in paths.flatten().take(limit_opt) {
-            writer.write_all(&path)?;
-            // add a trailing slash+newline for directories
-            if path.is_dir() {
-                writer.write_all(NEWLINE_CRLF)?;
+        let iter_paths = paths.flatten().take(true_limit);
+
+        if use_color {
+            for path in iter_paths {
+                writer.write_all(extension_colour(&path))?;
+                writer.write_all(&path)?;
+                writer.write_all(if path.is_dir() {
+                    NEWLINE_CRLF_RESET
+                } else {
+                    NEWLINE_RESET
+                })?;
             }
-            // add a trailing newline for files
-            else {
-                writer.write_all(NEWLINE)?;
+        } else {
+            for path in iter_paths {
+                writer.write_all(&path)?;
+                writer.write_all(if path.is_dir() { NEWLINE_CRLF } else { NEWLINE })?;
             }
         }
     }
-    writer.flush()?;
 
+    writer.flush()?;
     Ok(())
 }

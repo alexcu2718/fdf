@@ -21,7 +21,7 @@ use crate::ValueType;
 /// - File descriptor (positive integer) on success
 /// - -1 on error (check errno for details)
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    use std::arch::asm;
+    use core::arch::asm;
     // Create null-terminated C string from byte slice
     let filename: *const u8 = unsafe { cstr!(bytepath) };
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
@@ -62,7 +62,7 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 /// # Returns
 /// File descriptor on success, -1 on error
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    use std::arch::asm;
+    use core::arch::asm;
     let filename: *const u8 = unsafe { cstr!(bytepath) };
 
     // aarch64 doesn't have open, we need to use openat for this.
@@ -125,7 +125,7 @@ pub unsafe fn close_asm(fd: i32) {
 /// - Takes ownership of the file descriptor
 /// - Invalidates fd after call (even on error)
 pub unsafe fn close_asm(fd: i32) {
-    use std::arch::asm;
+    use core::arch::asm;
     let _: isize;
     unsafe {
         asm!(
@@ -152,7 +152,7 @@ pub unsafe fn close_asm(fd: i32) {
 /// - Invalidates fd after call (even on error)
 /// - No error checking - intentional for performance
 pub unsafe fn close_asm(fd: i32) {
-    use std::arch::asm;
+    use core::arch::asm;
     const SYSCALL_CLOSE: i32 = libc::SYS_close as _;
 
     unsafe {
@@ -188,7 +188,7 @@ pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -
 where
     T: ValueType, //i8/u8
 {
-    use std::arch::asm;
+    use core::arch::asm;
     let output;
     unsafe {
         asm!(
@@ -228,7 +228,7 @@ pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -
 where
     T: ValueType, //i8/u8
 {
-    use std::arch::asm;
+    use core::arch::asm;
     let ret: i64;
     unsafe {
         asm!(

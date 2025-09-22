@@ -285,7 +285,7 @@ Options:
       --same-file-system
           Only traverse the same filesystem as the starting directory
 
-  -S, --size <size>
+      --size <size>
           Filter by file size
 
           PREFIXES:

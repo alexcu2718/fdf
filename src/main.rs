@@ -172,7 +172,6 @@ struct Args {
     ///   --size 500ki       Files exactly 500 kibibytes
     #[arg(
         long = "size",
-        short = 'S',
         allow_hyphen_values = true,
         value_name = "size",
         help = "Filter by size. Examples '10k' (exactly 10KB),'+1M' (>=1MB),'-1GB' (<= 1GB)\n",

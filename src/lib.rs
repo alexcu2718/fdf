@@ -98,7 +98,7 @@ use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
     fs::metadata,
-    os::unix::fs::MetadataExt as _,
+    os::unix::{ffi::OsStrExt as _, fs::MetadataExt as _},
     path::Path,
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
@@ -326,8 +326,11 @@ where
         clippy::wildcard_enum_match_arm,
         reason = "Exhaustive on traversible types"
     )]
-    #[expect(clippy::ref_patterns,reason="Borrowing doesn't work on this extreme lint")]
-    #[expect(clippy::option_if_let_else,reason="Complicates it even more ")]
+    #[expect(
+        clippy::ref_patterns,
+        reason = "Borrowing doesn't work on this extreme lint"
+    )]
+    #[expect(clippy::option_if_let_else, reason = "Complicates it even more ")]
     /// Advanced filtering for directories and symlinks with filesystem constraints.
     ///
     /// Handles same-filesystem constraints, inode caching, and symlink resolution
@@ -339,8 +342,10 @@ where
                 match self.inode_cache {
                     None => {
                         // Fast path: only calls stat IFF self.starting_filesystem is Some
-                        self.starting_filesystem.is_none_or(|start_dev| dir.get_stat().is_ok_and(|statted| start_dev==access_stat!(statted,st_dev)))
-                       
+                        self.starting_filesystem.is_none_or(|start_dev| {
+                            dir.get_stat()
+                                .is_ok_and(|statted| start_dev == access_stat!(statted, st_dev))
+                        })
                     }
                     Some(ref cache) => {
                         dir.get_stat().is_ok_and(|stat| {
@@ -360,11 +365,13 @@ where
                 FileType::from_stat(&stat) == FileType::Directory &&
                 // Check filesystem boundary
                 self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
+
                 // Check if we've already traversed this inode
                 self.inode_cache.as_ref().is_none_or(|cache| {
-                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
-                }) 
-               
+                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))) &&
+                // if we're traversing in the same root, then we'll find it anyway so skip it
+                dir.get_realpath().is_ok_and(|path| !path.starts_with(self.root.as_bytes()))
+                })
             })
             }
 
@@ -674,6 +681,7 @@ where
 
         let inode_cache: Option<DashSet<(u64, u64)>> =
             (self.same_filesystem || self.follow_symlinks).then(DashSet::new);
+        //Enable the cache if same file system too, this helps de-duplicate for free (since it's 1 stat call regardless)
 
         Ok(Finder {
             root: resolved_root,

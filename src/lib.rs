@@ -111,7 +111,7 @@ mod size_filter;
 pub use size_filter::SizeFilter;
 
 mod iter;
-pub(crate) use iter::DirIter;
+pub(crate) use iter::ReadDir;
 
 #[cfg(target_os = "linux")]
 mod syscalls;

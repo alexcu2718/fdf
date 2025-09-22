@@ -390,7 +390,7 @@ pub trait DirentConstructor<S: BytesStorage> {
     }
 }
 
-impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
+impl<S: BytesStorage> DirentConstructor<S> for crate::ReadDir<S> {
     #[inline]
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
@@ -408,7 +408,7 @@ impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
 }
 
 #[cfg(target_os = "linux")]
-impl<S: BytesStorage> DirentConstructor<S> for crate::iter::DirEntryIterator<S> {
+impl<S: BytesStorage> DirentConstructor<S> for crate::iter::GetDents<S> {
     #[inline]
     fn path_buffer(&mut self) -> &mut crate::PathBuffer {
         &mut self.path_buffer

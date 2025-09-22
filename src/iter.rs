@@ -16,7 +16,7 @@ use crate::{
 ///
 // S, which can take forms  Vec<u8>,Box<[u8]>,Arc<[u8]> or ideally SlimmerBytes (an alias in this crate for a smaller box type)
 //this is only possible on linux/macos unfortunately.
-pub struct DirIter<S>
+pub struct ReadDir<S>
 where
     S: BytesStorage,
 {
@@ -28,7 +28,7 @@ where
     pub(crate) _phantom: PhantomData<S>, //this justholds the type information for later, this compiles away due to being zero sized.
 }
 
-impl<S> DirIter<S>
+impl<S> ReadDir<S>
 where
     S: BytesStorage,
 {
@@ -67,7 +67,6 @@ where
     }
     #[inline]
     /// A function to construction a `DirEntry` from the buffer+dirent
-    ///
     pub fn construct_direntry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
         // SAFETY:  This doesn't need unsafe because the pointer is already checked to not be null before it can be used here.
         unsafe { self.construct_entry(drnt) }
@@ -98,7 +97,7 @@ where
     }
 }
 
-impl<S> core::fmt::Debug for DirIter<S>
+impl<S> core::fmt::Debug for ReadDir<S>
 where
     S: BytesStorage,
 {
@@ -111,7 +110,7 @@ where
     }
 }
 
-impl<T> Iterator for DirIter<T>
+impl<T> Iterator for ReadDir<T>
 where
     T: BytesStorage,
 {
@@ -136,7 +135,7 @@ where
         }
     }
 }
-impl<T> Drop for DirIter<T>
+impl<T> Drop for ReadDir<T>
 where
     T: BytesStorage,
 {
@@ -167,8 +166,11 @@ libc source code for reference on blk size.
 */
 
 #[cfg(target_os = "linux")]
-///Iterator for directory entries using getdents syscall
-pub struct DirEntryIterator<S>
+/// Linux-specific directory iterator using the `getdents` syscall.
+///
+/// More efficient than `readdir` for large directories due to batched reads.
+/// Doesn't implicitly call stat unless on unusual filesystems.
+pub struct GetDents<S>
 where
     S: BytesStorage,
 {
@@ -183,7 +185,7 @@ where
                                                       //this gets compiled away anyway as its as a zst
 }
 #[cfg(target_os = "linux")]
-impl<S> Drop for DirEntryIterator<S>
+impl<S> Drop for GetDents<S>
 where
     S: BytesStorage,
 {
@@ -198,7 +200,7 @@ where
     }
 }
 #[cfg(target_os = "linux")]
-impl<S> DirEntryIterator<S>
+impl<S> GetDents<S>
 where
     S: BytesStorage,
 {
@@ -206,7 +208,7 @@ where
     ///Returns a pointer to the `libc::dirent64` in the buffer then increments the offset by the size of the dirent structure.
     /// this is so that when we next time we call `next_getdents_pointer`, we get the next entry in the buffer.
     /// This is unsafe because it dereferences a raw pointer, so we need to ensure that
-    /// the pointer is valid and that we don't read past the end of the buffer.
+    /// the pointer is valid(ie Non null) and that we don't read past the end of the buffer.
     pub const unsafe fn next_getdents_pointer(&mut self) -> *const libc::dirent64 {
         // SAFETY: This is only used in the iterator implementation, so we can safely assume that the pointer
         // is valid and that we don't read past the end of the buffer.
@@ -241,11 +243,11 @@ where
         }
     }
     #[inline]
-    pub(crate) fn from_direntry(dir: &DirEntry<S>) -> Result<impl Iterator<Item = DirEntry<S>>> {
+    pub(crate) fn new(dir: &DirEntry<S>) -> Result<Self> {
         use crate::SyscallBuffer;
         // SAFETY: We're  null terminating the filepath and it's below `LOCAL_PATH_MAX` (4096/1024 system dependent)
         let fd = unsafe { dir.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
-        let mut path_buffer = AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
+        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
         // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
         let path_len = unsafe { path_buffer.init_from_direntry(dir) };
         //TODO! make this more ergonomic
@@ -290,7 +292,7 @@ where
 }
 
 #[cfg(target_os = "linux")]
-impl<S> Iterator for DirEntryIterator<S>
+impl<S> Iterator for GetDents<S>
 where
     S: BytesStorage,
 {

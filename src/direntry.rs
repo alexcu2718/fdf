@@ -78,7 +78,7 @@
 //! ```
 
 use crate::{
-    BytePath as _, DirIter, OsBytes, Result, custom_types_result::BytesStorage, filetype::FileType,
+    BytePath as _, OsBytes, ReadDir, Result, custom_types_result::BytesStorage, filetype::FileType,
 };
 use core::cell::Cell;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
@@ -210,9 +210,17 @@ where
     #[must_use]
     // Converts to a lossy string for ease of use
     pub fn to_string_lossy(&self) -> std::borrow::Cow<'_, str> {
-        String::from_utf8_lossy(self.as_bytes())
+        String::from_utf8_lossy(self)
     }
 
+    #[inline]
+    /// Returns the underlying bytes as a UTF-8 string slice if valid.
+    ///
+    /// # Errors
+    /// Returns `Err` if the bytes are not valid UTF-8.
+    pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(self)
+    }
     ///Cost free check for character devices
     #[inline]
     #[must_use]
@@ -574,6 +582,10 @@ where
     #[must_use]
     /// Returns the directory name of the file (as bytes)
     pub fn dirname(&self) -> &[u8] {
+        debug_assert!(
+            self.file_name_index() <= self.len(),
+            "Indexing should always be within bounds"
+        );
         // SAFETY: the index is below the length of the path trivially
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as above, its very useful and cheap
@@ -588,6 +600,10 @@ where
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
+        debug_assert!(
+            self.file_name_index() <= self.len(),
+            "Indexing should always be within bounds"
+        );
         // SAFETY: the index is below the length of the path trivially
         unsafe { self.get_unchecked(..core::cmp::max(self.file_name_index() - 1, 1)) }
     }
@@ -708,7 +724,7 @@ where
     /// ```
     #[inline]
     pub fn readdir(&self) -> Result<impl Iterator<Item = Self>> {
-        DirIter::new(self)
+        ReadDir::new(self)
     }
     #[inline]
     #[cfg(target_os = "linux")]
@@ -766,7 +782,7 @@ where
     /// fs::remove_dir_all(&temp_dir).unwrap();
     /// ```
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
-        use crate::iter::DirEntryIterator;
-        DirEntryIterator::from_direntry(self)
+        use crate::iter::GetDents;
+        GetDents::new(self)
     }
 }

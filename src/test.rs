@@ -4,7 +4,7 @@ mod tests {
     use crate::memchr_derivations::{find_char_in_word, find_zero_byte_u64};
     use crate::size_filter::*;
     use crate::traits_and_conversions::BytePath;
-    use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
+    use crate::{DirEntry, FileType, ReadDir, SlimmerBytes};
     use chrono::{Duration as ChronoDuration, Utc};
     use filetime::{FileTime, set_file_times};
     use std::env::temp_dir;
@@ -75,7 +75,7 @@ mod tests {
         fs::set_permissions(&no_read_dir, perms).unwrap();
 
         let entry = DirEntry::<Arc<[u8]>>::new(&temp_dir).unwrap();
-        let iter = DirIter::new(&entry).unwrap();
+        let iter = ReadDir::new(&entry).unwrap();
 
         let entries: Vec<_> = iter.collect();
 
@@ -190,7 +190,7 @@ mod tests {
         fs::write(subdir.join("file.txt"), "data").unwrap();
 
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
 
         assert_eq!(entries.len(), 1, "Top-level should contain only subdir");
 
@@ -435,7 +435,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_os = "linux"))]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
@@ -528,7 +527,7 @@ mod tests {
         let _ = std::fs::File::create(dir_path.join(".hidden"));
 
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
         let mut names: Vec<_> = entries
             .iter()
             .map(|e| e.file_name().to_string_lossy().into_owned())
@@ -790,7 +789,7 @@ mod tests {
         let _ = fs::create_dir(dir_path.join("subdir"));
 
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
-        let iter = DirIter::new(&dir_entry).unwrap();
+        let iter = ReadDir::new(&dir_entry).unwrap();
         let entries: Vec<_> = iter.collect();
 
         assert_eq!(entries.len(), 2);
@@ -811,7 +810,7 @@ mod tests {
         let dir = temp_dir().join("test_dir");
         let _ = fs::create_dir_all(&dir);
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
-        let iter = DirIter::new(&dir_entry).unwrap();
+        let iter = ReadDir::new(&dir_entry).unwrap();
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
@@ -828,7 +827,7 @@ mod tests {
             .unwrap()
             .to_full_path()
             .unwrap();
-        let iter = DirIter::new(&dir_entry).unwrap();
+        let iter = ReadDir::new(&dir_entry).unwrap();
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
@@ -1043,7 +1042,7 @@ mod tests {
 
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path)
             .expect("if this errors then it's probably a permission issue related to sandboxing");
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
 
         let mut type_counts = std::collections::HashMap::new();
         for entry in entries {
@@ -1071,7 +1070,7 @@ mod tests {
         let _ = std::fs::File::create(sub_dir.join("nested_file.txt"));
 
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&top_dir).unwrap();
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
 
         let mut names: Vec<_> = entries
             .iter()
@@ -1100,7 +1099,7 @@ mod tests {
         let _ = symlink("regular.txt", dir_path.join("symlink"));
 
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
 
         let mut type_counts = std::collections::HashMap::new();
         for entry in entries {
@@ -1263,7 +1262,7 @@ mod tests {
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
 
         let _ = File::create(dir.join("regular.txt"));
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
         assert_eq!(entries.len(), 1);
 
         let v = entries[0]

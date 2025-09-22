@@ -98,7 +98,6 @@ use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
     fs::metadata,
-    os::unix::ffi::OsStrExt as _,
     os::unix::fs::MetadataExt as _,
     path::Path,
     sync::mpsc::{Receiver, Sender, channel as unbounded},
@@ -146,7 +145,16 @@ pub(crate) use custom_types_result::{DirEntryFilter, FilterType, PathBuffer};
 mod traits_and_conversions;
 pub(crate) use traits_and_conversions::BytePath;
 mod utils;
-#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 pub use utils::dirent_const_time_strlen;
 pub use utils::{modified_unix_time_to_datetime, strlen};
 
@@ -258,7 +266,7 @@ where
     /// # Arguments
     /// * `use_colours` - Enable ANSI color output for better readability (it's always off if output does not support colours)
     /// * `result_count` - Optional limit on the number of results to display
-    ///
+    /// * `sort` Enable sorting of the end results (has a big computational cost)
     /// # Errors
     /// Either:
     /// Returns [`SearchConfigError::TraversalError`] if the search operation fails
@@ -269,6 +277,7 @@ where
         result_count: Option<usize>,
         sort: bool,
     ) -> core::result::Result<(), SearchConfigError> {
+        //TODO clean this up
         write_paths_coloured(self.traverse()?.iter(), result_count, use_colours, sort)
     }
 
@@ -317,6 +326,8 @@ where
         clippy::wildcard_enum_match_arm,
         reason = "Exhaustive on traversible types"
     )]
+    #[expect(clippy::ref_patterns,reason="Borrowing doesn't work on this extreme lint")]
+    #[expect(clippy::option_if_let_else,reason="Complicates it even more ")]
     /// Advanced filtering for directories and symlinks with filesystem constraints.
     ///
     /// Handles same-filesystem constraints, inode caching, and symlink resolution
@@ -325,22 +336,25 @@ where
         match dir.file_type {
             // Normal directories
             FileType::Directory => {
-                if self.inode_cache.is_none() {
-                    // Fast path: no cache means no filesystem constraints
-                    return true;
-                }
-
-                dir.get_stat().is_ok_and(|stat| {
+                match self.inode_cache {
+                    None => {
+                        // Fast path: only calls stat IFF self.starting_filesystem is Some
+                        self.starting_filesystem.is_none_or(|start_dev| dir.get_stat().is_ok_and(|statted| start_dev==access_stat!(statted,st_dev)))
+                       
+                    }
+                    Some(ref cache) => {
+                        dir.get_stat().is_ok_and(|stat| {
                 // Check same filesystem if enabled
                 self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
                 // Check if we've already traversed this inode
-                self.inode_cache.as_ref().is_none_or(|cache| {
-                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
-                })
+                cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
             })
+                    }
+                }
             }
 
             // Symlinks that may point to directories
+            // This could be optimised a bit, symlinks are a beast due to their complexity.
             FileType::Symlink if self.search_config.follow_symlinks => {
                 dir.get_stat().is_ok_and(|stat| {
                 FileType::from_stat(&stat) == FileType::Directory &&
@@ -349,9 +363,8 @@ where
                 // Check if we've already traversed this inode
                 self.inode_cache.as_ref().is_none_or(|cache| {
                     cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
-                }) &&
-                // Ensure resolved path differs from root to avoid redundant traversal
-                dir.to_full_path().is_ok_and(|fullpath| !fullpath.starts_with(self.root.as_bytes()))
+                }) 
+               
             })
             }
 

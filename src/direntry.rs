@@ -318,8 +318,74 @@ where
             _ => false,
         }
     }
+
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
+    /// Private function for complicated reasons
+    pub(crate) fn get_realpath(&self) -> Result<OsBytes<S>> {
+        #[cfg(not(target_env = "gnu"))]
+        //Essentially, because only glibc has a really optimised strlen function, i'd prefer to use this
+        use crate::strlen;
+        #[cfg(target_env = "gnu")]
+        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out why(curiosity, not pragmatism!)
+        use libc::strlen;
+
+        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
+        let ptr = unsafe {
+            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, core::ptr::null_mut())) //realpath implicitly mallocs, hence need to free.
+        };
+
+        if ptr.is_null() {
+            //check for null
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
+        let full_path = unsafe { &*core::ptr::slice_from_raw_parts(ptr.cast(), strlen(ptr)) };
+
+        let boxed = full_path.into();
+        // SAFETY: the pointer points to valid malloc'ed memory(we have checked for null), it is safe to free it now
+        unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
+        //free the pointer to stop leaking
+        Ok(boxed)
+    }
+
+    /* (I spent a lot of time debating this function!)
+    https://man7.org/linux/man-pages/man3/realpath.3.html
+    DESCRIPTION         top
+
+       realpath() expands all symbolic links and resolves references to
+       /./, /../ and extra '/' characters in the null-terminated string
+       named by path to produce a canonicalized absolute pathname.  The
+       resulting pathname is stored as a null-terminated string, up to a
+       maximum of PATH_MAX bytes, in the buffer pointed to by
+       resolved_path.  The resulting path will have no symbolic link, /./
+       or /../ components.
+
+       If resolved_path is specified as NULL, then realpath() uses
+       malloc(3) to allocate a buffer of up to PATH_MAX bytes to hold the
+       resolved pathname, and returns a pointer to this buffer.  The
+       caller should deallocate this buffer using free(3).
+
+
+
+        https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
+    pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
+        let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
+        if r.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(PathBuf::from(OsString::from_vec(unsafe {
+            let buf = CStr::from_ptr(r).to_bytes().to_vec();
+            libc::free(r as *mut _);
+            buf
+        })))
+    }
+
+
+        */
+
+    #[inline]
     /// Converts a directory entry to a full, canonical path, resolving all symlinks
     ///
     /// This is a **costly** operation as it involves a system call (`realpath`).
@@ -368,79 +434,30 @@ where
     ///
     /// ```
     pub fn to_full_path(&self) -> Result<Self> {
-        #[cfg(not(target_env = "gnu"))]
-        //Essentially, because only glibc has a really optimised strlen function, i'd prefer to use this
-        use crate::strlen;
-        #[cfg(target_env = "gnu")]
-        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out why(curiosity, not pragmatism!)
-        use libc::strlen;
-        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
-        let ptr = unsafe {
-            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, core::ptr::null_mut())) //realpath implicitly mallocs, hence need to free.
-        };
+        let full_path = self.get_realpath()?;
 
-        if ptr.is_null() {
-            //check for null
-            return Err(std::io::Error::last_os_error().into());
-        }
-        // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
-        let full_path = unsafe { &*core::ptr::slice_from_raw_parts(ptr.cast(), strlen(ptr)) };
-        //get length without null terminator (no ub check, this is why i do it this way)
+        let file_name_index = full_path.file_name_index(); //used for indexing.
+        // Computing result here to avoid borrow issues
 
-        let file_type = if self.is_symlink() {
+        let (file_type, ino) = if self.is_symlink() {
+            let statted = full_path.get_stat()?;
             //if it's a symlink, we need to resolve it.
-            FileType::from_bytes(full_path) //Doesn't matter this internally calls lstat, it's resolved anyway
+            (FileType::from_stat(&statted), access_stat!(statted, st_ino))
         } else {
-            self.file_type()
+            (self.file_type(), self.ino())
         };
+
         let boxed = Self {
-            path: full_path.into(), //we're heap allocating here, i wish we could've reused the malloc but this isnt TOO important performance wise
+            path: full_path,
             file_type,
-            inode: self.inode,
-            depth: self.depth,
-            file_name_index: full_path.file_name_index() as _,
+            inode: ino,
+            depth: self.depth, //inherit depth, may need to revisit this
+            file_name_index,
             is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)), //we can check it's traversibility directly here because of it being resolved
         };
-        // SAFETY: the pointer points to valid malloc'ed memory(we have checked for null), it is safe to free it now
-        unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
-        //free the pointer to stop leaking
 
         Ok(boxed)
     }
-    /* (I spent a lot of time debating this function!)
-    https://man7.org/linux/man-pages/man3/realpath.3.html
-    DESCRIPTION         top
-
-       realpath() expands all symbolic links and resolves references to
-       /./, /../ and extra '/' characters in the null-terminated string
-       named by path to produce a canonicalized absolute pathname.  The
-       resulting pathname is stored as a null-terminated string, up to a
-       maximum of PATH_MAX bytes, in the buffer pointed to by
-       resolved_path.  The resulting path will have no symbolic link, /./
-       or /../ components.
-
-       If resolved_path is specified as NULL, then realpath() uses
-       malloc(3) to allocate a buffer of up to PATH_MAX bytes to hold the
-       resolved pathname, and returns a pointer to this buffer.  The
-       caller should deallocate this buffer using free(3).
-
-
-
-        https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
-    pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
-        let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
-        if r.is_null() {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(PathBuf::from(OsString::from_vec(unsafe {
-            let buf = CStr::from_ptr(r).to_bytes().to_vec();
-            libc::free(r as *mut _);
-            buf
-        })))
-    }
-
-
-        */
 
     #[inline]
     #[allow(clippy::missing_const_for_fn)]

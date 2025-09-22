@@ -52,7 +52,7 @@ crate::impl_bytes_storage!(Arc<[u8]>, Vec<u8>, Box<[u8]>);
 ///
 /// It allows for easy conversion between byte slices and various storage types, such as `Box`, `Arc`, `Vec`, or `SlimmerBox`.
 ///  ( switch to arc for multithreading to avoid race conditions:))
-#[derive(Clone, Debug)] //#[repr(C, align(8))]
+#[derive(Clone, Debug)]
 pub struct OsBytes<S: BytesStorage> {
     pub(crate) bytes: S,
 }
@@ -96,6 +96,19 @@ impl<S: BytesStorage> OsBytes<S> {
 }
 // SAFETY: Safe to send because any access is read only
 unsafe impl<S> Send for OsBytes<S> where S: Send + BytesStorage + 'static {}
+
+impl<S: BytesStorage> Deref for OsBytes<S> {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        debug_assert!(
+            self.bytes.len() < LOCAL_PATH_MAX,
+            "the path is longer than LOCAL_PATH_MAX, THIS SHOULDNT HAPPEN"
+        );
+        &self.bytes
+    }
+}
 
 impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
     #[inline]

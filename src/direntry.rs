@@ -221,28 +221,28 @@ where
     pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
         core::str::from_utf8(self)
     }
-    ///Cost free check for character devices
+    /// Cost free check for character devices
     #[inline]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
         self.file_type.is_char_device()
     }
 
-    ///Cost free check for pipes (FIFOs)
+    /// Cost free check for pipes (FIFOs)
     #[inline]
     #[must_use]
     pub const fn is_pipe(&self) -> bool {
         self.file_type.is_pipe()
     }
 
-    ///Cost free check for sockets
+    /// Cost free check for sockets
     #[inline]
     #[must_use]
     pub const fn is_socket(&self) -> bool {
         self.file_type.is_socket()
     }
 
-    ///Cost free check for regular files
+    /// Cost free check for regular files
     #[inline]
     #[must_use]
     pub const fn is_regular_file(&self) -> bool {
@@ -255,13 +255,13 @@ where
     pub const fn is_dir(&self) -> bool {
         self.file_type.is_dir()
     }
-    ///cost free check for unknown file types
+    /// Cost free check for unknown file types
     #[inline]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
         self.file_type.is_unknown()
     }
-    ///cost free check for symlinks
+    /// Cost free check for symlinks
     #[inline]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
@@ -325,6 +325,14 @@ where
             }
             _ => false,
         }
+    }
+
+    /// Takes the value of the path and gives the raw representation
+    ///  Essentially just giving you a wrapper of Box/Vec/etc.
+    ///
+    #[inline]
+    pub fn as_inner(self) -> OsBytes<S> {
+        self.path
     }
 
     #[inline]

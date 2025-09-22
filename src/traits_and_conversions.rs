@@ -41,12 +41,8 @@ where
     fn modified_time(&self) -> Result<DateTime<Utc>>;
     /// Converts to `&Path` (zero-cost on Unix)
     fn as_path(&self) -> &Path;
-    /// Opens file descriptor for directory paths
-    ///
-    /// # Safety
-    /// - Path must be a directory
-    /// - Uses `O_DIRECTORY | O_CLOEXEC | O_NONBLOCK`
     unsafe fn open_fd(&self) -> Result<i32>;
+    unsafe fn open_dir(&self) -> Result<*mut libc::DIR>;
     /// Gets index of filename component start
     ///
     /// Returns position after last '/' or 0 if none.
@@ -112,6 +108,18 @@ where
         }; // Null terminate the string
 
         func(c_path_buf.cast::<_>())
+    }
+    #[inline]
+    unsafe fn open_dir(&self) -> Result<*mut libc::DIR> {
+        // SAFETY: we are passing a null terminated directory to opendir and the path is below `PATH_MAX`
+        let dir = self.as_cstr_ptr(|ptr| unsafe { libc::opendir(ptr) });
+        // This function reads the directory entries and populates the iterator.
+        // It is called when the iterator is created or when it needs to be reset.
+        if dir.is_null() {
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        Ok(dir) // Return a pointer to the start `DIR` stream
     }
 
     #[inline]

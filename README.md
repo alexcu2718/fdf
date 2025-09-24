@@ -118,13 +118,13 @@ use libc::dirent64;
 pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // The only unsafe action is dereferencing the pointer
     // This MUST be validated beforehand
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name) + 1;
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name);
     let reclen = unsafe { (*dirent).d_reclen as usize }; 
     let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; 
     // reclen is always multiple of 8 so alignment is guaranteed
     let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // branchless mask
     let candidate_pos = last_word | mask;
-    let byte_pos = 7 - find_zero_byte_u64(candidate_pos); // branchless SWAR
+    let byte_pos = 8 - find_zero_byte_u64(candidate_pos); // branchless SWAR (internal function)
     reclen - DIRENT_HEADER_START - byte_pos
 }
 

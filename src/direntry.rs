@@ -14,7 +14,7 @@
 //! use std::sync::Arc;
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path", "*.txt")
+//!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path").pattern(Some("*.txt"))
 //!         .build()
 //!         .expect("Failed to build finder");
 //!
@@ -44,7 +44,7 @@
 //! use std::sync::Arc;
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path", "*.txt")
+//!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path").pattern(Some("*.txt"))
 //!         .keep_hidden(false)
 //!         .case_insensitive(true)
 //!         .keep_dirs(true)

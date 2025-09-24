@@ -190,6 +190,7 @@ Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
 ))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
+#[expect(clippy::as_conversions, reason = "Casting u16 to usize is safe")]
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 /// Returns the length of a `dirent64's d_name` string in constant time using
 /// SWAR (SIMD within a register) bit tricks.
@@ -228,11 +229,10 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
 
         // Offset from the start of the struct to the beginning of d_name.
         // We add 1 since we calculate backwards from the header boundary.
-        const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name) + 1;
+        const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
 
         // Accessing `d_reclen` is safe because the struct is kernel-provided.
         // SAFETY: `dirent` must be a valid pointer to an initialised dirent64 (trivially shown by)
-        #[expect(clippy::as_conversions, reason = "Casting u16 to usize is safe")]
         let reclen = unsafe { (*dirent).d_reclen } as usize; // do not use byte_offset here
 
         debug_assert!(
@@ -254,6 +254,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         // TODO: big-endian logic could be further optimised. Very much a minor nit.
 
         // When the record length is 24, the kernel may insert nulls before d_name.
+        // Which will exist on index's 17/18, as the d_name starts on offset 19
         // Mask them out to avoid false detection of a terminator.
         // Multiplying by 0 or 1 applies the mask conditionally without branching.
         let mask: u64 = 0x00FF_FFFFu64 * ((reclen == 24) as u64);
@@ -266,8 +267,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         let candidate_pos: u64 = last_word | mask;
 
         // Locate the first null byte in constant time using SWAR.
-        // Subtract 7 to compute its position relative to the start of d_name.
-        let byte_pos = 7 - find_zero_byte_u64(candidate_pos);
+        // Subtract 8 to compute its position relative to the start of d_name.
+        let byte_pos = 8 - find_zero_byte_u64(candidate_pos);
 
         // Final length:
         // total record length - header size - null byte position

@@ -170,8 +170,8 @@ impl SearchConfig {
     // Returns an error if the regex compilation fails
     #[allow(clippy::fn_params_excessive_bools)]
     #[expect(clippy::too_many_arguments, reason = "Internal convenience")]
-    pub(crate) fn new(
-        pattern: impl AsRef<str>,
+    pub(crate) fn new<A: AsRef<str>>(
+        pattern: Option<&A>,
         hide_hidden: bool,
         case_insensitive: bool,
         keep_dirs: bool,
@@ -184,34 +184,40 @@ impl SearchConfig {
         show_errors: bool,
         use_glob: bool,
     ) -> core::result::Result<Self, SearchConfigError> {
-        let patt = pattern.as_ref();
+        let (file_name_only, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
+            let patt = patt_ref.as_ref();
+            let file_name_only = if patt.contains('/') {
+                false //Over ride because if it's got a slash, it's gotta be a full path
+            } else {
+                filenameonly
+            };
 
-        let file_name_only = if patt.contains('/') {
-            false //Over ride because if it's got a slash, it's gotta be a full path
+            let pattern_to_use = if use_glob {
+                glob_to_regex(patt).map_err(SearchConfigError::GlobToRegexError)?
+            } else {
+                patt.into()
+            };
+            (file_name_only, pattern_to_use)
         } else {
-            filenameonly
-        };
-
-        let pattern_to_use = if use_glob {
-            glob_to_regex(patt).map_err(SearchConfigError::GlobToRegexError)?
-        } else {
-            patt.into()
+            // No pattern provided, use match-all pattern
+            (filenameonly, ".*".into())
         };
 
         // If pattern is "." or empty, we do not filter by regex, this avoids building a regex (even if its trivial cost)
-        let regex_match = if pattern_to_use == "." || pattern_to_use.is_empty() {
-            None
-        } else {
-            let reg = RegexBuilder::new(&pattern_to_use)
-                .case_insensitive(case_insensitive)
-                .dot_matches_new_line(false)
-                .build();
+        let regex_match =
+            if pattern_to_use == "." || pattern_to_use == ".*" || pattern_to_use.is_empty() {
+                None
+            } else {
+                let reg = RegexBuilder::new(&pattern_to_use)
+                    .case_insensitive(case_insensitive)
+                    .dot_matches_new_line(false)
+                    .build();
 
-            if let Err(regerror) = reg {
-                return Err(SearchConfigError::RegexError(regerror));
-            }
-            reg.ok()
-        };
+                if let Err(regerror) = reg {
+                    return Err(SearchConfigError::RegexError(regerror));
+                }
+                reg.ok()
+            };
 
         Ok(Self {
             regex_match,

@@ -48,7 +48,8 @@
 //! use std::sync::mpsc::Receiver;
 //!
 //! fn find_files() -> Result<Receiver<Vec<DirEntry<SlimmerBytes>>>, SearchConfigError> {
-//!     let finder = Finder::<SlimmerBytes>::init("/path/to/search", "*.rs")
+//!     let finder = Finder::<SlimmerBytes>::init("/path/to/search")
+//!         .pattern(Some("*.rs"))
 //!         .keep_hidden(false)
 //!         .max_depth(Some(3))
 //!         .follow_symlinks(true)
@@ -81,7 +82,8 @@
 //! ### Basic Usage
 //! ```rust
 //! # use fdf::{Finder, SlimmerBytes};
-//! let receiver = Finder::<SlimmerBytes>::init(".", ".*txt")
+//! let receiver = Finder::<SlimmerBytes>::init(".")
+//!     .pattern(Some(".*txt"))
 //!     .build()
 //!     .unwrap()
 //!     .traverse()
@@ -212,8 +214,8 @@ where
     #[must_use]
     #[inline]
     /// Create a new Finder instance.
-    pub fn init<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> FinderBuilder<S> {
-        FinderBuilder::new(root, pattern)
+    pub fn init<A: AsRef<OsStr>>(root: A) -> FinderBuilder<S> {
+        FinderBuilder::new(root)
     }
 
     #[inline]
@@ -460,7 +462,7 @@ where
     S: BytesStorage,
 {
     pub(crate) root: OsString,
-    pub(crate) pattern: String,
+    pub(crate) pattern: Option<String>,
     pub(crate) hide_hidden: bool,
     pub(crate) case_insensitive: bool,
     pub(crate) keep_dirs: bool,
@@ -486,12 +488,11 @@ where
     ///
     /// # Arguments
     /// * `root` - The root directory to search
-    /// * `pattern` - The glob pattern to match files against
-    pub fn new<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> Self {
+    pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
         let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1); //set default threadcount
         Self {
             root: root.as_ref().to_owned(),
-            pattern: pattern.as_ref().to_owned(),
+            pattern: None,
             hide_hidden: true,
             case_insensitive: true,
             keep_dirs: false,
@@ -509,6 +510,15 @@ where
             thread_count,
         }
     }
+    #[must_use]
+    /// Set the search pattern (regex or glob)
+    pub fn pattern<P: AsRef<str>>(mut self, pattern: Option<P>) -> Self {
+        if let Some(patt) = pattern {
+            self.pattern = Some(patt.as_ref().into());
+        }
+        self
+    }
+
     #[must_use]
     /// Set whether to hide hidden files, defaults to true
     pub const fn keep_hidden(mut self, hide_hidden: bool) -> Self {
@@ -599,12 +609,14 @@ where
     }
 
     #[must_use]
+    #[allow(clippy::ref_patterns)]
     /// Set whether to escape any regexs in the string, defaults to false
     pub fn fixed_string(mut self, fixed_string: bool) -> Self {
-        if fixed_string {
-            self.pattern = regex::escape(&self.pattern);
+        if let Some(ref patt) = self.pattern
+            && fixed_string
+        {
+            self.pattern = Some(regex::escape(patt));
         }
-
         self
     }
     #[must_use]
@@ -655,7 +667,7 @@ where
         };
 
         let search_config = SearchConfig::new(
-            self.pattern,
+            self.pattern.as_ref(),
             self.hide_hidden,
             self.case_insensitive,
             self.keep_dirs,

@@ -1126,7 +1126,8 @@ mod tests {
         let start_path: &[u8] = b"/";
         let pattern: &str = ".";
 
-        let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str(), &pattern)
+        let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str())
+            .pattern(Some(&pattern))
             .keep_hidden(true)
             .keep_dirs(true)
             .build()
@@ -1149,7 +1150,8 @@ mod tests {
         let start_path: &[u8] = b"/";
         let pattern: &str = ".";
 
-        let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str(), &pattern)
+        let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str())
+            .pattern(Some(&pattern))
             .keep_hidden(true)
             .keep_dirs(true)
             .follow_symlinks(true)
@@ -1173,12 +1175,12 @@ mod tests {
         let home_dir = std::env::home_dir();
 
         if home_dir.is_some() {
-            let finder: Finder<SlimmerBytes> =
-                Finder::init(home_dir.unwrap().as_os_str(), &pattern)
-                    .keep_hidden(true)
-                    .keep_dirs(true)
-                    .build()
-                    .unwrap();
+            let finder: Finder<SlimmerBytes> = Finder::init(home_dir.unwrap().as_os_str())
+                .pattern(Some(&pattern))
+                .keep_hidden(true)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
 
             let result = finder.traverse().unwrap().into_iter();
 
@@ -1194,13 +1196,13 @@ mod tests {
         let home_dir = std::env::home_dir();
 
         if home_dir.is_some() {
-            let finder: Finder<SlimmerBytes> =
-                Finder::init(home_dir.unwrap().as_os_str(), &pattern)
-                    .keep_hidden(true)
-                    .follow_symlinks(true)
-                    .keep_dirs(true)
-                    .build()
-                    .unwrap();
+            let finder: Finder<SlimmerBytes> = Finder::init(home_dir.unwrap().as_os_str())
+                .pattern(Some(&pattern))
+                .keep_hidden(true)
+                .follow_symlinks(true)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
 
             let result = finder.traverse().unwrap().into_iter();
 
@@ -1216,12 +1218,12 @@ mod tests {
         let home_dir = std::env::home_dir();
 
         if home_dir.is_some() {
-            let finder: Finder<SlimmerBytes> =
-                Finder::init(home_dir.unwrap().as_os_str(), &pattern)
-                    .keep_hidden(false)
-                    .keep_dirs(true)
-                    .build()
-                    .unwrap();
+            let finder: Finder<SlimmerBytes> = Finder::init(home_dir.unwrap().as_os_str())
+                .pattern(Some(&pattern))
+                .keep_hidden(false)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
 
             let result = finder.traverse().unwrap().into_iter();
 

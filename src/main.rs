@@ -261,7 +261,8 @@ fn main() -> Result<(), SearchConfigError> {
     });
 
     let path = args.directory.unwrap_or_else(|| OsString::from("."));
-    let finder: Finder<SlimmerBytes> = Finder::init(&path, &start_pattern)
+    let finder: Finder<SlimmerBytes> = Finder::init(&path)
+        .pattern(Some(&start_pattern))
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)

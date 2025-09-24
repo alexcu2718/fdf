@@ -6,17 +6,18 @@ use std::hint::black_box;
 #[inline(always)]
 //modified version to work for this test function(copy pasted really)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(LibcDirent64, d_name); //we're going backwards(to the start of d_name) so we add 1 to the offset
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(LibcDirent64, d_name);
     let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
     // Calculate find the  start of the d_name field
     //  Access the last 8 bytes(word) of the dirent structure as a u64 word
     #[cfg(target_endian = "little")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
+    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+
     #[cfg(target_endian = "big")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
+    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le(); // Convert to little-endian if necessary
 
-    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
-
+    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64);
+    //  let mask = 0x00FF_FFFFu64 & (((reclen == 24) as u64).wrapping_neg());
     let candidate_pos = last_word | mask;
 
     let byte_pos = 8 - find_zero_byte_u64(candidate_pos);
@@ -82,7 +83,7 @@ fn make_dirent(name: &str) -> LibcDirent64 {
 fn bench_strlen(c: &mut Criterion) {
     let length_groups = [
         ("tiny (1-4)", "a"),
-        ("small (5-16)", "file.txt"),
+        ("small (5-16)", "file.txtth6"),
         ("medium (17-64)", "config_files/settings/default.json"),
         (
             "large (65-128)",

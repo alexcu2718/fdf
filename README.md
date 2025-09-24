@@ -34,7 +34,7 @@ While the CLI is usable, the internal library is NOT suggested for use(except fo
 
 ### Not Yet Supported
 
-- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/).
+- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/), I would like to extend this to windows eventually.
 
 *Note: GitHub Actions does not yet provide Rust 2024 support for some platforms. Additional checks will be added when available.*
 

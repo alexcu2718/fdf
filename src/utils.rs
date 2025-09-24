@@ -1,4 +1,4 @@
-use crate::buffer::ValueType;
+use crate::{LOCAL_PATH_MAX, buffer::ValueType};
 
 use chrono::{DateTime, Utc};
 #[cfg(not(target_os = "linux"))]
@@ -116,6 +116,10 @@ pub unsafe fn construct_path(
     let d_name = unsafe { crate::access_dirent!(drnt, d_name) };
     // SAFETY: as above
     let name_len = unsafe { dirent_name_length(drnt) };
+    debug_assert!(
+        name_len + base_len < LOCAL_PATH_MAX,
+        "We don't expect the total length to exceed PATH_MAX!"
+    );
     // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
     // by the caller of this function.
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
@@ -228,7 +232,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         use crate::memchr_derivations::find_zero_byte_u64;
 
         // Offset from the start of the struct to the beginning of d_name.
-        // We add 1 since we calculate backwards from the header boundary.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
 
         // Accessing `d_reclen` is safe because the struct is kernel-provided.
@@ -245,7 +248,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         #[cfg(target_endian = "little")]
         // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
         let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
-
+        // Note, I don't index as a u64 with eg (reclen-8)/8 because that adds a division which is a costly operations, relatively speaking
+        // let last_word: u64 = unsafe { *(dirent.cast::<u64>()).add((reclen - 8)/8)}; //this will also work but it's less performant (MINUTELY)
         // For big-endian targets, convert to little-endian for uniform handling.
         #[cfg(target_endian = "big")]
         // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
@@ -254,7 +258,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         // TODO: big-endian logic could be further optimised. Very much a minor nit.
 
         // When the record length is 24, the kernel may insert nulls before d_name.
-        // Which will exist on index's 17/18, as the d_name starts on offset 19
+        // Which will exist on index's 17/18/19, as the d_name starts on offset 19 (The start can never be null so masking it is ok)
         // Mask them out to avoid false detection of a terminator.
         // Multiplying by 0 or 1 applies the mask conditionally without branching.
         let mask: u64 = 0x00FF_FFFFu64 * ((reclen == 24) as u64);

@@ -94,7 +94,7 @@ struct Args {
     #[arg(
         short = 'n',
         long = "max-results",
-        help = "Retrieves the first eg 10 results, '.cache' / -n 10"
+        help = "Retrieves the first eg 10 results, 'fdf  -n 10 '.cache' /"
     )]
     top_n: Option<usize>,
     #[arg(
@@ -221,11 +221,6 @@ fn main() -> Result<(), SearchConfigError> {
         return Ok(());
     }
 
-    let start_pattern = args
-        .pattern
-        .as_ref()
-        .map_or_else(|| ".".into(), core::clone::Clone::clone);
-
     if args.depth.is_some_and(|depth| depth == 0) {
         eprintln!("Error: Depth cannot be 0. Exiting.");
         std::process::exit(1);
@@ -262,7 +257,7 @@ fn main() -> Result<(), SearchConfigError> {
 
     let path = args.directory.unwrap_or_else(|| OsString::from("."));
     let finder: Finder<SlimmerBytes> = Finder::init(&path)
-        .pattern(Some(&start_pattern))
+        .pattern(args.pattern)
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)

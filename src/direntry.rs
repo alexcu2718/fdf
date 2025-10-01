@@ -302,7 +302,7 @@ impl DirEntry {
     /**
     Returns the underlying bytes as a UTF-8 string slice if valid.
     # Errors
-        Returns `Err` if the bytes are not valid UTF-8.
+    Returns `Err` if the bytes are not valid UTF-8.
     */
     pub const fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
         core::str::from_utf8(self.as_bytes())

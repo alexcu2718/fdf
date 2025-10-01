@@ -30,6 +30,8 @@ pub struct ReadDir {
     pub(crate) file_name_index: u16,
     /// Depth of this directory relative to traversal root
     pub(crate) parent_depth: u16,
+    /// The file descriptor of this directory, for use in calls like openat/statat etc.
+    pub(crate) dirfd: i32,
 }
 
 impl ReadDir {
@@ -61,9 +63,8 @@ impl ReadDir {
     /// Returns the file descriptor for this directory.
     ///
     /// Useful for operations that need the raw directory FD.
-    pub fn dirfd(&self) -> i32 {
-        // SAFETY: The dir is valid to be open for the duration of this iterator
-        unsafe { libc::dirfd(self.dir.as_ptr()) }
+    pub const fn dirfd(&self) -> i32 {
+        self.dirfd
     }
 
     #[inline]
@@ -91,11 +92,14 @@ impl ReadDir {
         let base_len = unsafe { path_buffer.init_from_direntry(dir_path) };
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)
+        // SAFETY:This is a valid pointer from a just opened directory
+        let dirfd = unsafe { libc::dirfd(dir.as_ptr()) };
         Ok(Self {
             dir,
             path_buffer,
             file_name_index: base_len as _,
             parent_depth: dir_path.depth, //inherit depth
+            dirfd,
         })
     }
 }

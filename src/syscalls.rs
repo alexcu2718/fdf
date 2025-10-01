@@ -1,5 +1,5 @@
 // honestly i should probably delete this and rely on just libc but I ideally would like to not dynamically link glibc in future on  Linux
-#![cfg(all(target_os = "linux", target_arch = "x86_64"))]
+
 #![allow(clippy::undocumented_unsafe_blocks)] // too lazy to comment it all
 use core::ffi::CStr;
 

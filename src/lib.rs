@@ -19,8 +19,6 @@
 //!   - File extensions
 //!   - Hidden file handling
 //!   - Custom filter functions
-//! - **Memory Efficiency**: Multiple storage backends (Vec, Arc, Box, `SlimmerBytes` )
-//!   for different memory/performance trade-offs
 //! - **Cycle Detection**: Automatic symlink cycle prevention using inode caching
 //! - **Depth Control**: Configurable maximum search depth
 //! - **Path Canonicalisation**: Optional path resolution to absolute paths

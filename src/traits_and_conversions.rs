@@ -7,11 +7,7 @@ use crate::{
 };
 
 use core::cell::Cell;
-<<<<<<< Updated upstream
-use core::{fmt, mem::MaybeUninit, ops::Deref};
-=======
 use core::{fmt, ops::Deref};
->>>>>>> Stashed changes
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
@@ -35,15 +31,6 @@ where
     /// Gets file metadata via `stat`
     /// Converts to `&Path` (zero-cost on Unix)
     fn as_path(&self) -> &Path;
-<<<<<<< Updated upstream
-    /// Opens file descriptor for directory paths
-    ///
-    /// # Safety
-    /// - Path must be a directory
-    /// - Uses `O_DIRECTORY | O_CLOEXEC | O_NONBLOCK`
-    unsafe fn open_fd(&self) -> Result<i32>;
-=======
->>>>>>> Stashed changes
     /// Gets index of filename component start
     ///
     /// Returns position after last '/' or 0 if none.
@@ -73,40 +60,6 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
-<<<<<<< Updated upstream
-    fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
-    where
-        //TODO! change this to unsafe MAYBE?
-        F: FnOnce(*const VT) -> R,
-        VT: ValueType, // VT==ValueType is u8/i8
-    {
-        debug_assert!(
-            self.len() < LOCAL_PATH_MAX, //declared at compile time via env_var or default to 4096/1024 (Linux/ BSD-like(including macos))
-            "Input too large for buffer"
-        );
-        // TODO! investigate this https://docs.rs/nix/latest/src/nix/lib.rs.html#318-350
-        // Essentially I need to check the implications of this.
-
-        let mut c_path_buf_start = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new();
-
-        let c_path_buf = c_path_buf_start.as_mut_ptr();
-
-        // copy bytes using copy_nonoverlapping to avoid ub check
-        // SAFETY: The source (`self`) and destination (`c_path_buf`) pointers are known not to overlap,
-        // and the length is guaranteed to be less than or equal to the destination's capacity (`LOCAL_PATH_MAX`).
-        unsafe { core::ptr::copy_nonoverlapping(self.as_ptr(), c_path_buf, self.len()) };
-        // SAFETY: The destination is `c_path_buf` offset by `self.len()`, which is a valid index
-        #[allow(clippy::multiple_unsafe_ops_per_block)]
-        unsafe {
-            c_path_buf.add(self.len()).write(0)
-        }; // Null terminate the string
-
-        func(c_path_buf.cast::<_>())
-    }
-
-    #[inline]
-=======
->>>>>>> Stashed changes
     fn extension(&self) -> Option<&[u8]> {
         // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
         memrchr(b'.', unsafe { self.get_unchecked(..self.len() - 1) }) //exclude cases where the . is the final character
@@ -261,11 +214,7 @@ pub trait DirentConstructor {
     }
 }
 
-<<<<<<< Updated upstream
-impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
-=======
 impl DirentConstructor for crate::ReadDir {
->>>>>>> Stashed changes
     #[inline]
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
@@ -283,11 +232,7 @@ impl DirentConstructor for crate::ReadDir {
 }
 
 #[cfg(target_os = "linux")]
-<<<<<<< Updated upstream
-impl<S: BytesStorage> DirentConstructor<S> for crate::iter::DirEntryIterator<S> {
-=======
 impl DirentConstructor for crate::iter::GetDents {
->>>>>>> Stashed changes
     #[inline]
     fn path_buffer(&mut self) -> &mut crate::PathBuffer {
         &mut self.path_buffer

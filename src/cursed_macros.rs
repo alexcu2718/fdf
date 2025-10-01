@@ -328,31 +328,32 @@ macro_rules! skip_dot_or_dot_dot_entries {
         #[allow(clippy::multiple_unsafe_ops_per_block)]
         // SAFETY: when calling this macro, the pointer has already been ensured to be non null
         unsafe {
-            let d_type = access_dirent!($entry, d_type);
+            match access_dirent!($entry, d_type) {
+                //get the file type from my macro
+                libc::DT_DIR | libc::DT_UNKNOWN => {
+                    #[cfg(target_os = "linux")]
+                    {
+                        // Linux optimisation: reclen is always 24 for . and .. on linux
+                        if access_dirent!($entry, d_reclen) == 24 {
+                            let name_ptr = access_dirent!($entry, d_name);
+                            match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
+                                (b'.', 0, _) | (b'.', b'.', 0) => $action,
+                                _ => (),
+                            }
+                        }
+                    }
 
-            #[cfg(target_os = "linux")]
-            {
-                //reclen is always 24 for . and .. on linux,
-                if (d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN)
-                    && access_dirent!($entry, d_reclen) == 24
-                {
-                    let name_ptr = access_dirent!($entry, d_name);
-                    match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
-                        (b'.', 0, _) | (b'.', b'.', 0) => $action,
-                        _ => (),
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        let name_ptr = access_dirent!($entry, d_name);
+                        match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
+                            (b'.', 0, _) | (b'.', b'.', 0) => $action,
+                            _ => (),
+                        }
                     }
                 }
-            }
-
-            #[cfg(not(target_os = "linux"))]
-            {
-                if d_type == libc::DT_DIR || d_type == libc::DT_UNKNOWN {
-                    let name_ptr = access_dirent!($entry, d_name);
-                    match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
-                        (b'.', 0, _) | (b'.', b'.', 0) => $action,
-                        _ => (),
-                    }
-                }
+                // For all other file types, no action needed
+                _ => (),
             }
         }
     }};
@@ -435,7 +436,7 @@ macro_rules! handle_depth_limit {
         if $self
             .search_config
             .depth
-            .is_some_and(|depth| $dir.depth >= depth)
+            .is_some_and(|depth| $dir.depth >= depth.into())
         {
             if $should_send {
                 if let Err(e) = $sender.send(vec![$dir]) {

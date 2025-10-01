@@ -331,6 +331,7 @@ const LO_U64: u64 = repeat_u64(0x01);
 
 const HI_U64: u64 = repeat_u64(0x80);
 
+#[inline]
 /// Returns the index (0..=7) of the first zero byte** in a `u64` word
 ///
 /// This uses a branchless, bitwise technique that identifies zero bytes
@@ -347,61 +348,20 @@ const HI_U64: u64 = repeat_u64(0x80);
 /// >> 3 converts from bit position to byte index (divides by 8)
 /// Returns:
 /// - The byte index of the first zero byte in `x`
-#[inline]
-pub(crate) const fn find_zero_byte_u64(x: u64) -> usize {
-    //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
-    // Because I don't intend to do a 32bit port, this is fine.
-    let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
+pub const fn find_zero_byte_u64(x: u64) -> usize {
+    let zero_bit = (x.wrapping_sub(LO_U64) & !x & HI_U64);
 
-    (zero_bit.trailing_zeros() >> 3) as usize
+    #[cfg(target_endian = "little")]
+    {
+        (zero_bit.trailing_zeros() >> 3) as usize
+    }
+    #[cfg(not(target_endian = "little"))]
+    {
+        (zero_bit.leading_zeros() >> 3) as usize
+    }
 }
 
 #[inline]
-<<<<<<< Updated upstream
-/// Finds the first occurrence of a byte in a 64-bit word.
-///
-/// This uses a branchless, bitwise technique to locate the first instance of
-/// the target byte `c` in the 64-bit value `str`. The operation works by:
-///
-/// 1. XORing each byte with the target value (resulting in 0 for matches)
-/// 2. Applying a zero-byte detection algorithm to find matches
-/// 3. Converting the bit position to a byte index
-///
-/// # The Computation
-/// - `str ^ repeat_u64(c)`: Creates a value where matching bytes become 0
-/// - `.wrapping_sub(LO_U64)`: Subtracts 1 from each byte (wrapping)
-/// - `& !xor_result`: Clears bits where the XOR result had 1s
-/// - `& HI_U64`: Isolates the high bit of each byte
-///
-/// The resulting word will have high bits set only for bytes that matched `c`.
-/// We then use `trailing_zeros() >> 3` to convert the bit position to a byte index.
-///
-/// # Examples
-/// ```
-/// use fdf::{find_char_in_word};
-/// // Basic usage
-/// assert_eq!(find_char_in_word(b'C', [b'A', b'B', b'C', b'D', 0, 0, 0, 0]), Some(2));
-/// assert_eq!(find_char_in_word(b'X', [b'A', b'B', b'C', b'D', 0, 0, 0, 0]), None);
-///
-/// // Edge cases
-/// assert_eq!(find_char_in_word(b'A', [b'A'; 8]), Some(0)); // first position
-/// assert_eq!(find_char_in_word(b'A', [0; 8]), None); // not found
-/// assert_eq!(find_char_in_word(0, [1, 2, 3, 0, 5, 6, 7, 8]), Some(3)); // null byte
-/// ```
-///
-/// # Notes
-/// - Returns the first occurrence if the byte appears multiple times
-/// - Returns `None` if the byte is not found
-/// - Works for any byte value (0-255)
-///
-/// # Parameters
-/// - `c`: The byte to search for (0-255)
-/// - `bytestr`: The word ( a [u8;8] ) to search in (64 bit specific)
-///
-/// # Returns
-/// - `Some(usize)`: Index (0-7) of the first occurrence
-/// - `None`: If the byte is not found
-=======
 pub(crate) const unsafe fn find_zero_byte_u64_optimised(x: u64) -> usize {
     // use ctl_nonzero's for this via  nonzero u64
     // This skips the need to for all 0's then uses instruction bsf on most architectures
@@ -478,38 +438,33 @@ assert_eq!(find_char_in_word(b'l', bytes), Some(2)); // first 'l'
 - `None`: If the byte is not found
 */
 #[inline]
->>>>>>> Stashed changes
 pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
-    // XOR with the target character will be 0 for matching bytes
-    let char_array = u64::from_le_bytes(bytestr);
-
+    let char_array = u64::from_ne_bytes(bytestr);
     let xor_result = char_array ^ repeat_u64(c);
-
-    // Find zero bytes in the XOR result
     let matches = (xor_result.wrapping_sub(LO_U64)) & !xor_result & HI_U64;
 
     if matches != 0 {
-        Some((matches.trailing_zeros() >> 3) as usize)
+        #[cfg(target_endian = "big")]
+        return Some((matches.leading_zeros() >> 3) as usize);
+        #[cfg(target_endian = "little")]
+        return Some((matches.trailing_zeros() >> 3) as usize);
     } else {
         None
     }
 }
 
-/// Returns `true` if `x` contains any zero byte.
-///
+/** Returns `true` if `x` contains any zero byte.
 
-/// From *Matters Computational*, J. Arndt:
 
-///
+ From *Matters Computational*, J. Arndt:
 
-/// "The idea is to subtract one from each of the bytes and then look for
 
-/// bytes where the borrow propagated all the way to the most significant
+"The edea is to subtract one from each of the bytes and then look for
 
-/// bit."
-///
-// COPY PASTED FROM STDLIB INTERNALS.
+ bytes where the borrow propagated all the way to the most significant  bit."
 
+ COPY PASTED FROM STDLIB INTERNALS.
+*/
 #[inline]
 pub const fn contains_zero_byte(x: usize) -> bool {
     x.wrapping_sub(LO_USIZE) & !x & HI_USIZE != 0

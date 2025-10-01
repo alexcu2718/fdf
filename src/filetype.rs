@@ -223,23 +223,23 @@ impl FileType {
 }
 
 impl core::fmt::Display for FileType {
-    #[allow(clippy::renamed_function_params)]
-    fn fmt(&self, func: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
-            Self::BlockDevice => write!(func, "Block device"),
-            Self::CharDevice => write!(func, "Character device"),
-            Self::Directory => write!(func, "Directory"),
-            Self::Pipe => write!(func, "FIFO"),
-            Self::Symlink => write!(func, "Symlink"),
-            Self::RegularFile => write!(func, "Regular file"),
-            Self::Socket => write!(func, "Socket"),
-            Self::Unknown => write!(func, "Unknown"),
+            Self::BlockDevice => write!(f, "Block device"),
+            Self::CharDevice => write!(f, "Character device"),
+            Self::Directory => write!(f, "Directory"),
+            Self::Pipe => write!(f, "FIFO"),
+            Self::Symlink => write!(f, "Symlink"),
+            Self::RegularFile => write!(f, "Regular file"),
+            Self::Socket => write!(f, "Socket"),
+            Self::Unknown => write!(f, "Unknown"),
         }
     }
 }
 
 impl From<libc::stat> for FileType {
     /// Converts a `libc::stat` directly to a `FileType`
+    #[inline]
     fn from(stat: libc::stat) -> Self {
         Self::from_stat(&stat)
     }

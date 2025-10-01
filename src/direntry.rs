@@ -14,11 +14,7 @@
 //! use std::sync::Arc;
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-<<<<<<< Updated upstream
-//!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path", "*.txt")
-=======
 //!     let finder= Finder::init("/some/path").pattern("*.txt")
->>>>>>> Stashed changes
 //!         .build()
 //!         .expect("Failed to build finder");
 //!
@@ -47,11 +43,7 @@
 //! use fdf::{Finder, SizeFilter, FileTypeFilter};
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-<<<<<<< Updated upstream
-//!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path", "*.txt")
-=======
 //!     let finder = Finder::init("/some/path").pattern("*.txt")
->>>>>>> Stashed changes
 //!         .keep_hidden(false)
 //!         .case_insensitive(true)
 //!         .keep_dirs(true)
@@ -83,13 +75,7 @@
 //!     Ok(())
 //! }
 
-<<<<<<< Updated upstream
-use crate::{
-    BytePath as _, DirIter, OsBytes, Result, custom_types_result::BytesStorage, filetype::FileType,
-};
-=======
 use crate::{BytePath as _, DirEntryError, ReadDir, Result, filetype::FileType};
->>>>>>> Stashed changes
 use core::cell::Cell;
 use core::ptr::NonNull;
 use libc::stat;
@@ -160,16 +146,12 @@ pub struct DirEntry {
     /// Offset in the path buffer where the file name starts.
     ///
     /// This helps quickly extract the file name from the full path.
-    pub(crate) file_name_index: u16, //2
+    pub(crate) file_name_index: u16, //2bytes
     ///
     /// `None` means not computed yet, `Some(bool)` means cached result.
-<<<<<<< Updated upstream
-    pub(crate) is_traversible_cache: Cell<Option<bool>>, //1
-=======
     pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
                                                          //30 bytes, rounded to 32
                                                          // We could add an extra bool on it? and still abuse null pointer optimisation for Options
->>>>>>> Stashed changes
 }
 
 impl core::ops::Deref for DirEntry {
@@ -309,12 +291,9 @@ impl DirEntry {
     #[must_use]
     // Converts to a lossy string for ease of use
     pub fn to_string_lossy(&self) -> std::borrow::Cow<'_, str> {
-        String::from_utf8_lossy(self.as_bytes())
+        String::from_utf8_lossy(self)
     }
 
-<<<<<<< Updated upstream
-    ///Cost free check for character devices
-=======
     #[inline]
     /// Returns the underlying bytes as a UTF-8 string slice if valid.
     ///
@@ -324,28 +303,27 @@ impl DirEntry {
         core::str::from_utf8(self.as_bytes())
     }
     /// Cost free check for character devices
->>>>>>> Stashed changes
     #[inline]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
         self.file_type.is_char_device()
     }
 
-    ///Cost free check for pipes (FIFOs)
+    /// Cost free check for pipes (FIFOs)
     #[inline]
     #[must_use]
     pub const fn is_pipe(&self) -> bool {
         self.file_type.is_pipe()
     }
 
-    ///Cost free check for sockets
+    /// Cost free check for sockets
     #[inline]
     #[must_use]
     pub const fn is_socket(&self) -> bool {
         self.file_type.is_socket()
     }
 
-    ///Cost free check for regular files
+    /// Cost free check for regular files
     #[inline]
     #[must_use]
     pub const fn is_regular_file(&self) -> bool {
@@ -358,13 +336,13 @@ impl DirEntry {
     pub const fn is_dir(&self) -> bool {
         self.file_type.is_dir()
     }
-    ///cost free check for unknown file types
+    /// Cost free check for unknown file types
     #[inline]
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
         self.file_type.is_unknown()
     }
-    ///cost free check for symlinks
+    /// Cost free check for symlinks
     #[inline]
     #[must_use]
     pub const fn is_symlink(&self) -> bool {
@@ -431,10 +409,6 @@ impl DirEntry {
             _ => false,
         }
     }
-<<<<<<< Updated upstream
-    #[inline]
-    #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
-=======
 
     /**
     Returns the full path of this directory entry as a `CStr`.
@@ -605,7 +579,6 @@ impl DirEntry {
         */
 
     #[inline]
->>>>>>> Stashed changes
     /// Converts a directory entry to a full, canonical path, resolving all symlinks
     ///
     /// This is a **costly** operation as it involves a system call (`realpath`).
@@ -654,17 +627,6 @@ impl DirEntry {
     ///
     /// ```
     pub fn to_full_path(&self) -> Result<Self> {
-<<<<<<< Updated upstream
-        #[cfg(not(target_env = "gnu"))]
-        //Essentially, because only glibc has a really optimised strlen function, i'd prefer to use this
-        use crate::strlen;
-        #[cfg(target_env = "gnu")]
-        // unfortunately my asm implementation doesn't perform well on long paths, which i want to figure out why(curiosity, not pragmatism!)
-        use libc::strlen;
-        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
-        let ptr = unsafe {
-            self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, core::ptr::null_mut())) //realpath implicitly mallocs, hence need to free.
-=======
         let full_path = self.get_realpath()?;
 
         let file_name_index = full_path.to_bytes().file_name_index(); //used for indexing.
@@ -676,71 +638,19 @@ impl DirEntry {
             (FileType::from_stat(&statted), access_stat!(statted, st_ino))
         } else {
             (self.file_type(), self.ino())
->>>>>>> Stashed changes
         };
 
-        if ptr.is_null() {
-            //check for null
-            return Err(std::io::Error::last_os_error().into());
-        }
-        // SAFETY: pointer is guaranteed null terminated by the kernel, the pointer is properly aligned
-        let full_path = unsafe { &*core::ptr::slice_from_raw_parts(ptr.cast(), strlen(ptr)) };
-        //get length without null terminator (no ub check, this is why i do it this way)
-
-        let file_type = if self.is_symlink() {
-            //if it's a symlink, we need to resolve it.
-            FileType::from_bytes(full_path) //Doesn't matter this internally calls lstat, it's resolved anyway
-        } else {
-            self.file_type()
-        };
         let boxed = Self {
-            path: full_path.into(), //we're heap allocating here, i wish we could've reused the malloc but this isnt TOO important performance wise
+            path: full_path,
             file_type,
-            inode: self.inode,
-            depth: self.depth,
-            file_name_index: full_path.file_name_index() as _,
+            inode: ino,
+            depth: self.depth, //inherit depth, may need to revisit this
+            file_name_index,
             is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)), //we can check it's traversibility directly here because of it being resolved
         };
-        // SAFETY: the pointer points to valid malloc'ed memory(we have checked for null), it is safe to free it now
-        unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
-        //free the pointer to stop leaking
 
         Ok(boxed)
     }
-    /* (I spent a lot of time debating this function!)
-    https://man7.org/linux/man-pages/man3/realpath.3.html
-    DESCRIPTION         top
-
-       realpath() expands all symbolic links and resolves references to
-       /./, /../ and extra '/' characters in the null-terminated string
-       named by path to produce a canonicalized absolute pathname.  The
-       resulting pathname is stored as a null-terminated string, up to a
-       maximum of PATH_MAX bytes, in the buffer pointed to by
-       resolved_path.  The resulting path will have no symbolic link, /./
-       or /../ components.
-
-       If resolved_path is specified as NULL, then realpath() uses
-       malloc(3) to allocate a buffer of up to PATH_MAX bytes to hold the
-       resolved pathname, and returns a pointer to this buffer.  The
-       caller should deallocate this buffer using free(3).
-
-
-
-        https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
-    pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
-        let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
-        if r.is_null() {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(PathBuf::from(OsString::from_vec(unsafe {
-            let buf = CStr::from_ptr(r).to_bytes().to_vec();
-            libc::free(r as *mut _);
-            buf
-        })))
-    }
-
-
-        */
 
     #[inline]
     /**
@@ -1081,6 +991,10 @@ impl DirEntry {
     #[must_use]
     /// Returns the directory name of the file (as bytes)
     pub fn dirname(&self) -> &[u8] {
+        debug_assert!(
+            self.file_name_index() <= self.len(),
+            "Indexing should always be within bounds"
+        );
         // SAFETY: the index is below the length of the path trivially
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as above, its very useful and cheap
@@ -1095,6 +1009,10 @@ impl DirEntry {
     #[must_use]
     ///returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
+        debug_assert!(
+            self.file_name_index() <= self.len(),
+            "Indexing should always be within bounds"
+        );
         // SAFETY: the index is below the length of the path trivially
         unsafe { self.get_unchecked(..core::cmp::max(self.file_name_index() - 1, 1)) }
     }
@@ -1248,7 +1166,7 @@ impl DirEntry {
     /// ```
     #[inline]
     pub fn readdir(&self) -> Result<impl Iterator<Item = Self>> {
-        DirIter::new(self)
+        ReadDir::new(self)
     }
     #[inline]
     #[cfg(target_os = "linux")]
@@ -1306,24 +1224,7 @@ impl DirEntry {
     /// fs::remove_dir_all(&temp_dir).unwrap();
     /// ```
     pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
-        use crate::SyscallBuffer;
-        use crate::iter::DirEntryIterator;
-        // SAFETY: We're  null terminating the filepath and it's below `LOCAL_PATH_MAX` (4096/1024 system dependent)
-        let fd = unsafe { self.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
-        let mut path_buffer = crate::AlignedBuffer::<u8, { crate::LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
-        // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
-        let path_len = unsafe { path_buffer.init_from_direntry(self) };
-        //TODO! make this more ergonomic
-        let buffer = SyscallBuffer::new();
-        Ok(DirEntryIterator {
-            fd,
-            buffer,
-            path_buffer,
-            file_name_index: path_len as _,
-            parent_depth: self.depth,
-            offset: 0,
-            remaining_bytes: 0,
-            _marker: core::marker::PhantomData::<S>, // marker for the storage type, this is used to ensure that the iterator can be used with any storage type
-        })
+        use crate::iter::GetDents;
+        GetDents::new(self)
     }
 }

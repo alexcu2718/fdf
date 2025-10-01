@@ -106,7 +106,7 @@ pub enum SearchConfigError {
     /// Invalid regular expression syntax
     RegexError(regex::Error),
     /// I/O error during search configuration or execution
-    IoError(io::Error),
+    IOError(io::Error),
     /// Specified root path is not a directory
     NotADirectory,
     /// Error during directory traversal operation
@@ -114,7 +114,7 @@ pub enum SearchConfigError {
 }
 impl From<io::Error> for SearchConfigError {
     fn from(error: io::Error) -> Self {
-        Self::IoError(error)
+        Self::IOError(error)
     }
 }
 #[allow(clippy::pattern_type_mismatch)]
@@ -123,7 +123,7 @@ impl fmt::Display for SearchConfigError {
         match self {
             Self::GlobToRegexError(e) => write!(f, "Glob to regex conversion error: {e}"),
             Self::RegexError(e) => write!(f, "Regex error: {e}"),
-            Self::IoError(e) => write!(f, "IO error: {e}"),
+            Self::IOError(e) => write!(f, "IO error: {e}"),
             Self::NotADirectory => write!(f, "Path is not a directory"),
             Self::TraversalError(e) => write!(f, "Traversal error: {e}"),
         }

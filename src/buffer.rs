@@ -107,8 +107,8 @@ impl<T, const SIZE: usize> AlignedBuffer<T, SIZE>
 where
     T: ValueType,
 {
-    #[inline]
     #[must_use]
+    #[inline]
     /// Creates a new uninitialised aligned buffer
     ///
     /// The buffer will have 8-byte alignment but its contents will be uninitialised.

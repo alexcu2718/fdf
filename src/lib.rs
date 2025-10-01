@@ -47,14 +47,9 @@
 //! use fdf::{Finder,DirEntry,SearchConfigError};
 //! use std::sync::mpsc::Receiver;
 //!
-<<<<<<< Updated upstream
-//! fn find_files() -> Result<Receiver<Vec<DirEntry<SlimmerBytes>>>, SearchConfigError> {
-//!     let finder = Finder::<SlimmerBytes>::init("/path/to/search", "*.rs")
-=======
 //! fn find_files() -> Result<Receiver<Vec<DirEntry>>, SearchConfigError> {
 //!     let finder = Finder::init("/path/to/search")
 //!         .pattern("*.rs")
->>>>>>> Stashed changes
 //!         .keep_hidden(false)
 //!         .max_depth(Some(3))
 //!         .follow_symlinks(true)
@@ -77,14 +72,9 @@
 //!
 //! ### Basic Usage
 //! ```rust
-<<<<<<< Updated upstream
-//! # use fdf::{Finder, SlimmerBytes};
-//! let receiver = Finder::<SlimmerBytes>::init(".", ".*txt")
-=======
 //! # use fdf::{Finder};
 //! let receiver = Finder::init(".")
 //!     .pattern(".*txt")
->>>>>>> Stashed changes
 //!     .build()
 //!     .unwrap()
 //!     .traverse()
@@ -96,13 +86,12 @@
 //!     }
 //! }
 //! ```
-
+use core::num::NonZeroU16;
 use rayon::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
     fs::metadata,
-    os::unix::ffi::OsStrExt as _,
-    os::unix::fs::MetadataExt as _,
+    os::unix::{ffi::OsStrExt as _, fs::MetadataExt as _},
     path::Path,
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
@@ -115,7 +104,9 @@ mod size_filter;
 pub use size_filter::SizeFilter;
 
 mod iter;
-pub(crate) use iter::DirIter;
+#[cfg(target_os = "linux")]
+pub use iter::GetDents;
+pub use iter::ReadDir;
 
 #[cfg(target_os = "linux")]
 mod syscalls;
@@ -147,7 +138,16 @@ pub(crate) use custom_types_result::{DirEntryFilter, FilterType, PathBuffer};
 mod traits_and_conversions;
 pub(crate) use traits_and_conversions::BytePath;
 mod utils;
-#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 pub use utils::dirent_const_time_strlen;
 pub use utils::{modified_unix_time_to_datetime, strlen};
 
@@ -198,13 +198,8 @@ impl Finder
     #[must_use]
     #[inline]
     /// Create a new Finder instance.
-<<<<<<< Updated upstream
-    pub fn init<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> FinderBuilder<S> {
-        FinderBuilder::new(root, pattern)
-=======
     pub fn init<A: AsRef<OsStr>>(root: A) -> FinderBuilder {
         FinderBuilder::new(root)
->>>>>>> Stashed changes
     }
 
     #[inline]
@@ -248,7 +243,29 @@ impl Finder
         }
     }
 
-    // fn print_results(self)
+    #[inline]
+    /// Prints search results to stdout with optional colouring and count limiting.
+    ///
+    /// This is a convenience method that handles the entire search, result collection,
+    /// and formatted output in one call.
+    ///
+    /// # Arguments
+    /// * `use_colours` - Enable ANSI colour output for better readability (it's always off if output does not support colours)
+    /// * `result_count` - Optional limit on the number of results to display
+    /// * `sort` Enable sorting of the end results (has a big computational cost)
+    /// # Errors
+    /// Either:
+    /// Returns [`SearchConfigError::TraversalError`] if the search operation fails
+    /// Returns [`SearchConfigError::IOError`] if the search operation fails
+    pub fn print_results(
+        self,
+        use_colours: bool,
+        result_count: Option<usize>,
+        sort: bool,
+    ) -> core::result::Result<(), SearchConfigError> {
+        //TODO clean this up
+        write_paths_coloured(self.traverse()?.iter(), result_count, use_colours, sort)
+    }
 
     #[inline]
     /// Determines if a directory should be sent through the channel
@@ -295,6 +312,11 @@ impl Finder
         clippy::wildcard_enum_match_arm,
         reason = "Exhaustive on traversible types"
     )]
+    #[expect(
+        clippy::ref_patterns,
+        reason = "Borrowing doesn't work on this extreme lint"
+    )]
+    #[expect(clippy::option_if_let_else, reason = "Complicates it even more ")]
     /// Advanced filtering for directories and symlinks with filesystem constraints.
     ///
     /// Handles same-filesystem constraints, inode caching, and symlink resolution
@@ -303,67 +325,45 @@ impl Finder
         match dir.file_type {
             // Normal directories
             FileType::Directory => {
-                if self.inode_cache.is_none() {
-                    // Fast path: no cache means no filesystem constraints
-                    return true;
-                }
-
-                dir.get_stat().is_ok_and(|stat| {
+                match self.inode_cache {
+                    None => {
+                        // Fast path: only calls stat IFF self.starting_filesystem is Some
+                        self.starting_filesystem.is_none_or(|start_dev| {
+                            dir.get_stat()
+                                .is_ok_and(|statted| start_dev == access_stat!(statted, st_dev))
+                        })
+                    }
+                    Some(ref cache) => {
+                        dir.get_stat().is_ok_and(|stat| {
                 // Check same filesystem if enabled
                 self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
                 // Check if we've already traversed this inode
-                self.inode_cache.as_ref().is_none_or(|cache| {
-                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
-                })
+                cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
             })
+                    }
+                }
             }
 
             // Symlinks that may point to directories
+            // This could be optimised a bit, symlinks are a beast due to their complexity.
             FileType::Symlink if self.search_config.follow_symlinks => {
                 dir.get_stat().is_ok_and(|stat| {
                 FileType::from_stat(&stat) == FileType::Directory &&
                 // Check filesystem boundary
                 self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
+
                 // Check if we've already traversed this inode
                 self.inode_cache.as_ref().is_none_or(|cache| {
-<<<<<<< Updated upstream
-                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
-                }) &&
-                // Ensure resolved path differs from root to avoid redundant traversal
-                dir.to_full_path().is_ok_and(|fullpath| !fullpath.starts_with(self.root.as_bytes()))
-=======
                     cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))) &&
                 // if we're traversing in the same root, then we'll find it anyway so skip it
                 dir.get_realpath().is_ok_and(|path| !path.to_bytes().starts_with(self.root.as_bytes()))
                 })
->>>>>>> Stashed changes
             })
             }
 
             // All other file types (files, non-followed symlinks, etc.)
             _ => false,
         }
-    }
-    #[inline]
-    /// Prints search results to stdout with optional coloring and count limiting.
-    ///
-    /// This is a convenience method that handles the entire search, result collection,
-    /// and formatted output in one call.
-    ///
-    /// # Arguments
-    /// * `use_colours` - Enable ANSI color output for better readability (it's always off if output does not support colours)
-    /// * `result_count` - Optional limit on the number of results to display
-    ///
-    /// # Errors
-    /// Either:
-    /// Returns [`SearchConfigError::TraversalError`] if the search operation fails
-    /// Returns [`SearchConfigError::IOError`] if the search operation fails
-    pub fn print_results(
-        self,
-        use_colours: bool,
-        result_count: Option<usize>,
-    ) -> core::result::Result<(), SearchConfigError> {
-        write_paths_coloured(self.traverse()?.iter(), result_count, use_colours)
     }
 
     #[expect(
@@ -443,13 +443,13 @@ impl Finder
 )]
 pub struct FinderBuilder {
     pub(crate) root: OsString,
-    pub(crate) pattern: String,
+    pub(crate) pattern: Option<String>,
     pub(crate) hide_hidden: bool,
     pub(crate) case_insensitive: bool,
     pub(crate) keep_dirs: bool,
     pub(crate) file_name_only: bool,
     pub(crate) extension_match: Option<Box<[u8]>>,
-    pub(crate) max_depth: Option<u16>,
+    pub(crate) max_depth: Option<NonZeroU16>,
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter>,
     pub(crate) size_filter: Option<SizeFilter>,
@@ -466,12 +466,11 @@ impl FinderBuilder {
     ///
     /// # Arguments
     /// * `root` - The root directory to search
-    /// * `pattern` - The glob pattern to match files against
-    pub fn new<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> Self {
+    pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
         let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1); //set default threadcount
         Self {
             root: root.as_ref().to_owned(),
-            pattern: pattern.as_ref().to_owned(),
+            pattern: None,
             hide_hidden: true,
             case_insensitive: true,
             keep_dirs: false,
@@ -489,6 +488,13 @@ impl FinderBuilder {
             thread_count,
         }
     }
+    #[must_use]
+    /// Set the search pattern (regex or glob)
+    pub fn pattern<P: AsRef<str>>(mut self, pattern: P) -> Self {
+        self.pattern = Some(pattern.as_ref().into());
+        self
+    }
+
     #[must_use]
     /// Set whether to hide hidden files, defaults to true
     pub const fn keep_hidden(mut self, hide_hidden: bool) -> Self {
@@ -514,18 +520,34 @@ impl FinderBuilder {
         self
     }
     #[must_use]
-    /// Set extension to match
-    pub fn extension_match<C: AsRef<str>>(mut self, extension_match: Option<C>) -> Self {
-        self.extension_match = extension_match.map(|x| x.as_ref().as_bytes().into());
+    /// Set extension to match, defaults to no extension
+    pub fn extension_match<C: AsRef<str>>(mut self, extension_match: C) -> Self {
+        let ext = extension_match.as_ref().as_bytes();
+
+        if ext.is_empty() {
+            self.extension_match = None;
+        } else {
+            self.extension_match = Some(Box::from(ext));
+        }
+
         self
     }
     #[must_use]
     /// Set maximum search depth
     pub const fn max_depth(mut self, max_depth: Option<u16>) -> Self {
-        self.max_depth = max_depth;
-        self
+        match max_depth {
+            None => self,
+            Some(num) => {
+                if let Some(non_zero) = NonZeroU16::new(num) {
+                    self.max_depth = Some(non_zero);
+                } else {
+                    // num == 0, remove depth limit by setting to None
+                    self.max_depth = None;
+                }
+                self
+            }
+        }
     }
-
     #[must_use]
     /// Sets size-based filtering criteria.
     pub const fn filter_by_size(mut self, size_of: Option<SizeFilter>) -> Self {
@@ -579,20 +601,21 @@ impl FinderBuilder {
     }
 
     #[must_use]
+    #[allow(clippy::ref_patterns)]
     /// Set whether to escape any regexs in the string, defaults to false
     pub fn fixed_string(mut self, fixed_string: bool) -> Self {
-        if fixed_string {
-            self.pattern = regex::escape(&self.pattern);
+        if let Some(ref patt) = self.pattern
+            && fixed_string
+        {
+            self.pattern = Some(regex::escape(patt));
         }
-
         self
     }
     #[must_use]
-    /// Set how many threads rayon is to use
-    pub const fn thread_count(mut self, threads: Option<usize>) -> Self {
-        if let Some(num) = threads {
-            self.thread_count = num;
-        }
+    /// Set how many threads rayon is to use, defaults to max
+    pub const fn thread_count(mut self, threads: usize) -> Self {
+        self.thread_count = threads;
+
         self
     }
 
@@ -635,7 +658,7 @@ impl FinderBuilder {
         };
 
         let search_config = SearchConfig::new(
-            self.pattern,
+            self.pattern.as_ref(),
             self.hide_hidden,
             self.case_insensitive,
             self.keep_dirs,
@@ -661,6 +684,7 @@ impl FinderBuilder {
 
         let inode_cache: Option<DashSet<(u64, u64)>> =
             (self.same_filesystem || self.follow_symlinks).then(DashSet::new);
+        //Enable the cache if same file system too, this helps de-duplicate for free (since it's 1 stat call regardless)
 
         Ok(Finder {
             root: resolved_root,
@@ -702,7 +726,7 @@ impl FinderBuilder {
             path_check
                 .canonicalize()
                 .map(core::convert::Into::into)
-                .map_err(SearchConfigError::IoError)
+                .map_err(SearchConfigError::IOError)
         } else {
             Ok(dir_to_use)
         }

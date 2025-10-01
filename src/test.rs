@@ -4,11 +4,7 @@ mod tests {
     use crate::memchr_derivations::{find_char_in_word, find_zero_byte_u64};
     use crate::size_filter::*;
     use crate::traits_and_conversions::BytePath;
-<<<<<<< Updated upstream
-    use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
-=======
     use crate::{DirEntry, FileType, ReadDir};
->>>>>>> Stashed changes
     use chrono::{Duration as ChronoDuration, Utc};
     use filetime::{FileTime, set_file_times};
     use std::env::temp_dir;
@@ -28,6 +24,15 @@ mod tests {
     fn as_bytes(path: &std::path::Path) -> &[u8] {
         path.to_str().unwrap().as_bytes()
     }
+
+    fn create_byte_array(s: &str) -> [u8; 8] {
+        let mut bytes = [0u8; 8];
+        let s_bytes = s.as_bytes();
+        let len = s_bytes.len().min(8);
+        bytes[..len].copy_from_slice(&s_bytes[..len]);
+        bytes
+    }
+
     #[allow(dead_code)]
     #[repr(C)]
     pub struct Dirent64 {
@@ -54,6 +59,7 @@ mod tests {
     #[test]
     fn test_directory_traversal_permissions() {
         let temp_dir = temp_dir().join("traversal_test");
+        let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(&temp_dir).unwrap();
 
         // no read permission
@@ -64,13 +70,8 @@ mod tests {
         perms.set_mode(0o000);
         fs::set_permissions(&no_read_dir, perms).unwrap();
 
-<<<<<<< Updated upstream
-        let entry = DirEntry::<Arc<[u8]>>::new(&temp_dir).unwrap();
-        let iter = DirIter::new(&entry).unwrap();
-=======
         let entry = DirEntry::new(&temp_dir).unwrap();
         let iter = ReadDir::new(&entry).unwrap();
->>>>>>> Stashed changes
 
         let entries: Vec<_> = iter.collect();
 
@@ -81,18 +82,6 @@ mod tests {
 
         fs::remove_dir_all(temp_dir).unwrap();
         assert!(entries.len() == 1)
-    }
-
-    #[test]
-    fn test_find_char_edge_cases() {
-        let all_zeros = [0u8; 8];
-        assert_eq!(find_char_in_word(b'x', all_zeros), None);
-
-        let all_x = [b'x'; 8];
-        assert_eq!(find_char_in_word(b'x', all_x), Some(0));
-
-        let mixed = [b'a', b'b', 0, b'c', b'd', 0, b'e', b'f'];
-        assert_eq!(find_char_in_word(0, mixed), Some(2));
     }
 
     #[test]
@@ -187,13 +176,8 @@ mod tests {
         fs::create_dir_all(&subdir).unwrap();
         fs::write(subdir.join("file.txt"), "data").unwrap();
 
-<<<<<<< Updated upstream
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
-=======
         let dir_entry = DirEntry::new(&dir).unwrap();
         let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
->>>>>>> Stashed changes
 
         assert_eq!(entries.len(), 1, "Top-level should contain only subdir");
 
@@ -432,13 +416,47 @@ mod tests {
     }
 
     #[test]
-    fn test_find_dot_u64() {
-        let x = *b"123.4567";
-        assert_eq!(find_char_in_word(b'.', x), Some(3));
+    fn test_find_char_at_beginning() {
+        let bytes = create_byte_array("hello");
+        assert_eq!(find_char_in_word(b'h', bytes), Some(0));
     }
 
     #[test]
-    #[cfg(not(target_os = "linux"))]
+    fn test_find_char_in_middle() {
+        let bytes = create_byte_array("hello");
+        assert_eq!(find_char_in_word(b'e', bytes), Some(1));
+        assert_eq!(find_char_in_word(b'l', bytes), Some(2)); // first 'l'
+    }
+
+    #[test]
+    fn test_find_char_at_end() {
+        let bytes = create_byte_array("hello");
+        assert_eq!(find_char_in_word(b'o', bytes), Some(4));
+    }
+
+    #[test]
+    fn test_char_not_found() {
+        let bytes = create_byte_array("hello");
+        assert_eq!(find_char_in_word(b'x', bytes), None);
+        assert_eq!(find_char_in_word(b'z', bytes), None);
+    }
+
+    #[test]
+    fn test_empty_string() {
+        let bytes = create_byte_array("");
+        assert_eq!(find_char_in_word(b'a', bytes), None);
+        assert_eq!(find_char_in_word(b'h', bytes), None);
+    }
+
+    #[test]
+    fn test_full_8_bytes() {
+        let bytes = create_byte_array("abcdefgh");
+        assert_eq!(find_char_in_word(b'a', bytes), Some(0));
+        assert_eq!(find_char_in_word(b'd', bytes), Some(3));
+        assert_eq!(find_char_in_word(b'h', bytes), Some(7));
+    }
+
+    #[test]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
@@ -482,47 +500,6 @@ mod tests {
     }
 
     #[test]
-    fn test_find_char_in_u8_not_found() {
-        let x = b"12345678";
-        assert_eq!(find_char_in_word(b'.', *x), None);
-        assert_eq!(find_char_in_word(0, *x), None);
-    }
-
-    #[test]
-    fn test_find_char_basic() {
-        let data = b"12.45678";
-        assert_eq!(find_char_in_word(b'.', *data), Some(2));
-    }
-
-    #[test]
-    fn test_find_char_first_position() {
-        let data = b".1245678";
-        assert_eq!(find_char_in_word(b'.', *data), Some(0));
-    }
-
-    #[test]
-    fn test_find_char_last_position() {
-        let data = b"6124567.";
-        assert_eq!(find_char_in_word(b'.', *data), Some(7));
-    }
-
-    #[test]
-    fn test_find_char_not_found() {
-        let data = [b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8'];
-        assert_eq!(find_char_in_word(b'.', data), None);
-        assert_eq!(find_char_in_word(0, data), None);
-    }
-
-    #[test]
-    fn test_find_special_chars() {
-        let data = [b' ', b'\t', b'\n', b'\0', b'-', b'_', b'~', b'@'];
-        assert_eq!(find_char_in_word(b' ', data), Some(0));
-        assert_eq!(find_char_in_word(b'\0', data), Some(3));
-        assert_eq!(find_char_in_word(b'@', data), Some(7));
-        assert_eq!(find_char_in_word(b'.', data), None);
-    }
-
-    #[test]
     fn test_hidden_files() {
         let dir_path = std::env::temp_dir().join("test_hidden");
         let _ = std::fs::create_dir_all(&dir_path);
@@ -530,13 +507,8 @@ mod tests {
         let _ = std::fs::File::create(dir_path.join("visible.txt"));
         let _ = std::fs::File::create(dir_path.join(".hidden"));
 
-<<<<<<< Updated upstream
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
-=======
         let dir_entry = DirEntry::new(&dir_path).unwrap();
         let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
->>>>>>> Stashed changes
         let mut names: Vec<_> = entries
             .iter()
             .map(|e| e.file_name().to_string_lossy().into_owned())
@@ -796,13 +768,8 @@ mod tests {
         let _ = File::create(dir_path.join("file1.txt"));
         let _ = fs::create_dir(dir_path.join("subdir"));
 
-<<<<<<< Updated upstream
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
-        let iter = DirIter::new(&dir_entry).unwrap();
-=======
         let dir_entry = DirEntry::new(&dir_path).unwrap();
         let iter = ReadDir::new(&dir_entry).unwrap();
->>>>>>> Stashed changes
         let entries: Vec<_> = iter.collect();
 
         assert_eq!(entries.len(), 2);
@@ -822,13 +789,8 @@ mod tests {
     fn test_entries() {
         let dir = temp_dir().join("test_dir");
         let _ = fs::create_dir_all(&dir);
-<<<<<<< Updated upstream
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
-        let iter = DirIter::new(&dir_entry).unwrap();
-=======
         let dir_entry = DirEntry::new(&dir).unwrap();
         let iter = ReadDir::new(&dir_entry).unwrap();
->>>>>>> Stashed changes
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
@@ -841,16 +803,8 @@ mod tests {
     fn test_realpath() {
         let dir = temp_dir().join("test_dir");
         let _ = fs::create_dir_all(&dir);
-<<<<<<< Updated upstream
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir)
-            .unwrap()
-            .to_full_path()
-            .unwrap();
-        let iter = DirIter::new(&dir_entry).unwrap();
-=======
         let dir_entry = DirEntry::new(&dir).unwrap().to_full_path().unwrap();
         let iter = ReadDir::new(&dir_entry).unwrap();
->>>>>>> Stashed changes
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
@@ -992,66 +946,6 @@ mod tests {
     }
 
     #[test]
-    fn no_zero_byte() {
-        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 1]);
-        assert_eq!(find_zero_byte_u64(value), 8);
-    }
-
-    #[test]
-    fn first_byte_zero() {
-        let value = u64::from_le_bytes([0, 1, 1, 1, 1, 1, 1, 1]);
-        assert_eq!(find_zero_byte_u64(value), 0);
-    }
-
-    #[test]
-    fn last_byte_zero() {
-        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 1, 0]);
-        assert_eq!(find_zero_byte_u64(value), 7);
-    }
-
-    #[test]
-    fn middle_byte_zero() {
-        let value = u64::from_le_bytes([1, 1, 1, 0, 1, 1, 1, 1]);
-        assert_eq!(find_zero_byte_u64(value), 3);
-    }
-
-    #[test]
-    fn multiple_zeros_returns_first() {
-        let value = u64::from_le_bytes([0, 1, 0, 1, 0, 1, 0, 1]);
-        assert_eq!(find_zero_byte_u64(value), 0);
-    }
-
-    #[test]
-    fn all_bytes_zero() {
-        let value = u64::from_le_bytes([0; 8]);
-        assert_eq!(find_zero_byte_u64(value), 0);
-    }
-
-    #[test]
-    fn single_zero_in_high_bytes() {
-        let value = u64::from_le_bytes([1, 1, 1, 1, 1, 1, 0, 1]);
-        assert_eq!(find_zero_byte_u64(value), 6);
-    }
-
-    #[test]
-    fn adjacent_zeros() {
-        let value = u64::from_le_bytes([1, 1, 0, 0, 1, 1, 1, 1]);
-        assert_eq!(find_zero_byte_u64(value), 2);
-    }
-
-    #[test]
-    fn zeros_in_lower_half() {
-        let value = u64::from_le_bytes([0, 0, 0, 0, 1, 1, 1, 1]);
-        assert_eq!(find_zero_byte_u64(value), 0);
-    }
-
-    #[test]
-    fn zeros_in_upper_half() {
-        let value = u64::from_le_bytes([1, 1, 1, 1, 0, 0, 0, 0]);
-        assert_eq!(find_zero_byte_u64(value), 4);
-    }
-
-    #[test]
     fn test_file_types() {
         let dir_path = temp_dir().join("THROW_AWAY_THIS");
 
@@ -1065,7 +959,7 @@ mod tests {
 
         let dir_entry = DirEntry::new(&dir_path)
             .expect("if this errors then it's probably a permission issue related to sandboxing");
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
 
         let mut type_counts = std::collections::HashMap::new();
         for entry in entries {
@@ -1092,13 +986,8 @@ mod tests {
         let _ = std::fs::File::create(top_dir.join("top_file.txt"));
         let _ = std::fs::File::create(sub_dir.join("nested_file.txt"));
 
-<<<<<<< Updated upstream
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&top_dir).unwrap();
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
-=======
         let dir_entry = DirEntry::new(&top_dir).unwrap();
         let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
->>>>>>> Stashed changes
 
         let mut names: Vec<_> = entries
             .iter()
@@ -1126,13 +1015,8 @@ mod tests {
 
         let _ = symlink("regular.txt", dir_path.join("symlink"));
 
-<<<<<<< Updated upstream
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
-=======
         let dir_entry = DirEntry::new(&dir_path).unwrap();
         let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
->>>>>>> Stashed changes
 
         let mut type_counts = std::collections::HashMap::new();
         for entry in entries {
@@ -1159,12 +1043,8 @@ mod tests {
         let start_path: &[u8] = b"/";
         let pattern: &str = ".";
 
-<<<<<<< Updated upstream
-        let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str(), &pattern)
-=======
         let finder = Finder::init(start_path.as_os_str())
             .pattern(&pattern)
->>>>>>> Stashed changes
             .keep_hidden(true)
             .keep_dirs(true)
             .build()
@@ -1179,8 +1059,6 @@ mod tests {
         //(basically  trying to avoid the same segfault issue seen previously....)
     }
 
-<<<<<<< Updated upstream
-=======
     #[cfg(target_os = "linux")]
     #[test]
     fn test_root_linux_symlinks() {
@@ -1206,7 +1084,6 @@ mod tests {
         //(basically  trying to avoid the same segfault issue seen previously....)
     }
 
->>>>>>> Stashed changes
     #[test]
     #[allow(unused)]
     fn test_home() {
@@ -1215,14 +1092,6 @@ mod tests {
         let home_dir = std::env::home_dir();
 
         if home_dir.is_some() {
-<<<<<<< Updated upstream
-            let finder: Finder<SlimmerBytes> =
-                Finder::init(home_dir.unwrap().as_os_str(), &pattern)
-                    .keep_hidden(true)
-                    .keep_dirs(true)
-                    .build()
-                    .unwrap();
-=======
             let finder = Finder::init(home_dir.unwrap().as_os_str())
                 .pattern(&pattern)
                 .keep_hidden(true)
@@ -1251,7 +1120,6 @@ mod tests {
                 .keep_dirs(true)
                 .build()
                 .unwrap();
->>>>>>> Stashed changes
 
             let result = finder.traverse().unwrap().into_iter();
 
@@ -1267,21 +1135,12 @@ mod tests {
         let home_dir = std::env::home_dir();
 
         if home_dir.is_some() {
-<<<<<<< Updated upstream
-            let finder: Finder<SlimmerBytes> =
-                Finder::init(home_dir.unwrap().as_os_str(), &pattern)
-                    .keep_hidden(false)
-                    .keep_dirs(true)
-                    .build()
-                    .unwrap();
-=======
             let finder = Finder::init(home_dir.unwrap().as_os_str())
                 .pattern(&pattern)
                 .keep_hidden(false)
                 .keep_dirs(true)
                 .build()
                 .unwrap();
->>>>>>> Stashed changes
 
             let result = finder.traverse().unwrap().into_iter();
 
@@ -1322,7 +1181,7 @@ mod tests {
         let dir_entry = DirEntry::new(&dir).unwrap();
 
         let _ = File::create(dir.join("regular.txt"));
-        let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
         assert_eq!(entries.len(), 1);
 
         let v = entries[0]

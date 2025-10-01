@@ -1,11 +1,6 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
-<<<<<<< Updated upstream
-
-use fdf::{FileTypeFilter, Finder, LOCAL_PATH_MAX, SearchConfigError, SizeFilter, SlimmerBytes};
-=======
 use fdf::{FileTypeFilter, Finder, LOCAL_PATH_MAX, SearchConfigError, SizeFilter};
->>>>>>> Stashed changes
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
@@ -31,6 +26,14 @@ struct Args {
         help = "Shows hidden files eg .gitignore or .bashrc, defaults to off"
     )]
     hidden: bool,
+
+    #[arg(
+        short = 'S',
+        long = "sort",
+        help = "Sort the entries alphabetically (this has quite the performance cost)",
+        default_value_t = false
+    )]
+    sort: bool,
     #[arg(
         short = 's',
         long = "case-sensitive",
@@ -39,9 +42,9 @@ struct Args {
     )]
     case_insensitive: bool,
     #[arg(
-        short='e',
+        short = 'e',
         long = "extension",
-        help = format!("filters based on extension, eg --extension .txt or -E txt"),
+        help = "filters based on extension, eg --extension .txt or -E txt"
     )]
     extension: Option<String>,
     #[arg(
@@ -74,6 +77,7 @@ struct Args {
     follow_symlinks: bool,
     #[arg(
         long = "nocolour",
+        alias = "nocolor",
         default_value_t = false,
         help = "Disable colouring output when sending to terminal"
     )]
@@ -90,7 +94,7 @@ struct Args {
     #[arg(
         short = 'n',
         long = "max-results",
-        help = "Retrieves the first eg 10 results, '.cache' / -n 10"
+        help = "Retrieves the first eg 10 results, 'fdf  -n 10 '.cache' /"
     )]
     top_n: Option<usize>,
     #[arg(
@@ -168,7 +172,6 @@ struct Args {
     ///   --size 500ki       Files exactly 500 kibibytes
     #[arg(
         long = "size",
-        short = 'S',
         allow_hyphen_values = true,
         value_name = "size",
         help = "Filter by size. Examples '10k' (exactly 10KB),'+1M' (>=1MB),'-1GB' (<= 1GB)\n",
@@ -218,16 +221,6 @@ fn main() -> Result<(), SearchConfigError> {
         return Ok(());
     }
 
-    let start_pattern = args
-        .pattern
-        .as_ref()
-        .map_or_else(|| ".".into(), core::clone::Clone::clone);
-
-    if args.depth.is_some_and(|depth| depth == 0) {
-        eprintln!("Error: Depth cannot be 0. Exiting.");
-        std::process::exit(1);
-    }
-
     let size_of_file = args.size.map(|file_size| {
         match SizeFilter::from_string(&file_size) {
             Ok(filter) => filter,
@@ -256,21 +249,18 @@ fn main() -> Result<(), SearchConfigError> {
             },
         )
     });
+    let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1);
 
     let path = args.directory.unwrap_or_else(|| OsString::from("."));
-<<<<<<< Updated upstream
-    let finder: Finder<SlimmerBytes> = Finder::init(&path, &start_pattern)
-=======
     let finder = Finder::init(&path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
->>>>>>> Stashed changes
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)
         .fixed_string(args.fixed_string)
         .canonicalise_root(args.absolute_path)
         .file_name_only(!args.full_path)
-        .extension_match(args.extension)
+        .extension_match(args.extension.unwrap_or_else(String::new))
         .max_depth(args.depth)
         .follow_symlinks(args.follow_symlinks)
         .filter_by_size(size_of_file)
@@ -278,9 +268,9 @@ fn main() -> Result<(), SearchConfigError> {
         .show_errors(args.show_errors)
         .use_glob(args.glob)
         .same_filesystem(args.same_file_system)
-        .thread_count(args.thread_num)
+        .thread_count(args.thread_num.unwrap_or(thread_count))
         .build()?;
 
-    finder.print_results(args.no_colour, args.top_n)?;
+    finder.print_results(args.no_colour, args.top_n, args.sort)?;
     Ok(())
 }

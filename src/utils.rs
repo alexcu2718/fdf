@@ -1,4 +1,4 @@
-use crate::buffer::ValueType;
+use crate::{LOCAL_PATH_MAX, buffer::ValueType};
 
 use chrono::{DateTime, Utc};
 #[cfg(not(target_os = "linux"))]
@@ -121,16 +121,12 @@ pub unsafe fn construct_path(
     // SAFETY: The `drnt` must not be null (checked before using)
     let d_name = unsafe { crate::access_dirent!(drnt, d_name) };
     // SAFETY: as above
-<<<<<<< Updated upstream
-    let name_len = unsafe { dirent_name_length(drnt) };
-=======
     // Add 1 to include the null terminator
     let name_len = unsafe { dirent_name_length(drnt) + 1 };
     debug_assert!(
         name_len + base_len < LOCAL_PATH_MAX,
         "We don't expect the total length to exceed PATH_MAX!"
     );
->>>>>>> Stashed changes
     // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
     // by the caller of this function.
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
@@ -161,39 +157,38 @@ pub unsafe fn construct_path(
 
 #[inline]
 #[must_use]
-#[allow(clippy::missing_const_for_fn)] //strlen isnt const yet the others two are
-///a utility function for breaking down the config spaghetti that is platform specific optimisations
-// i wanted to make this const and separate the function
-// because only strlen isn't constant here :(
+#[allow(clippy::missing_const_for_fn)]
+/*
+strlen isnt const yet the others two are
+a utility function for breaking down the config spaghetti that is platform specific optimisations
+ i wanted to make this const and separate the function
+ because only strlen isn't constant here :(
+ */
 unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
-    #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
-    {
-        use crate::dirent_const_time_strlen;
-        // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { dirent_const_time_strlen(drnt) } //const time strlen for linux (specialisation)
-    }
-
     #[cfg(any(
+        target_os = "linux",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "macos",
         target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
         target_os = "dragonfly",
-        target_os = "macos"
+        target_os = "openbsd",
+        target_os = "netbsd"
     ))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { access_dirent!(drnt, d_namlen) } //specialisation for BSD and macOS, where d_namlen is available
+        unsafe { dirent_const_time_strlen(drnt) } //const time strlen for the above platforms (specialisation)
     }
 
     #[cfg(not(any(
         target_os = "linux",
+        target_os = "illumos",
+        target_os = "solaris",
         target_os = "freebsd",
         target_os = "openbsd",
         target_os = "netbsd",
         target_os = "dragonfly",
         target_os = "macos",
-        target_os = "illumos",
-        target_os = "solaris"
     )))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -204,97 +199,116 @@ unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
 
 /*
 Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
-// (c) Alexander Curtis .
-// My Cat Diavolo is cute.
-//
+ (c) Alexander Curtis .
+My Cat Diavolo is cute.
+
 */
 
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
-<<<<<<< Updated upstream
-=======
 #[expect(
     clippy::as_conversions,
     reason = "Casting u16 to usize is only possible const via as casts"
 )]
->>>>>>> Stashed changes
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
-/// Returns the length of a `dirent64's d_name` string in constant time using
-/// SWAR (SIMD within a register) bit tricks.
-///
-/// This function avoids branching and SIMD instructions, achieving O(1) time
-/// by reading the final 8 bytes of the structure and applying bit-masking
-/// operations to locate the null terminator.
-///
-/// # Safety
-/// The caller must ensure:
-/// - `dirent` is a valid, non-null pointer to a `libc::dirent64`.
-///
-/// # Performance
-/// This is one of the hottest paths when scanning directories. By eliminating
-/// branches and unnecessary memory reads, it improves efficiency compared with
-/// conventional approaches.
-///
-/// # Implementation Notes
-/// - On little-endian platforms the final 8 bytes are read directly.
-/// - On big-endian platforms the bytes are converted to little-endian for
-///   uniform handling (future improvement possible).
-/// - A mask is applied when `reclen == 24` to avoid false positives from
-///   padding bytes.
-///
-/// # References
-/// - [Stanford Bit Twiddling Hacks](https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte)  
-/// - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
+/**
+ Returns the length of a `dirent64's d_name` string in constant time using
+ SWAR (SIMD within a register) bit tricks.
+
+ This function avoids branching and SIMD instructions, achieving O(1) time
+by reading the final 8 bytes of the structure and applying bit-masking
+ operations to locate the null terminator.
+
+# Safety
+ The caller must ensure:
+ `dirent` is a valid, non-null pointer to a `libc::dirent64`.
+
+# Performance
+This is one of the hottest paths when scanning directories. By eliminating
+ branches and unnecessary memory reads, it improves efficiency compared with
+ conventional approaches.
+
+
+ # References
+ - [Stanford Bit Twiddling Hacks](https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte)
+ - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
+*/
 pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
-    use crate::memchr_derivations::find_zero_byte_u64;
+    #[cfg(not(any(target_os = "linux", target_os = "illumos", target_os = "solaris")))]
+    // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
+    return unsafe { access_dirent!(dirent, d_namlen) }; //trivial operation for macos/bsds 
+    #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
+    // Linux/solaris etc type ones where we need a bit of Black magic
+    {
+        use crate::memchr_derivations::find_zero_byte_u64_optimised;
 
-    // Offset from the start of the struct to the beginning of d_name.
-    // We add 1 since we calculate backwards from the header boundary.
-    const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name) + 1;
+        // Offset from the start of the struct to the beginning of d_name.
+        const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
 
-    // Accessing `d_reclen` is safe because the struct is kernel-provided.
-    // SAFETY: `dirent` must be a valid pointer to an initialised dirent64 (trivially shown by)
-    #[expect(clippy::as_conversions, reason = "Casting u16 to usize is safe")]
-    let reclen = unsafe { (*dirent).d_reclen } as usize; // do not use byte_offset here
+        /*  Accessing `d_reclen` is safe because the struct is kernel-provided.
+        / SAFETY: `dirent` is valid by precondition */
+        let reclen = unsafe { (*dirent).d_reclen } as usize;
 
-    debug_assert!(
-        reclen.is_multiple_of(8),
-        "d_reclen must always be a multiple of 8"
-    );
+        debug_assert!(
+            reclen.is_multiple_of(8),
+            "d_reclen must always be a multiple of 8"
+        );
 
-    // Read the last 8 bytes of the struct as a u64.
-    // This works because dirents are always 8-byte aligned.
-    #[cfg(target_endian = "little")]
-    // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
-    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+        /*
+          Read the last 8 bytes of the struct as a u64.
+        This works because dirents are always 8-byte aligned. */
+        // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
+        let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+        /* Note, I don't index as a u64 with eg (reclen-8)/8 because that adds a division which is a costly operations, relatively speaking
+        let last_word: u64 = unsafe { *(dirent.cast::<u64>()).add((reclen - 8)/8)}; //this will also work but it's less performant (MINUTELY)
+        */
 
-    // For big-endian targets, convert to little-endian for uniform handling.
-    #[cfg(target_endian = "big")]
-    // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
-    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() }.to_le();
-    // TODO: big-endian logic could be further optimised. Very much a minor nit.
+        #[cfg(target_endian = "little")]
+        const MASK: u64 = 0x00FF_FFFFu64;
+        #[cfg(target_endian = "big")]
+        const MASK: u64 = 0xFFFF_FF00_0000_0000u64; // byte order is shifted unintuitively on big endian!
 
-    // When the record length is 24, the kernel may insert nulls before d_name.
-    // Mask them out to avoid false detection of a terminator.
-    // Multiplying by 0 or 1 applies the mask conditionally without branching.
-    let mask: u64 = 0x00FF_FFFFu64 * ((reclen == 24) as u64);
+        /* When the record length is 24, the kernel may insert nulls before d_name.
+        Which will exist on index's 17/18
+        Mask them out to avoid false detection of a terminator.
+        Multiplying by 0 or 1 applies the mask conditionally without branching. */
+        // let mask: u64 = MASK * ((reclen == 24) as u64);
+        let mask: u64 = MASK * ((reclen == 24) as u64);
+        /*
+         Apply the mask to ignore non-name bytes while preserving name bytes.
+         Result:
+         - Name bytes remain unchanged
+         - Non-name bytes become 0xFF (guaranteed non-zero)
+         - Any null terminator in the name remains detectable
+        */
+        let candidate_pos: u64 = last_word | mask;
+        //test_function(dirent);
 
-    // Apply the mask to ignore non-name bytes while preserving name bytes.
-    // Result:
-    // - Name bytes remain unchanged
-    // - Non-name bytes become 0xFF (guaranteed non-zero)
-    // - Any null terminator in the name remains detectable
-    let candidate_pos: u64 = last_word | mask;
+        /*
+         Locate the first null byte in constant time using SWAR.
+         Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.
+         SAFETY: The u64 can never be all 0's, therefore we can make a niche optimisation that won't be made public
+        (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
+        */
+        let byte_pos = 8 - unsafe { find_zero_byte_u64_optimised(candidate_pos) };
+        //let byte_pos=8-find_zero_byte_u64(candidate_pos);
 
-    // Locate the first null byte in constant time using SWAR.
-    // Subtract 7 to compute its position relative to the start of d_name.
-    let byte_pos = 7 - find_zero_byte_u64(candidate_pos);
-
-    // Final length:
-    // total record length - header size - null byte position
-    reclen - DIRENT_HEADER_START - byte_pos
+        /*  Final length:
+        total record length - header size - null byte position
+        */
+        reclen - DIRENT_HEADER_START - byte_pos
+    }
 }
 
 /*

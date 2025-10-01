@@ -1,13 +1,8 @@
 use crate::glob_to_regex;
 use crate::size_filter::SizeFilter;
 use crate::traits_and_conversions::BytePath as _;
-<<<<<<< Updated upstream
-
-use crate::{DirEntry, FileType, SearchConfigError, custom_types_result::BytesStorage};
-=======
 use crate::{DirEntry, FileType, SearchConfigError};
 use core::num::NonZeroU16;
->>>>>>> Stashed changes
 use regex::bytes::{Regex, RegexBuilder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -158,7 +153,7 @@ pub struct SearchConfig {
     ///if this is Some, then we match against the extension of the file otherwise accept (if none)
     pub(crate) file_name_only: bool,
     ///if true, then we only match against the file name, otherwise we match against the full path when regexing
-    pub(crate) depth: Option<u16>,
+    pub(crate) depth: Option<NonZeroU16>,
     ///the maximum depth to search, if None then no limit
     pub(crate) follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
     /// a size filter
@@ -174,49 +169,55 @@ impl SearchConfig {
     // Builds a regex matcher if a valid pattern is provided, otherwise stores None
     // Returns an error if the regex compilation fails
     #[allow(clippy::fn_params_excessive_bools)]
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        pattern: impl AsRef<str>,
+    #[expect(clippy::too_many_arguments, reason = "Internal convenience")]
+    pub(crate) fn new<A: AsRef<str>>(
+        pattern: Option<&A>,
         hide_hidden: bool,
         case_insensitive: bool,
         keep_dirs: bool,
         filenameonly: bool,
         extension_match: Option<Box<[u8]>>,
-        depth: Option<u16>,
+        depth: Option<NonZeroU16>,
         follow_symlinks: bool,
         size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,
         show_errors: bool,
         use_glob: bool,
     ) -> core::result::Result<Self, SearchConfigError> {
-        let patt = pattern.as_ref();
+        let (file_name_only, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
+            let patt = patt_ref.as_ref();
+            let file_name_only = if patt.contains('/') {
+                false //Over ride because if it's got a slash, it's gotta be a full path
+            } else {
+                filenameonly
+            };
 
-        let file_name_only = if patt.contains('/') {
-            false //Over ride because if it's got a slash, it's gotta be a full path
+            let pattern_to_use = if use_glob {
+                glob_to_regex(patt).map_err(SearchConfigError::GlobToRegexError)?
+            } else {
+                patt.into()
+            };
+            (file_name_only, pattern_to_use)
         } else {
-            filenameonly
-        };
-
-        let pattern_to_use = if use_glob {
-            glob_to_regex(patt).map_err(SearchConfigError::GlobToRegexError)?
-        } else {
-            patt.into()
+            // No pattern provided, use match-all pattern
+            (filenameonly, ".*".into())
         };
 
         // If pattern is "." or empty, we do not filter by regex, this avoids building a regex (even if its trivial cost)
-        let regex_match = if pattern_to_use == "." || pattern_to_use.is_empty() {
-            None
-        } else {
-            let reg = RegexBuilder::new(&pattern_to_use)
-                .case_insensitive(case_insensitive)
-                .dot_matches_new_line(false)
-                .build();
+        let regex_match =
+            if pattern_to_use == "." || pattern_to_use == ".*" || pattern_to_use.is_empty() {
+                None
+            } else {
+                let reg = RegexBuilder::new(&pattern_to_use)
+                    .case_insensitive(case_insensitive)
+                    .dot_matches_new_line(false)
+                    .build();
 
-            if let Err(regerror) = reg {
-                return Err(SearchConfigError::RegexError(regerror));
-            }
-            reg.ok()
-        };
+                if let Err(regerror) = reg {
+                    return Err(SearchConfigError::RegexError(regerror));
+                }
+                reg.ok()
+            };
 
         Ok(Self {
             regex_match,
@@ -235,13 +236,12 @@ impl SearchConfig {
     #[inline]
     #[must_use]
     /// Evaluates a custom predicate function against a path
-    pub fn matches_with<F: FnOnce(&[u8]) -> bool>(&self, path: &[u8], predicate: F) -> bool {
+    pub fn matches_with<F: Fn(&[u8]) -> bool>(&self, path: &[u8], predicate: F) -> bool {
         predicate(path)
     }
 
     #[inline]
-    /// Applies the size filter to a directory entry if configured
-    /// Works differently for regular files vs symlinks (resolves symlinks first)
+    /// Checks for extension match via memchr
     pub fn matches_extension<S>(&self, entry: &S) -> bool
     where
         S: core::ops::Deref<Target = [u8]>,
@@ -271,7 +271,7 @@ impl SearchConfig {
             return true; // No filter means always match
         };
 
-        match entry.file_type() {
+        match entry.file_type {
             FileType::RegularFile => entry
                 .file_size()
                 .ok()
@@ -316,30 +316,22 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
-    #[allow(clippy::if_not_else)] // this is a stylistic choice to avoid unnecessary else branches
+    #[expect(clippy::cast_lossless, reason = "overcomplicates it")]
     /// Checks if the path or file name matches the regex filter
     /// If `full_path` is false, only checks the filename
-<<<<<<< Updated upstream
-    pub fn matches_path<S>(&self, dir: &DirEntry<S>, full_path: bool) -> bool
-    where
-        S: BytesStorage,
-    {
-=======
     ///
     /// Use a branchless trick to do indexing
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
->>>>>>> Stashed changes
         debug_assert!(
             !dir.file_name().contains(&b'/'),
             "file_name contains a directory separator"
         );
 
-        self.regex_match.as_ref().is_none_or(|reg| {
-            reg.is_match(if !full_path {
-                dir.file_name() //this is the likelier path so we choose it first
-            } else {
-                dir
+        self.regex_match.as_ref().is_none_or(|reg|
+                // use arithmetic to avoid branching costs 
+             { let index_amount=!full_path as usize * dir.file_name_index();
+                     // SAFETY: are always indexing within bounds.
+            unsafe{reg.is_match(dir.get_unchecked(index_amount..))}
             })
-        })
     }
 }

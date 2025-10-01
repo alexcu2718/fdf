@@ -710,7 +710,11 @@ impl FinderBuilder {
     /// Returns `SearchConfigError::IoError` if canonicalisation fails
     fn resolve_directory(&self) -> core::result::Result<OsString, SearchConfigError> {
         let dir_to_use = if self.root.is_empty() {
-            OsString::from(".")
+            OsString::from(
+                std::env::current_dir()
+                    .and_then(|p| p.canonicalize())
+                    .unwrap_or_else(|_| ".".into()),
+            )
         } else {
             self.root.clone()
         };

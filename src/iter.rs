@@ -36,22 +36,18 @@ pub struct ReadDir {
 
 impl ReadDir {
     #[inline]
-    //#[expect(clippy::not_unsafe_ptr_arg_deref,reason="The pointer to fd is valid for the duration of the iterator")]
     /// Reads the next directory entry, returning a pointer to it.
     ///
     /// Wraps the libc `readdir` call. Returns `None` when the end of the
     /// directory is reached or an error occurs.
     ///
-    pub fn get_next_entry(&mut self) -> Option<*const dirent64> {
+    pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
         let dirent_ptr = unsafe { readdir(self.dir.as_ptr()) };
 
         // readdir returns null at end of directory or on error
-        if dirent_ptr.is_null() {
-            None
-        } else {
-            Some(dirent_ptr)
-        }
+        NonNull::new(dirent_ptr)
+        
     }
 
     /*
@@ -112,11 +108,11 @@ impl Iterator for ReadDir {
             let entry = self.get_next_entry()?; //read the next entry from the directory, this is a pointer to the dirent structure.
             //and early return if none
             // SAFETY: we know the pointer is not null therefor the operations in this macro are fine to use.
-            skip_dot_or_dot_dot_entries!(entry, continue); //we provide the continue here to make it explicit.
+            skip_dot_or_dot_dot_entries!(entry.as_ptr(), continue); //we provide the continue here to make it explicit.
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
             return Some(
-                self.construct_direntry(entry), //construct the dirent from the pointer, and the path buffer.
+                self.construct_direntry(entry.as_ptr()), //construct the dirent from the pointer, and the path buffer.
                                                 //this is safe because we've already checked if it's null
             );
         }

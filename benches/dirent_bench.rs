@@ -1,30 +1,27 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-
 use fdf::strlen as asm_strlen;
 use std::hint::black_box;
 
 #[inline(always)]
 //modified version to work for this test function(copy pasted really)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(LibcDirent64, d_name) + 1; //we're going backwards(to the start of d_name) so we add 1 to the offset
-    let reclen = unsafe { (*dirent).d_reclen } as usize; //(do not access it via byte_offset!)
-    // Calculate find the  start of the d_name field
-    //  Access the last 8 bytes(word) of the dirent structure as a u64 word
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(LibcDirent64, d_name);
+    let reclen = unsafe { (*dirent).d_reclen } as usize;
     #[cfg(target_endian = "little")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; //DO NOT USE BYTE OFFSET.
+    const MASK: u64 = 0x00FF_FFFFu64;
     #[cfg(target_endian = "big")]
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }.to_le(); // Convert to little-endian if necessary
+    const MASK: u64 = 0xFFFF_FF00_0000_0000u64;
 
-    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // (multiply by 0 or 1)
+    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+    let mask = MASK * ((reclen == 24) as u64);
 
     let candidate_pos = last_word | mask;
 
-    let byte_pos = 7 - find_zero_byte_u64(candidate_pos);
+    let byte_pos = 8 - unsafe { find_zero_byte_u64_optimised(candidate_pos) };
 
     reclen - DIRENT_HEADER_START - byte_pos
 }
 
-//repeated definitions (because i had to make find_zero_byte_u64 private)
 #[inline]
 pub(crate) const fn repeat_u64(byte: u8) -> u64 {
     u64::from_ne_bytes([byte; size_of::<u64>()])
@@ -33,14 +30,19 @@ pub(crate) const fn repeat_u64(byte: u8) -> u64 {
 const LO_U64: u64 = repeat_u64(0x01);
 
 const HI_U64: u64 = repeat_u64(0x80);
-
 #[inline]
-pub(crate) const fn find_zero_byte_u64(x: u64) -> usize {
-    //use the same trick seen earlier, except this time we have to use  hardcoded u64 values  to find the position of the 0 bit
-    let zero_bit = x.wrapping_sub(LO_U64) & !x & HI_U64;
+pub(crate) const unsafe fn find_zero_byte_u64_optimised(x: u64) -> usize {
+    let zero_bit =
+        unsafe { core::num::NonZeroU64::new_unchecked(x.wrapping_sub(LO_U64) & !x & HI_U64) };
 
-    (zero_bit.trailing_zeros() >> 3) as usize
-    //>> 3 converts from bit position to byte index (divides by 8)
+    #[cfg(target_endian = "little")]
+    {
+        (zero_bit.trailing_zeros() >> 3) as usize
+    }
+    #[cfg(not(target_endian = "little"))]
+    {
+        (zero_bit.leading_zeros() >> 3) as usize
+    }
 }
 
 #[repr(C, align(8))]
@@ -56,7 +58,7 @@ pub struct LibcDirent64 {
 const fn calculate_min_reclen(name_len: usize) -> u16 {
     const HEADER_SIZE: usize = std::mem::offset_of!(LibcDirent64, d_name);
     let total_size = HEADER_SIZE + name_len + 1;
-    (((total_size + 7) / 8) * 8) as u16 //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
+    ((total_size + 7) / 8 * 8) as u16 //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
     //this works because it's given the same representation in memory so repr C will ensure the layout is compatible
 }
 
@@ -82,7 +84,7 @@ fn make_dirent(name: &str) -> LibcDirent64 {
 fn bench_strlen(c: &mut Criterion) {
     let length_groups = [
         ("tiny (1-4)", "a"),
-        ("small (5-16)", "file.txt"),
+        ("small (5-16)", "file.txtth6"),
         ("medium (17-64)", "config_files/settings/default.json"),
         (
             "large (65-128)",

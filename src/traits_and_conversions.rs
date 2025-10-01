@@ -185,11 +185,12 @@ impl core::fmt::Debug for DirEntry {
 }
 
 ///A constructor for making accessing the buffer, filename indexes, depths of the parent path while inside the iterator.
-/// More documentation TBD
+/// intentionally not exposed
 pub trait DirentConstructor {
     fn path_buffer(&mut self) -> &mut PathBuffer;
     fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
     fn parent_depth(&self) -> u16;
+    fn file_descriptor(&self) -> i32;
 
     #[inline]
     #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
@@ -229,6 +230,11 @@ impl DirentConstructor for crate::ReadDir {
     fn parent_depth(&self) -> u16 {
         self.parent_depth
     }
+
+    #[inline]
+    fn file_descriptor(&self) -> i32 {
+        self.dirfd()
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -246,5 +252,9 @@ impl DirentConstructor for crate::iter::GetDents {
     #[inline]
     fn parent_depth(&self) -> u16 {
         self.parent_depth
+    }
+    #[inline]
+    fn file_descriptor(&self) -> i32 {
+        self.fd
     }
 }

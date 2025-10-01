@@ -107,6 +107,7 @@ where
 
 #[inline]
 #[allow(clippy::multiple_unsafe_ops_per_block)] //lazy
+#[allow(clippy::undocumented_unsafe_blocks)] // for the debug assert
 #[expect(
     clippy::transmute_ptr_to_ptr,
     reason = "they have exactly the same representation in memory, a null terminated slice of &[u8] is a Cstr"
@@ -137,8 +138,6 @@ pub unsafe fn construct_path(
     // length (`base_len + name_len`) is always less than or equal to `LOCAL_PATH_MAX`,
     // which is the capacity of `path_buffer`.
     unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned
-    //  SAFETY: The total length `base_len + name_len` is guaranteed to be
-    // less than or equal to `LOCAL_PATH_MAX`, which is 4096 or 1024 by default
     debug_assert!(
         unsafe {
             CStr::from_ptr(
@@ -146,12 +145,16 @@ pub unsafe fn construct_path(
                     .get_unchecked(..base_len + name_len)
                     .as_ptr()
                     .cast(),
-            ) == core::mem::transmute::<_, &core::ffi::CStr>(
+            ) == core::mem::transmute::<&[u8], &CStr>(
                 path_buffer.get_unchecked(..base_len + name_len),
             )
         },
         "we  expect these to be the same"
     );
+    //  SAFETY: The total length `base_len + name_len` is guaranteed to be
+    // less than or equal to `LOCAL_PATH_MAX`, which is 4096 or 1024 by default
+    // The name is null terminated and has the same representation as &[u8].
+    // Debug assert verifies this when running cargo test
     unsafe { core::mem::transmute(path_buffer.get_unchecked(..base_len + name_len)) }
 }
 
@@ -283,7 +286,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         Which will exist on index's 17/18
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
-        // let mask: u64 = MASK * ((reclen == 24) as u64);
         let mask: u64 = MASK * ((reclen == 24) as u64);
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.
@@ -293,7 +295,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
          - Any null terminator in the name remains detectable
         */
         let candidate_pos: u64 = last_word | mask;
-        //test_function(dirent);
 
         /*
          Locate the first null byte in constant time using SWAR.

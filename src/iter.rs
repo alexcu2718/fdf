@@ -5,7 +5,7 @@ use crate::{
 };
 
 use core::ptr::NonNull;
-
+//use core::ffi::CStr;
 use libc::{DIR, closedir};
 #[cfg(not(target_os = "linux"))]
 use libc::{dirent as dirent64, readdir};
@@ -51,6 +51,11 @@ impl ReadDir {
             Some(dirent_ptr)
         }
     }
+
+    /*
+    pub fn file_type_from_fd(&self,filename:&CStr)->FileType{
+        Fi
+    }*/
 
     #[inline]
     /// Returns the file descriptor for this directory.
@@ -204,6 +209,16 @@ impl GetDents {
         self.remaining_bytes = unsafe { self.buffer.getdents(self.fd) };
         self.offset = 0;
         self.remaining_bytes > 0 //if remaining_bytes<0 then we've reached the end.
+    }
+
+    #[inline]
+    /**
+    Returns the file descriptor for this directory.
+
+    Useful for operations that need the raw directory FD.
+    */
+    pub const fn dirfd(&self) -> i32 {
+        self.fd
     }
 
     #[inline]

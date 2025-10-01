@@ -445,6 +445,7 @@ impl DirEntry {
     std::fs::remove_file(tmp).unwrap();
     ```
     */
+    #[inline]
     pub const fn as_cstr(&self) -> &CStr {
         &self.path
     }
@@ -513,6 +514,18 @@ impl DirEntry {
         unsafe {
             core::mem::transmute(bytes.get_unchecked(self.file_name_index()..))
         }
+    }
+
+    #[inline]
+    #[must_use]
+    // Returns the name of the file (as bytes, no null terminator)
+    pub fn file_name(&self) -> &[u8] {
+        debug_assert!(
+            self.len() >= self.file_name_index(),
+            "this should always be equal or below (equal only when root)"
+        );
+        // SAFETY: the index is below the length of the path trivially
+        unsafe { self.get_unchecked(self.file_name_index()..) }
     }
 
     /// Takes the value of the path and gives the raw representation
@@ -832,18 +845,6 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "Stylistic")]
-    // Returns the name of the file (as bytes, no null terminator)
-    pub fn file_name(&self) -> &[u8] {
-        debug_assert!(
-            self.len() >= self.file_name_index(),
-            "this should always be equal or below (equal only when root)"
-        );
-        // SAFETY: the index is below the length of the path trivially
-        unsafe { self.get_unchecked(self.file_name_index()..) }
-    }
-    #[inline]
-    #[must_use]
     ///returns the inode number of the file, cost free check
     ///
     ///
@@ -906,6 +907,11 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "stylistic")]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "casting i8 to u8 is fine for characters"
+    )]
     /** Checks if the file is hidden (e.g., `.gitignore`, `.config`).
 
     A file is considered hidden if its filename (not the full path)
@@ -978,14 +984,7 @@ impl DirEntry {
     pub const fn is_hidden(&self) -> bool {
         // SAFETY: file_name_index() is guaranteed to be within bounds
         // and we're using pointer arithmetic which is const-compatible (slight const hack)
-        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "stylistic")]
-        #[expect(
-            clippy::cast_sign_loss,
-            reason = "casting i8 to u8 is fine for characters"
-        )]
-        unsafe {
-            *self.as_cstr().as_ptr().add(self.file_name_index()) as u8 == b'.'
-        }
+        unsafe { *self.as_cstr().as_ptr().add(self.file_name_index()) as u8 == b'.' }
     }
     #[inline]
     #[must_use]
@@ -1007,7 +1006,7 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    ///returns the parent directory of the file (as bytes)
+    /// Returns the parent directory of the file (as bytes)
     pub fn parent(&self) -> &[u8] {
         debug_assert!(
             self.file_name_index() <= self.len(),

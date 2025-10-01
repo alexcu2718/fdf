@@ -3,16 +3,13 @@ use crate::{
     AlignedBuffer, DirEntry, LOCAL_PATH_MAX, PathBuffer, Result,
     traits_and_conversions::DirentConstructor as _,
 };
-
+use core::cell::Cell;
 use core::ptr::NonNull;
-//use core::ffi::CStr;
 use libc::{DIR, closedir};
 #[cfg(not(target_os = "linux"))]
 use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir};
-
-//use readdir64 on linux
 
 /// POSIX-compliant directory iterator using libc's readdir functions.
 ///
@@ -31,7 +28,7 @@ pub struct ReadDir {
     /// Depth of this directory relative to traversal root
     pub(crate) parent_depth: u16,
     /// The file descriptor of this directory, for use in calls like openat/statat etc.
-    pub(crate) dirfd: i32,
+    pub(crate) dirfd: Cell<Option<i32>>,
 }
 
 impl ReadDir {
@@ -47,20 +44,23 @@ impl ReadDir {
 
         // readdir returns null at end of directory or on error
         NonNull::new(dirent_ptr)
-        
     }
-
-    /*
-    pub fn file_type_from_fd(&self,filename:&CStr)->FileType{
-        Fi
-    }*/
 
     #[inline]
     /// Returns the file descriptor for this directory.
     ///
     /// Useful for operations that need the raw directory FD.
-    pub const fn dirfd(&self) -> i32 {
-        self.dirfd
+    /// Computes the dirfd on first access and caches it.
+    pub fn dirfd(&self) -> i32 {
+        self.dirfd.get().map_or_else(
+            || {
+                // SAFETY: This is a valid directory pointer maintained by the iterator
+                let fd = unsafe { libc::dirfd(self.dir.as_ptr()) };
+                self.dirfd.set(Some(fd));
+                fd
+            },
+            |fd| fd,
+        )
     }
 
     #[inline]
@@ -88,14 +88,13 @@ impl ReadDir {
         let base_len = unsafe { path_buffer.init_from_direntry(dir_path) };
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)
-        // SAFETY:This is a valid pointer from a just opened directory
-        let dirfd = unsafe { libc::dirfd(dir.as_ptr()) };
+
         Ok(Self {
             dir,
             path_buffer,
             file_name_index: base_len as _,
             parent_depth: dir_path.depth, //inherit depth
-            dirfd,
+            dirfd: Cell::new(None), //we don't want to issue a system call to get it unnecessary
         })
     }
 }
@@ -113,7 +112,7 @@ impl Iterator for ReadDir {
 
             return Some(
                 self.construct_direntry(entry.as_ptr()), //construct the dirent from the pointer, and the path buffer.
-                                                //this is safe because we've already checked if it's null
+                                                         //this is safe because we've already checked if it's null
             );
         }
     }
@@ -222,23 +221,6 @@ impl GetDents {
     }
 
     #[inline]
-    #[allow(clippy::multiple_unsafe_ops_per_block)]
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::undocumented_unsafe_blocks)] //comment these later TODO!
-    /// Prefetches the next likely entry in the buffer to keep the cache warm.
-    pub(crate) fn prefetch_next_entry(&self) {
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        {
-            if self.offset + 128 < self.remaining_bytes as usize {
-                unsafe {
-                    use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-                    let next_entry = self.buffer.as_ptr().add(self.offset + 64).cast();
-                    _mm_prefetch(next_entry, _MM_HINT_T0);
-                }
-            }
-        }
-    }
-    #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
         use crate::SyscallBuffer;
         // SAFETY: We're  null terminating the filepath and it's below `LOCAL_PATH_MAX` (4096/1024 system dependent)
@@ -265,19 +247,6 @@ impl GetDents {
     pub const fn is_buffer_not_empty(&self) -> bool {
         self.offset < self.remaining_bytes as _
     }
-
-    #[inline]
-    #[allow(clippy::undocumented_unsafe_blocks)] //comment these later TODO!
-    /// Prefetches the start of the buffer to keep the cache warm.
-    pub(crate) fn prefetch_next_buffer(&self) {
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        {
-            unsafe {
-                use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-                _mm_prefetch(self.buffer.as_ptr().cast(), _MM_HINT_T0);
-            }
-        }
-    }
 }
 
 #[cfg(target_os = "linux")]
@@ -293,7 +262,6 @@ impl Iterator for GetDents {
                 // SAFETY: we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
                 let d: *const libc::dirent64 = unsafe { self.get_next_entry() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
-                self.prefetch_next_entry(); /* check how much is left remaining in buffer, if reasonable to hold more, warm cache this is a no-op on non-x86_64*/
                 // SAFETY: we know the pointer is not null therefor the operations in this macro are fine to use.
                 skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
@@ -303,7 +271,6 @@ impl Iterator for GetDents {
             }
             // prefetch the next buffer content before reading
 
-            self.prefetch_next_buffer(); //prefetch the next buffer content to keep the cache warm, this is a no-op on non-x86_64
             // issue a syscall once out of entries
             // SAFETY: the file descriptor is still open and is valid to call
             if unsafe { self.fill_buffer() } {

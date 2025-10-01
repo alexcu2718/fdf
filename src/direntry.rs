@@ -83,48 +83,50 @@ use std::{
     ffi::{CStr, OsStr},
     os::unix::ffi::OsStrExt as _,
 };
-/// A struct representing a directory entry with minimal memory overhead.
-///
-/// This struct is designed for high-performance file system traversal and analysis.
-/// It holds metadata and a path to a file or directory, optimised for size
-/// and efficient access to its components.
-///
-/// The struct's memory footprint is approximately 10 bytes on most Unix-like platforms(MacOS/Linux):
-/// - **Path**: A thin pointer wrapper, optimised for size.
-/// - **File type**: A 1-byte enum representing the entry's type (file, directory, etc.).
-/// - **Inode**: An 8-byte integer for the file's unique inode number.
-/// - **Depth**: A 2-byte integer indicating the entry's depth from the root.
-/// - **File name index**: A 2-byte integer pointing to the start of the file name within the path buffer.
-///
-/// # Examples
-///
-/// ```
-/// use fdf::DirEntry;
-/// use std::path::Path;
-/// use std::fs::File;
-/// use std::io::Write;
-/// use std::sync::Arc;
-///
-///
-///
-/// // Create a temporary directory for the test
-/// let temp_dir = std::env::temp_dir();
-///
-/// let file_path = temp_dir.join("test_file.txt");
-///
-/// // Create a file inside the temporary directory
-/// {
-///     let mut file = File::create(&file_path).expect("Failed to create file");
-///     writeln!(file, "Hello, world!").expect("Failed to write to file");
-/// }
-///
-/// // Create a DirEntry from the temporary file path
-///  let entry = DirEntry::new(&file_path).unwrap();
-/// assert!(entry.is_regular_file());
-/// assert_eq!(entry.file_name(), b"test_file.txt");
-///
-///
-/// ```
+/**
+  A struct representing a directory entry with minimal memory overhead.
+
+  This struct is designed for high-performance file system traversal and analysis.
+  It holds metadata and a path to a file or directory, optimised for size
+  and efficient access to its components.
+
+  The struct's memory footprint is
+  - **Path**: 16 bytes, Box<CStr>, retaining compatibility for use in libc but converting to &[u8] trivially(as deref)
+  - **File type**: A 1-byte enum representing the entry's type (file, directory, etc.).
+  - **Inode**: An 8-byte integer for the file's unique inode number.
+  - **Depth**: A 2-byte integer indicating the entry's depth from the root.
+  - **File name index**: A 2-byte integer pointing to the start of the file name within the path buffer.
+
+  # Examples
+
+  ```
+  use fdf::DirEntry;
+  use std::path::Path;
+  use std::fs::File;
+  use std::io::Write;
+  use std::sync::Arc;
+
+
+
+  // Create a temporary directory for the test
+  let temp_dir = std::env::temp_dir();
+
+  let file_path = temp_dir.join("test_file.txt");
+
+  // Create a file inside the temporary directory
+  {
+      let mut file = File::create(&file_path).expect("Failed to create file");
+      writeln!(file, "Hello, world!").expect("Failed to write to file");
+  }
+
+  // Create a DirEntry from the temporary file path
+   let entry = DirEntry::new(&file_path).unwrap();
+  assert!(entry.is_regular_file());
+  assert_eq!(entry.file_name(), b"test_file.txt");
+
+
+  ```
+*/
 #[derive(Clone)] //could probably implement a more specialised clone.
 pub struct DirEntry {
     /// Path to the entry, stored as a Boxed `CStr` (to avoid storing the capacity)
@@ -174,6 +176,7 @@ impl AsRef<[u8]> for DirEntry {
 impl DirEntry {
     #[inline]
     #[must_use]
+    /**
     /// Checks if the entry is an executable file.
     ///
     /// This is a **costly** operation as it performs an `access` system call.
@@ -199,6 +202,7 @@ impl DirEntry {
     /// fs::remove_file(exe_path).unwrap();
     /// fs::remove_file(non_exe_path).unwrap();
     /// ```
+     */
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
         // SAFETY: We know the path is valid because internally it's a cstr
@@ -295,10 +299,11 @@ impl DirEntry {
     }
 
     #[inline]
-    /// Returns the underlying bytes as a UTF-8 string slice if valid.
-    ///
-    /// # Errors
-    /// Returns `Err` if the bytes are not valid UTF-8.
+    /**
+    Returns the underlying bytes as a UTF-8 string slice if valid.
+    # Errors
+        Returns `Err` if the bytes are not valid UTF-8.
+    */
     pub const fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
         core::str::from_utf8(self.as_bytes())
     }

@@ -208,7 +208,7 @@ impl Finder
     /// background thread and sends batches of directory entries through an unbounded channel.
     ///
     /// # Returns
-    /// Returns a `Receiver<Vec<DirEntry<S>>>` that will receive batches of directory entries
+    /// Returns a `Receiver<Vec<DirEntry>>` that will receive batches of directory entries
     /// as they are found during the traversal. The receiver can be used to iterate over the
     /// results as they become available.
     ///

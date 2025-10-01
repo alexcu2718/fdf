@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
+    use crate::cli_helpers::*;
     use crate::memchr_derivations::{find_char_in_word, find_zero_byte_u64};
-    use crate::size_filter::*;
     use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, FileType, ReadDir};
     use chrono::{Duration as ChronoDuration, Utc};

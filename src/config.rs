@@ -1,5 +1,5 @@
+use crate::cli_helpers::SizeFilter;
 use crate::glob_to_regex;
-use crate::size_filter::SizeFilter;
 use crate::traits_and_conversions::BytePath as _;
 use crate::{DirEntry, FileType, SearchConfigError};
 use core::num::NonZeroU16;

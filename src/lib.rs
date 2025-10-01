@@ -97,9 +97,9 @@ use std::{
 #[macro_use]
 pub(crate) mod macros;
 
-mod size_filter;
+mod cli_helpers;
 
-pub use size_filter::SizeFilter;
+pub use cli_helpers::{FileTypeParser, SizeFilter, SizeFilterParser};
 
 mod iter;
 #[cfg(target_os = "linux")]

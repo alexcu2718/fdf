@@ -14,7 +14,11 @@
 //! use std::sync::Arc;
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
+<<<<<<< Updated upstream
 //!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path", "*.txt")
+=======
+//!     let finder= Finder::init("/some/path").pattern("*.txt")
+>>>>>>> Stashed changes
 //!         .build()
 //!         .expect("Failed to build finder");
 //!
@@ -41,10 +45,13 @@
 //! Advanced file search example
 //! ```no_run
 //! use fdf::{Finder, SizeFilter, FileTypeFilter};
-//! use std::sync::Arc;
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
+<<<<<<< Updated upstream
 //!     let finder: Finder<Arc<[u8]>> = Finder::init("/some/path", "*.txt")
+=======
+//!     let finder = Finder::init("/some/path").pattern("*.txt")
+>>>>>>> Stashed changes
 //!         .keep_hidden(false)
 //!         .case_insensitive(true)
 //!         .keep_dirs(true)
@@ -75,25 +82,26 @@
 //!
 //!     Ok(())
 //! }
-//! ```
 
+<<<<<<< Updated upstream
 use crate::{
     BytePath as _, DirIter, OsBytes, Result, custom_types_result::BytesStorage, filetype::FileType,
 };
+=======
+use crate::{BytePath as _, DirEntryError, ReadDir, Result, filetype::FileType};
+>>>>>>> Stashed changes
 use core::cell::Cell;
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
-
+use core::ptr::NonNull;
+use libc::stat;
+use std::{
+    ffi::{CStr, OsStr},
+    os::unix::ffi::OsStrExt as _,
+};
 /// A struct representing a directory entry with minimal memory overhead.
 ///
 /// This struct is designed for high-performance file system traversal and analysis.
 /// It holds metadata and a path to a file or directory, optimised for size
 /// and efficient access to its components.
-///
-/// # Type Parameters
-///
-/// - `S`: The storage type for the path bytes (e.g., `Box<[u8]>`, `Arc<[u8]>`, `Vec<u8>`).
-///
-/// # Memory Layout
 ///
 /// The struct's memory footprint is approximately 10 bytes on most Unix-like platforms(MacOS/Linux):
 /// - **Path**: A thin pointer wrapper, optimised for size.
@@ -125,21 +133,17 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
 /// }
 ///
 /// // Create a DirEntry from the temporary file path
-///  let entry: DirEntry<Arc<[u8]>>  = DirEntry::new(&file_path).unwrap();
+///  let entry = DirEntry::new(&file_path).unwrap();
 /// assert!(entry.is_regular_file());
 /// assert_eq!(entry.file_name(), b"test_file.txt");
 ///
 ///
 /// ```
 #[derive(Clone)] //could probably implement a more specialised clone.
-pub struct DirEntry<S>
-where
-    S: BytesStorage,
-{
-    /// Path to the entry, stored as OS-native bytes.
+pub struct DirEntry {
+    /// Path to the entry, stored as a Boxed `CStr` (to avoid storing the capacity)
     ///
-    /// This is a thin pointer wrapper around the storage `S`, optimised for size (~10 bytes). ( on linux/macos, will be bigger on other systems)
-    pub(crate) path: OsBytes<S>,
+    pub(crate) path: Box<CStr>, //16 bytes
 
     /// File type (file, directory, symlink, etc.).
     ///
@@ -159,13 +163,33 @@ where
     pub(crate) file_name_index: u16, //2
     ///
     /// `None` means not computed yet, `Some(bool)` means cached result.
+<<<<<<< Updated upstream
     pub(crate) is_traversible_cache: Cell<Option<bool>>, //1
+=======
+    pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
+                                                         //30 bytes, rounded to 32
+                                                         // We could add an extra bool on it? and still abuse null pointer optimisation for Options
+>>>>>>> Stashed changes
 }
 
-impl<S> DirEntry<S>
-where
-    S: BytesStorage,
-{
+impl core::ops::Deref for DirEntry {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+// Also implement AsRef<[u8]> for convenience
+impl AsRef<[u8]> for DirEntry {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl DirEntry {
     #[inline]
     #[must_use]
     /// Checks if the entry is an executable file.
@@ -183,21 +207,20 @@ where
     /// let exe_path = temp_dir.join("my_executable");
     /// File::create(&exe_path).unwrap().set_permissions(fs::Permissions::from_mode(0o755)).unwrap();
     ///
-    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(&exe_path).unwrap();
+    /// let entry = DirEntry::new(&exe_path).unwrap();
     /// assert!(entry.is_executable());
     ///
     /// let non_exe_path = temp_dir.join("my_file");
     /// File::create(&non_exe_path).unwrap();
-    /// let non_exe_entry:DirEntry<Arc<[u8]>> = DirEntry::new(&non_exe_path).unwrap();
+    /// let non_exe_entry = DirEntry::new(&non_exe_path).unwrap();
     /// assert!(!non_exe_entry.is_executable());
     /// fs::remove_file(exe_path).unwrap();
     /// fs::remove_file(non_exe_path).unwrap();
     /// ```
     pub fn is_executable(&self) -> bool {
         //X_OK is the execute permission, requires access call
-        // SAFETY: we forcefully null terminate the path
-        self.is_regular_file()
-            && unsafe { self.as_cstr_ptr(|ptr| libc::access(ptr, libc::X_OK) == 0) }
+        // SAFETY: We know the path is valid because internally it's a cstr
+        self.is_regular_file() && unsafe { libc::access(self.path.as_ptr(), libc::X_OK) == 0 }
     }
 
     /// Cost free check for block devices
@@ -206,6 +229,82 @@ where
     pub const fn is_block_device(&self) -> bool {
         self.file_type.is_block_device()
     }
+
+    #[inline]
+    /**
+     * Opens the directory and returns a file descriptor.
+
+    This is a low-level operation that opens the directory with the following flags:
+     - `O_CLOEXEC`: Close the file descriptor on exec
+     - `O_DIRECTORY`: Fail if not a directory
+    - `O_NONBLOCK`: Open in non-blocking mode
+
+    # Safety
+
+     The caller must ensure:
+    - `self.path` contains a valid, null-terminated C string
+     - The path points to an existing directory
+    - The file descriptor is properly closed when no longer needed
+
+     # Errors
+
+     Returns an error if:
+    - The directory doesn't exist or can't be opened
+    - The path doesn't point to a directory
+    - Permission is denied
+    */
+    pub unsafe fn open_fd(&self) -> Result<i32> {
+        // Opens the file and returns a file descriptor.
+        // This is a low-level operation that may fail if the file does not exist or cannot be opened.
+        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+
+        // SAFETY: the pointer is null terminated
+        //   #[cfg(target_os="linux")]
+        //  let fd=unsafe{crate::syscalls::open_asm(self.path.as_ref(),FLAGS)};
+        // #[cfg(not(target_os="linux"))]
+        let fd = unsafe { libc::open(self.path.as_ptr(), FLAGS) };
+
+        if fd < 0 {
+            Err(std::io::Error::last_os_error().into())
+        } else {
+            Ok(fd)
+        }
+    }
+
+    #[inline]
+    /**  Opens a directory stream for reading directory entries.
+
+     This function returns a `NonNull<libc::DIR>` pointer to the directory stream,
+     which can be used with `readdir` to iterate over directory entries.
+
+
+     # Safety
+
+     The caller must ensure:
+     - `self.path` contains a valid, null-terminated C string
+     - The path points to an existing directory
+     - The returned `DIR` pointer is properly closed with `closedir`
+     - The pointer is not used after the directory stream is closed
+
+     # Errors
+
+     Returns an error if:
+     - The directory doesn't exist or can't be opened
+     - The path doesn't point to a directory
+     - Permission is denied
+     - System resources are exhausted
+    */
+    pub unsafe fn open_dir(&self) -> Result<NonNull<libc::DIR>> {
+        // SAFETY: we are passing a null terminated directory to opendir and the path is below `PATH_MAX`
+        let dir = unsafe { libc::opendir(self.path.as_ptr()) };
+        // This function reads the directory entries and populates the iterator.
+        // It is called when the iterator is created or when it needs to be reset.
+        if dir.is_null() {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        // SAFETY: know it's non-null
+        Ok(unsafe { NonNull::new_unchecked(dir) }) // Return a pointer to the start `DIR` stream
+    }
     #[inline]
     #[must_use]
     // Converts to a lossy string for ease of use
@@ -213,7 +312,19 @@ where
         String::from_utf8_lossy(self.as_bytes())
     }
 
+<<<<<<< Updated upstream
     ///Cost free check for character devices
+=======
+    #[inline]
+    /// Returns the underlying bytes as a UTF-8 string slice if valid.
+    ///
+    /// # Errors
+    /// Returns `Err` if the bytes are not valid UTF-8.
+    pub const fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(self.as_bytes())
+    }
+    /// Cost free check for character devices
+>>>>>>> Stashed changes
     #[inline]
     #[must_use]
     pub const fn is_char_device(&self) -> bool {
@@ -265,45 +376,47 @@ where
         clippy::wildcard_enum_match_arm,
         reason = "We're only matching on relevant types"
     )]
-    /// Checks if the entry is empty.
-    ///
-    /// For files, it checks if the size is zero. For directories, it checks if there are no entries.
-    /// This is a **costly** operation as it requires system calls (`stat` or `getdents`/`readdir`).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use fdf::DirEntry;
-    /// use std::fs::{self, File};
-    /// use std::io::Write;
-    /// use std::sync::Arc;
-    /// let temp_dir = std::env::temp_dir();
-    ///
-    /// // Check an empty file.
-    /// let empty_file_path = temp_dir.join("empty.txt");
-    /// File::create(&empty_file_path).unwrap();
-    /// let empty_entry:DirEntry<Arc<[u8]>> = DirEntry::new(&empty_file_path).unwrap();
-    /// assert!(empty_entry.is_empty());
-    ///
-    /// // Check a non-empty file.
-    /// let non_empty_file_path = temp_dir.join("not_empty.txt");
-    /// File::create(&non_empty_file_path).unwrap().write_all(b"Hello").unwrap();
-    /// let non_empty_entry:DirEntry<Arc<[u8]>> = DirEntry::new(&non_empty_file_path).unwrap();
-    /// assert!(!non_empty_entry.is_empty());
-    ///
-    /// // Check an empty directory.
-    /// let empty_dir_path = temp_dir.join("empty_dir");
-    /// fs::create_dir(&empty_dir_path).unwrap();
-    /// let empty_dir_entry:DirEntry<Arc<[u8]>> = DirEntry::new(&empty_dir_path).unwrap();
-    /// assert!(empty_dir_entry.is_empty());
-    ///
-    /// fs::remove_file(empty_file_path).unwrap();
-    /// fs::remove_file(non_empty_file_path).unwrap();
-    /// fs::remove_dir(empty_dir_path).unwrap();
-    /// ```
+    /**
+        Checks if the entry is empty.
+
+        For files, it checks if the size is zero. For directories, it checks if there are no entries.
+        This is a **costly** operation as it requires system calls (`stat` or `getdents`/`readdir`).
+
+        # Examples
+
+        ```
+        use fdf::DirEntry;
+        use std::fs::{self, File};
+        use std::io::Write;
+        use std::sync::Arc;
+        let temp_dir = std::env::temp_dir();
+
+        // Check an empty file.
+        let empty_file_path = temp_dir.join("empty.txt");
+        File::create(&empty_file_path).unwrap();
+        let empty_entry = DirEntry::new(&empty_file_path).unwrap();
+        assert!(empty_entry.is_empty());
+
+        // Check a non-empty file.
+        let non_empty_file_path = temp_dir.join("not_empty.txt");
+        File::create(&non_empty_file_path).unwrap().write_all(b"Hello").unwrap();
+        let non_empty_entry = DirEntry::new(&non_empty_file_path).unwrap();
+        assert!(!non_empty_entry.is_empty());
+
+        // Check an empty directory.
+        let empty_dir_path = temp_dir.join("empty_dir");
+        fs::create_dir(&empty_dir_path).unwrap();
+        let empty_dir_entry = DirEntry::new(&empty_dir_path).unwrap();
+        assert!(empty_dir_entry.is_empty());
+
+        fs::remove_file(empty_file_path).unwrap();
+        fs::remove_file(non_empty_file_path).unwrap();
+        fs::remove_dir(empty_dir_path).unwrap();
+        ```
+    */
     pub fn is_empty(&self) -> bool {
         match self.file_type() {
-            FileType::RegularFile => self.size().is_ok_and(|size| size == 0),
+            FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
                 #[cfg(target_os = "linux")]
                 let result = self
@@ -318,8 +431,181 @@ where
             _ => false,
         }
     }
+<<<<<<< Updated upstream
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
+=======
+
+    /**
+    Returns the full path of this directory entry as a `CStr`.
+
+    This function provides direct access to the underlying null-terminated C string
+    representing the entry’s absolute or relative path (depending on how it was created).
+
+     The returned reference is valid for the lifetime of the `DirEntry` and does not allocate.
+
+    # Examples
+
+     ```
+     use fdf::DirEntry;
+     use std::fs::File;
+     use std::io::Write;
+     use std::os::unix::ffi::OsStrExt;
+    // Create a temporary file
+    let tmp = std::env::temp_dir().join("as_cstr_test.txt");
+     File::create(&tmp).unwrap().write_all(b"data").unwrap();
+
+    // Create a DirEntry from the file path
+    let entry = DirEntry::new(&tmp).unwrap();
+
+     // Retrieve full path as a CStr
+    let cstr = entry.as_cstr();
+
+    // It should match the full path string plus null terminator
+    let expected = std::ffi::CString::new(tmp.as_os_str().as_bytes()).unwrap();
+     assert_eq!(cstr.to_bytes_with_nul(), expected.to_bytes_with_nul());
+
+     // The CStr can be converted back to &str (if valid UTF-8)
+    let path_str = cstr.to_str().unwrap();
+    assert!(path_str.ends_with("as_cstr_test.txt"));
+    std::fs::remove_file(tmp).unwrap();
+    ```
+    */
+    pub const fn as_cstr(&self) -> &CStr {
+        &self.path
+    }
+
+    /**
+     Returns the file name component of the entry as a `CStr`.
+
+     This slice is a view into the internal path buffer and includes the null terminator.
+     It is guaranteed to be valid UTF-8 if and only if the file name is UTF-8.
+
+    Useful within the openat calls
+     # Examples
+
+     ```
+     use fdf::DirEntry;
+     use std::fs::File;
+     use std::io::Write;
+
+     // Create a temporary file
+     let tmp = std::env::temp_dir().join("file_name_cstr_test.txt");
+     File::create(&tmp).unwrap().write_all(b"abc").unwrap();
+
+     // Build DirEntry
+    let entry = DirEntry::new(&tmp).unwrap();
+
+    // Extract file name as CStr
+    let cstr = entry.file_name_cstr();
+
+    // It should match the file name plus null terminator
+    assert_eq!(cstr.to_bytes_with_nul(), b"file_name_cstr_test.txt\0");
+
+    // We can also convert it to a &str
+    assert_eq!(cstr.to_str().unwrap(), "file_name_cstr_test.txt");
+
+    std::fs::remove_file(tmp).unwrap();
+    ```
+
+    ```
+    use fdf::DirEntry;
+    use std::fs::File;
+
+     // File name with spaces
+    let tmp = std::env::temp_dir().join("some name.txt");
+    File::create(&tmp).unwrap();
+
+    let entry = DirEntry::new(&tmp).unwrap();
+    let name = entry.file_name_cstr();
+
+    assert_eq!(name.to_str().unwrap(), "some name.txt");
+
+    std::fs::remove_file(tmp).unwrap();
+    ```
+    */
+    pub fn file_name_cstr(&self) -> &CStr {
+        let bytes = self.path.to_bytes_with_nul();
+        // SAFETY:
+        // - `file_name_index()` points to the start of the file name within `bytes`.
+        // - The slice from this index to the end includes the null terminator.
+        // - The slice is guaranteed to represent a valid C string.
+        // We transmute the slice into a `&CStr` reference for zero-copy access.
+        #[allow(clippy::multiple_unsafe_ops_per_block)]
+        #[expect(
+            clippy::transmute_ptr_to_ptr,
+            reason = "They have the same representation due to repr transparent on cstr"
+        )]
+        unsafe {
+            core::mem::transmute(bytes.get_unchecked(self.file_name_index()..))
+        }
+    }
+
+    /// Takes the value of the path and gives the raw representation
+    #[inline]
+    pub fn as_inner(self) -> Box<CStr> {
+        self.path
+    }
+
+    #[inline]
+    #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
+    /// Private function for complicated reasons
+    pub(crate) fn get_realpath(&self) -> Result<Box<std::ffi::CStr>> {
+        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
+        // Guaranteed null terminated due to underlying CStr representation
+        let ptr = unsafe { libc::realpath(self.path.as_ptr(), core::ptr::null_mut()) }; //realpath implicitly mallocs, hence need to free.
+
+        if ptr.is_null() {
+            //check for null
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        // Add 1 due to wanting to include the null terminator
+        // SAFETY: We know the path is valid because internally it's a cstr (this null terminated)
+        let boxed = unsafe { Box::from(CStr::from_ptr(ptr)) };
+        // SAFETY: the pointer points to valid malloc'ed memory(we have checked for null), it is safe to free it now
+        unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
+        //free the pointer to stop leaking
+        Ok(boxed)
+    }
+
+    /* (I spent a lot of time debating this function!)
+    https://man7.org/linux/man-pages/man3/realpath.3.html
+    DESCRIPTION         top
+
+       realpath() expands all symbolic links and resolves references to
+       /./, /../ and extra '/' characters in the null-terminated string
+       named by path to produce a canonicalized absolute pathname.  The
+       resulting pathname is stored as a null-terminated string, up to a
+       maximum of PATH_MAX bytes, in the buffer pointed to by
+       resolved_path.  The resulting path will have no symbolic link, /./
+       or /../ components.
+
+       If resolved_path is specified as NULL, then realpath() uses
+       malloc(3) to allocate a buffer of up to PATH_MAX bytes to hold the
+       resolved pathname, and returns a pointer to this buffer.  The
+       caller should deallocate this buffer using free(3).
+
+
+
+        https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
+    pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
+        let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
+        if r.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(PathBuf::from(OsString::from_vec(unsafe {
+            let buf = CStr::from_ptr(r).to_bytes().to_vec();
+            libc::free(r as *mut _);
+            buf
+        })))
+    }
+
+
+        */
+
+    #[inline]
+>>>>>>> Stashed changes
     /// Converts a directory entry to a full, canonical path, resolving all symlinks
     ///
     /// This is a **costly** operation as it involves a system call (`realpath`).
@@ -354,7 +640,7 @@ where
     /// symlink(&target_path, &symlink_path).unwrap();
     ///
     /// // Create a DirEntry from the symlink path
-    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(&symlink_path).unwrap();
+    /// let entry = DirEntry::new(&symlink_path).unwrap();
     /// assert!(entry.is_symlink());
     ///
     /// // Canonicalise the path
@@ -368,6 +654,7 @@ where
     ///
     /// ```
     pub fn to_full_path(&self) -> Result<Self> {
+<<<<<<< Updated upstream
         #[cfg(not(target_env = "gnu"))]
         //Essentially, because only glibc has a really optimised strlen function, i'd prefer to use this
         use crate::strlen;
@@ -377,6 +664,19 @@ where
         // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
         let ptr = unsafe {
             self.as_cstr_ptr(|cstrpointer| libc::realpath(cstrpointer, core::ptr::null_mut())) //realpath implicitly mallocs, hence need to free.
+=======
+        let full_path = self.get_realpath()?;
+
+        let file_name_index = full_path.to_bytes().file_name_index(); //used for indexing.
+        // Computing result here to avoid borrow issues
+
+        let (file_type, ino) = if self.is_symlink() {
+            let statted = self.get_stat()?;
+            //if it's a symlink, we need to resolve it.
+            (FileType::from_stat(&statted), access_stat!(statted, st_ino))
+        } else {
+            (self.file_type(), self.ino())
+>>>>>>> Stashed changes
         };
 
         if ptr.is_null() {
@@ -443,13 +743,167 @@ where
         */
 
     #[inline]
-    #[allow(clippy::missing_const_for_fn)]
-    //this cant be const clippy be LYING AGAIN, this cant be const with slimmer box as it's misaligned,
-    //so in my case, because it's 10 bytes, we're looking for an 8 byte reference, so it doesnt work
+    /**
+    Checks if the file or directory is readable by the current process.
+
+    This uses the `access` system call with `R_OK` to check read permissions
+    without actually opening the file. It follows symlinks.
+
+    # Returns
+
+    `true` if the current process has read permission, `false` otherwise.
+
+    `false` if the file doesn't exist or on permission errors.
+    */
+    pub fn is_readable(&self) -> bool {
+        // SAFETY: The path is guaranteed to be a be null terminated
+        unsafe { libc::access(self.path.as_ptr(), libc::R_OK) == 0 }
+    }
+
+    #[inline]
+    /**
+    Checks if the file or directory is writable by the current process.
+
+    This uses the `access` system call with `W_OK` to check write permissions
+    without actually opening the file. It follows symlinks.
+
+    Note: This may perform unnecessary syscalls for obviously unwritable paths
+    like system directories. Future optimizations could exclude certain paths.
+
+    # Returns
+
+    `true` if the current process has write permission, `false` otherwise.
+    `false` if the file doesn't exist or on permission errors.
+    */
+    pub fn is_writable(&self) -> bool {
+        //maybe i can automatically exclude certain files from this check to
+        //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
+        // SAFETY: The path is guaranteed to be a null terminated
+        unsafe { libc::access(self.path.as_ptr(), libc::W_OK) == 0 }
+    }
+
+    #[inline]
+    /**
+
+    Gets file status information without following symlinks.
+
+    This performs an `lstat` system call to retrieve metadata about the file,
+    including type, permissions, size, and timestamps. Unlike `stat`,
+    `lstat` returns information about the symlink itself rather than the target.
+
+
+
+    # Errors
+
+    Returns an error if:
+    - The file doesn't exist
+    - Permission is denied
+    - The path is invalid
+    - System call fails for any other reason
+
+    # Returns
+
+    A `stat` structure containing file metadata on success.
+    */
+    pub fn get_lstat(&self) -> Result<stat> {
+        Self::get_lstat_private(self.path.as_ptr())
+    }
+
+    #[inline]
+    /**
+    Gets file status information by following symlinks.
+
+    This performs a `stat` system call to retrieve metadata about the file,
+    including type, permissions, size, and timestamps. Unlike `lstat`,
+    `stat` follows symbolic links and returns information about the target file
+    rather than the link itself.
+
+
+    # Errors
+
+    Returns an error if:
+    - The file doesn't exist
+    - Permission is denied
+    - The path is invalid
+    - A symlink target doesn't exist
+    - System call fails for any other reason
+
+    # Returns
+
+    A `stat` structure containing file metadata on success.
+    */
+    pub fn get_stat(&self) -> Result<stat> {
+        Self::get_stat_private(self.path.as_ptr())
+    }
+
+    #[inline]
+    ///checks if the file exists, this, makes a syscall
+    pub fn exists(&self) -> bool {
+        // SAFETY: The path is guaranteed to be be null terminated
+        unsafe { libc::access(self.path.as_ptr(), libc::F_OK) == 0 }
+    }
+
+    #[inline]
+    pub(crate) fn get_lstat_private(ptr: *const libc::c_char) -> Result<stat> {
+        let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
+        // SAFETY: We know the path is valid because internally it's a cstr
+        let res = unsafe { libc::lstat(ptr, stat_buf.as_mut_ptr()) };
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know it's been initialised properly
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(crate::DirEntryError::InvalidStat)
+        }
+    }
+
+    #[inline]
+    pub(crate) fn get_stat_private(ptr: *const libc::c_char) -> Result<stat> {
+        let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
+        // SAFETY: We know the path is valid because internally it's a cstr
+        let res = unsafe { libc::stat(ptr, stat_buf.as_mut_ptr()) };
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know it's been initialised properly
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(crate::DirEntryError::InvalidStat)
+        }
+    }
+
+    #[inline]
     #[must_use]
     /// Cost free conversion to bytes (because it is already is bytes)
-    pub fn as_bytes(&self) -> &[u8] {
-        self
+    pub const fn as_bytes(&self) -> &[u8] {
+        let byte_ptr = self.path.to_bytes_with_nul();
+        // SAFETY: Avoid UB check, it's guaranteed to be in range due to having 1 less than the len
+        unsafe { &*core::ptr::slice_from_raw_parts(byte_ptr.as_ptr(), byte_ptr.len() - 1) }
+    }
+
+    #[inline]
+    /**
+    Returns the length of the path string in bytes.
+
+    The length excludes the internal null terminator, so it matches
+    what you'd expect from a regular Rust string slice length.
+
+    # Examples
+    ```
+    use fdf::DirEntry;
+    use std::fs::File;
+
+    let tmp = std::env::temp_dir().join("test_file.txt");
+    File::create(&tmp).unwrap();
+
+    let entry = DirEntry::new(&tmp).unwrap();
+    // Length matches the path string without null terminator
+    assert_eq!(entry.len(), tmp.as_os_str().len());
+
+    std::fs::remove_file(tmp).unwrap();
+    ```
+    */
+    pub const fn len(&self) -> usize {
+        self.path.to_bytes_with_nul().len() - 1
     }
 
     #[inline]
@@ -468,7 +922,8 @@ where
 
     #[inline]
     #[must_use]
-    ///Returns the name of the file (as bytes)
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "Stylistic")]
+    // Returns the name of the file (as bytes, no null terminator)
     pub fn file_name(&self) -> &[u8] {
         debug_assert!(
             self.len() >= self.file_name_index(),
@@ -477,7 +932,6 @@ where
         // SAFETY: the index is below the length of the path trivially
         unsafe { self.get_unchecked(self.file_name_index()..) }
     }
-
     #[inline]
     #[must_use]
     ///returns the inode number of the file, cost free check
@@ -542,16 +996,86 @@ where
 
     #[inline]
     #[must_use]
-    ///checks if the file is hidden eg .gitignore
-    pub fn is_hidden(&self) -> bool {
-        debug_assert!(
-            self.file_name_index() < self.as_bytes().len(),
-            "trivial assert"
-        );
-        // SAFETY: the index is below the length of the path trivially
-        unsafe { *self.get_unchecked(self.file_name_index()) == b'.' } //we use the base_len as a way to index to filename immediately, this means
-        //we can store a full path and still get the filename without copying.
-        //this is safe because we know that the base_len is always less than the length of the path
+    /** Checks if the file is hidden (e.g., `.gitignore`, `.config`).
+
+    A file is considered hidden if its filename (not the full path)
+    starts with a dot ('.') character.
+
+    Useful for filtering out hidden files in directory listings.
+
+    # Examples
+
+    ```
+    use fdf::DirEntry;
+    use std::fs::File;
+    use std::io::Write;
+
+    // Create a temporary hidden file
+    let tmp = std::env::temp_dir().join(".hidden_file.txt");
+    File::create(&tmp).unwrap().write_all(b"content").unwrap();
+
+    // Build DirEntry
+    let entry = DirEntry::new(&tmp).unwrap();
+
+    // Check if it's hidden
+    assert!(entry.is_hidden());
+
+    std::fs::remove_file(tmp).unwrap();
+    ```
+
+    ```
+    use fdf::DirEntry;
+    use std::fs::File;
+
+    // Regular non-hidden file
+    let tmp = std::env::temp_dir().join("visible_file.txt");
+    File::create(&tmp).unwrap();
+
+    let entry = DirEntry::new(&tmp).unwrap();
+    assert!(!entry.is_hidden());
+
+    std::fs::remove_file(tmp).unwrap();
+    ```
+
+    ```
+    use fdf::DirEntry;
+    use std::fs::File;
+
+    // File with multiple dots but not hidden
+    let tmp = std::env::temp_dir().join("backup.old.txt");
+    File::create(&tmp).unwrap();
+
+    let entry = DirEntry::new(&tmp).unwrap();
+    assert!(!entry.is_hidden());
+
+    std::fs::remove_file(tmp).unwrap();
+    ```
+
+    ```
+    use fdf::DirEntry;
+    use std::fs::File;
+
+    // Edge case: just a dot
+    let tmp = std::env::temp_dir().join(".helo");
+    File::create(&tmp).unwrap();
+
+    let entry = DirEntry::new(&tmp).unwrap();
+    assert!(entry.is_hidden());
+
+    std::fs::remove_file(tmp).unwrap();
+    ```
+    */
+    pub const fn is_hidden(&self) -> bool {
+        // SAFETY: file_name_index() is guaranteed to be within bounds
+        // and we're using pointer arithmetic which is const-compatible (slight const hack)
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "stylistic")]
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "casting i8 to u8 is fine for characters"
+        )]
+        unsafe {
+            *self.as_cstr().as_ptr().add(self.file_name_index()) as u8 == b'.'
+        }
     }
     #[inline]
     #[must_use]
@@ -589,14 +1113,13 @@ where
     /// ```
     /// use fdf::DirEntry;
     /// use std::env;
-    /// use std::sync::Arc; // example container type
     ///
     /// # fn main() -> Result<(), fdf::DirEntryError> {
     /// // Use the system temporary directory
     /// let tmp = env::temp_dir();
     ///
     /// // Create a DirEntry from the temporary directory path
-    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(tmp)?;
+    /// let entry = DirEntry::new(tmp)?;
     ///
     /// println!("inode: {}", entry.ino());
     ///  Ok(())
@@ -611,7 +1134,6 @@ where
     ///
     /// ```
     /// use fdf::{DirEntry, DirEntryError};
-    /// use std::sync::Arc;
     /// use std::fs;
     ///
     /// // Verify the path doesn't exist first
@@ -619,7 +1141,7 @@ where
     /// assert!(!fs::metadata(nonexistent_path).is_ok());
     ///
     /// // This will return an InvalidStat error because the file does not exist
-    /// let result = DirEntry::<Arc<[u8]>>::new(nonexistent_path);
+    /// let result = DirEntry::new(nonexistent_path);
     /// match result {
     ///     Ok(_) => panic!("Expected InvalidStat error"),
     ///     Err(DirEntryError::InvalidStat) => {}, // Expected error
@@ -629,19 +1151,54 @@ where
     /// # Ok::<(), DirEntryError>(())
     /// ```
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
-        let path_ref = path.as_ref().as_bytes();
+        let path_ref = path.as_ref().as_bytes(); //TODO GET RID OF UNWRAP HERE
+        #[allow(clippy::map_err_ignore)] //lazy(don't want to also increase size of enum)
+        let cstring = std::ffi::CString::new(path_ref).map_err(|_| DirEntryError::NullError)?;
 
         // extract information from successful stat
-        let get_stat = path_ref.get_lstat()?;
+        let get_stat = Self::get_lstat_private(cstring.as_ptr())?;
         let inode = access_stat!(get_stat, st_ino);
         Ok(Self {
-            path: path_ref.into(),
+            path: cstring.into(),
             file_type: get_stat.into(),
             inode,
             depth: 0,
             file_name_index: path_ref.file_name_index(),
             is_traversible_cache: Cell::new(None), //no need to check
         })
+    }
+
+    #[inline]
+    #[allow(clippy::missing_errors_doc)] //fixing errors later
+    pub fn modified_time(&self) -> Result<chrono::DateTime<chrono::Utc>> {
+        let s = self.get_lstat()?;
+        crate::utils::modified_unix_time_to_datetime(&s).ok_or(DirEntryError::TimeError)
+    }
+
+    #[inline]
+    /**
+    Gets the file size in bytes.
+
+    This method retrieves the file size by calling `get_lstat()` and extracting
+    the `st_size` field from the stat structure. Unlike `get_stat()`, this
+    method does not follow symbolic links - it returns the size of the symlink
+    itself rather than the target file.
+
+    # Errors
+
+    Returns an error if:
+    - The file doesn't exist
+    - Permission is denied
+    - The path is invalid
+    - The lstat system call fails for any other reason
+
+    # Returns
+
+    The size of the file in bytes as an `i64`. For symbolic links, this returns
+    the length of the symlink path itself, not the target file size.
+    */
+    pub fn file_size(&self) -> Result<i64> {
+        self.get_lstat().map(|s| s.st_size as _)
     }
 
     /// Returns an iterator over directory entries using the `readdir` API.
@@ -676,7 +1233,7 @@ where
     /// fs::create_dir(temp_dir.join("subdir")).unwrap();
     ///
     /// // Create DirEntry for the temporary directory
-    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(&temp_dir).unwrap();
+    /// let entry = DirEntry::new(&temp_dir).unwrap();
     ///
     /// // Use readdir to iterate through directory contents
     /// let mut entries: Vec<_> = entry.readdir().unwrap().collect();
@@ -733,7 +1290,7 @@ where
     /// fs::create_dir(temp_dir.join("subdir")).unwrap();
     ///
     /// // Create DirEntry for the temporary directory
-    /// let entry: DirEntry<Arc<[u8]>> = DirEntry::new(&temp_dir).unwrap();
+    /// let entry= DirEntry::new(&temp_dir).unwrap();
     ///
     /// // Use getdents to iterate through directory contents
     /// let mut entries: Vec<_> = entry.getdents().unwrap().collect();

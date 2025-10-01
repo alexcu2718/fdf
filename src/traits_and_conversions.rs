@@ -1,18 +1,22 @@
 #![allow(dead_code)] //some traits are not used yet in full implementation but are used in tests/for future CLI/lib use
-use crate::modified_unix_time_to_datetime;
+
 //need to add these todo
 use crate::{
-    AlignedBuffer, BytesStorage, DirEntry, DirEntryError, FileType, LOCAL_PATH_MAX, PathBuffer,
-    Result, access_dirent, buffer::ValueType, memchr_derivations::memrchr,
+    DirEntry, DirEntryError, FileType, PathBuffer, Result, access_dirent,
+    memchr_derivations::memrchr,
 };
-use chrono::{DateTime, Utc};
+
 use core::cell::Cell;
+<<<<<<< Updated upstream
 use core::{fmt, mem::MaybeUninit, ops::Deref};
+=======
+use core::{fmt, ops::Deref};
+>>>>>>> Stashed changes
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
-use libc::{F_OK, R_OK, W_OK, access, lstat, stat};
+
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
@@ -23,51 +27,36 @@ pub trait BytePath<T>
 where
     T: Deref<Target = [u8]> + ?Sized,
 {
-    fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
-    where
-        F: FnOnce(*const VT) -> R,
-        VT: ValueType; // VT=i8/u8
-
     fn extension(&self) -> Option<&[u8]>;
     /// Checks if file extension matches given bytes (case-insensitive)
     fn matches_extension(&self, ext: &[u8]) -> bool;
-    /// Gets file size in bytes
-    fn size(&self) -> Result<i64>;
+
     /// Gets file metadata via `lstat`
-    fn get_lstat(&self) -> Result<stat>;
     /// Gets file metadata via `stat`
-    fn get_stat(&self) -> Result<stat>;
-    /// Gets last modification time
-    fn modified_time(&self) -> Result<DateTime<Utc>>;
     /// Converts to `&Path` (zero-cost on Unix)
     fn as_path(&self) -> &Path;
+<<<<<<< Updated upstream
     /// Opens file descriptor for directory paths
     ///
     /// # Safety
     /// - Path must be a directory
     /// - Uses `O_DIRECTORY | O_CLOEXEC | O_NONBLOCK`
     unsafe fn open_fd(&self) -> Result<i32>;
+=======
+>>>>>>> Stashed changes
     /// Gets index of filename component start
     ///
     /// Returns position after last '/' or 0 if none.
     fn file_name_index(&self) -> u16;
     /// Converts to `&OsStr` (zero-cost)
     fn as_os_str(&self) -> &OsStr;
-    /// Checks file existence (`access(F_OK)`)
-    fn exists(&self) -> bool;
+
     /// Creates directory entry from self
-    fn to_direntry<S>(&self) -> Result<DirEntry<S>>
-    where
-        S: BytesStorage;
-    /// Checks read permission (`access(R_OK)`)
-    fn is_readable(&self) -> bool;
-    /// Checks write permission (`access(W_OK)`)
-    fn is_writable(&self) -> bool;
+    fn to_direntry(&self) -> Result<DirEntry>;
 
     /// Splits path into components (split on '/')
     fn components(&self) -> impl Iterator<Item = &[u8]>;
-    /// Gets standard filesystem metadata
-    fn to_std_file_type(&self) -> Result<std::fs::FileType>;
+
     /// Converts to UTF-8 string (with validation)
     fn as_str(&self) -> Result<&str>;
     /// Converts to UTF-8 string without validation
@@ -84,6 +73,7 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
+<<<<<<< Updated upstream
     fn as_cstr_ptr<F, R, VT>(&self, func: F) -> R
     where
         //TODO! change this to unsafe MAYBE?
@@ -115,6 +105,8 @@ where
     }
 
     #[inline]
+=======
+>>>>>>> Stashed changes
     fn extension(&self) -> Option<&[u8]> {
         // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
         memrchr(b'.', unsafe { self.get_unchecked(..self.len() - 1) }) //exclude cases where the . is the final character
@@ -127,76 +119,16 @@ where
     }
 
     #[inline]
-    fn to_direntry<S>(&self) -> Result<DirEntry<S>>
-    where
-        S: BytesStorage,
-    {
+    fn to_direntry(&self) -> Result<DirEntry> {
         // Convert the byte slice to an OsStr and then to a DirEntry
 
-        DirEntry::<S>::new(self.as_os_str())
+        DirEntry::new(self.as_os_str())
     }
 
     #[inline]
     fn matches_extension(&self, ext: &[u8]) -> bool {
         self.extension()
             .is_some_and(|e| e.eq_ignore_ascii_case(ext))
-    }
-
-    #[inline]
-    fn size(&self) -> Result<i64> {
-        self.get_lstat().map(|s| s.st_size as _)
-    }
-
-    #[inline]
-    unsafe fn open_fd(&self) -> Result<i32> {
-        // Opens the file and returns a file descriptor.
-        // This is a low-level operation that may fail if the file does not exist or cannot be opened.
-        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
-        self.as_cstr_ptr(|ptr| {
-            // SAFETY: the pointer is null terminated
-            let fd = unsafe { libc::open(ptr, FLAGS) };
-
-            if fd < 0 {
-                Err(std::io::Error::last_os_error().into())
-            } else {
-                Ok(fd)
-            }
-        })
-    }
-
-    #[inline]
-    fn get_lstat(&self) -> Result<stat> {
-        let mut stat_buf = MaybeUninit::<stat>::uninit();
-        // SAFETY: We know the path is valid
-        let res = self.as_cstr_ptr(|ptr| unsafe { lstat(ptr, stat_buf.as_mut_ptr()) });
-
-        if res == 0 {
-            // SAFETY: If the return code is 0, we know it's been initialised properly
-            Ok(unsafe { stat_buf.assume_init() })
-        } else {
-            Err(crate::DirEntryError::InvalidStat)
-        }
-    }
-
-    #[inline]
-    fn get_stat(&self) -> Result<stat> {
-        let mut stat_buf = MaybeUninit::<stat>::uninit();
-        // SAFETY: We know the path is valid
-        let res = self.as_cstr_ptr(|ptr| unsafe { stat(ptr, stat_buf.as_mut_ptr()) });
-
-        if res == 0 {
-            // SAFETY: If the return code is 0, we know it's been initialised properly
-            Ok(unsafe { stat_buf.assume_init() })
-        } else {
-            Err(crate::DirEntryError::InvalidStat)
-        }
-    }
-
-    #[inline]
-    #[allow(clippy::missing_errors_doc)] //fixing errors later
-    fn modified_time(&self) -> Result<DateTime<Utc>> {
-        let s = self.get_lstat()?;
-        modified_unix_time_to_datetime(&s).ok_or(DirEntryError::TimeError)
     }
 
     #[inline]
@@ -213,20 +145,6 @@ where
     }
 
     #[inline]
-    fn is_readable(&self) -> bool {
-        // SAFETY: The path is guaranteed to be a filepath (when used internally)
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, R_OK)) == 0 }
-    }
-
-    #[inline]
-    fn is_writable(&self) -> bool {
-        //maybe i can automatically exclude certain files from this check to
-        //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
-        // SAFETY: The path is guaranteed to be a filepath (when used internally)
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, W_OK)) == 0 }
-    }
-
-    #[inline]
     // Returns an iterator over the components of the path.
     /// This splits the path by '/' and filters out empty components.
     fn components(&self) -> impl Iterator<Item = &[u8]> {
@@ -234,31 +152,13 @@ where
     }
 
     #[inline]
-    fn to_std_file_type(&self) -> Result<std::fs::FileType> {
-        //  can't directly create a std::fs::FileType,
-        // we need to make a system call to get it
-        std::fs::symlink_metadata(self.as_path())
-            .map(|m| m.file_type())
-            .map_err(core::convert::Into::into)
-    }
-
-    #[inline]
-    ///checks if the file exists, this, makes a syscall
-    fn exists(&self) -> bool {
-        // SAFETY: The path is guaranteed to be be null terminated
-        unsafe { self.as_cstr_ptr(|ptr| access(ptr, F_OK)) == 0 }
-    }
-
-    #[inline]
     #[allow(clippy::missing_errors_doc)]
-    #[allow(clippy::missing_const_for_fn)] //this cant be const clippy be LYING
     /// Returns the path as a `Result<&str>`
     fn as_str(&self) -> Result<&str> {
         core::str::from_utf8(self).map_err(crate::DirEntryError::Utf8Error)
     }
 
     #[inline]
-    #[allow(clippy::missing_const_for_fn)]
     /// Returns the path as a &str without checking if it is valid UTF-8.
     /// # Safety
     /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
@@ -281,40 +181,20 @@ where
     }
 }
 
-impl<S> fmt::Display for DirEntry<S>
-where
-    S: BytesStorage,
-{
+impl fmt::Display for DirEntry {
     //i might need to change this to show other metadata.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string_lossy())
     }
 }
 
-impl<S> Deref for DirEntry<S>
-where
-    S: BytesStorage,
-{
-    type Target = [u8];
+impl From<DirEntry> for PathBuf {
     #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.path.as_bytes()
-    }
-}
-
-impl<S> From<DirEntry<S>> for PathBuf
-where
-    S: BytesStorage,
-{
-    #[inline]
-    fn from(entry: DirEntry<S>) -> Self {
+    fn from(entry: DirEntry) -> Self {
         entry.as_os_str().into()
     }
 }
-impl<S> TryFrom<&[u8]> for DirEntry<S>
-where
-    S: BytesStorage,
-{
+impl TryFrom<&[u8]> for DirEntry {
     type Error = DirEntryError;
     #[inline]
     fn try_from(path: &[u8]) -> Result<Self> {
@@ -322,10 +202,7 @@ where
     }
 }
 
-impl<S> TryFrom<&OsStr> for DirEntry<S>
-where
-    S: BytesStorage,
-{
+impl TryFrom<&OsStr> for DirEntry {
     type Error = DirEntryError;
     #[inline]
     fn try_from(path: &OsStr) -> Result<Self> {
@@ -333,20 +210,14 @@ where
     }
 }
 
-impl<S> AsRef<Path> for DirEntry<S>
-where
-    S: BytesStorage,
-{
+impl AsRef<Path> for DirEntry {
     #[inline]
     fn as_ref(&self) -> &Path {
         self.as_path()
     }
 }
 
-impl<S> core::fmt::Debug for DirEntry<S>
-where
-    S: BytesStorage,
-{
+impl core::fmt::Debug for DirEntry {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Dirent")
             .field("path", &self.to_string_lossy())
@@ -362,14 +233,14 @@ where
 
 ///A constructor for making accessing the buffer, filename indexes, depths of the parent path while inside the iterator.
 /// More documentation TBD
-pub trait DirentConstructor<S: BytesStorage> {
+pub trait DirentConstructor {
     fn path_buffer(&mut self) -> &mut PathBuffer;
     fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
     fn parent_depth(&self) -> u16;
 
     #[inline]
     #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
-    unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry<S> {
+    unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {
         let base_len = self.file_index();
         // SAFETY: The `drnt` must not be null(checked before hand)
         let full_path = unsafe { crate::utils::construct_path(self.path_buffer(), base_len, drnt) };
@@ -390,7 +261,11 @@ pub trait DirentConstructor<S: BytesStorage> {
     }
 }
 
+<<<<<<< Updated upstream
 impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
+=======
+impl DirentConstructor for crate::ReadDir {
+>>>>>>> Stashed changes
     #[inline]
     fn path_buffer(&mut self) -> &mut PathBuffer {
         &mut self.path_buffer
@@ -408,7 +283,11 @@ impl<S: BytesStorage> DirentConstructor<S> for crate::DirIter<S> {
 }
 
 #[cfg(target_os = "linux")]
+<<<<<<< Updated upstream
 impl<S: BytesStorage> DirentConstructor<S> for crate::iter::DirEntryIterator<S> {
+=======
+impl DirentConstructor for crate::iter::GetDents {
+>>>>>>> Stashed changes
     #[inline]
     fn path_buffer(&mut self) -> &mut crate::PathBuffer {
         &mut self.path_buffer

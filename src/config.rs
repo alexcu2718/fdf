@@ -1,8 +1,13 @@
 use crate::glob_to_regex;
 use crate::size_filter::SizeFilter;
 use crate::traits_and_conversions::BytePath as _;
+<<<<<<< Updated upstream
 
 use crate::{DirEntry, FileType, SearchConfigError, custom_types_result::BytesStorage};
+=======
+use crate::{DirEntry, FileType, SearchConfigError};
+use core::num::NonZeroU16;
+>>>>>>> Stashed changes
 use regex::bytes::{Regex, RegexBuilder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -261,24 +266,21 @@ impl SearchConfig {
     /// For regular files the size is checked directly.
     /// For symlinks, the target is resolved first and then checked if it is a regular file.
     /// Other file types are ignored.
-    pub fn matches_size<S>(&self, entry: &DirEntry<S>) -> bool
-    where
-        S: BytesStorage,
-    {
+    pub fn matches_size(&self, entry: &DirEntry) -> bool {
         let Some(filter_size) = self.size_filter else {
             return true; // No filter means always match
         };
 
         match entry.file_type() {
             FileType::RegularFile => entry
-                .size()
+                .file_size()
                 .ok()
                 .is_some_and(|sz| filter_size.is_within_size(sz as _)),
 
             FileType::Symlink => {
                 if let Ok(path) = entry.to_full_path() {
                     if path.is_regular_file() {
-                        if let Ok(sz) = entry.size() {
+                        if let Ok(sz) = entry.file_size() {
                             return filter_size.is_within_size(sz as _);
                         }
                     }
@@ -293,10 +295,7 @@ impl SearchConfig {
     #[must_use]
     /// Applies a type filter using `FileTypeFilter` enum
     /// Supports common file types: file, dir, symlink, device, pipe, etc
-    pub fn matches_type<S>(&self, entry: &DirEntry<S>) -> bool
-    where
-        S: BytesStorage,
-    {
+    pub fn matches_type(&self, entry: &DirEntry) -> bool {
         let Some(type_filter) = self.type_filter else {
             return true;
         };
@@ -320,10 +319,16 @@ impl SearchConfig {
     #[allow(clippy::if_not_else)] // this is a stylistic choice to avoid unnecessary else branches
     /// Checks if the path or file name matches the regex filter
     /// If `full_path` is false, only checks the filename
+<<<<<<< Updated upstream
     pub fn matches_path<S>(&self, dir: &DirEntry<S>, full_path: bool) -> bool
     where
         S: BytesStorage,
     {
+=======
+    ///
+    /// Use a branchless trick to do indexing
+    pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
+>>>>>>> Stashed changes
         debug_assert!(
             !dir.file_name().contains(&b'/'),
             "file_name contains a directory separator"

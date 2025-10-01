@@ -11,8 +11,7 @@
 /// # Field Aliases
 /// - On BSD systems (FreeBSD, OpenBSD, etc ), `d_ino` is aliased to `d_fileno`
 /// - On Linux, `d_reclen` is used to access the record length directly,
-/// - On MacOS/BSD, `d_namlen` is used to access the name length directly, this is a special case, since it is not aligned  similarly to `d_reclen`.
-/// - The other fields are accessed normally, as raw pointers to the field
+/// - On MacOS/BSD, `d_namlen` is used to access the name length directly,
 /// # Usage
 /// ```ignore
 /// let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
@@ -357,22 +356,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
             }
         }
     }};
-}
-
-#[macro_export]
-/// Macro to implement `BytesStorage` for types that support `From<&[u8]>`
-///The types must implement `From<&[u8]>` to be used with this macro
-macro_rules! impl_bytes_storage {
-    ($($type:ty),*) => {
-        $(
-            impl $crate::BytesStorage for $type {
-                #[inline]
-                fn from_slice(bytes: &[u8]) -> Self {
-                    bytes.into()
-                }
-            }
-        )*
-    };
 }
 
 /// Macro to create a const from an env var with compile-time parsing (Please read the docs carefully)

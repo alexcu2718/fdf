@@ -1,7 +1,11 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
+<<<<<<< Updated upstream
 
 use fdf::{FileTypeFilter, Finder, LOCAL_PATH_MAX, SearchConfigError, SizeFilter, SlimmerBytes};
+=======
+use fdf::{FileTypeFilter, Finder, LOCAL_PATH_MAX, SearchConfigError, SizeFilter};
+>>>>>>> Stashed changes
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
@@ -254,7 +258,12 @@ fn main() -> Result<(), SearchConfigError> {
     });
 
     let path = args.directory.unwrap_or_else(|| OsString::from("."));
+<<<<<<< Updated upstream
     let finder: Finder<SlimmerBytes> = Finder::init(&path, &start_pattern)
+=======
+    let finder = Finder::init(&path)
+        .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
+>>>>>>> Stashed changes
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .keep_dirs(args.keep_dirs)

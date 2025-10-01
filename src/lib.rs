@@ -44,11 +44,17 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use fdf::{Finder, SlimmerBytes,DirEntry,SearchConfigError};
+//! use fdf::{Finder,DirEntry,SearchConfigError};
 //! use std::sync::mpsc::Receiver;
 //!
+<<<<<<< Updated upstream
 //! fn find_files() -> Result<Receiver<Vec<DirEntry<SlimmerBytes>>>, SearchConfigError> {
 //!     let finder = Finder::<SlimmerBytes>::init("/path/to/search", "*.rs")
+=======
+//! fn find_files() -> Result<Receiver<Vec<DirEntry>>, SearchConfigError> {
+//!     let finder = Finder::init("/path/to/search")
+//!         .pattern("*.rs")
+>>>>>>> Stashed changes
 //!         .keep_hidden(false)
 //!         .max_depth(Some(3))
 //!         .follow_symlinks(true)
@@ -58,15 +64,6 @@
 //!     finder.traverse()
 //! }
 //! ```
-//!
-//! ## Storage Backends
-//!
-//! The library supports multiple storage types through the `BytesStorage` trait:
-//!
-//! - `Vec<u8>`: Standard vector storage
-//! - `Arc<[u8]>`: Shared ownership for reduced copying
-//! - `Box<[u8]>`: Owned boxed slice
-//! - `SlimmerBytes`: Custom optimised storage type
 //!
 //! ## Safety Considerations
 //!
@@ -80,8 +77,14 @@
 //!
 //! ### Basic Usage
 //! ```rust
+<<<<<<< Updated upstream
 //! # use fdf::{Finder, SlimmerBytes};
 //! let receiver = Finder::<SlimmerBytes>::init(".", ".*txt")
+=======
+//! # use fdf::{Finder};
+//! let receiver = Finder::init(".")
+//!     .pattern(".*txt")
+>>>>>>> Stashed changes
 //!     .build()
 //!     .unwrap()
 //!     .traverse()
@@ -138,9 +141,7 @@ mod custom_types_result;
 
 #[cfg(target_os = "linux")]
 pub(crate) use custom_types_result::SyscallBuffer;
-pub use custom_types_result::{
-    BUFFER_SIZE, BytesStorage, LOCAL_PATH_MAX, OsBytes, Result, SlimmerBytes,
-};
+pub use custom_types_result::{BUFFER_SIZE, LOCAL_PATH_MAX, Result};
 pub(crate) use custom_types_result::{DirEntryFilter, FilterType, PathBuffer};
 
 mod traits_and_conversions;
@@ -174,21 +175,16 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 /// with configurable filtering and search criteria. It uses Rayon for parallel
 /// execution and provides both synchronous and asynchronous result handling.
 ///
-/// # Type Parameters
-/// - `S`: Bytes storage type implementing [`BytesStorage`] (e.g., `Vec<u8>`, `Arc<[u8]>`)
 #[derive(Debug)]
-pub struct Finder<S>
-where
-    S: BytesStorage,
-{
+pub struct Finder {
     /// Root directory path for the search operation
     pub(crate) root: OsString,
     /// Configuration for search criteria and filtering options
     pub(crate) search_config: SearchConfig,
     /// Optional custom filter function for advanced entry filtering
-    pub(crate) filter: Option<DirEntryFilter<S>>,
+    pub(crate) filter: Option<DirEntryFilter>,
     /// Internal filter logic combining all filtering criteria
-    pub(crate) custom_filter: FilterType<S>,
+    pub(crate) custom_filter: FilterType,
     /// Filesystem device ID for same-filesystem constraint (optional)
     pub(crate) starting_filesystem: Option<u64>,
     /// Cache for (device, inode) pairs to prevent duplicate traversal with symlinks
@@ -196,16 +192,19 @@ where
     pub(crate) inode_cache: Option<DashSet<(u64, u64)>>,
 }
 ///The Finder struct is used to find files in your filesystem
-impl<S> Finder<S>
+impl Finder
 //S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
-where
-    S: BytesStorage + 'static + Clone + Send,
 {
     #[must_use]
     #[inline]
     /// Create a new Finder instance.
+<<<<<<< Updated upstream
     pub fn init<A: AsRef<OsStr>, B: AsRef<str>>(root: A, pattern: B) -> FinderBuilder<S> {
         FinderBuilder::new(root, pattern)
+=======
+    pub fn init<A: AsRef<OsStr>>(root: A) -> FinderBuilder {
+        FinderBuilder::new(root)
+>>>>>>> Stashed changes
     }
 
     #[inline]
@@ -230,8 +229,8 @@ where
     /// - Uses an unbounded channel to avoid blocking the producer thread
     /// - Entries are sent in batches to minimise channel contention
     /// - Traversal runs in parallel using Rayon's work-stealing scheduler
-    pub fn traverse(self) -> core::result::Result<Receiver<Vec<DirEntry<S>>>, SearchConfigError> {
-        let (sender, receiver): (_, Receiver<Vec<DirEntry<S>>>) = unbounded();
+    pub fn traverse(self) -> core::result::Result<Receiver<Vec<DirEntry>>, SearchConfigError> {
+        let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
         // try to construct the starting directory entry
         let entry = DirEntry::new(&self.root).map_err(SearchConfigError::TraversalError)?;
@@ -253,7 +252,7 @@ where
 
     #[inline]
     /// Determines if a directory should be sent through the channel
-    fn should_send_dir(&self, dir: &DirEntry<S>) -> bool {
+    fn should_send_dir(&self, dir: &DirEntry) -> bool {
         self.search_config.keep_dirs && self.file_filter(dir) && dir.depth() != 0
     }
 
@@ -263,7 +262,7 @@ where
         reason = "Exhaustive on traversible types"
     )]
     /// Determines if a directory should be traversed and caches the result
-    fn should_traverse(&self, dir: &DirEntry<S>) -> bool {
+    fn should_traverse(&self, dir: &DirEntry) -> bool {
         match dir.file_type {
             // Regular directory - always traversible
             FileType::Directory => true,
@@ -280,14 +279,14 @@ where
 
     #[inline]
     /// Filters out hidden files if configured to do so
-    fn keep_hidden(&self, dir: &DirEntry<S>) -> bool {
+    const fn keep_hidden(&self, dir: &DirEntry) -> bool {
         !self.search_config.hide_hidden || !dir.is_hidden()
         // Some efficient boolean shortcircuits here to avoid checking
     }
 
     #[inline]
     /// Applies custom file filtering logic
-    fn file_filter(&self, dir: &DirEntry<S>) -> bool {
+    fn file_filter(&self, dir: &DirEntry) -> bool {
         (self.custom_filter)(&self.search_config, dir, self.filter)
     }
 
@@ -300,7 +299,7 @@ where
     ///
     /// Handles same-filesystem constraints, inode caching, and symlink resolution
     /// to prevent infinite loops and duplicate traversal.
-    fn directory_or_symlink_filter(&self, dir: &DirEntry<S>) -> bool {
+    fn directory_or_symlink_filter(&self, dir: &DirEntry) -> bool {
         match dir.file_type {
             // Normal directories
             FileType::Directory => {
@@ -327,10 +326,17 @@ where
                 self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
                 // Check if we've already traversed this inode
                 self.inode_cache.as_ref().is_none_or(|cache| {
+<<<<<<< Updated upstream
                     cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
                 }) &&
                 // Ensure resolved path differs from root to avoid redundant traversal
                 dir.to_full_path().is_ok_and(|fullpath| !fullpath.starts_with(self.root.as_bytes()))
+=======
+                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))) &&
+                // if we're traversing in the same root, then we'll find it anyway so skip it
+                dir.get_realpath().is_ok_and(|path| !path.to_bytes().starts_with(self.root.as_bytes()))
+                })
+>>>>>>> Stashed changes
             })
             }
 
@@ -375,7 +381,7 @@ where
     /// # Arguments
     /// * `dir` - The `DirEntry` representing the directory to process.
     /// * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
-    fn process_directory(&self, dir: DirEntry<S>, sender: &Sender<Vec<DirEntry<S>>>) {
+    fn process_directory(&self, dir: DirEntry, sender: &Sender<Vec<DirEntry>>) {
         if !self.directory_or_symlink_filter(&dir) {
             return; //check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info
         }
@@ -435,10 +441,7 @@ where
     clippy::struct_excessive_bools,
     reason = "Naturally a builder will contain many bools"
 )]
-pub struct FinderBuilder<S>
-where
-    S: BytesStorage,
-{
+pub struct FinderBuilder {
     pub(crate) root: OsString,
     pub(crate) pattern: String,
     pub(crate) hide_hidden: bool,
@@ -448,7 +451,7 @@ where
     pub(crate) extension_match: Option<Box<[u8]>>,
     pub(crate) max_depth: Option<u16>,
     pub(crate) follow_symlinks: bool,
-    pub(crate) filter: Option<DirEntryFilter<S>>,
+    pub(crate) filter: Option<DirEntryFilter>,
     pub(crate) size_filter: Option<SizeFilter>,
     pub(crate) file_type: Option<FileTypeFilter>,
     pub(crate) show_errors: bool,
@@ -458,10 +461,7 @@ where
     pub(crate) thread_count: usize,
 }
 
-impl<S> FinderBuilder<S>
-where
-    S: BytesStorage + 'static + Clone + Send,
-{
+impl FinderBuilder {
     /// Creates a new `FinderBuilder` with required fields.
     ///
     /// # Arguments
@@ -545,7 +545,7 @@ where
 
     /// Set a custom filter
     #[must_use]
-    pub const fn filter(mut self, filter: Option<DirEntryFilter<S>>) -> Self {
+    pub const fn filter(mut self, filter: Option<DirEntryFilter>) -> Self {
         self.filter = filter;
         self
     }
@@ -618,7 +618,7 @@ where
     /// - The root path cannot be canonicalised (when enabled)
     /// - The search pattern cannot be compiled to a valid regular expression
     /// - File system metadata cannot be retrieved (for same-filesystem tracking)
-    pub fn build(self) -> core::result::Result<Finder<S>, SearchConfigError> {
+    pub fn build(self) -> core::result::Result<Finder, SearchConfigError> {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
         let _ = rayon::ThreadPoolBuilder::new()
@@ -649,7 +649,7 @@ where
             self.use_glob,
         )?;
 
-        let lambda: FilterType<S> = |rconfig, rdir, rfilter| {
+        let lambda: FilterType = |rconfig, rdir, rfilter| {
             {
                 rfilter.is_none_or(|func| func(rdir))
                     && rconfig.matches_type(rdir)

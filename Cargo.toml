@@ -22,7 +22,6 @@ libc = { version = "0.2.175" }
 rayon = "1.10.0"
 regex = { version = "1.11.1", features = ["perf"] }
 [target.'cfg(any(target_os = "linux",target_os="macos"))'.dependencies]
-slimmer_box = "0.6.5"
 mimalloc = "0.1.43"
 
 

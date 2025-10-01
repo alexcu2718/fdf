@@ -74,7 +74,7 @@ where
     T: ValueType, //only generic over i8 and u8!
 {
     //generic over size.
-    data: MaybeUninit<[T; SIZE]>,
+    pub(crate) data: MaybeUninit<[T; SIZE]>,
 }
 
 impl<T, const SIZE: usize, Idx> Index<Idx> for AlignedBuffer<T, SIZE>
@@ -215,17 +215,18 @@ where
     /// # Safety
     /// The caller must ensure:
     /// - The buffer is zeroed and has sufficient capacity (at least `LOCAL_PATH_MAX`) (4096 on Linux or 1024 on non-Linux (dependent on `libc::PATH_MAX`))
-    pub(crate) unsafe fn init_from_direntry<S>(&mut self, dir_path: &crate::DirEntry<S>) -> usize
-    where
-        S: crate::BytesStorage,
-    {
+    pub(crate) const unsafe fn init_from_direntry(&mut self, dir_path: &crate::DirEntry) -> usize {
         let buffer_ptr = self.as_mut_ptr(); // get the mutable pointer to the buffer
 
         let mut base_len = dir_path.len(); // get length of directory path
-        let needs_slash = u8::from(dir_path.as_bytes() != b"/"); // check if we need to append a slash
+
+        let dir_path_in_bytes = dir_path.as_bytes();
+
+        // const hack, partial eq isn't available in const contexts, but this is.
+        let needs_slash = (!matches!(dir_path_in_bytes, b"/")) as u8; // check if we need to append a slash
 
         unsafe {
-            core::ptr::copy_nonoverlapping(dir_path.as_ptr(), buffer_ptr.cast(), base_len); // copy path
+            core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr.cast(), base_len); // copy path
             *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash // add slash if needed  (this avoids a branch )
         }; //cast into byte types
 

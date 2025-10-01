@@ -1,5 +1,9 @@
 // honestly i should probably delete this and rely on just libc but I ideally would like to not dynamically link glibc in future on  Linux
-#![allow(clippy::undocumented_unsafe_blocks)] //can comment all of this later
+#![cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#![allow(clippy::undocumented_unsafe_blocks)] // too lazy to comment it all
+use core::ffi::CStr;
+
+//can comment all of this later
 use crate::ValueType;
 #[inline]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
@@ -8,23 +12,23 @@ use crate::ValueType;
 // x86_64-specific implementation
 /// Opens a directory using direct syscall via assembly
 ///
-/// Uses the `open` syscall with flags optimised for directory scanning:
-/// - `O_CLOEXEC`: Close on exec (security)
-/// - `O_DIRECTORY`: Fail if not a directory (safety)
-/// - `O_NONBLOCK`: Non-blocking operations (performance)
-/// - `O_RDONLY`: Read-only access
 ///
 /// # Safety
-/// - Requires byte path to be a valid directory
+/// - Requires cstr to be a valid directory
 ///
 /// # Returns
 /// - File descriptor (positive integer) on success
 /// - -1 on error (check errno for details)
+<<<<<<< Updated upstream
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
     // Create null-terminated C string from byte slice
     let filename: *const u8 = unsafe { cstr!(bytepath) };
     const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+=======
+pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+    use core::arch::asm;
+>>>>>>> Stashed changes
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
     let fd: i32;
@@ -32,8 +36,8 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
         asm!(
             "syscall",
             inout("rax") SYSCALL_NUM => fd,
-            in("rdi") filename,
-            in("rsi") FLAGS,
+            in("rdi") cstr.as_ptr()  ,
+            in("rsi") flags,
             in("rdx") libc::O_RDONLY,
             out("rcx") _, out("r11") _,
              // Clobbered registers (resetting)
@@ -50,23 +54,20 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 /// ARM64 uses `openat` instead of `open` for better path resolution.
 /// Uses `AT_FDCWD` to indicate relative to current working directory.
 ///
-/// Flags:
-/// - `O_CLOEXEC`: Close on exec
-/// - `O_DIRECTORY`: Ensure it's a directory
-/// - `O_NONBLOCK`: Non-blocking I/O
-/// - `O_RDONLY`: Read-only access (mode parameter required but ignored)
-///
 /// # Safety
 /// - Requires byte path to be a valid directory
 ///
 /// # Returns
 /// File descriptor on success, -1 on error
+<<<<<<< Updated upstream
 pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
     use std::arch::asm;
     let filename: *const u8 = unsafe { cstr!(bytepath) };
+=======
+pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+    use core::arch::asm;
+>>>>>>> Stashed changes
 
-    // aarch64 doesn't have open, we need to use openat for this.
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
     const MODE: i32 = libc::O_RDONLY; // Required even if unused in directory open
     const SYSCALL_OPENAT: i32 = libc::SYS_openat as i32;
 
@@ -75,8 +76,8 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
         asm!(
             "svc 0",
             in("x0") libc::AT_FDCWD,          // dirfd = AT_FDCWD
-            in("x1") filename,
-            in("x2") FLAGS,
+            in("x1") cstr.as_ptr(),
+            in("x2") flags,
             in("x3") MODE,
             in("x8") SYSCALL_OPENAT,
             lateout("x0") fd,           // return value
@@ -98,9 +99,8 @@ pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
 ///
 /// # Returns
 /// File descriptor on success, -1 on error
-pub unsafe fn open_asm(bytepath: &[u8]) -> i32 {
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
-    unsafe { libc::open(cstr!(bytepath), FLAGS) }
+pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+    unsafe { libc::open(cstr.as_ptr(), flags) }
 }
 
 #[inline]

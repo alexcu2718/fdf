@@ -1,10 +1,9 @@
-use crate::BytePath as _;
-
 use libc::{
-    DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO,
-    S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t,
+    DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, DT_UNKNOWN, S_IFBLK, S_IFCHR,
+    S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t,
 };
 
+use crate::DirEntry;
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[expect(
@@ -77,7 +76,36 @@ impl FileType {
             DT_FIFO => Self::Pipe,
             DT_LNK => Self::Symlink,
             DT_SOCK => Self::Socket,
-            _ => Self::Unknown, /*DT_UNKNOWN */
+            DT_UNKNOWN => Self::Unknown,
+            // SAFETY: d_type can only be one of the above
+            // Provide a hint to the optimer to realise it can only take these values
+            _ => unsafe { core::hint::unreachable_unchecked() },
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    #[expect(clippy::if_not_else, reason = "We pick the likelier branch first")]
+    /// Fallback method to determine file type when `d_type` is unavailable or `DT_UNKNOWN`
+    ///
+    /// This method first checks the `d_type` value, and if it's `DT_UNKNOWN`,
+    /// falls back to a more expensive lstat-based lookup using the file path.
+    ///
+    /// # Parameters
+    /// - `d_type`: The file type from a dirent structure
+    /// - `file_path`: The path cstr to use
+    ///
+    /// # Notes
+    /// While ext4 and BTRFS (and others, not entirely tested!) typically provide reliable `d_type` values,
+    /// other filesystems like NTFS, XFS, or FUSE-based filesystems
+    /// may require the fallback path.
+    pub fn from_dtype_fallback(d_type: u8, file_path: &std::ffi::CStr) -> Self {
+        if d_type != libc::DT_UNKNOWN {
+            Self::from_dtype(d_type)
+        } else {
+            DirEntry::get_lstat_private(file_path.as_ptr())
+                .map(|statted| Self::from_stat(&statted))
+                .unwrap_or(Self::Unknown)
         }
     }
     /// Returns true if this represents a directory  (cost free check)
@@ -134,50 +162,6 @@ impl FileType {
     #[must_use]
     pub const fn is_unknown(&self) -> bool {
         matches!(*self, Self::Unknown)
-    }
-
-    #[must_use]
-    #[inline]
-    /// Fallback method to determine file type when `d_type` is unavailable or `DT_UNKNOWN`
-    ///
-    /// This method first checks the `d_type` value, and if it's `DT_UNKNOWN`,
-    /// falls back to a more expensive lstat-based lookup using the file path.
-    ///
-    /// # Parameters
-    /// - `d_type`: The file type from a dirent structure
-    /// - `file_path`: The path to the file for fallback lookup
-    ///
-    /// # Notes
-    /// While ext4 and BTRFS (and others, not entirely tested!) typically provide reliable `d_type` values,
-    /// other filesystems like NTFS, XFS, or FUSE-based filesystems
-    /// may require the fallback path.
-    pub fn from_dtype_fallback(d_type: u8, file_path: &[u8]) -> Self {
-        //i wouldve just chained the function calls but it's clearer this way
-        match d_type {
-            DT_REG => Self::RegularFile,
-            DT_DIR => Self::Directory,
-            DT_BLK => Self::BlockDevice,
-            DT_CHR => Self::CharDevice,
-            DT_FIFO => Self::Pipe,
-            DT_LNK => Self::Symlink,
-            DT_SOCK => Self::Socket,
-            _ => Self::from_bytes(file_path),
-        }
-    }
-
-    #[must_use]
-    #[inline]
-    /// Determines file type using an lstat call on the provided path
-    ///
-    /// This is more expensive but more reliable than relying on `d_type`,
-    /// especially on filesystems that don't fully support dirent `d_type`.
-    ///
-    /// # Parameters
-    /// - `file_path`: The path to the file to stat (must be a valid filepath)
-    pub fn from_bytes(file_path: &[u8]) -> Self {
-        file_path
-            .get_lstat()
-            .map_or(Self::Unknown, |stat| Self::from_mode(stat.st_mode))
     }
 
     #[must_use]

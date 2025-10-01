@@ -35,6 +35,8 @@ pub enum DirEntryError {
     NotADirectory,
     /// Symbolic link recursion limit exceeded
     TooManySymbolicLinks,
+
+    NullError,
 }
 
 impl From<io::Error> for DirEntryError {
@@ -75,6 +77,7 @@ impl fmt::Display for DirEntryError {
             Self::InvalidPath => write!(f, "Invalid path, neither a file nor a directory"),
             Self::InvalidStat => write!(f, "Invalid file stat"),
             Self::TimeError => write!(f, "Invalid time conversion"),
+            Self::NullError => write!(f, "Invalid nulls detected in name! "),
             Self::TemporarilyUnavailable => {
                 write!(f, "Operation temporarily unavailable, retry later")
             }

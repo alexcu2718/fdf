@@ -357,6 +357,7 @@ pub(crate) const fn find_zero_byte_u64(x: u64) -> usize {
 }
 
 #[inline]
+<<<<<<< Updated upstream
 /// Finds the first occurrence of a byte in a 64-bit word.
 ///
 /// This uses a branchless, bitwise technique to locate the first instance of
@@ -400,6 +401,84 @@ pub(crate) const fn find_zero_byte_u64(x: u64) -> usize {
 /// # Returns
 /// - `Some(usize)`: Index (0-7) of the first occurrence
 /// - `None`: If the byte is not found
+=======
+pub(crate) const unsafe fn find_zero_byte_u64_optimised(x: u64) -> usize {
+    // use ctl_nonzero's for this via  nonzero u64
+    // This skips the need to for all 0's then uses instruction bsf on most architectures
+    let zero_bit =
+        unsafe { core::num::NonZeroU64::new_unchecked(x.wrapping_sub(LO_U64) & !x & HI_U64) };
+
+    #[cfg(target_endian = "little")]
+    {
+        (zero_bit.trailing_zeros() >> 3) as usize
+    }
+    #[cfg(not(target_endian = "little"))]
+    {
+        (zero_bit.leading_zeros() >> 3) as usize
+    }
+}
+
+#[inline]
+/**
+ Finds the first occurrence of a byte in a 64-bit word.
+
+ This uses a branchless, bitwise technique to locate the first instance of
+ the target byte `c` in the 64-bit value `str`. The operation works by:
+
+ 1. XORing each byte with the target value (resulting in 0 for matches)
+ 2. Applying a zero-byte detection algorithm to find matches
+ 3. Converting the bit position to a byte index
+
+ # The Computation
+ - `str ^ repeat_u64(c)`: Creates a value where matching bytes become 0
+ - `.wrapping_sub(LO_U64)`: Subtracts 1 from each byte (wrapping)
+ - `& !xor_result`: Clears bits where the XOR result had 1s
+ - `& HI_U64`: Isolates the high bit of each byte
+
+ The resulting word will have high bits set only for bytes that matched `c`.
+
+
+ # Examples
+```
+use fdf::find_char_in_word;
+
+// Helper function to create byte arrays from strings
+fn create_byte_array(s: &str) -> [u8; 8] {
+let mut bytes = [0u8; 8];
+let s_bytes = s.as_bytes();
+let len = s_bytes.len().min(8);
+bytes[..len].copy_from_slice(&s_bytes[..len]);
+bytes
+}
+
+// Basic usage
+ let bytes = create_byte_array("hello");
+assert_eq!(find_char_in_word(b'h', bytes), Some(0),"hello is predicted wrong!");
+
+// Edge cases
+assert_eq!(find_char_in_word(b'A', create_byte_array("AAAAAAAA")), Some(0)); // first position
+assert_eq!(find_char_in_word(b'A', create_byte_array("")), None); // not found
+assert_eq!(find_char_in_word(0, create_byte_array("\x01\x02\x03\0\x05\x06\x07\x08")), Some(3)); // null byte
+
+// Multiple occurrences (returns first)
+let bytes = create_byte_array("hello");
+assert_eq!(find_char_in_word(b'l', bytes), Some(2)); // first 'l'
+```
+# Notes
+- Returns the first occurrence if the byte appears multiple times
+- Returns `None` if the byte is not found
+- Works for any byte value (0-255)
+
+# Parameters
+- `c`: The byte to search for (0-255)
+- `bytestr`: The word ( a [u8;8] ) to search in (64 bit specific)
+
+# Returns
+- `Some(usize)`: Index (0-7) of the first occurrence
+- `None`: If the byte is not found
+*/
+#[inline]
+>>>>>>> Stashed changes
 pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     // XOR with the target character will be 0 for matching bytes
     let char_array = u64::from_le_bytes(bytestr);

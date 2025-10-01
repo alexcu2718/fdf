@@ -4,7 +4,11 @@ mod tests {
     use crate::memchr_derivations::{find_char_in_word, find_zero_byte_u64};
     use crate::size_filter::*;
     use crate::traits_and_conversions::BytePath;
+<<<<<<< Updated upstream
     use crate::{DirEntry, DirIter, FileType, SlimmerBytes};
+=======
+    use crate::{DirEntry, FileType, ReadDir};
+>>>>>>> Stashed changes
     use chrono::{Duration as ChronoDuration, Utc};
     use filetime::{FileTime, set_file_times};
     use std::env::temp_dir;
@@ -42,23 +46,9 @@ mod tests {
 
         let _ = std::fs::File::create(&file_path);
 
-        let entry: DirEntry<Arc<[u8]>> = DirEntry::new(file_path.as_os_str()).unwrap();
+        let entry = DirEntry::new(file_path.as_os_str()).unwrap();
         let _ = std::fs::remove_file(&file_path);
         assert_eq!(entry.file_name(), file_name.as_bytes());
-    }
-
-    #[test]
-    fn modified_time_fails_for_nonexistent_file() {
-        let tmp_dir = temp_dir();
-        let file_path = tmp_dir.join("nonexistent_file_should_fail.txt");
-
-        let result = as_bytes(&file_path).modified_time();
-
-        assert!(
-            result.is_err(),
-            "Expected error for nonexistent file, got {:?}",
-            result
-        );
     }
 
     #[test]
@@ -74,8 +64,13 @@ mod tests {
         perms.set_mode(0o000);
         fs::set_permissions(&no_read_dir, perms).unwrap();
 
+<<<<<<< Updated upstream
         let entry = DirEntry::<Arc<[u8]>>::new(&temp_dir).unwrap();
         let iter = DirIter::new(&entry).unwrap();
+=======
+        let entry = DirEntry::new(&temp_dir).unwrap();
+        let iter = ReadDir::new(&entry).unwrap();
+>>>>>>> Stashed changes
 
         let entries: Vec<_> = iter.collect();
 
@@ -105,7 +100,7 @@ mod tests {
         let temp_dir = temp_dir().join("perm_test");
         fs::create_dir_all(&temp_dir).unwrap();
 
-        let entry = DirEntry::<Arc<[u8]>>::new(&temp_dir).unwrap();
+        let entry = DirEntry::new(&temp_dir).unwrap();
 
         assert!(entry.exists());
         assert!(entry.is_readable());
@@ -131,7 +126,8 @@ mod tests {
         // Apply custom time
         set_file_times(&file_path, custom_ft, custom_ft).expect("failed to set file time");
 
-        let dt = as_bytes(&file_path)
+        let dt = DirEntry::new(as_bytes(&file_path).as_os_str())
+            .unwrap()
             .modified_time()
             .expect("should return custom datetime");
 
@@ -154,7 +150,8 @@ mod tests {
             writeln!(f, "initial contents").unwrap();
         }
 
-        let first_time = as_bytes(&file_path)
+        let first_time = DirEntry::new(as_bytes(&file_path).as_os_str())
+            .unwrap()
             .modified_time()
             .expect("should get initial modified time");
 
@@ -169,7 +166,8 @@ mod tests {
             writeln!(f, "new contents").unwrap();
         }
 
-        let second_time = as_bytes(&file_path)
+        let second_time = DirEntry::new(as_bytes(&file_path).as_os_str())
+            .unwrap()
             .modified_time()
             .expect("should get updated modified time");
 
@@ -189,8 +187,13 @@ mod tests {
         fs::create_dir_all(&subdir).unwrap();
         fs::write(subdir.join("file.txt"), "data").unwrap();
 
+<<<<<<< Updated upstream
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+=======
+        let dir_entry = DirEntry::new(&dir).unwrap();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+>>>>>>> Stashed changes
 
         assert_eq!(entries.len(), 1, "Top-level should contain only subdir");
 
@@ -201,7 +204,7 @@ mod tests {
     fn test_size_filter_edge_zero_and_large() {
         let file_zero = temp_dir().join("zero_size.txt");
         File::create(&file_zero).unwrap();
-        let entry = DirEntry::<Arc<[u8]>>::new(&file_zero).unwrap();
+        let entry = DirEntry::new(&file_zero).unwrap();
         let metadata = std::fs::metadata(entry).unwrap();
         assert_eq!(metadata.len(), 0);
 
@@ -225,7 +228,7 @@ mod tests {
         let link = dir.join("link.txt");
         let _ = symlink(&target, &link);
 
-        let entry = DirEntry::<Arc<[u8]>>::new(&link).unwrap();
+        let entry = DirEntry::new(&link).unwrap();
         assert!(entry.exists());
         assert!(entry.is_symlink());
         assert_eq!(entry.file_name(), b"link.txt");
@@ -244,7 +247,8 @@ mod tests {
             writeln!(f, "hello world").unwrap();
         }
 
-        let dt = as_bytes(&file_path)
+        let dt = DirEntry::new(as_bytes(&file_path).as_os_str())
+            .unwrap()
             .modified_time()
             .expect("should return valid datetime");
 
@@ -276,8 +280,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(test_dir);
         std::fs::create_dir_all(test_dir).expect("Failed to create test directory");
         std::fs::write(&test_file_path, "test").expect("Failed to write test file");
-        let entry: DirEntry<Box<[u8]>> =
-            DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
+        let entry = DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
         assert_eq!(entry.file_name(), b"child.txt");
         assert_eq!(entry.extension().unwrap(), b"txt");
         assert_eq!(entry.parent(), test_dir.as_os_str().as_bytes());
@@ -396,7 +399,7 @@ mod tests {
         std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
         let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
 
-        let dir_entry: DirEntry<Vec<u8>> = DirEntry::new(dir_path.as_os_str()).unwrap();
+        let dir_entry = DirEntry::new(dir_path.as_os_str()).unwrap();
         let entries = dir_entry.getdents().unwrap();
         let entries_clone: Vec<_> = dir_entry.getdents().unwrap().collect();
 
@@ -446,7 +449,7 @@ mod tests {
         std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
         let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
 
-        let dir_entry: DirEntry<Vec<u8>> = DirEntry::new(dir_path.as_os_str()).unwrap();
+        let dir_entry = DirEntry::new(dir_path.as_os_str()).unwrap();
         let entries = dir_entry.readdir().unwrap();
         let entries_clone: Vec<_> = dir_entry.readdir().unwrap().collect();
 
@@ -527,8 +530,13 @@ mod tests {
         let _ = std::fs::File::create(dir_path.join("visible.txt"));
         let _ = std::fs::File::create(dir_path.join(".hidden"));
 
+<<<<<<< Updated upstream
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+=======
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+>>>>>>> Stashed changes
         let mut names: Vec<_> = entries
             .iter()
             .map(|e| e.file_name().to_string_lossy().into_owned())
@@ -551,7 +559,7 @@ mod tests {
         let _ = std::fs::remove_file(&file_path);
         let _ = std::fs::write(&file_path, "test");
 
-        let entry = DirEntry::<SlimmerBytes>::new(file_path.as_os_str()).unwrap();
+        let entry = DirEntry::new(file_path.as_os_str()).unwrap();
 
         assert_eq!(entry.file_name(), b"testfile.txt");
         let x = std::fs::remove_file(&file_path).is_ok();
@@ -564,7 +572,7 @@ mod tests {
         let file_path = temp_dir.as_path().join("testfilenew.txt");
         std::fs::write(&file_path, "test").unwrap();
 
-        let entry: usize = DirEntry::<SlimmerBytes>::new(file_path.as_os_str())
+        let entry: usize = DirEntry::new(file_path.as_os_str())
             .unwrap()
             .file_name_index();
 
@@ -587,7 +595,7 @@ mod tests {
 
         let _ = std::env::set_current_dir(&temp_dir); //.unwrap();
 
-        let file_path = DirEntry::<SlimmerBytes>::new(".")
+        let file_path = DirEntry::new(".")
             .unwrap()
             .to_full_path()
             .expect("should not fail");
@@ -622,7 +630,7 @@ mod tests {
 
         // Test directory entry
 
-        let dir_entry = DirEntry::<SlimmerBytes>::new(&temp_dir)
+        let dir_entry = DirEntry::new(&temp_dir)
             .expect("why did this fail? ")
             .to_full_path()
             .unwrap();
@@ -685,7 +693,7 @@ mod tests {
 
         // init a DirEntry for testing
 
-        let dir_entry = DirEntry::<SlimmerBytes>::new(&dir_path).unwrap();
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
 
         // get iterator
         let iter = dir_entry.readdir().unwrap();
@@ -726,7 +734,7 @@ mod tests {
         let _ = fs::remove_dir_all(&tdir);
         let _ = fs::create_dir_all(&tdir);
 
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&tdir).unwrap();
+        let dir_entry = DirEntry::new(&tdir).unwrap();
 
         //PAY ATTENTION TO THE ! MARKS, HARD TO ******** SEE
         assert_eq!(
@@ -770,8 +778,7 @@ mod tests {
         assert!(file_path.is_file(), "Test path is not a file");
 
         // the actual functionality
-        let entry =
-            DirEntry::<Arc<[u8]>>::new(file_path.as_os_str()).expect("Failed to create DirEntry");
+        let entry = DirEntry::new(file_path.as_os_str()).expect("Failed to create DirEntry");
         assert_eq!(entry.dirname(), b"parent", "Incorrect directory name");
 
         // verify removal
@@ -789,14 +796,19 @@ mod tests {
         let _ = File::create(dir_path.join("file1.txt"));
         let _ = fs::create_dir(dir_path.join("subdir"));
 
+<<<<<<< Updated upstream
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
         let iter = DirIter::new(&dir_entry).unwrap();
+=======
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let iter = ReadDir::new(&dir_entry).unwrap();
+>>>>>>> Stashed changes
         let entries: Vec<_> = iter.collect();
 
         assert_eq!(entries.len(), 2);
         let mut names: Vec<_> = entries
             .iter()
-            .map(|e| e.path.as_os_str().to_string_lossy())
+            .map(|e| e.as_os_str().to_string_lossy())
             .collect();
         names.sort();
 
@@ -810,8 +822,13 @@ mod tests {
     fn test_entries() {
         let dir = temp_dir().join("test_dir");
         let _ = fs::create_dir_all(&dir);
+<<<<<<< Updated upstream
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
         let iter = DirIter::new(&dir_entry).unwrap();
+=======
+        let dir_entry = DirEntry::new(&dir).unwrap();
+        let iter = ReadDir::new(&dir_entry).unwrap();
+>>>>>>> Stashed changes
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
@@ -824,11 +841,16 @@ mod tests {
     fn test_realpath() {
         let dir = temp_dir().join("test_dir");
         let _ = fs::create_dir_all(&dir);
+<<<<<<< Updated upstream
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir)
             .unwrap()
             .to_full_path()
             .unwrap();
         let iter = DirIter::new(&dir_entry).unwrap();
+=======
+        let dir_entry = DirEntry::new(&dir).unwrap().to_full_path().unwrap();
+        let iter = ReadDir::new(&dir_entry).unwrap();
+>>>>>>> Stashed changes
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
@@ -921,7 +943,7 @@ mod tests {
         let content = vec![0u8; 100]; // 100 bytes
         fs::write(&file_path, content).unwrap();
 
-        let entry = DirEntry::<Arc<[u8]>>::new(&file_path).unwrap();
+        let entry = DirEntry::new(&file_path).unwrap();
         let metadata = std::fs::metadata(entry).unwrap();
 
         let filter = SizeFilter::Equals(100);
@@ -958,7 +980,7 @@ mod tests {
             writeln!(f, "test content").unwrap();
         }
 
-        let entry = DirEntry::<Arc<[u8]>>::new(&file_path).unwrap();
+        let entry = DirEntry::new(&file_path).unwrap();
         let metadata = std::fs::metadata(entry).unwrap();
 
         assert!(metadata.is_file());
@@ -1041,7 +1063,7 @@ mod tests {
 
         let _ = symlink("regular.txt", dir_path.join("symlink"));
 
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path)
+        let dir_entry = DirEntry::new(&dir_path)
             .expect("if this errors then it's probably a permission issue related to sandboxing");
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
 
@@ -1050,7 +1072,7 @@ mod tests {
             *type_counts.entry(entry.file_type).or_insert(0) += 1;
             println!(
                 "File: {}, Type: {:?}",
-                entry.path.as_os_str().to_string_lossy(),
+                entry.as_os_str().to_string_lossy(),
                 entry.file_type
             );
         }
@@ -1070,8 +1092,13 @@ mod tests {
         let _ = std::fs::File::create(top_dir.join("top_file.txt"));
         let _ = std::fs::File::create(sub_dir.join("nested_file.txt"));
 
+<<<<<<< Updated upstream
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&top_dir).unwrap();
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+=======
+        let dir_entry = DirEntry::new(&top_dir).unwrap();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+>>>>>>> Stashed changes
 
         let mut names: Vec<_> = entries
             .iter()
@@ -1099,15 +1126,20 @@ mod tests {
 
         let _ = symlink("regular.txt", dir_path.join("symlink"));
 
+<<<<<<< Updated upstream
         let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir_path).unwrap();
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
+=======
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+>>>>>>> Stashed changes
 
         let mut type_counts = std::collections::HashMap::new();
         for entry in entries {
             *type_counts.entry(entry.file_type).or_insert(0) += 1;
             println!(
                 "File: {}, Type: {:?}",
-                entry.path.as_os_str().to_string_lossy(),
+                entry.as_os_str().to_string_lossy(),
                 entry.file_type
             );
         }
@@ -1127,7 +1159,12 @@ mod tests {
         let start_path: &[u8] = b"/";
         let pattern: &str = ".";
 
+<<<<<<< Updated upstream
         let finder: Finder<SlimmerBytes> = Finder::init(start_path.as_os_str(), &pattern)
+=======
+        let finder = Finder::init(start_path.as_os_str())
+            .pattern(&pattern)
+>>>>>>> Stashed changes
             .keep_hidden(true)
             .keep_dirs(true)
             .build()
@@ -1142,6 +1179,34 @@ mod tests {
         //(basically  trying to avoid the same segfault issue seen previously....)
     }
 
+<<<<<<< Updated upstream
+=======
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_root_linux_symlinks() {
+        // Quick test for symlink recursion detection
+        use crate::Finder;
+        let start_path: &[u8] = b"/";
+        let pattern: &str = ".";
+
+        let finder = Finder::init(start_path.as_os_str())
+            .pattern(&pattern)
+            .keep_hidden(true)
+            .keep_dirs(true)
+            .follow_symlinks(true)
+            .build()
+            .unwrap();
+
+        let result = finder.traverse().unwrap().into_iter();
+
+        let collected: Vec<_> = result.collect();
+
+        assert!(collected.len() > 3);
+        //a fairly arbitirary assert, this is to make sure that the result isnt no-opped away.
+        //(basically  trying to avoid the same segfault issue seen previously....)
+    }
+
+>>>>>>> Stashed changes
     #[test]
     #[allow(unused)]
     fn test_home() {
@@ -1150,12 +1215,43 @@ mod tests {
         let home_dir = std::env::home_dir();
 
         if home_dir.is_some() {
+<<<<<<< Updated upstream
             let finder: Finder<SlimmerBytes> =
                 Finder::init(home_dir.unwrap().as_os_str(), &pattern)
                     .keep_hidden(true)
                     .keep_dirs(true)
                     .build()
                     .unwrap();
+=======
+            let finder = Finder::init(home_dir.unwrap().as_os_str())
+                .pattern(&pattern)
+                .keep_hidden(true)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
+
+            let result = finder.traverse().unwrap().into_iter();
+
+            let collected: Vec<_> = std::hint::black_box(result.collect());
+        }
+    }
+
+    #[test]
+    #[allow(unused)]
+    fn test_home_symlink() {
+        use crate::Finder;
+        let pattern: &str = ".";
+        let home_dir = std::env::home_dir();
+
+        if home_dir.is_some() {
+            let finder = Finder::init(home_dir.unwrap().as_os_str())
+                .pattern(&pattern)
+                .keep_hidden(true)
+                .follow_symlinks(true)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
+>>>>>>> Stashed changes
 
             let result = finder.traverse().unwrap().into_iter();
 
@@ -1171,12 +1267,21 @@ mod tests {
         let home_dir = std::env::home_dir();
 
         if home_dir.is_some() {
+<<<<<<< Updated upstream
             let finder: Finder<SlimmerBytes> =
                 Finder::init(home_dir.unwrap().as_os_str(), &pattern)
                     .keep_hidden(false)
                     .keep_dirs(true)
                     .build()
                     .unwrap();
+=======
+            let finder = Finder::init(home_dir.unwrap().as_os_str())
+                .pattern(&pattern)
+                .keep_hidden(false)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
+>>>>>>> Stashed changes
 
             let result = finder.traverse().unwrap().into_iter();
 
@@ -1214,14 +1319,13 @@ mod tests {
         let dir = temp_dir().join("test_pathXXX");
         let _ = fs::create_dir_all(&dir);
 
-        let dir_entry = DirEntry::<Arc<[u8]>>::new(&dir).unwrap();
+        let dir_entry = DirEntry::new(&dir).unwrap();
 
         let _ = File::create(dir.join("regular.txt"));
         let entries: Vec<_> = DirIter::new(&dir_entry).unwrap().collect();
         assert_eq!(entries.len(), 1);
 
         let v = entries[0]
-            .path
             .as_os_str()
             .to_string_lossy()
             .contains("regular.txt");
@@ -1236,7 +1340,7 @@ mod tests {
 
         let std_path = Path::new(use_path.as_os_str());
         if std_path.exists() {
-            let non_existent = DirEntry::<Arc<[u8]>>::new(use_path.as_os_str());
+            let non_existent = DirEntry::new(use_path.as_os_str());
             assert!(non_existent.is_err(), "ok, stop being an ass")
         };
     }

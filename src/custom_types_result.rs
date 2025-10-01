@@ -1,10 +1,14 @@
 use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig, const_from_env};
+<<<<<<< Updated upstream
 use core::ops::Deref;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use slimmer_box::SlimmerBox;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::Arc;
+=======
+
+>>>>>>> Stashed changes
 ///Generic result type for directory entry operations
 pub type Result<T> = core::result::Result<T, DirEntryError>;
 
@@ -25,6 +29,7 @@ pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
 #[cfg(target_os = "linux")] //we only use a buffer for syscalls on linux because of stable ABI
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 
+<<<<<<< Updated upstream
 ///  A trait that all storage types must implement (for our main types) (so the user can use their own types if they want)
 pub trait BytesStorage: Deref<Target = [u8]> {
     fn from_slice(bytes: &[u8]) -> Self;
@@ -104,18 +109,9 @@ impl<S: BytesStorage, T: AsRef<[u8]>> From<T> for OsBytes<S> {
     }
 }
 
+=======
+>>>>>>> Stashed changes
 ///filter function type for directory entries,
-pub type FilterType<S> = fn(&SearchConfig, &DirEntry<S>, Option<DirEntryFilter<S>>) -> bool;
+pub type FilterType = fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>) -> bool;
 ///generic filter function type for directory entries
-pub type DirEntryFilter<S> = fn(&DirEntry<S>) -> bool;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-/// A space-optimised byte container for Linux and macOS systems.
-///
-/// This type alias provides a memory-efficient alternative to `Box<[u8]>` on
-/// supported platforms, reducing the storage overhead from 16 bytes to 10 bytes
-/// per allocation while maintaining the same functionality
-/// This helps with cache affinity
-/// Defaults to Box for non-macOS/Linux
-pub type SlimmerBytes = SlimmerBox<[u8], u16>;
-#[cfg(not(any(target_os = "linux", target_os = "macos")))] // If not on Linux/macos, we use a regular Box
-pub type SlimmerBytes = Box<[u8]>;
+pub type DirEntryFilter = fn(&DirEntry) -> bool;

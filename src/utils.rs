@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
+use std::ffi::CStr;
 
 #[must_use]
 #[inline]
@@ -105,17 +106,31 @@ where
 }
 
 #[inline]
+#[allow(clippy::multiple_unsafe_ops_per_block)] //lazy
+#[expect(
+    clippy::transmute_ptr_to_ptr,
+    reason = "they have exactly the same representation in memory, a null terminated slice of &[u8] is a Cstr"
+)]
 ///  constructs a path convenience (just a utility function to save verbosity)
 /// this internal function relies on the pointer to the `dirent64` being non-null
 pub unsafe fn construct_path(
     path_buffer: &mut crate::PathBuffer,
     base_len: usize,
     drnt: *const dirent64,
-) -> &[u8] {
+) -> &CStr {
     // SAFETY: The `drnt` must not be null (checked before using)
     let d_name = unsafe { crate::access_dirent!(drnt, d_name) };
     // SAFETY: as above
+<<<<<<< Updated upstream
     let name_len = unsafe { dirent_name_length(drnt) };
+=======
+    // Add 1 to include the null terminator
+    let name_len = unsafe { dirent_name_length(drnt) + 1 };
+    debug_assert!(
+        name_len + base_len < LOCAL_PATH_MAX,
+        "We don't expect the total length to exceed PATH_MAX!"
+    );
+>>>>>>> Stashed changes
     // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
     // by the caller of this function.
     let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
@@ -128,7 +143,20 @@ pub unsafe fn construct_path(
     unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned
     //  SAFETY: The total length `base_len + name_len` is guaranteed to be
     // less than or equal to `LOCAL_PATH_MAX`, which is 4096 or 1024 by default
-    unsafe { path_buffer.get_unchecked(..base_len + name_len) }
+    debug_assert!(
+        unsafe {
+            CStr::from_ptr(
+                path_buffer
+                    .get_unchecked(..base_len + name_len)
+                    .as_ptr()
+                    .cast(),
+            ) == core::mem::transmute::<_, &core::ffi::CStr>(
+                path_buffer.get_unchecked(..base_len + name_len),
+            )
+        },
+        "we  expect these to be the same"
+    );
+    unsafe { core::mem::transmute(path_buffer.get_unchecked(..base_len + name_len)) }
 }
 
 #[inline]
@@ -185,6 +213,13 @@ Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
+<<<<<<< Updated upstream
+=======
+#[expect(
+    clippy::as_conversions,
+    reason = "Casting u16 to usize is only possible const via as casts"
+)]
+>>>>>>> Stashed changes
 #[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 /// Returns the length of a `dirent64's d_name` string in constant time using
 /// SWAR (SIMD within a register) bit tricks.

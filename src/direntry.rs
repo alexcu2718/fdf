@@ -1086,10 +1086,15 @@ impl DirEntry {
     }
 
     #[inline]
+    #[expect(clippy::cast_sign_loss, reason = "needs to be in u32 for chrono")]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     pub fn modified_time(&self) -> Result<chrono::DateTime<chrono::Utc>> {
-        let s = self.get_lstat()?;
-        crate::utils::modified_unix_time_to_datetime(&s).ok_or(DirEntryError::TimeError)
+        let statted = self.get_lstat()?;
+        chrono::DateTime::from_timestamp(
+            access_stat!(statted, st_mtime),
+            access_stat!(statted, st_mtimensec),
+        )
+        .ok_or(DirEntryError::TimeError)
     }
 
     #[inline]

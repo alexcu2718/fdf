@@ -1,26 +1,9 @@
-use crate::{LOCAL_PATH_MAX, buffer::ValueType};
+use crate::buffer::ValueType;
 
-use chrono::{DateTime, Utc};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
-use std::ffi::CStr;
-
-#[must_use]
-#[inline]
-#[expect(
-    clippy::cast_sign_loss,
-    reason = "We need to cast into the appropriate type for chrono"
-)]
-/// Converts Unix timestamp metadata from a `stat` structure to a UTC `DateTime`.
-///
-/// This function extracts the modification time from a `libc::stat` structure and
-/// converts it to a `DateTime<Utc>` object. It handles both the seconds and
-/// nanoseconds components of the Unix timestamp.
-pub const fn modified_unix_time_to_datetime(st: &libc::stat) -> Option<DateTime<Utc>> {
-    DateTime::from_timestamp(access_stat!(st, st_mtime), access_stat!(st, st_mtimensec))
-}
 
 /// Calculates the length of a null-terminated string pointed to by `ptr`,
 /// Via specialised instructions, AVX2 if available, then SSE2 then libc's strlen
@@ -106,59 +89,6 @@ where
 }
 
 #[inline]
-#[allow(clippy::multiple_unsafe_ops_per_block)] //lazy
-#[allow(clippy::undocumented_unsafe_blocks)] // for the debug assert
-#[expect(
-    clippy::transmute_ptr_to_ptr,
-    reason = "they have exactly the same representation in memory, a null terminated slice of &[u8] is a Cstr"
-)]
-///  constructs a path convenience (just a utility function to save verbosity)
-/// this internal function relies on the pointer to the `dirent64` being non-null
-pub unsafe fn construct_path(
-    path_buffer: &mut crate::PathBuffer,
-    base_len: usize,
-    drnt: *const dirent64,
-) -> &CStr {
-    // SAFETY: The `drnt` must not be null (checked before using)
-    let d_name = unsafe { crate::access_dirent!(drnt, d_name) };
-    // SAFETY: as above
-    // Add 1 to include the null terminator
-    let name_len = unsafe { dirent_name_length(drnt) + 1 };
-    debug_assert!(
-        name_len + base_len < LOCAL_PATH_MAX,
-        "We don't expect the total length to exceed PATH_MAX!"
-    );
-    // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
-    // by the caller of this function.
-    let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) }; //we know base_len is in bounds 
-    // SAFETY: `d_name` and `buffer` are known not to overlap because `d_name` is
-    // from a `dirent64` pointer and `buffer` is a slice of `path_buffer`.
-    // The pointers are properly aligned as they point to bytes. The `name_len`
-    // is guaranteed to be within the bounds of `buffer` because the total path
-    // length (`base_len + name_len`) is always less than or equal to `LOCAL_PATH_MAX`,
-    // which is the capacity of `path_buffer`.
-    unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) }; //we know these don't overlap and they're properly aligned
-    debug_assert!(
-        unsafe {
-            CStr::from_ptr(
-                path_buffer
-                    .get_unchecked(..base_len + name_len)
-                    .as_ptr()
-                    .cast(),
-            ) == core::mem::transmute::<&[u8], &CStr>(
-                path_buffer.get_unchecked(..base_len + name_len),
-            )
-        },
-        "we  expect these to be the same"
-    );
-    //  SAFETY: The total length `base_len + name_len` is guaranteed to be
-    // less than or equal to `LOCAL_PATH_MAX`, which is 4096 or 1024 by default
-    // The name is null terminated and has the same representation as &[u8].
-    // Debug assert verifies this when running cargo test
-    unsafe { core::mem::transmute(path_buffer.get_unchecked(..base_len + name_len)) }
-}
-
-#[inline]
 #[must_use]
 #[allow(clippy::missing_const_for_fn)]
 /*
@@ -167,7 +97,7 @@ a utility function for breaking down the config spaghetti that is platform speci
  i wanted to make this const and separate the function
  because only strlen isn't constant here :(
  */
-unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
+pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     #[cfg(any(
         target_os = "linux",
         target_os = "illumos",

@@ -97,7 +97,7 @@ use std::{
 };
 
 #[macro_use]
-pub(crate) mod cursed_macros;
+pub(crate) mod macros;
 
 mod size_filter;
 
@@ -128,12 +128,12 @@ pub use direntry::DirEntry;
 mod error;
 pub use error::{DirEntryError, SearchConfigError};
 
-mod custom_types_result;
+mod types;
 
 #[cfg(target_os = "linux")]
-pub(crate) use custom_types_result::SyscallBuffer;
-pub use custom_types_result::{BUFFER_SIZE, LOCAL_PATH_MAX, Result};
-pub(crate) use custom_types_result::{DirEntryFilter, FilterType, PathBuffer};
+pub(crate) use types::SyscallBuffer;
+pub use types::{BUFFER_SIZE, LOCAL_PATH_MAX, Result};
+pub(crate) use types::{DirEntryFilter, FilterType, PathBuffer};
 
 mod traits_and_conversions;
 pub(crate) use traits_and_conversions::BytePath;
@@ -149,7 +149,8 @@ mod utils;
     target_os = "netbsd"
 ))]
 pub use utils::dirent_const_time_strlen;
-pub use utils::{modified_unix_time_to_datetime, strlen};
+
+pub use utils::strlen;
 
 mod glob;
 pub use glob::glob_to_regex;

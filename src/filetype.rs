@@ -1,6 +1,7 @@
 use libc::{
-    AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG, DT_SOCK, DT_UNKNOWN,
-    S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, fstatat, mode_t, stat,
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
+    DT_SOCK, DT_UNKNOWN, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
+    fstatat, mode_t, stat,
 };
 
 use crate::DirEntry;
@@ -85,7 +86,7 @@ impl FileType {
             DT_SOCK => Self::Socket,
             DT_UNKNOWN => Self::Unknown,
             // SAFETY: d_type can only be one of the above
-            // Provide a hint to the optimer to realise it can only take these values
+            // Provide a hint to the optimiser to realise it can only take these values
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
@@ -108,7 +109,7 @@ impl FileType {
     other filesystems like NTFS, XFS, or FUSE-based filesystems
     may require the fallback path.
     */
-    pub fn from_dtype_fallback(d_type: u8, file_path: &std::ffi::CStr) -> Self {
+    pub fn from_dtype_fallback(d_type: u8, file_path: &CStr) -> Self {
         if d_type != libc::DT_UNKNOWN {
             Self::from_dtype(d_type)
         } else {
@@ -118,18 +119,26 @@ impl FileType {
         }
     }
     /**
-    Determines the file type from a file descriptor and filename
+    Determines the file type from a file descriptor and filename without following symlinks
 
     This method uses `fstatat` with the `AT_SYMLINK_NOFOLLOW` flag to get file
     information from a file descriptor, which is more efficient than
     path-based lookups when you already have an open file descriptor.
 
+    This function will not follow symbolic links - it will return information about
+    the link itself rather than the target file.
+
     # Parameters
     - `fd`: The directory file descriptor (or `AT_FDCWD` for current directory)
     - `filename`: The filename to stat relative to the directory fd
 
+    # Returns
+    - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist
+      or an error occurred
 
-    # Examples
+
+
+        # Examples
 
     ```
     use std::ffi::CStr;
@@ -138,7 +147,7 @@ impl FileType {
 
     // Example showing how to handle non-existent files
     if let Ok(filename) = CStr::from_bytes_with_nul(b"non_existent_file_12345\0") {
-    let file_type = FileType::from_fd(AT_FDCWD, filename);
+    let file_type = FileType::from_fd_no_follow(AT_FDCWD, filename);
     // Non-existent files return Unknown
     assert!(file_type.is_unknown());
     }
@@ -153,26 +162,26 @@ impl FileType {
 
     // Test with current directory and a known file
     if let Ok(cwd) = std::ffi::CString::new(".") {
-    let file_type = FileType::from_fd(AT_FDCWD, cwd.as_c_str());
+    let file_type = FileType::from_fd_no_follow(AT_FDCWD, cwd.as_c_str());
     assert!(file_type.is_dir());
     }
 
     // Test with root directory
     if let Ok(root) = std::ffi::CString::new("/") {
-    let file_type = FileType::from_fd(AT_FDCWD, root.as_c_str());
+    let file_type = FileType::from_fd_no_follow(AT_FDCWD, root.as_c_str());
     assert!(file_type.is_dir());
     }
 
     // Test with a non-existent file
     if let Ok(nonexistent) = std::ffi::CString::new("this_file_does_not_exist_12345") {
-    let file_type = FileType::from_fd(AT_FDCWD, nonexistent.as_c_str());
+    let file_type = FileType::from_fd_no_follow(AT_FDCWD, nonexistent.as_c_str());
     assert!(file_type.is_unknown());
     }
      ```
         */
     #[inline]
     #[must_use]
-    pub fn from_fd(fd: i32, filename: &CStr) -> Self {
+    pub fn from_fd_no_follow(fd: i32, filename: &CStr) -> Self {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
         // SAFETY: We are passing a valid cstr (null terminated)
         let res = unsafe {
@@ -181,6 +190,49 @@ impl FileType {
                 filename.as_ptr(),
                 stat_buf.as_mut_ptr(),
                 AT_SYMLINK_NOFOLLOW,
+            )
+        };
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know it's been initialised properly
+            Self::from_stat(&unsafe { stat_buf.assume_init() })
+        } else {
+            Self::Unknown
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    /**
+    Determines the file type from a file descriptor and filename, following symlinks
+
+    This method uses `fstatat` with the `AT_SYMLINK_FOLLOW` flag to get file
+    information from a file descriptor. Unlike `from_fd_no_follow`, this function
+    will follow symbolic links and return information about the target file rather
+    than the link itself.
+
+    This is equivalent to the standard `stat` system call behavior and is useful
+    when you want to know the type of the actual file being accessed, regardless
+    of whether it's reached through a symbolic link.
+
+    # Parameters
+    - `fd`: The directory file descriptor (or `AT_FDCWD` for current directory)
+    - `filename`: The filename to stat relative to the directory fd
+
+    # Returns
+    - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist
+      or an error occurred
+
+    ```
+    */
+    pub fn from_fd_follow(fd: i32, filename: &CStr) -> Self {
+        let mut stat_buf = MaybeUninit::<stat>::uninit();
+        // SAFETY: We are passing a valid cstr (null terminated)
+        let res = unsafe {
+            fstatat(
+                fd,
+                filename.as_ptr(),
+                stat_buf.as_mut_ptr(),
+                AT_SYMLINK_FOLLOW,
             )
         };
         if res == 0 {

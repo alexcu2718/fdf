@@ -129,7 +129,7 @@ where
     #[inline]
     #[must_use]
     /// Returns the max capacity of this buffer
-    pub const fn capacity(&mut self) ->usize{
+    pub const fn capacity(&self) ->usize{
         SIZE
     }
 

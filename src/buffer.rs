@@ -128,6 +128,13 @@ where
 
     #[inline]
     #[must_use]
+    /// Returns the max capacity of this buffer
+    pub const fn capacity(&mut self) ->usize{
+        SIZE
+    }
+
+    #[inline]
+    #[must_use]
     /// Returns a const pointer to the buffer's data
     pub const fn as_ptr(&self) -> *const T {
         self.data.as_ptr().cast()

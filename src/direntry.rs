@@ -803,9 +803,8 @@ impl DirEntry {
     #[must_use]
     /// Cost free conversion to bytes (because it is already is bytes)
     pub const fn as_bytes(&self) -> &[u8] {
-        let byte_ptr = self.path.to_bytes_with_nul();
         // SAFETY: Avoid UB check, it's guaranteed to be in range due to having 1 less than the len
-        unsafe { &*core::ptr::slice_from_raw_parts(byte_ptr.as_ptr(), byte_ptr.len() - 1) }
+        unsafe { &*core::ptr::slice_from_raw_parts(self.path.to_bytes_with_nul().as_ptr(),self.len()) }
     }
 
     #[inline]
@@ -831,7 +830,7 @@ impl DirEntry {
     ```
     */
     pub const fn len(&self) -> usize {
-        self.path.to_bytes_with_nul().len() - 1
+        self.path.count_bytes()
     }
 
     #[inline]

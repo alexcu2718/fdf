@@ -69,9 +69,9 @@ impl ReadDir {
         reason = "It is safe to deference while in the lifetime of the iterator"
     )]
     /// A function to construction a `DirEntry` from the buffer+dirent
-    pub fn construct_direntry(&mut self, drnt: *const dirent64) -> DirEntry {
+    pub fn construct_direntry(&mut self, drnt: NonNull<dirent64>) -> DirEntry {
         // SAFETY:  This doesn't need unsafe because the pointer is already checked to not be null before it can be used here.
-        unsafe { self.construct_entry(drnt) }
+        unsafe { self.construct_entry(drnt.as_ptr()) }
     }
 
     #[inline]
@@ -111,7 +111,7 @@ impl Iterator for ReadDir {
             //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
 
             return Some(
-                self.construct_direntry(entry.as_ptr()), //construct the dirent from the pointer, and the path buffer.
+                self.construct_direntry(entry), //construct the dirent from the pointer, and the path buffer.
                                                          //this is safe because we've already checked if it's null
             );
         }

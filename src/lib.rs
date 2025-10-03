@@ -86,13 +86,18 @@
 //! ```
 use core::num::NonZeroU16;
 use rayon::prelude::*;
+
 use std::{
     ffi::{OsStr, OsString},
     fs::metadata,
     os::unix::{ffi::OsStrExt as _, fs::MetadataExt as _},
     path::Path,
+    path::PathBuf,
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
+
+// Re-exports
+pub use libc;
 
 #[macro_use]
 pub(crate) mod macros;
@@ -128,11 +133,11 @@ pub use error::{DirEntryError, SearchConfigError};
 
 mod types;
 
+pub use types::FileDes;
 #[cfg(target_os = "linux")]
 pub(crate) use types::SyscallBuffer;
 pub use types::{BUFFER_SIZE, LOCAL_PATH_MAX, Result};
 pub(crate) use types::{DirEntryFilter, FilterType, PathBuffer};
-
 mod traits_and_conversions;
 pub(crate) use traits_and_conversions::BytePath;
 mod utils;
@@ -165,19 +170,21 @@ pub use filetype::FileType;
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+/**
 // The `Finder` struct is the main entry point for the file search.
 // Its methods are exposed for building the search configuration
 
-/// The main entry point for file system search operations.
-///
-/// `Finder` provides a high-performance, parallel file system traversal API
-/// with configurable filtering and search criteria. It uses Rayon for parallel
-/// execution and provides both synchronous and asynchronous result handling.
-///
+  The main entry point for file system search operations.
+
+  `Finder` provides a high-performance, parallel file system traversal API
+  with configurable filtering and search criteria. It uses Rayon for parallel
+  execution and provides both synchronous and asynchronous result handling.
+
+*/
 #[derive(Debug)]
 pub struct Finder {
     /// Root directory path for the search operation
-    pub(crate) root: OsString,
+    pub(crate) root: Box<OsStr>,
     /// Configuration for search criteria and filtering options
     pub(crate) search_config: SearchConfig,
     /// Optional custom filter function for advanced entry filtering
@@ -191,9 +198,7 @@ pub struct Finder {
     pub(crate) inode_cache: Option<DashSet<(u64, u64)>>,
 }
 ///The Finder struct is used to find files in your filesystem
-impl Finder
-//S is a generic type that implements BytesStorage trait aka  vec/arc/box/slimmerbox(alias to SlimmerBytes)
-{
+impl Finder {
     #[must_use]
     #[inline]
     /// Create a new Finder instance.
@@ -202,32 +207,41 @@ impl Finder
     }
 
     #[inline]
-    /// Traverse the directory tree starting from the root and return a receiver for the found entries.
-    ///
-    /// This method initiates a parallel directory traversal using Rayon. The traversal runs in a
-    /// background thread and sends batches of directory entries through an unbounded channel.
-    ///
-    /// # Returns
-    /// Returns a `Receiver<Vec<DirEntry>>` that will receive batches of directory entries
-    /// as they are found during the traversal. The receiver can be used to iterate over the
-    /// results as they become available.
-    ///
-    /// # Errors
-    /// Returns `Err(SearchConfigError)` if:
-    /// - The root path cannot be converted to a `DirEntry` (`TraversalError`)
-    /// - The root directory is not traversible (`NotADirectory`)
-    /// - The root directory is inaccessible due to permissions (`TraversalError`)
-    ///
-    ///
-    /// # Performance Notes
-    /// - Uses an unbounded channel to avoid blocking the producer thread
-    /// - Entries are sent in batches to minimise channel contention
-    /// - Traversal runs in parallel using Rayon's work-stealing scheduler
+    #[must_use]
+    /// Returns a reference to the underlying root
+    pub const fn root_dir(&self) -> &OsStr {
+        &self.root
+    }
+
+    #[inline]
+    /**
+      Traverse the directory tree starting from the root and return a receiver for the found entries.
+
+      This method initiates a parallel directory traversal using Rayon. The traversal runs in a
+      background thread and sends batches of directory entries through an unbounded channel.
+
+      # Returns
+      Returns a `Receiver<Vec<DirEntry>>` that will receive batches of directory entries
+      as they are found during the traversal. The receiver can be used to iterate over the
+      results as they become available.
+
+      # Errors
+      Returns `Err(SearchConfigError)` if:
+      - The root path cannot be converted to a `DirEntry` (`TraversalError`)
+      - The root directory is not traversible (`NotADirectory`)
+      - The root directory is inaccessible due to permissions (`TraversalError`)
+
+
+      # Performance Notes
+      - Uses an unbounded channel to avoid blocking the producer thread
+      - Entries are sent in batches to minimise channel contention
+      - Traversal runs in parallel using Rayon's work-stealing scheduler
+    */
     pub fn traverse(self) -> core::result::Result<Receiver<Vec<DirEntry>>, SearchConfigError> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
         // try to construct the starting directory entry
-        let entry = DirEntry::new(&self.root).map_err(SearchConfigError::TraversalError)?;
+        let entry = DirEntry::new(self.root_dir()).map_err(SearchConfigError::TraversalError)?;
 
         // only continue if it is traversible
         if entry.is_traversible() {
@@ -243,19 +257,22 @@ impl Finder
     }
 
     #[inline]
-    /// Prints search results to stdout with optional colouring and count limiting.
-    ///
-    /// This is a convenience method that handles the entire search, result collection,
-    /// and formatted output in one call.
-    ///
-    /// # Arguments
-    /// * `use_colours` - Enable ANSI colour output for better readability (it's always off if output does not support colours)
-    /// * `result_count` - Optional limit on the number of results to display
-    /// * `sort` Enable sorting of the end results (has a big computational cost)
-    /// # Errors
-    /// Either:
-    /// Returns [`SearchConfigError::TraversalError`] if the search operation fails
-    /// Returns [`SearchConfigError::IOError`] if the search operation fails
+    /**
+     Prints search results to stdout with optional colouring and count limiting.
+
+     This is a convenience method that handles the entire search, result collection,
+     and formatted output in a single call.
+
+     # Arguments
+      -`use_colours` - Enable ANSI colour output for better readability
+                       (automatically disabled if output does not support colours)
+      -`result_count` - Optional limit on the number of results to display
+      =`sort` - Enable sorting of the final results (has significant computational cost)
+
+     # Errors
+     -Returns [`SearchConfigError::TraversalError`] if the search operation fails
+     -Returns [`SearchConfigError::IOError`] if the search operation fails
+    */
     pub fn print_results(
         self,
         use_colours: bool,
@@ -355,7 +372,7 @@ impl Finder
                 self.inode_cache.as_ref().is_none_or(|cache| {
                     cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))) &&
                 // if we're traversing in the same root, then we'll find it anyway so skip it
-                dir.get_realpath().is_ok_and(|path| !path.to_bytes().starts_with(self.root.as_bytes()))
+                dir.get_realpath().is_ok_and(|path| !path.to_bytes().starts_with(self.root_dir().as_bytes()))
                 })
             })
             }
@@ -461,10 +478,12 @@ pub struct FinderBuilder {
 }
 
 impl FinderBuilder {
-    /// Creates a new `FinderBuilder` with required fields.
-    ///
-    /// # Arguments
-    /// * `root` - The root directory to search
+    /**
+      Creates a new `FinderBuilder` with required fields.
+
+      # Arguments
+      * `root` - The root directory to search
+    */
     pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
         let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1); //set default threadcount
         Self {
@@ -650,7 +669,7 @@ impl FinderBuilder {
 
         let starting_filesystem = if self.same_filesystem {
             // Get the filesystem ID of the root directory directly
-            let metadata = metadata(&resolved_root)?;
+            let metadata = metadata(&*resolved_root)?;
             Some(metadata.dev()) // dev() returns the filesystem ID on Unix
         } else {
             None
@@ -695,43 +714,39 @@ impl FinderBuilder {
         })
     }
 
-    /// Resolves and validates the root directory path.
-    ///
-    /// This function handles:
-    /// - Default to current directory (".") if root is empty
-    /// - Validates that the path is a directory
-    /// - Optionally canonicalises the path if canonicalise flag is set
-    ///
-    /// # Returns
-    /// Returns the resolved directory path as an `OsString`
-    ///
-    /// # Errors
-    /// Returns `SearchConfigError::NotADirectory` if the path is not a directory
-    /// Returns `SearchConfigError::IoError` if canonicalisation fails
-    fn resolve_directory(&self) -> core::result::Result<OsString, SearchConfigError> {
+    /**
+     Resolves and validates the root directory path.
+
+      This function handles:
+      - Default to current directory (".") if root is empty
+      - Validates that the path is a directory
+      - Optionally canonicalises the path if canonicalise flag is set
+    */
+    fn resolve_directory(&self) -> core::result::Result<Box<OsStr>, SearchConfigError> {
         let dir_to_use = if self.root.is_empty() {
-            OsString::from(
-                std::env::current_dir()
-                    .and_then(|p| p.canonicalize())
-                    .unwrap_or_else(|_| ".".into()),
-            )
+            // Get current directory and canonicalise it for consistency
+            std::env::current_dir()
+                .map(PathBuf::into_os_string)
+                .map_err(SearchConfigError::IOError)?
         } else {
             self.root.clone()
         };
 
         let path_check = Path::new(&dir_to_use);
 
+        // Validate that the path exists and is a directory
         if !path_check.is_dir() {
             return Err(SearchConfigError::NotADirectory);
         }
 
+        // Apply canonicalization if requested
         if self.canonicalise {
             path_check
                 .canonicalize()
-                .map(core::convert::Into::into)
+                .map(|p| p.into_os_string().into_boxed_os_str())
                 .map_err(SearchConfigError::IOError)
         } else {
-            Ok(dir_to_use)
+            Ok(dir_to_use.into_boxed_os_str())
         }
     }
 }

@@ -2,6 +2,9 @@
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
+
+#[cfg(target_os = "linux")]
+use crate::FileDes;
 mod sealed {
     /// Sealed trait pattern to restrict `ValueType` implementation to i8 and u8 only
     pub trait Sealed {}
@@ -129,7 +132,7 @@ where
     #[inline]
     #[must_use]
     /// Returns the max capacity of this buffer
-    pub const fn capacity(&self) ->usize{
+    pub const fn capacity(&self) -> usize {
         SIZE
     }
 
@@ -167,12 +170,6 @@ where
     /// This method bypasses libc to directly invoke the getdents64 system call,
     /// which is necessary to avoid certain libc quirks and limitations.
     ///
-    /// # Safety
-    /// This method uses inline assembly and directly interacts with the kernel.
-    /// The caller must ensure:
-    /// - The file descriptor is valid and open for reading
-    /// - The buffer is properly aligned and sized
-    /// - Proper error handling is implemented
     ///
     /// # Platform Specificity
     /// This implementation is specific to Linux on supported architectures (currently x86 and aarch64)
@@ -181,12 +178,9 @@ where
     // A RISC-V implementation is currently pending(might do others because i'm learning assembly)
     #[inline]
     #[cfg(target_os = "linux")]
-    pub unsafe fn getdents(&mut self, fd: i32) -> i64 {
-        // SAFETY: Caller must ensure:
-        // - fd is a valid open file descriptor
-        // - Buffer is properly aligned and sized
-        // - Buffer memory is valid and accessible
-        unsafe { crate::syscalls::getdents_asm(fd, self.as_mut_ptr(), SIZE) }
+    pub fn getdents(&mut self, fd: &FileDes) -> i64 {
+        // SAFETY: we're passing a valid buffer
+        unsafe { crate::syscalls::getdents_asm(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
     /// Returns a reference to a subslice without doing bounds checking

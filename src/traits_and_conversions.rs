@@ -1,5 +1,6 @@
 #![allow(dead_code)] //some traits are not used yet in full implementation but are used in tests/for future CLI/lib use
 
+use crate::FileDes;
 //need to add these todo
 use crate::{
     DirEntry, DirEntryError, FileType, LOCAL_PATH_MAX, PathBuffer, Result, access_dirent,
@@ -205,7 +206,7 @@ pub trait DirentConstructor {
     /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
     fn parent_depth(&self) -> u16;
     /// Returns the file descriptor for the current directory being read
-    fn file_descriptor(&self) -> i32;
+    fn file_descriptor(&self) -> &FileDes;
 
     #[inline]
     /// Constructs a `DirEntry` from a raw directory entry pointer
@@ -239,10 +240,7 @@ pub trait DirentConstructor {
     /**
       Constructs a full path by appending the directory entry name to the base path
 
-     # Safety
-     - `drnt` must be a valid, non-null pointer to a `dirent64` structure
-     - The `d_name` field must contain a valid null-terminated string
-     - The total path length must not exceed `LOCAL_PATH_MAX`
+
     */
     unsafe fn construct_path(&mut self, drnt: *const dirent64) -> &CStr {
         let base_len = self.file_index();
@@ -287,6 +285,10 @@ pub trait DirentConstructor {
         */
         unsafe { mem::transmute(path_buffer.get_unchecked(..base_len + name_len)) }
     }
+
+    //   #[inline]
+    // fn readahead(&self,count:usize)->usize
+    // {unsafe{libc::readahead(self.file_descriptor().0,self.of)}}
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)]
     #[allow(clippy::transmute_ptr_to_ptr)]
@@ -327,7 +329,7 @@ impl DirentConstructor for crate::ReadDir {
     }
 
     #[inline]
-    fn file_descriptor(&self) -> i32 {
+    fn file_descriptor(&self) -> &FileDes {
         self.dirfd()
     }
 }
@@ -349,7 +351,7 @@ impl DirentConstructor for crate::iter::GetDents {
         self.parent_depth
     }
     #[inline]
-    fn file_descriptor(&self) -> i32 {
-        self.fd
+    fn file_descriptor(&self) -> &FileDes {
+        &self.fd
     }
 }

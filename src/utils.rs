@@ -84,7 +84,7 @@ where
         any(target_feature = "avx2", target_feature = "sse2")
     )))]
     {
-        unsafe { libc::strlen(ptr.cast::<_>()) } //not we inventing the wheel
+        unsafe { libc::strlen(ptr.cast::<_>()) } //not reinventing the wheel
     }
 }
 
@@ -229,7 +229,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         /*
          Locate the first null byte in constant time using SWAR.
          Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.
-         SAFETY: The u64 can never be all 0's, therefore we can make a niche optimisation that won't be made public
+         SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation that won't be made public
         (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
         */
         let byte_pos = 8 - unsafe { find_zero_byte_u64_optimised(candidate_pos) };

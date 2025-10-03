@@ -1,25 +1,28 @@
 #![allow(unused_macros)]
 
 #[macro_export]
-///A helper macro to safely access dirent(64 on linux)'s
-/// fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
-///
-/// # Safety
-/// - The caller must ensure that the pointer is valid and points to a 'dirent-type' struct.
-/// - The field name must be a valid field of the 'dirent-type' struct.
-///
-/// # Field Aliases
-/// - On BSD systems (FreeBSD, OpenBSD, etc ), `d_ino` is aliased to `d_fileno`
-/// - On Linux, `d_reclen` is used to access the record length directly,
-/// - On MacOS/BSD, `d_namlen` is used to access the name length directly,
-/// # Usage
-/// ```ignore
-/// let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
-/// let d_name_ptr:*const _ = access_dirent!(entry_ptr, d_name);
-/// let d_reclen:usize = access_dirent!(entry_ptr, d_reclen);
-///
-/// let d_namlen:usize = access_dirent!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
-/// let d_ino :u64= access_dirent!(entry_ptr, d_ino); // This
+/**
+ A helper macro to safely access dirent(64 on linux)'s
+  fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
+
+  # Safety
+  - The caller must ensure that the pointer is valid and points to a 'dirent-type' struct.
+  - The field name must be a valid field of the 'dirent-type' struct.
+
+  # Field Aliases
+  - On BSD systems (FreeBSD, OpenBSD, etc ), `d_ino` is aliased to `d_fileno`
+  - On Linux, `d_reclen` is used to access the record length directly,
+  - On MacOS/BSD, `d_namlen` is used to access the name length directly,
+  # Usage
+  ```ignore
+  let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
+  let d_name_ptr:*const _ = access_dirent!(entry_ptr, d_name);
+  let d_reclen:usize = access_dirent!(entry_ptr, d_reclen);
+
+  let d_namlen:usize = access_dirent!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
+  let d_ino :u64= access_dirent!(entry_ptr, d_ino); // This
+  ```
+*/
 macro_rules! access_dirent {
     // Special case for `d_reclen`
     ($entry_ptr:expr, d_reclen) => {{
@@ -441,7 +444,7 @@ macro_rules! handle_depth_limit {
             if $should_send {
                 if let Err(e) = $sender.send(vec![$dir]) {
                     if $self.search_config.show_errors {
-                        eprintln!("Error sending DirEntry: {}", e);
+                        eprintln!("Error sending DirEntry: {e}");
                     }
                 }
             }
@@ -455,7 +458,7 @@ macro_rules! send_files_if_not_empty {
         if !$files.is_empty() {
             if let Err(e) = $sender.send($files) {
                 if $self.search_config.show_errors {
-                    eprintln!("Error sending files: {}", e);
+                    eprintln!("Error sending files: {e}");
                 }
             }
         }

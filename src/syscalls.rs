@@ -251,11 +251,14 @@ where
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
+pub fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
 where
     T: ValueType, //i8/u8
 {
-    unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
+    /// SAFETY: we're passing a properly aligned buffer.
+    unsafe {
+        libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size)
+    }
 }
 
 /*

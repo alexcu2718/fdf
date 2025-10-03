@@ -229,7 +229,7 @@ fn main() -> Result<(), SearchConfigError> {
 
     let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1);
 
-    let path = args.directory.unwrap_or_else(|| OsString::from("."));
+    let path = args.directory.unwrap_or_else(|| ".".into());
     let finder = Finder::init(&path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
         .keep_hidden(!args.hidden)

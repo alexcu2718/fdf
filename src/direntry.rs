@@ -75,10 +75,13 @@
 //!     Ok(())
 //! }
 
-use crate::{BytePath as _, DirEntryError, ReadDir, Result, filetype::FileType};
+use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::FileType};
 use core::cell::Cell;
 use core::ptr::NonNull;
-use libc::stat;
+use libc::{
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, R_OK, W_OK,
+    X_OK, access, c_char, fstatat, lstat, open, opendir, realpath, stat,
+};
 use std::{
     ffi::{CStr, OsStr},
     os::unix::ffi::OsStrExt as _,
@@ -129,8 +132,9 @@ use std::{
 */
 #[derive(Clone)] //could probably implement a more specialised clone.
 pub struct DirEntry {
-    /// Path to the entry, stored as a Boxed `CStr` (to avoid storing the capacity)
-    ///
+    /// Path to the entry, stored as a Boxed `CStr`
+    //(to avoid storing the capacity)
+    /// This allows easy C ffi by just calling `.as_cstr().as_ptr()`
     pub(crate) path: Box<CStr>, //16 bytes
 
     /// File type (file, directory, symlink, etc.).
@@ -174,39 +178,53 @@ impl AsRef<[u8]> for DirEntry {
 }
 
 impl DirEntry {
-    #[inline]
-    #[must_use]
     /**
-    /// Checks if the entry is an executable file.
-    ///
-    /// This is a **costly** operation as it performs an `access` system call.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use fdf::DirEntry;
-    /// use std::fs::{self, File};
-    /// use std::os::unix::fs::PermissionsExt;
-    /// use std::sync::Arc;
-    /// let temp_dir = std::env::temp_dir();
-    /// let exe_path = temp_dir.join("my_executable");
-    /// File::create(&exe_path).unwrap().set_permissions(fs::Permissions::from_mode(0o755)).unwrap();
-    ///
-    /// let entry = DirEntry::new(&exe_path).unwrap();
-    /// assert!(entry.is_executable());
-    ///
-    /// let non_exe_path = temp_dir.join("my_file");
-    /// File::create(&non_exe_path).unwrap();
-    /// let non_exe_entry = DirEntry::new(&non_exe_path).unwrap();
-    /// assert!(!non_exe_entry.is_executable());
-    /// fs::remove_file(exe_path).unwrap();
-    /// fs::remove_file(non_exe_path).unwrap();
-    /// ```
-     */
+    Checks if the entry is an executable file.
+
+     This is a **costly** operation as it performs an `access` system call.
+
+    # Examples
+
+    ```
+      use fdf::DirEntry;
+      use std::fs::{self, File};
+      use std::os::unix::fs::PermissionsExt;
+      use std::sync::Arc;
+
+      let temp_dir = std::env::temp_dir();
+      let exe_path = temp_dir.join("my_executable");
+      File::create(&exe_path).unwrap().set_permissions(fs::Permissions::from_mode(0o755)).unwrap();
+
+      let entry = DirEntry::new(&exe_path).unwrap();
+      assert!(entry.is_executable());
+
+      let non_exe_path = temp_dir.join("my_file");
+      File::create(&non_exe_path).unwrap();
+      let non_exe_entry = DirEntry::new(&non_exe_path).unwrap();
+      assert!(!non_exe_entry.is_executable());
+      fs::remove_file(exe_path).unwrap();
+      fs::remove_file(non_exe_path).unwrap();
+      ```
+    */
     pub fn is_executable(&self) -> bool {
-        //X_OK is the execute permission, requires access call
+        // X_OK is the execute permission, requires access call
         // SAFETY: We know the path is valid because internally it's a cstr
-        self.is_regular_file() && unsafe { libc::access(self.path.as_ptr(), libc::X_OK) == 0 }
+        self.is_regular_file() && unsafe { access(self.path.as_ptr(), X_OK) == 0 }
+    }
+
+    /*
+     Returns a raw pointer to the underlying C string.
+
+     This provides access to the null-terminated C string representation
+     of the file path for use with FFI functions.
+
+     # Returns
+     A raw pointer to the null-terminated C string.
+
+    */
+    #[inline]
+    pub const fn as_ptr(&self) -> *const c_char {
+        self.path.as_ptr()
     }
 
     /// Cost free check for block devices
@@ -225,13 +243,6 @@ impl DirEntry {
      - `O_DIRECTORY`: Fail if not a directory
     - `O_NONBLOCK`: Open in non-blocking mode
 
-    # Safety
-
-     The caller must ensure:
-    - `self.path` contains a valid, null-terminated C string
-     - The path points to an existing directory
-    - The file descriptor is properly closed when no longer needed
-
      # Errors
 
      Returns an error if:
@@ -239,16 +250,16 @@ impl DirEntry {
     - The path doesn't point to a directory
     - Permission is denied
     */
-    pub unsafe fn open_fd(&self) -> Result<i32> {
+    pub fn open_fd(&self) -> Result<i32> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
-        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+        const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
 
-        // SAFETY: the pointer is null terminated
         //   #[cfg(target_os="linux")]
         //  let fd=unsafe{crate::syscalls::open_asm(self.path.as_ref(),FLAGS)};
         // #[cfg(not(target_os="linux"))]
-        let fd = unsafe { libc::open(self.path.as_ptr(), FLAGS) };
+        // SAFETY: the pointer is null terminated
+        let fd = unsafe { open(self.as_ptr(), FLAGS) };
 
         if fd < 0 {
             Err(std::io::Error::last_os_error().into())
@@ -264,14 +275,6 @@ impl DirEntry {
      which can be used with `readdir` to iterate over directory entries.
 
 
-     # Safety
-
-     The caller must ensure:
-     - `self.path` contains a valid, null-terminated C string
-     - The path points to an existing directory
-     - The returned `DIR` pointer is properly closed with `closedir`
-     - The pointer is not used after the directory stream is closed
-
      # Errors
 
      Returns an error if:
@@ -280,9 +283,10 @@ impl DirEntry {
      - Permission is denied
      - System resources are exhausted
     */
-    pub unsafe fn open_dir(&self) -> Result<NonNull<libc::DIR>> {
-        // SAFETY: we are passing a null terminated directory to opendir and the path is below `PATH_MAX`
-        let dir = unsafe { libc::opendir(self.path.as_ptr()) };
+    pub fn open_dir(&self) -> Result<NonNull<libc::DIR>> {
+        // SAFETY: we are passing a null terminated directory to opendir
+
+        let dir = unsafe { opendir(self.as_ptr()) };
         // This function reads the directory entries and populates the iterator.
         // It is called when the iterator is created or when it needs to be reset.
         if dir.is_null() {
@@ -542,22 +546,24 @@ impl DirEntry {
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
     /// Private function for complicated reasons
-    pub(crate) fn get_realpath(&self) -> Result<Box<std::ffi::CStr>> {
-        // SAFETY: the filepath must be less than `LOCAL_PATH_MAX` (default, 4096/1024 (System dependent))  (PATH_MAX but can be setup via envvar for testing)
-        // Guaranteed null terminated due to underlying CStr representation
-        let ptr = unsafe { libc::realpath(self.path.as_ptr(), core::ptr::null_mut()) }; //realpath implicitly mallocs, hence need to free.
+    pub(crate) fn get_realpath(&self) -> Result<Box<CStr>> {
+        // SAFETY: Guaranteed null terminated due to underlying CStr representation
+
+        let ptr = unsafe { realpath(self.as_ptr(), core::ptr::null_mut()) }; //realpath implicitly mallocs, hence need to free.
 
         if ptr.is_null() {
-            //check for null
             return Err(std::io::Error::last_os_error().into());
         }
 
-        // Add 1 due to wanting to include the null terminator
-        // SAFETY: We know the path is valid because internally it's a cstr (this null terminated)
+        // SAFETY: We know the path is valid because it's a  guaranteed null terminated+non null
         let boxed = unsafe { Box::from(CStr::from_ptr(ptr)) };
         // SAFETY: the pointer points to valid malloc'ed memory(we have checked for null), it is safe to free it now
         unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
         //free the pointer to stop leaking
+        // I wonder if you can do Box::from_raw on the above, I believe rust's allocator would be the libc's version of malloc
+        // however because I am using a custom allocator `MiMalloc` I'm not sure if how they'd interact,
+        // however i've never introspected memory pages until not except primitive methods
+        // however this would be a very amusing micro optimisation, it's too much effort, i'll read into it more when i feel like
         Ok(boxed)
     }
 
@@ -655,7 +661,7 @@ impl DirEntry {
             //if it's a symlink, we need to resolve it.
             (FileType::from_stat(&statted), access_stat!(statted, st_ino))
         } else {
-            (self.file_type(), self.ino())
+            (self.file_type(), self.ino()) //ino will not change if it's not a symlink, neither will file type!
         };
 
         let boxed = Self {
@@ -685,7 +691,7 @@ impl DirEntry {
     */
     pub fn is_readable(&self) -> bool {
         // SAFETY: The path is guaranteed to be a be null terminated
-        unsafe { libc::access(self.path.as_ptr(), libc::R_OK) == 0 }
+        unsafe { access(self.as_ptr(), R_OK) == 0 }
     }
 
     #[inline]
@@ -707,7 +713,7 @@ impl DirEntry {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
         // SAFETY: The path is guaranteed to be a null terminated
-        unsafe { libc::access(self.path.as_ptr(), libc::W_OK) == 0 }
+        unsafe { access(self.as_ptr(), W_OK) == 0 }
     }
 
     #[inline]
@@ -734,7 +740,7 @@ impl DirEntry {
     A `stat` structure containing file metadata on success.
     */
     pub fn get_lstat(&self) -> Result<stat> {
-        Self::get_lstat_private(self.path.as_ptr())
+        Self::get_lstat_private(self.as_ptr())
     }
 
     #[inline]
@@ -761,21 +767,104 @@ impl DirEntry {
     A `stat` structure containing file metadata on success.
     */
     pub fn get_stat(&self) -> Result<stat> {
-        Self::get_stat_private(self.path.as_ptr())
+        // Simple wrapper to avoid code duplication so I can use the private method within the crate
+        Self::get_stat_private(self.as_ptr())
     }
 
     #[inline]
-    ///checks if the file exists, this, makes a syscall
+    /**
+     * Checks if the file exists.
+     *
+     * This makes a system call to check file existence.
+     */
     pub fn exists(&self) -> bool {
-        // SAFETY: The path is guaranteed to be be null terminated
-        unsafe { libc::access(self.path.as_ptr(), libc::F_OK) == 0 }
+        // SAFETY: The path is guaranteed to be null terminated
+        unsafe { access(self.as_ptr(), F_OK) == 0 }
     }
 
     #[inline]
-    pub(crate) fn get_lstat_private(ptr: *const libc::c_char) -> Result<stat> {
+    /**
+     * Gets file metadata using lstatat for a file relative to a directory file descriptor.
+     *
+     * This function uses `fstatat` with `AT_SYMLINK_NOFOLLOW` to get metadata without
+     * following symbolic links, similar to `lstat` but relative to a directory fd.
+     *
+     * # Arguments
+     * * `fd` - Directory file descriptor to use as the base for relative path resolution
+     *
+     * # Returns
+     * A `stat` structure containing file metadata on success.
+     *
+     * # Errors
+     * Returns `DirEntryError::InvalidStat` if the stat operation fails
+     */
+    pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
+        let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
+        // SAFETY:
+        // - The path is guaranteed to be null-terminated (CStr)
+        // - fd must be a valid file descriptor
+        // - stat_buf is properly allocated
+        let res = unsafe {
+            fstatat(
+                fd.0,
+                self.as_ptr(),
+                stat_buf.as_mut_ptr(),
+                AT_SYMLINK_NOFOLLOW,
+            )
+        };
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know the stat structure has been properly initialized
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(crate::DirEntryError::InvalidStat)
+        }
+    }
+
+    #[inline]
+    /**
+     * Gets file metadata using statat for a file relative to a directory file descriptor.
+     *
+     * This function uses `fstatat` with `AT_SYMLINK_FOLLOW` to get metadata by
+     * following symbolic links, similar to `stat` but relative to a directory fd.
+     *
+     * # Arguments
+     * * `fd` - Directory file descriptor to use as the base for relative path resolution
+     *
+     * # Returns
+     * A `stat` structure containing file metadata on success.
+     *
+     * # Errors
+     * Returns `DirEntryError::InvalidStat` if the stat operation fails
+     */
+    pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
+        let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
+        // SAFETY:
+        // - The path is guaranteed to be null-terminated (CStr)
+        // - fd must be a valid file descriptor
+        // - stat_buf is properly allocated
+        let res = unsafe {
+            fstatat(
+                fd.0,
+                self.as_ptr(),
+                stat_buf.as_mut_ptr(),
+                AT_SYMLINK_FOLLOW,
+            )
+        };
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know the stat structure has been properly initialized
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(crate::DirEntryError::InvalidStat)
+        }
+    }
+
+    #[inline]
+    pub(crate) fn get_lstat_private(ptr: *const c_char) -> Result<stat> {
         let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
         // SAFETY: We know the path is valid because internally it's a cstr
-        let res = unsafe { libc::lstat(ptr, stat_buf.as_mut_ptr()) };
+        let res = unsafe { lstat(ptr, stat_buf.as_mut_ptr()) };
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know it's been initialised properly
@@ -786,10 +875,10 @@ impl DirEntry {
     }
 
     #[inline]
-    pub(crate) fn get_stat_private(ptr: *const libc::c_char) -> Result<stat> {
+    pub(crate) fn get_stat_private(ptr: *const c_char) -> Result<stat> {
         let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
         // SAFETY: We know the path is valid because internally it's a cstr
-        let res = unsafe { libc::stat(ptr, stat_buf.as_mut_ptr()) };
+        let res = unsafe { stat(ptr, stat_buf.as_mut_ptr()) };
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know it's been initialised properly
@@ -803,8 +892,12 @@ impl DirEntry {
     #[must_use]
     /// Cost free conversion to bytes (because it is already is bytes)
     pub const fn as_bytes(&self) -> &[u8] {
-        // SAFETY: Avoid UB check, it's guaranteed to be in range due to having 1 less than the len
-        unsafe { &*core::ptr::slice_from_raw_parts(self.path.to_bytes_with_nul().as_ptr(),self.len()) }
+        // SAFETY: Avoid UB check, it's guaranteed to be in range due to having 1 less than the 'true' len
+        // and guaranteed non null
+        unsafe {
+            &*core::ptr::slice_from_raw_parts(self.path.to_bytes_with_nul().as_ptr(), self.len())
+            // len is the length of the non-null terminated internal buffer.
+        }
     }
 
     #[inline]

@@ -24,3 +24,7 @@ pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 pub type FilterType = fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>) -> bool;
 ///generic filter function type for directory entries
 pub type DirEntryFilter = fn(&DirEntry) -> bool;
+
+#[derive(Debug)]
+/// A safe abstraction around file descriptors for internal IO
+pub struct FileDes(pub(crate) i32);

@@ -4,7 +4,7 @@ use libc::{
     fstatat, mode_t, stat,
 };
 
-use crate::DirEntry;
+use crate::{DirEntry, FileDes};
 use core::ffi::CStr;
 use core::mem::MaybeUninit;
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
@@ -136,57 +136,16 @@ impl FileType {
     - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist
       or an error occurred
 
-
-
-        # Examples
-
-    ```
-    use std::ffi::CStr;
-    use fdf::FileType;
-    use libc::AT_FDCWD;
-
-    // Example showing how to handle non-existent files
-    if let Ok(filename) = CStr::from_bytes_with_nul(b"non_existent_file_12345\0") {
-    let file_type = FileType::from_fd_no_follow(AT_FDCWD, filename);
-    // Non-existent files return Unknown
-    assert!(file_type.is_unknown());
-    }
-    ```
-
-    #  Examples with temporary files (for more comprehensive testing)
-
-    ```
-    use std::ffi::CStr;
-    use fdf::FileType;
-    use libc::AT_FDCWD;
-
-    // Test with current directory and a known file
-    if let Ok(cwd) = std::ffi::CString::new(".") {
-    let file_type = FileType::from_fd_no_follow(AT_FDCWD, cwd.as_c_str());
-    assert!(file_type.is_dir());
-    }
-
-    // Test with root directory
-    if let Ok(root) = std::ffi::CString::new("/") {
-    let file_type = FileType::from_fd_no_follow(AT_FDCWD, root.as_c_str());
-    assert!(file_type.is_dir());
-    }
-
-    // Test with a non-existent file
-    if let Ok(nonexistent) = std::ffi::CString::new("this_file_does_not_exist_12345") {
-    let file_type = FileType::from_fd_no_follow(AT_FDCWD, nonexistent.as_c_str());
-    assert!(file_type.is_unknown());
-    }
      ```
         */
     #[inline]
     #[must_use]
-    pub fn from_fd_no_follow(fd: i32, filename: &CStr) -> Self {
+    pub fn from_fd_no_follow(fd: &FileDes, filename: &CStr) -> Self {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
         // SAFETY: We are passing a valid cstr (null terminated)
         let res = unsafe {
             fstatat(
-                fd,
+                fd.0,
                 filename.as_ptr(),
                 stat_buf.as_mut_ptr(),
                 AT_SYMLINK_NOFOLLOW,
@@ -224,12 +183,12 @@ impl FileType {
 
     ```
     */
-    pub fn from_fd_follow(fd: i32, filename: &CStr) -> Self {
+    pub fn from_fd_follow(fd: &FileDes, filename: &CStr) -> Self {
         let mut stat_buf = MaybeUninit::<stat>::uninit();
         // SAFETY: We are passing a valid cstr (null terminated)
         let res = unsafe {
             fstatat(
-                fd,
+                fd.0,
                 filename.as_ptr(),
                 stat_buf.as_mut_ptr(),
                 AT_SYMLINK_FOLLOW,

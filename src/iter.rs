@@ -1,9 +1,11 @@
 #![allow(clippy::must_use_candidate)]
+#[cfg(target_os = "linux")]
+use crate::SyscallBuffer;
 use crate::{
-    AlignedBuffer, DirEntry, LOCAL_PATH_MAX, PathBuffer, Result,
+    AlignedBuffer, DirEntry, FileDes, LOCAL_PATH_MAX, PathBuffer, Result,
     traits_and_conversions::DirentConstructor as _,
 };
-use core::cell::Cell;
+
 use core::ptr::NonNull;
 use libc::{DIR, closedir};
 #[cfg(not(target_os = "linux"))]
@@ -28,16 +30,19 @@ pub struct ReadDir {
     /// Depth of this directory relative to traversal root
     pub(crate) parent_depth: u16,
     /// The file descriptor of this directory, for use in calls like openat/statat etc.
-    pub(crate) dirfd: Cell<Option<i32>>,
+    pub(crate) dirfd: FileDes,
 }
 
 impl ReadDir {
     #[inline]
-    /// Reads the next directory entry, returning a pointer to it.
-    ///
-    /// Wraps the libc `readdir` call. Returns `None` when the end of the
-    /// directory is reached or an error occurs.
-    ///
+    /**
+    Reads the next directory entry, returning a pointer to it.
+
+    Wraps the libc `readdir` call.
+
+    Returns `None` when the end of the directory is reached or an error occurs.
+
+     */
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
         let dirent_ptr = unsafe { readdir(self.dir.as_ptr()) };
@@ -47,54 +52,71 @@ impl ReadDir {
     }
 
     #[inline]
-    /// Returns the file descriptor for this directory.
-    ///
-    /// Useful for operations that need the raw directory FD.
-    /// Computes the dirfd on first access and caches it.
-    pub fn dirfd(&self) -> i32 {
-        self.dirfd.get().map_or_else(
-            || {
-                // SAFETY: This is a valid directory pointer maintained by the iterator
-                let fd = unsafe { libc::dirfd(self.dir.as_ptr()) };
-                self.dirfd.set(Some(fd));
-                fd
-            },
-            |fd| fd,
-        )
+    /**
+      Returns the file descriptor for this directory.
+
+      Useful for operations that need the raw
+    */
+    pub const fn dirfd(&self) -> &FileDes {
+        &self.dirfd
     }
 
     #[inline]
-    #[expect(
-        clippy::not_unsafe_ptr_arg_deref,
-        reason = "It is safe to deference while in the lifetime of the iterator"
-    )]
-    /// A function to construction a `DirEntry` from the buffer+dirent
+    /**
+     Constructs a `DirEntry` from a directory entry pointer.
+
+     This method converts a raw `dirent64` pointer into a safe `DirEntry`
+     by combining the directory entry metadata with the parent directory's
+     path information stored in the path buffer.
+
+     # Arguments
+     * `drnt` - Non-null pointer to a valid `dirent64` structure
+
+    */
     pub fn construct_direntry(&mut self, drnt: NonNull<dirent64>) -> DirEntry {
-        // SAFETY:  This doesn't need unsafe because the pointer is already checked to not be null before it can be used here.
+        // SAFETY:  Because the pointer is already checked to not be null before it can be used here safely
         unsafe { self.construct_entry(drnt.as_ptr()) }
     }
 
     #[inline]
-    ///now private but explanatory documentation.
-    /// This function is used to create a new iterator over directory entries.
-    /// It takes a `DirEntry<S>` which contains the directory path and other metadata.
-    /// It initialises the iterator by opening the directory and preparing the path buffer.
-    /// Utilises libc's `opendir` and `readdir64` for directory reading.
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        // SAFETY: We are passing a null terminated string.
-        let dir = unsafe { dir_path.open_dir()? }; //read the directory and get the pointer to the DIR structure.
+        let dir_stream = dir_path.open_dir()?; //read the directory and get the pointer to the DIR structure.
         let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)
         // SAFETY:This pointer is forcefully null terminated and below PATH_MAX (system dependent)
         let base_len = unsafe { path_buffer.init_from_direntry(dir_path) };
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)
 
+        /*
+        SAFETY:   dir is a non null pointer, see comments
+        This operations is essentially just a struct field access cost(no syscall/blocking io), the pointer is guaranteed to be valid because
+         I found reading into this interesting, never heard of opaque pointers in C before this, i assumed C was public everything,
+        */
+        let dirfd = unsafe { FileDes(libc::dirfd(dir_stream.as_ptr())) };
+
+        /*
+
+
+                        struct __dirstream
+        {
+            off_t tell;
+            int fd;
+            int buf_pos;
+            int buf_end;
+            volatile int lock[1];
+            /* Any changes to this struct must preserve the property:
+             * offsetof(struct __dirent, buf) % sizeof(off_t) == 0 */
+            char buf[2048];
+        };
+
+                 */
+
         Ok(Self {
-            dir,
+            dir: dir_stream,
             path_buffer,
             file_name_index: base_len as _,
             parent_depth: dir_path.depth, //inherit depth
-            dirfd: Cell::new(None), //we don't want to issue a system call to get it unnecessary
+            dirfd,
         })
     }
 }
@@ -112,7 +134,7 @@ impl Iterator for ReadDir {
 
             return Some(
                 self.construct_direntry(entry), //construct the dirent from the pointer, and the path buffer.
-                                                         //this is safe because we've already checked if it's null
+                                                //this is safe because we've already checked if it's null
             );
         }
     }
@@ -147,85 +169,147 @@ libc source code for reference on blk size.
 */
 
 #[cfg(target_os = "linux")]
-/// Linux-specific directory iterator using the `getdents` syscall.
-///
-/// More efficient than `readdir` for large directories due to batched reads.
-/// Doesn't implicitly call stat unless on unusual filesystems.
+/**
+ Linux-specific directory iterator using the `getdents` system call.
+
+ Provides more efficient directory traversal than `readdir` for large directories
+ by performing batched reads into a kernel buffer. This reduces system call overhead
+ and improves performance when scanning directories with many entries.
+
+ Unlike some directory iteration methods, this does not implicitly call `stat`
+ on each entry unless required by unusual filesystem behaviour.
+*/
 pub struct GetDents {
-    pub(crate) fd: i32,
-    /// File descriptor of the open directory
-    pub(crate) buffer: crate::SyscallBuffer, // buffer for the directory entries, this is used to read the directory entries from the  syscall IO, it is 4.1k bytes~ish in size
-    pub(crate) path_buffer: crate::PathBuffer, // buffer(stack allocated) for the path, this is used to construct the full path of the entry, this is reused for each entry
-    pub(crate) file_name_index: u16, // base path length, this is the length of the path up to and including the last slash (we use these to get filename trivially)
-    pub(crate) parent_depth: u16, // depth of the parent directory, this is used to calculate the depth of the child entries
-    pub(crate) offset: usize, // offset in the buffer, this is used to keep track of where we are in the buffer
-    pub(crate) remaining_bytes: i64, // remaining bytes in the buffer, this is used to keep track of how many bytes are left to read
-                                     //this gets compiled away anyway as its as a zst
+    /// File descriptor of the open directory, wrapped for automatic resource management
+    pub(crate) fd: FileDes,
+    /// Kernel buffer for batch reading directory entries via system call I/O
+    /// Approximately 4.1KB in size, optimised for typical directory traversal
+    pub(crate) buffer: SyscallBuffer,
+    /// Stack-allocated buffer for constructing full entry paths
+    /// Reused for each entry to avoid repeated memory allocation
+    pub(crate) path_buffer: PathBuffer,
+    /// Length of the base directory path including the trailing slash
+    /// Used for efficient filename extraction and path construction
+    pub(crate) file_name_index: u16,
+    /// Depth of the parent directory in the directory tree hierarchy
+    /// Used to calculate depth for child entries during recursive traversal
+    pub(crate) parent_depth: u16,
+    /// Current read position within the directory entry buffer
+    /// Tracks progress through the currently loaded batch of entries
+    pub(crate) offset: usize,
+    /// Number of bytes remaining to be processed in the current buffer
+    /// Indicates when a new system call is needed to fetch more entries
+    pub(crate) remaining_bytes: i64,
 }
 #[cfg(target_os = "linux")]
 impl Drop for GetDents {
-    /// Drops the iterator, closing the file descriptor.
-    /// we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
-    /// basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
+    /**
+      Drops the iterator, closing the file descriptor.
+      we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
+
+      basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
+    */
     #[inline]
     fn drop(&mut self) {
         // SAFETY: we've know the fd is valid and we're closing it as our drop impl
-        unsafe { libc::close(self.fd) }; //this doesn't return an error code anyway, fuggedaboutit
-        //unsafe { crate::syscalls::close_asm(self.fd) }; //asm implementation, for when i feel like testing if it does anything useful.
+        unsafe { libc::close(self.fd.0) }; //this doesn't return an error code anyway, fuggedaboutit
+        //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
 
 #[cfg(target_os = "linux")]
 impl GetDents {
     #[inline]
-    /// Advances to the next directory entry in the buffer and returns a pointer to it.
-    ///
-    /// Increments the internal offset by the entry's record length, positioning the iterator
-    /// at the next entry for subsequent calls.
-    ///
-    /// # Safety
-    /// - The buffer must contain valid `dirent64` structures
-    /// - `self.offset` must point to a valid entry within the buffer bounds
-    /// - The caller must ensure we don't read past the end of the buffer
-    pub const unsafe fn get_next_entry(&mut self) -> *const libc::dirent64 {
-        // SAFETY: This is only used in the iterator implementation, so we can safely assume that the pointer
-        // is valid and that we don't read past the end of the buffer.
+    /**
+      Advances to the next directory entry in the buffer and returns a pointer to it.
+
+      Increments the internal offset by the entry's record length, positioning the iterator
+      at the next entry for subsequent calls.
+
+      # Safety
+      - The buffer must contain valid `dirent64` structures
+      - You must check if `is_buffer_not_empty` is true before calling.
+    */
+    pub const unsafe fn get_next_entry(&mut self) -> NonNull<dirent64> {
+        // SAFETY: the buffer must contain enough (checked by caller).
         let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
-        // SAFETY: we've checked it's not null
+        // SAFETY: By precondition
         self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-        d //return the pointer
+        // SAFETY: as above
+        unsafe { NonNull::new_unchecked(d.cast_mut()) } //return the pointer
     }
 
     #[inline]
-    /// Fills the buffer with directory entries using the getdents system call.
-    ///
-    /// Returns `true` if new entries were read, `false` if end of directory.
-    ///
-    /// # Safety
-    /// - File descriptor must be valid and open
-    pub unsafe fn fill_buffer(&mut self) -> bool {
-        // SAFETY: This is a valid fd (its open for the lifetime of the iterator)
-        self.remaining_bytes = unsafe { self.buffer.getdents(self.fd) };
+    /**
+      Constructs a `DirEntry` from a directory entry pointer.
+
+      This method converts a raw `dirent64` pointer into a safe `DirEntry`
+      by combining the directory entry metadata with path information from
+      the internal path buffer. The resulting `DirEntry` contains the full
+      path and metadata for filesystem traversal.
+
+      # Arguments
+      * `drnt` - Pointer to a valid `dirent64` structure from the getdents buffer
+    */
+    pub fn construct_direntry(&mut self, drnt: NonNull<dirent64>) -> DirEntry {
+        use crate::traits_and_conversions::DirentConstructor as _;
+        // SAFETY:  Because the pointer is already checked to not be null before it can be used here.
+        unsafe { self.construct_entry(drnt.as_ptr()) }
+    }
+
+    #[inline]
+    /**
+      Fills the buffer with directory entries using the getdents system call.
+
+      Returns `true` if new entries were read, `false` if end of directory.
+
+    */
+    pub fn fill_buffer(&mut self) -> bool {
+        self.remaining_bytes = self.buffer.getdents(&self.fd);
         self.offset = 0;
         self.remaining_bytes > 0 //if remaining_bytes<0 then we've reached the end.
     }
 
-    #[inline]
     /**
     Returns the file descriptor for this directory.
 
     Useful for operations that need the raw directory FD.
     */
-    pub const fn dirfd(&self) -> i32 {
-        self.fd
+    pub const fn dirfd(&self) -> &FileDes {
+        &self.fd
+    }
+
+    #[inline]
+    /**
+      Initiates read-ahead for the directory to improve sequential read performance.
+
+      This system call hints to the kernel that the application intends to read
+      the specified range of the directory file soon. The kernel may preload
+      this data into the page cache, reducing I/O latency for subsequent reads.
+
+      # Arguments
+        `count` - Number of bytes to read ahead from the current offset
+
+      # Returns
+      The number of bytes actually read ahead, or -1 on error.
+
+      # Note
+      This is an optimisation hint and may be ignored by the kernel.
+     Errors are typically silent as read-ahead failures don't affect correctness.
+    */
+    pub fn readhead(&self, count: usize) -> isize {
+        // SAFETY:
+        // - The file descriptor is valid and owned by this struct
+        // - The offset is within valid bounds for the directory file
+        // - The count is a valid usize that won't cause arithmetic overflow
+        // - readahead is a safe syscall that only performs read operations
+        unsafe { libc::readahead(self.fd.0, self.offset as _, count) }
     }
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
-        use crate::SyscallBuffer;
-        // SAFETY: We're  null terminating the filepath and it's below `LOCAL_PATH_MAX` (4096/1024 system dependent)
-        let fd = unsafe { dir.open_fd()? }; //returns none if null (END OF DIRECTORY/Directory no longer exists) (we've already checked if it's a directory/symlink originally )
-        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //nulll initialised  (stack) buffer that can axiomatically hold any filepath.
+        let fd = FileDes(dir.open_fd()?); //getting the file descriptor and wrapping it in our non publicly constructible 
+        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //null initialised  (stack) buffer that can axiomatically hold any filepath.
         // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
         let path_len = unsafe { path_buffer.init_from_direntry(dir) };
         //TODO! make this more ergonomic
@@ -243,6 +327,7 @@ impl GetDents {
 
     #[inline]
     #[allow(clippy::cast_sign_loss)]
+    #[must_use]
     /// Checks if the buffer is empty
     pub const fn is_buffer_not_empty(&self) -> bool {
         self.offset < self.remaining_bytes as _
@@ -255,25 +340,20 @@ impl Iterator for GetDents {
     #[inline]
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
-        use crate::traits_and_conversions::DirentConstructor as _;
         loop {
             // If we have remaining data in buffer, process it
             if self.is_buffer_not_empty() {
                 // SAFETY: we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
-                let d: *const libc::dirent64 = unsafe { self.get_next_entry() }; //get next entry in the buffer,
+                let drnt = unsafe { self.get_next_entry() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
                 // SAFETY: we know the pointer is not null therefor the operations in this macro are fine to use.
-                skip_dot_or_dot_dot_entries!(d, continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
+                skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
-                // SAFETY: As the above safety comment states
-                //construct the dirent from the pointer, this is a safe function that constructs the DirEntry from the dirent64 structure
-                return Some(unsafe { self.construct_entry(d) });
+                return Some(self.construct_direntry(drnt));
             }
-            // prefetch the next buffer content before reading
 
-            // issue a syscall once out of entries
-            // SAFETY: the file descriptor is still open and is valid to call
-            if unsafe { self.fill_buffer() } {
+            // Issue a syscall once out of entries
+            if self.fill_buffer() {
                 continue; // New entries available, restart loop
             }
 

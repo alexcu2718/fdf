@@ -440,7 +440,7 @@ impl GetDents {
         }
 
         // Read directory entries, ignoring negative error codes
-        self.remaining_bytes = (self.buffer.getdents(&self.fd).max(0)) as usize;
+        self.remaining_bytes = self.buffer.getdents(&self.fd).max(0) as usize;
         let no_bytes_left = self.remaining_bytes == 0;
         /*
 
@@ -450,19 +450,20 @@ impl GetDents {
          Why this works:
          - A full directory read returns exactly buffer.max_capacity() bytes
          - A partial read (end approaching) returns less than maximum
-         - If returned bytes ≤ (max_capacity - largest_dirent_size), there can't be
-           another full buffer's worth of data remaining
+         - If returned bytes ≤ (max_capacity - largest_dirent_size), the file descriptor is exhausted
+         - Meaning that the next system call will return 0 anyway.
 
          Example:
          - Buffer capacity: 4600 bytes (It is arbitrary)
          - Largest dirent64 size: 280 bytes
          - If getdents returns ≤ 4320 bytes (4600 - 280), then even if we made another
-           system call, we couldn't fill the buffer completely, indicating we're at EOF
+           system call, it would definitively call 0 bytes on next call, so we skip it!
+           Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
         */
         self.end_of_stream = no_bytes_left
             || (self.buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes);
 
-        // Reset to start reading from the beginning of the new buffer data
+        // Reset to start reading from the beginning of the new buffer data for the case where it's got 
         self.offset = 0;
 
         // Return true only if we successfully read non-zero bytes
@@ -506,6 +507,7 @@ impl GetDents {
          - readahead is a safe syscall that only performs read operationS
         */
         unsafe { libc::readahead(self.fd.0, self.offset as _, count) }
+        // Note, not used yet but will be.
     }
 
     #[inline]

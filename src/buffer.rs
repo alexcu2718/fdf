@@ -81,6 +81,12 @@ where
     pub(crate) data: MaybeUninit<[T; SIZE]>,
 }
 
+
+
+
+
+
+
 impl<T, const SIZE: usize, Idx> Index<Idx> for AlignedBuffer<T, SIZE>
 where
     T: ValueType,

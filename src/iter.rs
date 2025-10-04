@@ -85,10 +85,9 @@ impl ReadDir {
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)
 
-        /*
-        SAFETY:   dir is a non null pointer,the pointer is guaranteed to be valid
-        */
+        // SAFETY:   dir is a non null pointer,the pointer is guaranteed to be valid
         let dirfd = unsafe { FileDes(libc::dirfd(dir_stream.as_ptr())) };
+        debug_assert!(dirfd.is_open(), "We expect it to be open");
 
         Ok(Self {
             dir: dir_stream,
@@ -97,27 +96,27 @@ impl ReadDir {
             parent_depth: dir_path.depth, //inherit depth
             dirfd,
         })
-
-        /*
-           This operations is essentially just a struct field access cost(no syscall/blocking io), the pointer is guaranteed to be valid because
-         I found reading into this interesting, never heard of opaque pointers in C before this, i assumed C was public everything,
-         see this below
-
-                        struct __dirstream
-        {
-            off_t tell;
-            int fd;
-            int buf_pos;
-            int buf_end;
-            volatile int lock[1];
-            /* Any changes to this struct must preserve the property:
-             * offsetof(struct __dirent, buf) % sizeof(off_t) == 0 */
-            char buf[2048];
-        };
-
-                 */
     }
 }
+
+/*
+   This operations is essentially just a struct field access cost(no syscall/blocking io), the pointer is guaranteed to be valid because
+ I found reading into this interesting, never heard of opaque pointers in C before this, i assumed C was public everything,
+ see this below
+
+                struct __dirstream
+{
+    off_t tell;
+    int fd;
+    int buf_pos;
+    int buf_end;
+    volatile int lock[1];
+    /* Any changes to this struct must preserve the property:
+     * offsetof(struct __dirent, buf) % sizeof(off_t) == 0 */
+    char buf[2048];
+};
+
+         */
 
 impl Iterator for ReadDir {
     type Item = DirEntry;
@@ -144,6 +143,10 @@ impl Drop for ReadDir {
     /// File descriptors are limited system resources, so proper cleanup
     /// is essential.
     fn drop(&mut self) {
+        debug_assert!(
+            self.dirfd.is_open(),
+            "We expect the file descriptor to be open before lcosing"
+        );
         // SAFETY: we've know it's not null and we need to close it to prevent the fd staying open
         unsafe { closedir(self.dir.as_ptr()) };
     }
@@ -209,6 +212,10 @@ impl Drop for GetDents {
     */
     #[inline]
     fn drop(&mut self) {
+        debug_assert!(
+            self.fd.is_open(),
+            "We expect the file descriptor to be open before closing"
+        );
         // SAFETY: we've know the fd is valid and we're closing it as our drop impl
         unsafe { libc::close(self.fd.0) }; //this doesn't return an error code anyway, fuggedaboutit
         //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
@@ -250,7 +257,6 @@ impl GetDents {
       * `drnt` - Pointer to a valid `dirent64` structure from the getdents buffer
     */
     pub fn construct_direntry(&mut self, drnt: NonNull<dirent64>) -> DirEntry {
-        use crate::traits_and_conversions::DirentConstructor as _;
         // SAFETY:  Because the pointer is already checked to not be null before it can be used here.
         unsafe { self.construct_entry(drnt.as_ptr()) }
     }
@@ -309,6 +315,7 @@ impl GetDents {
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
         let fd = dir.open_fd()?; //getting the file descriptor
+        debug_assert!(fd.is_open(), "We expect it to always be open");
 
         // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
         let (path_buffer, path_len) = unsafe { PathBuffer::init_from_direntry(dir) };

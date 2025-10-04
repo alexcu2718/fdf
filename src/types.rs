@@ -31,7 +31,29 @@ pub struct FileDes(pub(crate) i32);
 
 impl FileDes {
     #[must_use]
+    #[inline]
+    /// Returns a borrowed reference to the underlying file descriptor.
     pub const fn as_borrowed_fd(&self) -> &i32 {
         &self.0
+    }
+    #[must_use]
+    #[inline]
+    /// Checks if the file descriptor is currently open
+    /// Returns `true` if the file descriptor is open, `false` otherwise
+    pub fn is_open(&self) -> bool {
+        // Use fcntl with F_GETFD to check if the file descriptor is valid
+        // If it returns -1 with errno EBADF, the fd is closed
+        //SAFETY:  Always safe
+        unsafe { libc::fcntl(self.0, libc::F_GETFD) != -1 }
+    }
+    /**
+     Checks if the file descriptor is closed or invalid.
+     This is the inverse of [`is_open()`](Self::is_open) and provides
+     a more readable alternative for checking closed status.
+    */
+    #[must_use]
+    #[inline]
+    pub fn is_closed(&self) -> bool {
+        !self.is_open()
     }
 }

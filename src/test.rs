@@ -171,6 +171,7 @@ mod tests {
     #[test]
     fn test_iterating_nested_structure() {
         let dir = temp_dir().join("nested_struct");
+        let _=fs::remove_dir_all(&dir);
         let subdir = dir.join("sub");
         fs::create_dir_all(&subdir).unwrap();
         fs::write(subdir.join("file.txt"), "data").unwrap();
@@ -223,6 +224,7 @@ mod tests {
     fn modified_time_returns_valid_datetime_for_file() {
         let tmp_dir = temp_dir();
         let file_path = tmp_dir.join("modified_time_test.txt");
+        
 
         // Create file
         {
@@ -761,6 +763,7 @@ mod tests {
     #[test]
     fn test_basic_iteration() {
         let dir_path = temp_dir().join("THROWAWAYANYTHING");
+        let _ = fs::remove_dir_all(&dir_path);
         let _ = fs::create_dir_all(&dir_path);
 
         // create test files
@@ -979,6 +982,7 @@ mod tests {
     #[test]
     fn test_non_recursive_iteration() {
         let top_dir = std::env::temp_dir().join("test_nested");
+        let _=fs::remove_dir_all(&top_dir);
         let sub_dir = top_dir.join("subdir");
 
         let _ = std::fs::create_dir_all(&sub_dir);
@@ -1190,6 +1194,43 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(dir);
         assert!(v);
+    }
+
+    #[test]
+    fn test_filedes_readdir() {
+        let dir = temp_dir().join("test_filedes_readdir");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let dir_entry = DirEntry::new(&dir).unwrap();
+
+        let _ = File::create(dir.join("regular.txt"));
+        let entries = ReadDir::new(&dir_entry).unwrap();
+        let file_des = (&entries).dirfd();
+        assert!(file_des.is_open());
+        let entries_collected: Vec<_> = entries.collect();
+
+        assert_eq!(entries_collected.len(), 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_filedes_getdents() {
+        let dir = temp_dir().join("test_filedes_getdents");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let dir_entry = DirEntry::new(&dir).unwrap();
+
+        let _ = File::create(dir.join("regular.txt"));
+        let entries = ReadDir::new(&dir_entry).unwrap();
+        let file_des = (&entries).dirfd();
+        assert!(file_des.is_open());
+        let entries_collected: Vec<_> = entries.collect();
+
+        assert_eq!(entries_collected.len(), 1);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -286,29 +286,28 @@ pub trait DirentConstructor {
         unsafe { mem::transmute(path_buffer.get_unchecked(..base_len + name_len)) }
     }
 
-    //   #[inline]
-    // fn readahead(&self,count:usize)->usize
-    // {unsafe{libc::readahead(self.file_descriptor().0,self.of)}}
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)]
     #[allow(clippy::transmute_ptr_to_ptr)]
+    #[allow(clippy::wildcard_enum_match_arm)]
     fn get_filetype(&self, d_type: u8, path: &CStr) -> FileType {
-        // Use the directory entry type if it's known
-        let file_type = FileType::from_dtype(d_type);
-        if file_type != FileType::Unknown {
-            return file_type; //early return
+        match FileType::from_dtype(d_type) {
+            FileType::Unknown => {
+                // Fall back to fstatat for filesystems that don't provide d_type (DT_UNKNOWN)
+                /* SAFETY:
+                - `file_index()` points to the start of the file name within `bytes`
+                - The slice from this index to the end includes the null terminator
+                - The slice is guaranteed to represent a valid C string
+                - We transmute the slice into a `&CStr` reference for zero-copy access */
+                let cstr_name: &CStr = unsafe {
+                    core::mem::transmute(
+                        path.to_bytes_with_nul().get_unchecked(self.file_index()..),
+                    )
+                };
+                FileType::from_fd_no_follow(self.file_descriptor(), cstr_name)
+            }
+            known_type => known_type,
         }
-
-        // Fall back to fstatat for filesystems that don't provide d_type (DT_UNKNOWN)
-        let bytes = path.to_bytes_with_nul();
-        /* SAFETY:
-        - `file_index()` points to the start of the file name within `bytes`
-        - The slice from this index to the end includes the null terminator
-        - The slice is guaranteed to represent a valid C string
-        - We transmute the slice into a `&CStr` reference for zero-copy access */
-        let cstr_name: &CStr =
-            unsafe { core::mem::transmute(bytes.get_unchecked(self.file_index()..)) };
-        FileType::from_fd_no_follow(self.file_descriptor(), cstr_name)
     }
 }
 

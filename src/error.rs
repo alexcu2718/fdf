@@ -131,3 +131,32 @@ impl fmt::Display for SearchConfigError {
 }
 
 impl core::error::Error for SearchConfigError {}
+
+/*
+
+
+ERRORS         top
+
+       EACCES Read or search permission was denied for a component of the
+              path prefix.
+
+       EINVAL path is NULL.  (Before glibc 2.3, this error is also
+              returned if resolved_path is NULL.)
+
+       EIO    An I/O error occurred while reading from the filesystem.
+
+       ELOOP  Too many symbolic links were encountered in translating the
+              pathname.
+
+       ENAMETOOLONG
+              A component of a pathname exceeded NAME_MAX characters, or
+              an entire pathname exceeded PATH_MAX characters.
+
+       ENOENT The named file does not exist.
+
+       ENOMEM Out of memory.
+
+       ENOTDIR
+              A component of the path prefix is not a directory.
+
+              */

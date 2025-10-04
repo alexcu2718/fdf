@@ -78,6 +78,7 @@
 #[cfg(target_os = "linux")]
 use crate::GetDents;
 use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::FileType};
+use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ptr::NonNull;
 use libc::{
@@ -620,6 +621,7 @@ impl DirEntry {
         */
 
     #[inline]
+    #[allow(clippy::cast_possible_truncation)]
     /// Converts a directory entry to a full, canonical path, resolving all symlinks
     ///
     /// This is a **costly** operation as it involves a system call (`realpath`).
@@ -670,7 +672,7 @@ impl DirEntry {
     pub fn to_full_path(&self) -> Result<Self> {
         let full_path = self.get_realpath()?;
 
-        let file_name_index = full_path.to_bytes().file_name_index(); //used for indexing.
+        let file_name_index = full_path.to_bytes().file_name_index() as u16; //used for indexing.
         // Computing result here to avoid borrow issues
 
         let (file_type, ino) = if self.is_symlink() {
@@ -1131,6 +1133,10 @@ impl DirEntry {
     }
 
     #[inline]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the path won't be longer than u16"
+    )]
     /// Creates a new [`DirEntry`] from the given path.
     ///
     /// This constructor attempts to resolve metadata for the provided path using
@@ -1194,17 +1200,18 @@ impl DirEntry {
             file_type: get_stat.into(),
             inode,
             depth: 0,
-            file_name_index: path_ref.file_name_index(),
+            file_name_index: path_ref.file_name_index() as u16,
             is_traversible_cache: Cell::new(None), //no need to check
         })
     }
 
     #[inline]
     #[expect(clippy::cast_sign_loss, reason = "needs to be in u32 for chrono")]
+    #[expect(clippy::cast_possible_truncation, reason = "same as above")]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
-    pub fn modified_time(&self) -> Result<chrono::DateTime<chrono::Utc>> {
+    pub fn modified_time(&self) -> Result<DateTime<Utc>> {
         let statted = self.get_lstat()?;
-        chrono::DateTime::from_timestamp(
+        DateTime::from_timestamp(
             access_stat!(statted, st_mtime),
             access_stat!(statted, st_mtimensec),
         )

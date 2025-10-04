@@ -8,6 +8,10 @@ use crate::ValueType;
 #[inline]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "SYS_OPEN is typically very low"
+)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 // x86_64-specific implementation
 /// Opens a directory using direct syscall via assembly

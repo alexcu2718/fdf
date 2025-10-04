@@ -36,7 +36,7 @@ where
     /// Gets index of filename component start
     ///
     /// Returns position after last '/' or 0 if none.
-    fn file_name_index(&self) -> u16;
+    fn file_name_index(&self) -> usize;
     /// Converts to `&OsStr` (zero-cost)
     fn as_os_str(&self) -> &OsStr;
 
@@ -131,8 +131,8 @@ where
 
     /// Get the length of the basename of a path (up to and including the last '/')
     #[inline]
-    fn file_name_index(&self) -> u16 {
-        memrchr(b'/', self).map_or(1, |pos| (pos + 1) as _)
+    fn file_name_index(&self) -> usize {
+        memrchr(b'/', self).map_or(1, |pos| pos + 1)
     }
 }
 
@@ -209,6 +209,10 @@ pub trait DirentConstructor {
     fn file_descriptor(&self) -> &FileDes;
 
     #[inline]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Not expecting a filepath to be >u16::MAX"
+    )]
     /// Constructs a `DirEntry` from a raw directory entry pointer
     #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {

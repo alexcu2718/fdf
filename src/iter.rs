@@ -12,12 +12,14 @@ use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir};
 
-/// POSIX-compliant directory iterator using libc's readdir functions.
-///
-/// This iterator traverses directory entries using the standard POSIX directory
-/// reading API. It automatically skips "." and ".." entries and provides
-/// a safe Rust interface over the underlying C library functions.
-///
+/**
+ POSIX-compliant directory iterator using libc's readdir functions.
+
+ This iterator traverses directory entries using the standard POSIX directory
+ reading API. It automatically skips "." and ".." entries and provides
+ a safe Rust interface over the underlying C library functions.
+
+*/
 #[derive(Debug)]
 pub struct ReadDir {
     /// Raw directory pointer from libc's `opendir()`
@@ -200,7 +202,9 @@ pub struct GetDents {
     pub(crate) offset: usize,
     /// Number of bytes remaining to be processed in the current buffer
     /// Indicates when a new system call is needed to fetch more entries
-    pub(crate) remaining_bytes: i64,
+    pub(crate) remaining_bytes: usize,
+    /// A marker for when the `FileDes` can give no more entries
+    pub(crate) end_of_stream: bool,
 }
 #[cfg(target_os = "linux")]
 impl Drop for GetDents {
@@ -242,6 +246,35 @@ impl GetDents {
         // SAFETY: as above
         unsafe { NonNull::new_unchecked(d.cast_mut()) } //return the pointer
     }
+    #[inline]
+    #[must_use]
+    /// Returns whether the directory stream has reached its end.
+    ///
+    /// This method indicates that no more directory entries can be read from this stream.
+    /// Once `true`, subsequent calls to [`fill_buffer()`](Self::fill_buffer) will return `false`
+    /// and the iterator will return `None`.
+    ///
+    /// # Returns
+    /// - `true` if the directory stream has ended (EOF reached or buffer capacity insufficient)
+    /// - `false` if more directory entries may be available to read
+    ///
+    /// # Examples
+    /// ```
+    /// use fdf::DirEntry;
+    /// let dir = DirEntry::new("/tmp").unwrap();
+    /// let mut getdents = dir.getdents().unwrap();
+    ///
+    /// // Process entries until end of stream
+    /// while !getdents.is_end_of_stream() {
+    ///     if getdents.fill_buffer() {
+    ///         // Process entries in buffer...
+    ///     }
+    /// }
+    /// println!("Reached end of directory");
+    /// ```
+    pub const fn is_end_of_stream(&self) -> bool {
+        self.end_of_stream
+    }
 
     #[inline]
     /**
@@ -262,15 +295,179 @@ impl GetDents {
 
     #[inline]
     /**
-      Fills the buffer with directory entries using the getdents system call.
+     Returns the number of unprocessed bytes remaining in the current kernel buffer.
 
-      Returns `true` if new entries were read, `false` if end of directory.
+     This indicates how much data is still available to be processed before needing
+     to perform another `getdents64` system call. When this returns 0, the buffer
+     has been exhausted and [`read_more_entries`] should be called to fetch the
+     next batch of directory entries from the kernel.
+
+     # Examples
+     ```
+      use fdf::DirEntry;
+     let start_path=std::env::temp_dir();
+       let getdents=DirEntry::new(start_path).unwrap().getdents().unwrap();
+     while getdents.remaining_bytes() > 0 {
+         // Process entries from current buffer
+     }
+     // Buffer exhausted, need to read more
+     ```
 
     */
+    pub const fn remaining_bytes(&self) -> usize {
+        self.remaining_bytes
+    }
+
+    #[inline]
+    #[allow(clippy::integer_division)] // Trust me, you dont want floats.
+    #[allow(clippy::integer_division_remainder_used)]
+    /**
+
+     This provides a lower bound by dividing the remaining bytes by the size of a `dirent64`
+     structure. Since actual directory entries have variable sizes (due to different filename
+     lengths), this represents the worst-case scenario where all remaining entries use the
+     maximum possible space.
+
+     # Note
+     The actual number of entries WILL ALWAYS be higher than this estimate because:
+     - Directory entries with shorter names consume less space
+     - In theory, a buffer can hold up to 11 (extremely short name) files,
+     - EG: 11*24 (minimum reclen/size of `dirent64` struct)==264, while `size_of` a `dirent64` will always be 280
+     # Examples
+     ```
+     use fdf::DirEntry;
+     let start_path=std::env::temp_dir();
+     let getdents=DirEntry::new(start_path).unwrap().getdents().unwrap();
+     // Use for pre-allocation or progress estimation
+     let min_entries = getdents.minimum_direntries_left();
+     if min_entries > 100 {
+         // Likely many entries remaining
+     }
+     ```
+    */
+    pub const fn minimum_direntries_left(&self) -> usize {
+        self.remaining_bytes / size_of::<dirent64>() // floor division = minimum
+        //self.remaining_bytes.div_floor(size_of::<dirent64>())
+        // use this when const num traits is stable FIXME
+    }
+
+    /**
+    Returns the absolute maximum number of directory entries that could theoretically fit
+    in the entire buffer, assuming all entries use the minimum possible size.
+
+       */
+    pub const fn max_direntries_possible(&self) -> usize {
+        self.buffer.max_capacity().div_ceil(24)
+    }
+
+    #[inline]
+    #[allow(clippy::integer_division)]
+    /**
+     This provides an upper bound by dividing the remaining bytes by the minimum possible entry size.
+     Since directory entries have variable sizes but cannot be smaller than the fixed header portion
+     plus at least 1 byte for the filename, this represents the best-case scenario where all
+     remaining entries use the absolute minimum space.
+
+     # Note
+     The actual number of entries WILL ALWAYS be less than or equal to this estimate because:
+     - No directory entry can be smaller than the fixed header overhead
+     - On Linux `x86_64`, the minimum `d_reclen` is typically 24 bytes (header + null terminator)
+     - This gives the theoretical maximum possible entries that could fit in the remaining buffer
+
+     # Examples
+     ```
+     use fdf::DirEntry;
+     let start_path = std::env::temp_dir();
+     let getdents = DirEntry::new(start_path).unwrap().getdents().unwrap();
+     // Use for worst-case memory allocation
+     let max_entries = getdents.maximum_direntries_left();
+     if max_entries < 1000 {
+         // We have a reasonable upper bound
+     }
+     ```
+    */
+    #[allow(clippy::integer_division_remainder_used)]
+    pub const fn maximum_direntries_left(&self) -> usize {
+        //self.remaining_bytes.div_floor(24)
+        // use this when const num traits is stable FIXME
+        self.remaining_bytes / 24
+    }
+
+    #[inline]
+    /**
+     Fills the buffer with directory entries using the getdents system call.
+
+     This method attempts to read more directory entries into the internal buffer.
+     If the directory stream has already ended, returns immediately.
+
+     # Smart End-of-Stream Detection
+
+     This method uses an optimisation to minimise system calls by detecting when
+     the directory has been exhausted before getdents returns 0 bytes:
+
+     - A full directory read returns exactly `buffer.max_capacity()` bytes
+     - A partial read (end approaching) returns fewer bytes
+     - If returned bytes ≤ `(max_capacity - size_of::<dirent64>())`, there cannot be
+       another full buffer's worth of data remaining, indicating EOF
+
+     This avoids making an extra system call that would return 0 bytes.
+
+     # Returns
+
+     - `true` if new directory entries were read into the buffer
+     - `false` if:
+       - The directory stream has already ended (`is_end_of_stream()` was `true`)
+       - No entries were read (0 bytes returned)
+       - The optimisation detected EOF (partial buffer read with insufficient remaining data)
+
+     # State Transitions
+
+     - Sets `end_of_stream = true` when EOF is detected via zero bytes or the optimisation
+     - Resets `offset = 0` to start reading from the beginning of new buffer data
+     - Updates `remaining_bytes` with the actual bytes read from the system call
+    */
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "Negative error codes from getdents are explicitly handled by max(0)"
+    )]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "i64 to usize truncation is acceptable as buffer sizes are limited"
+    )]
     pub fn fill_buffer(&mut self) -> bool {
-        self.remaining_bytes = self.buffer.getdents(&self.fd);
+        // Early return if we've already reached end of stream
+        if self.is_end_of_stream() {
+            return false;
+        }
+
+        // Read directory entries, ignoring negative error codes
+        self.remaining_bytes = (self.buffer.getdents(&self.fd).max(0)) as usize;
+        let no_bytes_left = self.remaining_bytes == 0;
+        /*
+
+         Smart end-of-stream detection: Avoid unnecessary system calls by detecting when
+         we've likely exhausted the directory based on the returned byte count.
+
+         Why this works:
+         - A full directory read returns exactly buffer.max_capacity() bytes
+         - A partial read (end approaching) returns less than maximum
+         - If returned bytes ≤ (max_capacity - largest_dirent_size), there can't be
+           another full buffer's worth of data remaining
+
+         Example:
+         - Buffer capacity: 4600 bytes (It is arbitrary)
+         - Largest dirent64 size: 280 bytes
+         - If getdents returns ≤ 4320 bytes (4600 - 280), then even if we made another
+           system call, we couldn't fill the buffer completely, indicating we're at EOF
+        */
+        self.end_of_stream = no_bytes_left
+            || (self.buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes);
+
+        // Reset to start reading from the beginning of the new buffer data
         self.offset = 0;
-        self.remaining_bytes > 0 //if remaining_bytes<0 then we've reached the end.
+
+        // Return true only if we successfully read non-zero bytes
+        !no_bytes_left
     }
 
     /**
@@ -284,6 +481,7 @@ impl GetDents {
     }
 
     #[inline]
+    #[allow(clippy::cast_possible_wrap)] // It'll never be high enough (usize->isize)
     /**
       Initiates read-ahead for the directory to improve sequential read performance.
 
@@ -327,6 +525,7 @@ impl GetDents {
             parent_depth: dir.depth,
             offset: 0,
             remaining_bytes: 0,
+            end_of_stream: false,
         })
     }
 
@@ -335,7 +534,7 @@ impl GetDents {
     #[must_use]
     /// Checks if the buffer is empty
     pub const fn is_buffer_not_empty(&self) -> bool {
-        self.offset < self.remaining_bytes as _
+        self.offset < self.remaining_bytes
     }
 }
 

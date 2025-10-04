@@ -133,7 +133,7 @@ where
     #[inline]
     #[must_use]
     /// Returns the max capacity of this buffer
-    pub const fn capacity(&self) -> usize {
+    pub const fn max_capacity(&self) -> usize {
         SIZE
     }
 
@@ -202,6 +202,10 @@ where
     }
 
     #[inline]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the length of a path will never be above a u16 (well, i'm just not covering that extreme an edgecase!"
+    )]
     #[allow(clippy::undocumented_unsafe_blocks)] //too lazy to comment all of this, will do later.
     /// Initialises the buffer with directory path contents
     ///

@@ -4,7 +4,6 @@ use crate::traits_and_conversions::BytePath as _;
 use crate::{DirEntry, FileType, SearchConfigError};
 use core::num::NonZeroU16;
 use regex::bytes::{Regex, RegexBuilder};
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// File type filter for directory traversal
 #[expect(clippy::exhaustive_enums, reason = "This list is exhaustive")]

@@ -98,7 +98,7 @@ use std::{
   and efficient access to its components.
 
   The struct's memory footprint is
-  - **Path**: 16 bytes, Box<CStr>, retaining compatibility for use in libc but converting to &[u8] trivially(as deref)
+  - **Path**: 16 bytes, `Box<CStr>`, retaining compatibility for use in libc but converting to &[u8] trivially(as deref)
   - **File type**: A 1-byte enum representing the entry's type (file, directory, etc.).
   - **Inode**: An 8-byte integer for the file's unique inode number.
   - **Depth**: A 2-byte integer indicating the entry's depth from the root.
@@ -735,60 +735,7 @@ impl DirEntry {
         unsafe { access(self.as_ptr(), W_OK) == 0 }
     }
 
-    #[inline]
-    /**
-
-    Gets file status information without following symlinks.
-
-    This performs an `lstat` system call to retrieve metadata about the file,
-    including type, permissions, size, and timestamps. Unlike `stat`,
-    `lstat` returns information about the symlink itself rather than the target.
-
-
-
-    # Errors
-
-    Returns an error if:
-    - The file doesn't exist
-    - Permission is denied
-    - The path is invalid
-    - System call fails for any other reason
-
-    # Returns
-
-    A `stat` structure containing file metadata on success.
-    */
-    pub fn get_lstat(&self) -> Result<stat> {
-        Self::get_lstat_private(self.as_ptr())
-    }
-
-    #[inline]
-    /**
-    Gets file status information by following symlinks.
-
-    This performs a `stat` system call to retrieve metadata about the file,
-    including type, permissions, size, and timestamps. Unlike `lstat`,
-    `stat` follows symbolic links and returns information about the target file
-    rather than the link itself.
-
-
-    # Errors
-
-    Returns an error if:
-    - The file doesn't exist
-    - Permission is denied
-    - The path is invalid
-    - A symlink target doesn't exist
-    - System call fails for any other reason
-
-    # Returns
-
-    A `stat` structure containing file metadata on success.
-    */
-    pub fn get_stat(&self) -> Result<stat> {
-        // Simple wrapper to avoid code duplication so I can use the private method within the crate
-        Self::get_stat_private(self.as_ptr())
-    }
+   
 
     #[inline]
     /**
@@ -815,29 +762,66 @@ impl DirEntry {
      A `stat` structure containing file metadata on success.
 
      # Errors
-     Returns `DirEntryError::InvalidStat` if the stat operation fails
+     Returns `DirEntryError::IOError` if the stat operation fails
     */
     pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
-        let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
-        // SAFETY:
-        // - The path is guaranteed to be null-terminated (CStr)
-        // - fd must be a valid file descriptor
-        // - stat_buf is properly allocated
-        let res = unsafe {
-            fstatat(
-                fd.0,
-                self.as_ptr(),
-                stat_buf.as_mut_ptr(),
-                AT_SYMLINK_NOFOLLOW,
-            )
-        };
+    stat_syscall!(fstatat, fd, self, AT_SYMLINK_NOFOLLOW)
 
-        if res == 0 {
-            // SAFETY: If the return code is 0, we know the stat structure has been properly initialized
-            Ok(unsafe { stat_buf.assume_init() })
-        } else {
-            Err(crate::DirEntryError::InvalidStat)
-        }
+    }
+
+     #[inline]
+    /**
+
+    Gets file status information without following symlinks.
+
+    This performs an `lstat` system call to retrieve metadata about the file,
+    including type, permissions, size, and timestamps. Unlike `stat`,
+    `lstat` returns information about the symlink itself rather than the target.
+
+
+
+    # Errors
+
+    Returns an error if:
+    - The file doesn't exist
+    - Permission is denied
+    - The path is invalid
+    - System call fails for any other reason
+
+    Returns `DirEntryError::IOError` if the stat operation fails
+
+    A `stat` structure containing file metadata on success.
+    */
+    pub fn get_lstat(&self) -> Result<stat> {
+        Self::get_lstat_private(self.as_ptr())
+    }
+
+    #[inline]
+    /**
+    Gets file status information by following symlinks.
+
+    This performs a `stat` system call to retrieve metadata about the file,
+    including type, permissions, size, and timestamps. Unlike `lstat`,
+    `stat` follows symbolic links and returns information about the target file
+    rather than the link itself.
+
+
+    # Errors
+
+    Returns an error if:
+    - The file doesn't exist
+    - Permission is denied
+    - The path is invalid
+    - A symlink target doesn't exist
+    - System call fails for any other reason
+
+    #  Returns `DirEntryError::IOError` if the stat operation fails
+
+    A `stat` structure containing file metadata on success.
+    */
+    pub fn get_stat(&self) -> Result<stat> {
+        // Simple wrapper to avoid code duplication so I can use the private method within the crate
+        Self::get_stat_private(self.as_ptr())
     }
 
     #[inline]
@@ -854,57 +838,21 @@ impl DirEntry {
      A `stat` structure containing file metadata on success.
 
      # Errors
-     Returns `DirEntryError::InvalidStat` if the stat operation fails
+     Returns `DirEntryError::IOError` if the stat operation fails
+    *
     */
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
-        let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
-        // SAFETY:
-        // - The path is guaranteed to be null-terminated (CStr)
-        // - fd must be a valid file descriptor
-        // - stat_buf is properly allocated
-        let res = unsafe {
-            fstatat(
-                fd.0,
-                self.as_ptr(),
-                stat_buf.as_mut_ptr(),
-                AT_SYMLINK_FOLLOW,
-            )
-        };
-
-        if res == 0 {
-            // SAFETY: If the return code is 0, we know the stat structure has been properly initialized
-            Ok(unsafe { stat_buf.assume_init() })
-        } else {
-            Err(crate::DirEntryError::InvalidStat)
-        }
+    stat_syscall!(fstatat, fd, self, AT_SYMLINK_FOLLOW)
     }
 
     #[inline]
     pub(crate) fn get_lstat_private(ptr: *const c_char) -> Result<stat> {
-        let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
-        // SAFETY: We know the path is valid because internally it's a cstr
-        let res = unsafe { lstat(ptr, stat_buf.as_mut_ptr()) };
-
-        if res == 0 {
-            // SAFETY: If the return code is 0, we know it's been initialised properly
-            Ok(unsafe { stat_buf.assume_init() })
-        } else {
-            Err(crate::DirEntryError::InvalidStat)
-        }
+        stat_syscall!(lstat, ptr)
     }
 
     #[inline]
     pub(crate) fn get_stat_private(ptr: *const c_char) -> Result<stat> {
-        let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
-        // SAFETY: We know the path is valid because internally it's a cstr
-        let res = unsafe { stat(ptr, stat_buf.as_mut_ptr()) };
-
-        if res == 0 {
-            // SAFETY: If the return code is 0, we know it's been initialised properly
-            Ok(unsafe { stat_buf.assume_init() })
-        } else {
-            Err(crate::DirEntryError::InvalidStat)
-        }
+        stat_syscall!(stat, ptr)
     }
 
     #[inline]
@@ -1177,12 +1125,12 @@ impl DirEntry {
     /// let nonexistent_path = "/definitely/not/a/real/file/lalalalalalalalalalalal";
     /// assert!(!fs::metadata(nonexistent_path).is_ok());
     ///
-    /// // This will return an InvalidStat error because the file does not exist
+    /// // This will return an DirEntry::IOError because the file does not exist
     /// let result = DirEntry::new(nonexistent_path);
     /// match result {
-    ///     Ok(_) => panic!("Expected InvalidStat error"),
-    ///     Err(DirEntryError::InvalidStat) => {}, // Expected error
-    ///     Err(_) => panic!("Expected InvalidStat error, got different error"),
+    ///     Ok(_) => panic!("this should never happen!"),
+    ///     Err(DirEntryError::IOError(_)) => {}, // Expected error
+    ///     Err(_) => panic!("Expected  error, got different error"),
     /// }
     /// # // The test passes if we reach this point without panicking
     /// # Ok::<(), DirEntryError>(())

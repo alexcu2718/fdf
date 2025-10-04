@@ -1,66 +1,201 @@
+
+
 use core::fmt;
-use libc::{EACCES, EAGAIN, EINVAL, ELOOP, ENOENT, ENOTDIR};
 use std::io;
+use libc::{
+    EACCES, EAGAIN, EBADF, EBUSY, EEXIST, EFAULT, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP,
+    EMFILE, EMLINK, ENAMETOOLONG, ENFILE, ENOENT, ENOMEM, ENOTDIR, EOVERFLOW,
+    EPERM, ETXTBSY, EXDEV,
+};
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]
-/// Comprehensive error type for directory entry operations and file system traversal.
+/// Comprehensive filesystem I/O error type mapping libc error codes to meaningful variants.
 ///
-/// This enum encapsulates all possible errors that can occur during directory
-/// operations, including I/O errors, permission issues, path validation failures,
-/// and system-specific error conditions. It provides detailed error context
-/// for robust error handling in file system utilities.
-pub enum DirEntryError {
-    /// The specified path does not exist or is invalid
-    InvalidPath,
-    /// File stat information is corrupted or unavailable
-    InvalidStat,
-    /// Time conversion or timestamp processing failed
-    TimeError,
-    /// File metadata could not be retrieved or parsed
-    MetadataError,
-    /// Operation temporarily blocked (e.g., EAGAIN/EWOULDBLOCK)
+/// This enum encapsulates all possible I/O errors that can occur during filesystem
+/// operations, with precise mapping from libc error codes to semantic error variants.
+/// Comprehensive filesystem I/O error type mapping libc error codes to meaningful variants.
+pub enum FilesystemIOError {
+    /// Permission denied for file system access (EACCES, EPERM)
+    AccessDenied(io::Error),
+    /// Operation temporarily blocked (EAGAIN, EINTR)
     TemporarilyUnavailable,
-    /// Path contains invalid UTF-8 sequences
-    Utf8Error(core::str::Utf8Error),
+    /// Invalid path or null pointer (EINVAL, EFAULT)
+    InvalidPath,
+    /// I/O error occurred while reading from filesystem (EIO)
+    FilesystemIO(io::Error),
+    /// Symbolic link recursion limit exceeded (ELOOP)
+    TooManySymbolicLinks,
+    /// Pathname component exceeds system limits (ENAMETOOLONG)
+    NameTooLong,
+    /// The named file does not exist (ENOENT)
+    FileNotFound,
+    /// Out of memory for filesystem operations (ENOMEM)
+    OutOfMemory,
+    /// Path exists but is not a directory (ENOTDIR)
+    NotADirectory,
     /// Broken pipe error during output operations
     BrokenPipe(io::Error),
-    /// General operating system error
-    OSerror(io::Error),
-    /// Permission denied for file system access
-    AccessDenied(io::Error),
-    /// File write operation failed
-    WriteError(io::Error),
-    /// Path exists but is not a directory
-    NotADirectory,
-    /// Symbolic link recursion limit exceeded
-    TooManySymbolicLinks,
+    /// File already exists (EEXIST)
+    FileExists(io::Error),
+    /// Path refers to a directory but operation requires file (EISDIR)
+    IsDirectory(io::Error),
+    /// File too large (EFBIG, EOVERFLOW)
+    FileTooLarge(io::Error),
+    /// Too many hard links (EMLINK)
+    TooManyLinks(io::Error),
+    /// Invalid cross-device link (EXDEV)
+    CrossDeviceLink(io::Error),
+    /// Resource busy or locked (EBUSY, ETXTBSY)
+    ResourceBusy(io::Error),
+    /// Invalid file descriptor (EBADF)
+    InvalidFileDescriptor(io::Error),
+    /// Process file descriptor limit reached (EMFILE)
+    ProcessFileLimitReached(io::Error),
+    /// System-wide file descriptor limit reached (ENFILE)
+    SystemFileLimitReached(io::Error),
+    /// Unsupported operation
+    UnsupportedOperation(io::Error),
+    /// Unhandled OS error
+    Other(io::Error),
+}
 
+impl fmt::Display for FilesystemIOError {
+    #[allow(clippy::pattern_type_mismatch)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AccessDenied(e) => write!(f, "Permission denied: {e}"),
+            Self::TemporarilyUnavailable => write!(f, "Operation temporarily unavailable, retry later"),
+            Self::InvalidPath => write!(f, "Invalid path or null pointer"),
+            Self::FilesystemIO(e) => write!(f, "Filesystem I/O error: {e}"),
+            Self::TooManySymbolicLinks => write!(f, "Too many symbolic links (recursion limit exceeded)"),
+            Self::NameTooLong => write!(f, "Pathname component exceeds system limits"),
+            Self::FileNotFound => write!(f, "File or directory not found"),
+            Self::OutOfMemory => write!(f, "Out of memory for filesystem operation"),
+            Self::NotADirectory => write!(f, "Path exists but is not a directory"),
+            Self::BrokenPipe(e) => write!(f, "Broken pipe: {e}"),
+            Self::FileExists(e) => write!(f, "File already exists: {e}"),
+            Self::IsDirectory(e) => write!(f, "Path refers to a directory: {e}"),
+            Self::FileTooLarge(e) => write!(f, "File too large: {e}"),
+            Self::TooManyLinks(e) => write!(f, "Too many hard links: {e}"),
+            Self::CrossDeviceLink(e) => write!(f, "Invalid cross-device link: {e}"),
+            Self::ResourceBusy(e) => write!(f, "Resource busy or locked: {e}"),
+            Self::InvalidFileDescriptor(e) => write!(f, "Invalid file descriptor: {e}"),
+            Self::ProcessFileLimitReached(e) => write!(f, "Process file descriptor limit reached: {e}"),
+            Self::SystemFileLimitReached(e) => write!(f, "System-wide file descriptor limit reached: {e}"),
+            Self::UnsupportedOperation(e) => write!(f, "Unsupported operation: {e}"),
+            Self::Other(e) => write!(f, "OS error: {e}"),
+        }
+    }
+}
+
+impl<E> From<E> for FilesystemIOError 
+where 
+    E: Into<std::io::Error>
+{
+    fn from(error: E) -> Self {
+        Self::from_io_error(error.into())
+    }
+}
+
+
+impl FilesystemIOError {
+
+   
+    #[allow(clippy::wildcard_enum_match_arm)] //not doing them all...
+    /// Create a new `FilesystemIOError` from a `std::io::Error`
+    pub fn from_io_error(error: io::Error) -> Self {
+    
+
+        // Map OS error codes to variants based on libc documentation
+        if let Some(code) = error.raw_os_error() {
+            match code {
+                // Permission and access errors
+                EACCES | EPERM => Self::AccessDenied(error),
+                
+                // Temporary/retryable errors
+                EAGAIN | EINTR => Self::TemporarilyUnavailable,
+                
+                // Path and file existence errors
+                EINVAL | EFAULT => Self::InvalidPath,
+                ENOENT => Self::FileNotFound,
+                EEXIST => Self::FileExists(error),
+                EISDIR => Self::IsDirectory(error),
+                ENOTDIR => Self::NotADirectory,
+                
+                // Symbolic link and path resolution errors
+                ELOOP => Self::TooManySymbolicLinks,
+                ENAMETOOLONG => Self::NameTooLong,
+                
+                // I/O and device errors
+                EIO => Self::FilesystemIO(error),
+                EBADF => Self::InvalidFileDescriptor(error),
+                
+                // Resource and quota errors
+                ENOMEM => Self::OutOfMemory,
+                EFBIG | EOVERFLOW => Self::FileTooLarge(error),
+                
+                // File system structure errors
+                EMLINK => Self::TooManyLinks(error),
+                EXDEV => Self::CrossDeviceLink(error),
+                
+                // File state and locking errors
+                EBUSY | ETXTBSY => Self::ResourceBusy(error),
+             
+                
+                // Resource limit errors
+                EMFILE => Self::ProcessFileLimitReached(error),
+                ENFILE => Self::SystemFileLimitReached(error),
+                
+                _ => Self::Other(error),
+            }
+        } else {
+            // Map std error kinds to our variants
+            match error.kind() {
+                io::ErrorKind::BrokenPipe=>Self::BrokenPipe(error),
+                io::ErrorKind::NotFound => Self::FileNotFound,
+                io::ErrorKind::PermissionDenied => Self::AccessDenied(error),
+                io::ErrorKind::NotADirectory => Self::NotADirectory,
+                io::ErrorKind::AlreadyExists => Self::FileExists(error),
+                io::ErrorKind::IsADirectory => Self::IsDirectory(error),
+                io::ErrorKind::NotSeekable => Self::InvalidFileDescriptor(error),
+                io::ErrorKind::ResourceBusy => Self::ResourceBusy(error),
+                io::ErrorKind::TooManyLinks => Self::TooManyLinks(error),
+                io::ErrorKind::InvalidFilename => Self::InvalidPath,
+                io::ErrorKind::Unsupported => Self::UnsupportedOperation(error),
+                io::ErrorKind::UnexpectedEof => Self::FilesystemIO(error),
+                io::ErrorKind::OutOfMemory => Self::OutOfMemory,
+                _ => Self::Other(error),
+            }
+        }
+    }
+
+}
+
+
+
+#[derive(Debug)]
+#[allow(clippy::exhaustive_enums)]
+pub enum DirEntryError {
+    /// Time conversion or timestamp processing failed
+    TimeError,
+    /// Path contains invalid UTF-8 sequences
+    Utf8Error(core::str::Utf8Error),
+    /// Invalid nulls detected in filename
     NullError,
+    /// Filesystem I/O error
+    IOError(FilesystemIOError),
 }
 
 impl From<io::Error> for DirEntryError {
-    #[allow(clippy::wildcard_enum_match_arm)]
     fn from(error: io::Error) -> Self {
-        // handle specific error kinds first
-        if error.kind() == io::ErrorKind::BrokenPipe {
-            return Self::BrokenPipe(error);
-        }
+        Self::IOError(FilesystemIOError::from_io_error(error))
+    }
+}
 
-        // map OS error codes to variants
-        if let Some(code) = error.raw_os_error() {
-            match code {
-                EAGAIN => Self::TemporarilyUnavailable, // EAGAIN is not a fatal error, just try again later
-                EINVAL | ENOENT => Self::InvalidPath,
-                ENOTDIR => Self::NotADirectory,
-                ELOOP => Self::TooManySymbolicLinks,
-                EACCES => Self::AccessDenied(error),
-                _ => Self::OSerror(error),
-            }
-        } else {
-            // handle non-OS errors
-            Self::OSerror(error)
-        }
+impl From<FilesystemIOError> for DirEntryError {
+    fn from(error: FilesystemIOError) -> Self {
+        Self::IOError(error)
     }
 }
 
@@ -74,21 +209,10 @@ impl fmt::Display for DirEntryError {
     #[allow(clippy::pattern_type_mismatch)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidPath => write!(f, "Invalid path, neither a file nor a directory"),
-            Self::InvalidStat => write!(f, "Invalid file stat"),
             Self::TimeError => write!(f, "Invalid time conversion"),
-            Self::NullError => write!(f, "Invalid nulls detected in name! "),
-            Self::TemporarilyUnavailable => {
-                write!(f, "Operation temporarily unavailable, retry later")
-            }
-            Self::MetadataError => write!(f, "Metadata error"),
             Self::Utf8Error(e) => write!(f, "UTF-8 conversion error: {e}"),
-            Self::BrokenPipe(e) => write!(f, "Broken pipe: {e}"),
-            Self::OSerror(e) => write!(f, "OS error: {e}"),
-            Self::WriteError(e) => write!(f, "Write error: {e}"),
-            Self::AccessDenied(e) => write!(f, "Access denied: {e}"),
-            Self::NotADirectory => write!(f, "Not a directory"),
-            Self::TooManySymbolicLinks => write!(f, "Too many symbolic links"),
+            Self::NullError => write!(f, "Invalid nulls detected in name"),
+            Self::IOError(e) => write!(f, "I/O error: {e}"),
         }
     }
 }
@@ -107,10 +231,10 @@ pub enum SearchConfigError {
     RegexError(regex::Error),
     /// I/O error during search configuration or execution
     IOError(io::Error),
-    /// Specified root path is not a directory
-    NotADirectory,
     /// Error during directory traversal operation
     TraversalError(DirEntryError),
+    /// Specified root path is not a directory
+    NotADirectory,
 }
 impl From<io::Error> for SearchConfigError {
     fn from(error: io::Error) -> Self {
@@ -132,31 +256,3 @@ impl fmt::Display for SearchConfigError {
 
 impl core::error::Error for SearchConfigError {}
 
-/*
-
-
-ERRORS         top
-
-       EACCES Read or search permission was denied for a component of the
-              path prefix.
-
-       EINVAL path is NULL.  (Before glibc 2.3, this error is also
-              returned if resolved_path is NULL.)
-
-       EIO    An I/O error occurred while reading from the filesystem.
-
-       ELOOP  Too many symbolic links were encountered in translating the
-              pathname.
-
-       ENAMETOOLONG
-              A component of a pathname exceeded NAME_MAX characters, or
-              an entire pathname exceeded PATH_MAX characters.
-
-       ENOENT The named file does not exist.
-
-       ENOMEM Out of memory.
-
-       ENOTDIR
-              A component of the path prefix is not a directory.
-
-              */

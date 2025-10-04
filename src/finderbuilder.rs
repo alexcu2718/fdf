@@ -1,7 +1,7 @@
 use core::num::NonZeroU16;
 
 use crate::{
-    DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError, SizeFilter,
+    DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError, SizeFilter
 };
 use dashmap::DashSet;
 
@@ -291,8 +291,7 @@ impl FinderBuilder {
         let dir_to_use = if self.root.is_empty() {
             // Get current directory and canonicalise it for consistency
             std::env::current_dir()
-                .map(PathBuf::into_os_string)
-                .map_err(SearchConfigError::IOError)?
+                .map(PathBuf::into_os_string)?
         } else {
             self.root.clone()
         };
@@ -304,12 +303,12 @@ impl FinderBuilder {
             return Err(SearchConfigError::NotADirectory);
         }
 
-        // Apply canonicalization if requested
+        // Apply canonicalisation if requested
         if self.canonicalise {
-            path_check
+            Ok(path_check
                 .canonicalize()
-                .map(|p| p.into_os_string().into_boxed_os_str())
-                .map_err(SearchConfigError::IOError)
+                .map(|p| p.into_os_string().into_boxed_os_str())?)
+                
         } else {
             Ok(dir_to_use.into_boxed_os_str())
         }

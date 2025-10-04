@@ -464,3 +464,44 @@ macro_rules! send_files_if_not_empty {
         }
     };
 }
+
+
+/// Macro for safely calling stat-like functions and handling the result, I might make it public? 
+macro_rules! stat_syscall {
+    // For fstatat with flags
+    ($syscall:ident, $fd:expr, $path:expr, $flags:expr) => {{
+        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY:
+        // - The path is guaranteed to be null-terminated (CStr)
+        let res = unsafe {
+            $syscall(
+                $fd.0,
+                $path.as_ptr(),
+                stat_buf.as_mut_ptr(),
+                $flags,
+            )
+        };
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know the stat structure has been properly initialized
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(std::io::Error::last_os_error().into())
+        }
+    }};
+
+    // For stat/lstat with path pointer
+    ($syscall:ident, $path_ptr:expr) => {{
+        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: We know the path is valid because internally it's a cstr
+        let res = unsafe { $syscall($path_ptr, stat_buf.as_mut_ptr()) };
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know it's been initialised properly
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(std::io::Error::last_os_error().into())
+        }
+    }};
+}
+

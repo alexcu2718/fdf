@@ -299,8 +299,7 @@ impl GetDents {
 
      This indicates how much data is still available to be processed before needing
      to perform another `getdents64` system call. When this returns 0, the buffer
-     has been exhausted and [`read_more_entries`] should be called to fetch the
-     next batch of directory entries from the kernel.
+     has been exhausted.
 
      # Examples
      ```

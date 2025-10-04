@@ -136,7 +136,6 @@ impl FileType {
     - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist
       or an error occurred
 
-     ```
         */
     #[inline]
     #[must_use]
@@ -181,7 +180,6 @@ impl FileType {
     - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist
       or an error occurred
 
-    ```
     */
     pub fn from_fd_follow(fd: &FileDes, filename: &CStr) -> Self {
         let mut stat_buf = MaybeUninit::<stat>::uninit();

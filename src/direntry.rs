@@ -911,7 +911,7 @@ impl DirEntry {
         // and guaranteed non null
         unsafe {
             &*core::ptr::slice_from_raw_parts(self.path.to_bytes_with_nul().as_ptr(), self.len())
-            // len is the length of the non-null terminated internal buffer.
+            // len is the length of the internal `CStr` -1
         }
     }
 

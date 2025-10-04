@@ -2,8 +2,7 @@
 #[cfg(target_os = "linux")]
 use crate::SyscallBuffer;
 use crate::{
-    AlignedBuffer, DirEntry, FileDes, LOCAL_PATH_MAX, PathBuffer, Result,
-    traits_and_conversions::DirentConstructor as _,
+    DirEntry, FileDes, PathBuffer, Result, traits_and_conversions::DirentConstructor as _,
 };
 
 use core::ptr::NonNull;
@@ -81,9 +80,8 @@ impl ReadDir {
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
         let dir_stream = dir_path.open_dir()?; //read the directory and get the pointer to the DIR structure.
-        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //this is a VERY big buffer (filepaths literally cant be longer than this)
         // SAFETY:This pointer is forcefully null terminated and below PATH_MAX (system dependent)
-        let base_len = unsafe { path_buffer.init_from_direntry(dir_path) };
+        let (path_buffer, path_len) = unsafe { PathBuffer::init_from_direntry(dir_path) };
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)
 
@@ -95,7 +93,7 @@ impl ReadDir {
         Ok(Self {
             dir: dir_stream,
             path_buffer,
-            file_name_index: base_len as _,
+            file_name_index: path_len,
             parent_depth: dir_path.depth, //inherit depth
             dirfd,
         })
@@ -298,28 +296,28 @@ impl GetDents {
       This is an optimisation hint and may be ignored by the kernel.
      Errors are typically silent as read-ahead failures don't affect correctness.
     */
-    pub fn readhead(&self, count: usize) -> isize {
-        // SAFETY:
-        // - The file descriptor is valid and owned by this struct
-        // - The offset is within valid bounds for the directory file
-        // - The count is a valid usize that won't cause arithmetic overflow
-        // - readahead is a safe syscall that only performs read operations
+    pub fn readahead(&self, count: usize) -> isize {
+        /*  SAFETY:
+         - The file descriptor is valid and owned by this struct
+         - The offset is within valid bounds for the directory file
+         - The count is a valid usize that won't cause arithmetic overflow
+         - readahead is a safe syscall that only performs read operationS
+        */
         unsafe { libc::readahead(self.fd.0, self.offset as _, count) }
     }
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
         let fd = dir.open_fd()?; //getting the file descriptor
-        let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //null initialised  (stack) buffer that can axiomatically hold any filepath.
+
         // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
-        let path_len = unsafe { path_buffer.init_from_direntry(dir) };
-        //TODO! make this more ergonomic
+        let (path_buffer, path_len) = unsafe { PathBuffer::init_from_direntry(dir) };
         let buffer = SyscallBuffer::new();
         Ok(Self {
             fd,
             buffer,
             path_buffer,
-            file_name_index: path_len as _,
+            file_name_index: path_len,
             parent_depth: dir.depth,
             offset: 0,
             remaining_bytes: 0,

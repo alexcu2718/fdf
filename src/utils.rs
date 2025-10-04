@@ -233,7 +233,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
         */
         let byte_pos = 8 - unsafe { find_zero_byte_u64_optimised(candidate_pos) };
-        //let byte_pos=8-find_zero_byte_u64(candidate_pos);
 
         /*  Final length:
         total record length - header size - null byte position

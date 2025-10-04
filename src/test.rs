@@ -57,7 +57,7 @@ mod tests {
 
     #[test]
     fn test_directory_traversal_permissions() {
-        let temp_dir = temp_dir().join("traversal_test");
+        let temp_dir = temp_dir().join("traversal_test_again");
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(&temp_dir).unwrap();
 

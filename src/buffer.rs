@@ -3,9 +3,9 @@ use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
 
-use crate::DirEntry;
 #[cfg(target_os = "linux")]
 use crate::FileDes;
+use crate::{DirEntry, PathBuffer};
 mod sealed {
     /// Sealed trait pattern to restrict `ValueType` implementation to i8 and u8 only
     pub trait Sealed {}
@@ -212,20 +212,20 @@ where
     /// - `dir_path`: The directory entry containing the path to initialise
     ///
     /// # Returns
-    /// The new base length after writing into the buffer
+    /// The the buffer and the new base length (after writing into the buffer)
     ///
     /// # Safety
     /// The caller must ensure:
-    /// - The buffer is zeroed and has sufficient capacity (at least `LOCAL_PATH_MAX`) (4096 on Linux or 1024 on non-Linux (dependent on `libc::PATH_MAX`))
-    pub(crate) const unsafe fn init_from_direntry(&mut self, dir_path: &DirEntry) -> usize {
-        let buffer_ptr = self.as_mut_ptr(); // get the mutable pointer to the buffer
-
+    pub(crate) const unsafe fn init_from_direntry(dir_path: &DirEntry) -> (PathBuffer, u16) {
+        let mut path_buffer = PathBuffer::new();
         let mut base_len = dir_path.len(); // get length of directory path
 
         let dir_path_in_bytes = dir_path.as_bytes();
 
         // const hack, partial eq isn't available in const contexts, but this is.
         let needs_slash = (!matches!(dir_path_in_bytes, b"/")) as u8; // check if we need to append a slash
+
+        let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
 
         unsafe {
             core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr.cast(), base_len); // copy path
@@ -234,7 +234,7 @@ where
 
         base_len += needs_slash as usize; // update length if slash added
 
-        base_len
+        (path_buffer, base_len as _)
     }
     /// Returns a mutable reference to a subslice without doing bounds checking
     ///

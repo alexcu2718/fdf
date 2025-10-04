@@ -36,6 +36,11 @@ impl FileDes {
     pub const fn as_borrowed_fd(&self) -> &i32 {
         &self.0
     }
+
+    pub fn close_fd(&self) {
+        // SAFETY: we've know the fd is valid and we're closing it as our drop impl
+        unsafe { libc::close(self.0) }; //
+    }
     #[must_use]
     #[inline]
     /// Checks if the file descriptor is currently open

@@ -6,7 +6,7 @@ use crate::{
 };
 
 use core::ptr::NonNull;
-use libc::{DIR, closedir};
+use libc::DIR;
 #[cfg(not(target_os = "linux"))]
 use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
@@ -145,10 +145,10 @@ impl Drop for ReadDir {
     fn drop(&mut self) {
         debug_assert!(
             self.dirfd.is_open(),
-            "We expect the file descriptor to be open before lcosing"
+            "We expect the file descriptor to be open before closing"
         );
-        // SAFETY: we've know it's not null and we need to close it to prevent the fd staying open
-        unsafe { closedir(self.dir.as_ptr()) };
+        self.dirfd.close_fd()
+        //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
 
@@ -216,8 +216,7 @@ impl Drop for GetDents {
             self.fd.is_open(),
             "We expect the file descriptor to be open before closing"
         );
-        // SAFETY: we've know the fd is valid and we're closing it as our drop impl
-        unsafe { libc::close(self.fd.0) }; //this doesn't return an error code anyway, fuggedaboutit
+        self.fd.close_fd()
         //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }

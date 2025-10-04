@@ -28,3 +28,10 @@ pub type DirEntryFilter = fn(&DirEntry) -> bool;
 #[derive(Debug)]
 /// A safe abstraction around file descriptors for internal IO
 pub struct FileDes(pub(crate) i32);
+
+impl FileDes {
+    #[must_use]
+    pub const fn as_borrowed_fd(&self) -> &i32 {
+        &self.0
+    }
+}

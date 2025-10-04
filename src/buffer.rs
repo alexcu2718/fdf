@@ -3,6 +3,7 @@ use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
 
+use crate::DirEntry;
 #[cfg(target_os = "linux")]
 use crate::FileDes;
 mod sealed {
@@ -216,7 +217,7 @@ where
     /// # Safety
     /// The caller must ensure:
     /// - The buffer is zeroed and has sufficient capacity (at least `LOCAL_PATH_MAX`) (4096 on Linux or 1024 on non-Linux (dependent on `libc::PATH_MAX`))
-    pub(crate) const unsafe fn init_from_direntry(&mut self, dir_path: &crate::DirEntry) -> usize {
+    pub(crate) const unsafe fn init_from_direntry(&mut self, dir_path: &DirEntry) -> usize {
         let buffer_ptr = self.as_mut_ptr(); // get the mutable pointer to the buffer
 
         let mut base_len = dir_path.len(); // get length of directory path

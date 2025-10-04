@@ -88,14 +88,22 @@ impl ReadDir {
         //we use this length to index to get the filename (store full path -> index to get filename)
 
         /*
-        SAFETY:   dir is a non null pointer, see comments
-        This operations is essentially just a struct field access cost(no syscall/blocking io), the pointer is guaranteed to be valid because
-         I found reading into this interesting, never heard of opaque pointers in C before this, i assumed C was public everything,
+        SAFETY:   dir is a non null pointer,the pointer is guaranteed to be valid
         */
         let dirfd = unsafe { FileDes(libc::dirfd(dir_stream.as_ptr())) };
 
-        /*
+        Ok(Self {
+            dir: dir_stream,
+            path_buffer,
+            file_name_index: base_len as _,
+            parent_depth: dir_path.depth, //inherit depth
+            dirfd,
+        })
 
+        /*
+           This operations is essentially just a struct field access cost(no syscall/blocking io), the pointer is guaranteed to be valid because
+         I found reading into this interesting, never heard of opaque pointers in C before this, i assumed C was public everything,
+         see this below
 
                         struct __dirstream
         {
@@ -110,14 +118,6 @@ impl ReadDir {
         };
 
                  */
-
-        Ok(Self {
-            dir: dir_stream,
-            path_buffer,
-            file_name_index: base_len as _,
-            parent_depth: dir_path.depth, //inherit depth
-            dirfd,
-        })
     }
 }
 
@@ -275,6 +275,7 @@ impl GetDents {
 
     Useful for operations that need the raw directory FD.
     */
+    #[inline]
     pub const fn dirfd(&self) -> &FileDes {
         &self.fd
     }
@@ -308,7 +309,7 @@ impl GetDents {
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
-        let fd = FileDes(dir.open_fd()?); //getting the file descriptor and wrapping it in our non publicly constructible 
+        let fd = dir.open_fd()?; //getting the file descriptor
         let mut path_buffer = AlignedBuffer::<u8, { LOCAL_PATH_MAX }>::new(); //null initialised  (stack) buffer that can axiomatically hold any filepath.
         // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
         let path_len = unsafe { path_buffer.init_from_direntry(dir) };

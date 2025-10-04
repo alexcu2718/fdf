@@ -85,6 +85,7 @@ use libc::{
 use std::{
     ffi::{CStr, OsStr},
     os::unix::ffi::OsStrExt as _,
+    path::Path,
 };
 /**
   A struct representing a directory entry with minimal memory overhead.
@@ -227,6 +228,20 @@ impl DirEntry {
         self.path.as_ptr()
     }
 
+    #[inline]
+    /// Returns the underlying path as a `Path`
+    pub const fn as_path(&self) -> &Path {
+        // SAFETY: bytes <=> OsStr <=> Path on unix
+        unsafe { core::mem::transmute(self.as_bytes()) }
+    }
+
+    #[inline]
+    /// Returns the underlying path as an `OsStr`
+    pub const fn as_os_str(&self) -> &OsStr {
+        // SAFETY: bytes <=> OsStr <=> Path on unix
+        unsafe { core::mem::transmute(self.as_bytes()) }
+    }
+
     /// Cost free check for block devices
     #[inline]
     #[must_use]
@@ -250,7 +265,7 @@ impl DirEntry {
     - The path doesn't point to a directory
     - Permission is denied
     */
-    pub fn open_fd(&self) -> Result<i32> {
+    pub fn open_fd(&self) -> Result<FileDes> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
         const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
@@ -264,7 +279,7 @@ impl DirEntry {
         if fd < 0 {
             Err(std::io::Error::last_os_error().into())
         } else {
-            Ok(fd)
+            Ok(crate::types::FileDes(fd))
         }
     }
 
@@ -537,9 +552,9 @@ impl DirEntry {
         unsafe { self.get_unchecked(self.file_name_index()..) }
     }
 
-    /// Takes the value of the path and gives the raw representation
+    /// Takes the value of the path and gives the raw representation as a boxed Cstr
     #[inline]
-    pub fn as_inner(self) -> Box<CStr> {
+    pub fn to_inner(self) -> Box<CStr> {
         self.path
     }
 
@@ -773,10 +788,10 @@ impl DirEntry {
 
     #[inline]
     /**
-     * Checks if the file exists.
-     *
-     * This makes a system call to check file existence.
-     */
+     Checks if the file exists.
+
+     This makes a system call to check file existence.
+    */
     pub fn exists(&self) -> bool {
         // SAFETY: The path is guaranteed to be null terminated
         unsafe { access(self.as_ptr(), F_OK) == 0 }
@@ -784,20 +799,20 @@ impl DirEntry {
 
     #[inline]
     /**
-     * Gets file metadata using lstatat for a file relative to a directory file descriptor.
-     *
-     * This function uses `fstatat` with `AT_SYMLINK_NOFOLLOW` to get metadata without
-     * following symbolic links, similar to `lstat` but relative to a directory fd.
-     *
-     * # Arguments
-     * * `fd` - Directory file descriptor to use as the base for relative path resolution
-     *
-     * # Returns
-     * A `stat` structure containing file metadata on success.
-     *
-     * # Errors
-     * Returns `DirEntryError::InvalidStat` if the stat operation fails
-     */
+     Gets file metadata using lstatat for a file relative to a directory file descriptor.
+
+     This function uses `fstatat` with `AT_SYMLINK_NOFOLLOW` to get metadata without
+     following symbolic links, similar to `lstat` but relative to a directory fd.
+
+     # Arguments
+      `fd` - Directory file descriptor to use as the base for relative path resolution
+
+     # Returns
+     A `stat` structure containing file metadata on success.
+
+     # Errors
+     Returns `DirEntryError::InvalidStat` if the stat operation fails
+    */
     pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
         let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
         // SAFETY:
@@ -823,20 +838,20 @@ impl DirEntry {
 
     #[inline]
     /**
-     * Gets file metadata using statat for a file relative to a directory file descriptor.
-     *
-     * This function uses `fstatat` with `AT_SYMLINK_FOLLOW` to get metadata by
-     * following symbolic links, similar to `stat` but relative to a directory fd.
-     *
-     * # Arguments
-     * * `fd` - Directory file descriptor to use as the base for relative path resolution
-     *
-     * # Returns
-     * A `stat` structure containing file metadata on success.
-     *
-     * # Errors
-     * Returns `DirEntryError::InvalidStat` if the stat operation fails
-     */
+     Gets file metadata using statat for a file relative to a directory file descriptor.
+
+     This function uses `fstatat` with `AT_SYMLINK_FOLLOW` to get metadata by
+     following symbolic links, similar to `stat` but relative to a directory fd.
+
+     # Arguments
+      `fd` - Directory file descriptor to use as the base for relative path resolution
+
+     # Returns
+     A `stat` structure containing file metadata on success.
+
+     # Errors
+     Returns `DirEntryError::InvalidStat` if the stat operation fails
+    */
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
         let mut stat_buf = core::mem::MaybeUninit::<stat>::uninit();
         // SAFETY:
@@ -942,10 +957,10 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    ///returns the inode number of the file, cost free check
+    /// Returns the inode number of the file, cost free check
     ///
     ///
-    /// this is a unique identifier for the file on the filesystem, it is not the same
+    /// This is a unique identifier for the file on the filesystem, it is not the same
     /// as the file name or path, it is a number that identifies the file on the
     /// It should be u32 on BSD's but I use u64 for consistency across platforms
     pub const fn ino(&self) -> u64 {
@@ -961,7 +976,7 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    ///returns the length of the base path (eg /home/user/ is 6 '/home/')
+    /// Returns the length of the base path (eg /home/user/ is 6 '/home/')
     pub const fn file_name_index(&self) -> usize {
         self.file_name_index as _
     }

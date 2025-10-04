@@ -13,13 +13,11 @@ use crate::ValueType;
 /// Opens a directory using direct syscall via assembly
 ///
 ///
-/// # Safety
-/// - Requires cstr to be a valid directory
 ///
 /// # Returns
 /// - File descriptor (positive integer) on success
 /// - -1 on error (check errno for details)
-pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> i32 {
     use core::arch::asm;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
@@ -46,12 +44,10 @@ pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
 /// ARM64 uses `openat` instead of `open` for better path resolution.
 /// Uses `AT_FDCWD` to indicate relative to current working directory.
 ///
-/// # Safety
-/// - Requires byte path to be a valid directory
 ///
 /// # Returns
 /// File descriptor on success, -1 on error
-pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> i32 {
     use core::arch::asm;
 
     const MODE: i32 = libc::O_RDONLY; // Required even if unused in directory open
@@ -80,12 +76,10 @@ pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
 ))]
 /// Opens a directory using `libc::open`
 ///
-/// # Safety
-/// - Requires byte path to be a valid directory
 ///
 /// # Returns
 /// File descriptor on success, -1 on error
-pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> i32 {
     unsafe { libc::open(cstr.as_ptr(), flags) }
 }
 
@@ -251,14 +245,11 @@ where
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
 where
     T: ValueType, //i8/u8
 {
-    /// SAFETY: we're passing a properly aligned buffer.
-    unsafe {
-        libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size)
-    }
+    unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
 }
 
 /*

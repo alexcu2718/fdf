@@ -75,6 +75,8 @@
 //!     Ok(())
 //! }
 
+#[cfg(target_os = "linux")]
+use crate::GetDents;
 use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::FileType};
 use core::cell::Cell;
 use core::ptr::NonNull;
@@ -1281,7 +1283,7 @@ impl DirEntry {
     /// fs::remove_dir_all(&temp_dir).unwrap();
     /// ```
     #[inline]
-    pub fn readdir(&self) -> Result<impl Iterator<Item = Self>> {
+    pub fn readdir(&self) -> Result<ReadDir> {
         ReadDir::new(self)
     }
     #[inline]
@@ -1339,7 +1341,7 @@ impl DirEntry {
     /// // Clean up
     /// fs::remove_dir_all(&temp_dir).unwrap();
     /// ```
-    pub fn getdents(&self) -> Result<impl Iterator<Item = Self>> {
+    pub fn getdents(&self) -> Result<GetDents> {
         use crate::iter::GetDents;
         GetDents::new(self)
     }

@@ -1,12 +1,9 @@
-
-
 use core::fmt;
-use std::io;
 use libc::{
-    EACCES, EAGAIN, EBADF, EBUSY, EEXIST, EFAULT, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP,
-    EMFILE, EMLINK, ENAMETOOLONG, ENFILE, ENOENT, ENOMEM, ENOTDIR, EOVERFLOW,
-    EPERM, ETXTBSY, EXDEV,
+    EACCES, EAGAIN, EBADF, EBUSY, EEXIST, EFAULT, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP, EMFILE,
+    EMLINK, ENAMETOOLONG, ENFILE, ENOENT, ENOMEM, ENOTDIR, EOVERFLOW, EPERM, ETXTBSY, EXDEV,
 };
+use std::io;
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]
@@ -65,10 +62,14 @@ impl fmt::Display for FilesystemIOError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::AccessDenied(e) => write!(f, "Permission denied: {e}"),
-            Self::TemporarilyUnavailable => write!(f, "Operation temporarily unavailable, retry later"),
+            Self::TemporarilyUnavailable => {
+                write!(f, "Operation temporarily unavailable, retry later")
+            }
             Self::InvalidPath => write!(f, "Invalid path or null pointer"),
             Self::FilesystemIO(e) => write!(f, "Filesystem I/O error: {e}"),
-            Self::TooManySymbolicLinks => write!(f, "Too many symbolic links (recursion limit exceeded)"),
+            Self::TooManySymbolicLinks => {
+                write!(f, "Too many symbolic links (recursion limit exceeded)")
+            }
             Self::NameTooLong => write!(f, "Pathname component exceeds system limits"),
             Self::FileNotFound => write!(f, "File or directory not found"),
             Self::OutOfMemory => write!(f, "Out of memory for filesystem operation"),
@@ -81,78 +82,76 @@ impl fmt::Display for FilesystemIOError {
             Self::CrossDeviceLink(e) => write!(f, "Invalid cross-device link: {e}"),
             Self::ResourceBusy(e) => write!(f, "Resource busy or locked: {e}"),
             Self::InvalidFileDescriptor(e) => write!(f, "Invalid file descriptor: {e}"),
-            Self::ProcessFileLimitReached(e) => write!(f, "Process file descriptor limit reached: {e}"),
-            Self::SystemFileLimitReached(e) => write!(f, "System-wide file descriptor limit reached: {e}"),
+            Self::ProcessFileLimitReached(e) => {
+                write!(f, "Process file descriptor limit reached: {e}")
+            }
+            Self::SystemFileLimitReached(e) => {
+                write!(f, "System-wide file descriptor limit reached: {e}")
+            }
             Self::UnsupportedOperation(e) => write!(f, "Unsupported operation: {e}"),
             Self::Other(e) => write!(f, "OS error: {e}"),
         }
     }
 }
 
-impl<E> From<E> for FilesystemIOError 
-where 
-    E: Into<std::io::Error>
+impl<E> From<E> for FilesystemIOError
+where
+    E: Into<std::io::Error>,
 {
     fn from(error: E) -> Self {
         Self::from_io_error(error.into())
     }
 }
 
-
 impl FilesystemIOError {
-
-   
     #[allow(clippy::wildcard_enum_match_arm)] //not doing them all...
     /// Create a new `FilesystemIOError` from a `std::io::Error`
     pub fn from_io_error(error: io::Error) -> Self {
-    
-
         // Map OS error codes to variants based on libc documentation
         if let Some(code) = error.raw_os_error() {
             match code {
                 // Permission and access errors
                 EACCES | EPERM => Self::AccessDenied(error),
-                
+
                 // Temporary/retryable errors
                 EAGAIN | EINTR => Self::TemporarilyUnavailable,
-                
+
                 // Path and file existence errors
                 EINVAL | EFAULT => Self::InvalidPath,
                 ENOENT => Self::FileNotFound,
                 EEXIST => Self::FileExists(error),
                 EISDIR => Self::IsDirectory(error),
                 ENOTDIR => Self::NotADirectory,
-                
+
                 // Symbolic link and path resolution errors
                 ELOOP => Self::TooManySymbolicLinks,
                 ENAMETOOLONG => Self::NameTooLong,
-                
+
                 // I/O and device errors
                 EIO => Self::FilesystemIO(error),
                 EBADF => Self::InvalidFileDescriptor(error),
-                
+
                 // Resource and quota errors
                 ENOMEM => Self::OutOfMemory,
                 EFBIG | EOVERFLOW => Self::FileTooLarge(error),
-                
+
                 // File system structure errors
                 EMLINK => Self::TooManyLinks(error),
                 EXDEV => Self::CrossDeviceLink(error),
-                
+
                 // File state and locking errors
                 EBUSY | ETXTBSY => Self::ResourceBusy(error),
-             
-                
+
                 // Resource limit errors
                 EMFILE => Self::ProcessFileLimitReached(error),
                 ENFILE => Self::SystemFileLimitReached(error),
-                
+
                 _ => Self::Other(error),
             }
         } else {
             // Map std error kinds to our variants
             match error.kind() {
-                io::ErrorKind::BrokenPipe=>Self::BrokenPipe(error),
+                io::ErrorKind::BrokenPipe => Self::BrokenPipe(error),
                 io::ErrorKind::NotFound => Self::FileNotFound,
                 io::ErrorKind::PermissionDenied => Self::AccessDenied(error),
                 io::ErrorKind::NotADirectory => Self::NotADirectory,
@@ -169,10 +168,7 @@ impl FilesystemIOError {
             }
         }
     }
-
 }
-
-
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]
@@ -255,4 +251,3 @@ impl fmt::Display for SearchConfigError {
 }
 
 impl core::error::Error for SearchConfigError {}
-

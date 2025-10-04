@@ -31,6 +31,7 @@
 //! - Batched result delivery to minimise channel contention
 //! - Zero-copy path handling where possible
 //! - Avoids unnecessary `stat` calls through careful API design
+//! - Makes up to 50% less `getdents` syscalls on linux (Not rigorously tested, check getdents `fill_buffer` docs)
 //!
 //! ## Platform Support
 //!

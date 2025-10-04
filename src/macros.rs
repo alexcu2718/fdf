@@ -465,8 +465,7 @@ macro_rules! send_files_if_not_empty {
     };
 }
 
-
-/// Macro for safely calling stat-like functions and handling the result, I might make it public? 
+/// Macro for safely calling stat-like functions and handling the result, I might make it public?
 macro_rules! stat_syscall {
     // For fstatat with flags
     ($syscall:ident, $fd:expr, $path:expr, $flags:expr) => {{
@@ -489,6 +488,29 @@ macro_rules! stat_syscall {
             Err(std::io::Error::last_os_error().into())
         }
     }};
+      // For fstatat with flags - returns FileType directly (kinda like an internal black magic tool for me to save writing so much duplicate code)
+     ($syscall:ident, $fd:expr, $path:expr, $flags:expr,DTYPE) => {{
+        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY:
+        // - The path is guaranteed to be null-terminated (CStr)
+        let res = unsafe {
+            $syscall(
+                $fd.0,
+                $path.as_ptr(),
+                stat_buf.as_mut_ptr(),
+                $flags,
+            )
+        };
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know it's been initialised properly
+            $crate::FileType::from_stat(&unsafe { stat_buf.assume_init() })
+        } else {
+            $crate::FileType::Unknown
+        }
+    }};
+
+
 
     // For stat/lstat with path pointer
     ($syscall:ident, $path_ptr:expr) => {{
@@ -503,5 +525,6 @@ macro_rules! stat_syscall {
             Err(std::io::Error::last_os_error().into())
         }
     }};
-}
 
+
+}

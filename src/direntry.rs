@@ -735,8 +735,6 @@ impl DirEntry {
         unsafe { access(self.as_ptr(), W_OK) == 0 }
     }
 
-   
-
     #[inline]
     /**
      Checks if the file exists.
@@ -765,11 +763,10 @@ impl DirEntry {
      Returns `DirEntryError::IOError` if the stat operation fails
     */
     pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
-    stat_syscall!(fstatat, fd, self, AT_SYMLINK_NOFOLLOW)
-
+        stat_syscall!(fstatat, fd, self, AT_SYMLINK_NOFOLLOW)
     }
 
-     #[inline]
+    #[inline]
     /**
 
     Gets file status information without following symlinks.
@@ -793,7 +790,7 @@ impl DirEntry {
     A `stat` structure containing file metadata on success.
     */
     pub fn get_lstat(&self) -> Result<stat> {
-        Self::get_lstat_private(self.as_ptr())
+        stat_syscall!(lstat, self.as_ptr())
     }
 
     #[inline]
@@ -821,7 +818,7 @@ impl DirEntry {
     */
     pub fn get_stat(&self) -> Result<stat> {
         // Simple wrapper to avoid code duplication so I can use the private method within the crate
-        Self::get_stat_private(self.as_ptr())
+        stat_syscall!(stat, self.as_ptr())
     }
 
     #[inline]
@@ -842,17 +839,7 @@ impl DirEntry {
     *
     */
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
-    stat_syscall!(fstatat, fd, self, AT_SYMLINK_FOLLOW)
-    }
-
-    #[inline]
-    pub(crate) fn get_lstat_private(ptr: *const c_char) -> Result<stat> {
-        stat_syscall!(lstat, ptr)
-    }
-
-    #[inline]
-    pub(crate) fn get_stat_private(ptr: *const c_char) -> Result<stat> {
-        stat_syscall!(stat, ptr)
+        stat_syscall!(fstatat, fd, self, AT_SYMLINK_FOLLOW)
     }
 
     #[inline]
@@ -1141,7 +1128,7 @@ impl DirEntry {
         let cstring = std::ffi::CString::new(path_ref).map_err(|_| DirEntryError::NullError)?;
 
         // extract information from successful stat
-        let get_stat = Self::get_lstat_private(cstring.as_ptr())?;
+        let get_stat = stat_syscall!(lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
         let inode = access_stat!(get_stat, st_ino);
         Ok(Self {
             path: cstring.into(),

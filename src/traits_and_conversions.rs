@@ -29,8 +29,6 @@ where
     /// Checks if file extension matches given bytes (case-insensitive)
     fn matches_extension(&self, ext: &[u8]) -> bool;
 
-    /// Gets file metadata via `lstat`
-    /// Gets file metadata via `stat`
     /// Converts to `&Path` (zero-cost on Unix)
     fn as_path(&self) -> &Path;
     /// Gets index of filename component start

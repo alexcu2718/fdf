@@ -1,12 +1,12 @@
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
     DT_SOCK, DT_UNKNOWN, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
-    fstatat, mode_t, stat,
+    fstatat, mode_t,
 };
 
-use crate::{DirEntry, FileDes};
+use crate::FileDes;
 use core::ffi::CStr;
-use core::mem::MaybeUninit;
+
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[expect(
@@ -91,33 +91,6 @@ impl FileType {
         }
     }
 
-    #[must_use]
-    #[inline]
-    #[expect(clippy::if_not_else, reason = "We pick the likelier branch first")]
-    /**
-    Fallback method to determine file type when `d_type` is unavailable or `DT_UNKNOWN`
-
-    This method first checks the `d_type` value, and if it's `DT_UNKNOWN`,
-    falls back to a more expensive lstat-based lookup using the file path.
-
-    # Parameters
-    - `d_type`: The file type from a dirent structure
-    - `file_path`: The path cstr to use
-
-    # Notes
-    While ext4 and BTRFS (and others, not entirely tested!) typically provide reliable `d_type` values,
-    other filesystems like NTFS, XFS, or FUSE-based filesystems
-    may require the fallback path.
-    */
-    pub fn from_dtype_fallback(d_type: u8, file_path: &CStr) -> Self {
-        if d_type != libc::DT_UNKNOWN {
-            Self::from_dtype(d_type)
-        } else {
-            DirEntry::get_lstat_private(file_path.as_ptr())
-                .map(|statted| Self::from_stat(&statted))
-                .unwrap_or(Self::Unknown)
-        }
-    }
     /**
     Determines the file type from a file descriptor and filename without following symlinks
 
@@ -140,22 +113,7 @@ impl FileType {
     #[inline]
     #[must_use]
     pub fn from_fd_no_follow(fd: &FileDes, filename: &CStr) -> Self {
-        let mut stat_buf = MaybeUninit::<stat>::uninit();
-        // SAFETY: We are passing a valid cstr (null terminated)
-        let res = unsafe {
-            fstatat(
-                fd.0,
-                filename.as_ptr(),
-                stat_buf.as_mut_ptr(),
-                AT_SYMLINK_NOFOLLOW,
-            )
-        };
-        if res == 0 {
-            // SAFETY: If the return code is 0, we know it's been initialised properly
-            Self::from_stat(&unsafe { stat_buf.assume_init() })
-        } else {
-            Self::Unknown
-        }
+        stat_syscall!(fstatat, fd, filename, AT_SYMLINK_NOFOLLOW, DTYPE)
     }
 
     #[inline]
@@ -182,22 +140,7 @@ impl FileType {
 
     */
     pub fn from_fd_follow(fd: &FileDes, filename: &CStr) -> Self {
-        let mut stat_buf = MaybeUninit::<stat>::uninit();
-        // SAFETY: We are passing a valid cstr (null terminated)
-        let res = unsafe {
-            fstatat(
-                fd.0,
-                filename.as_ptr(),
-                stat_buf.as_mut_ptr(),
-                AT_SYMLINK_FOLLOW,
-            )
-        };
-        if res == 0 {
-            // SAFETY: If the return code is 0, we know it's been initialised properly
-            Self::from_stat(&unsafe { stat_buf.assume_init() })
-        } else {
-            Self::Unknown
-        }
+        stat_syscall!(fstatat, fd, filename, AT_SYMLINK_FOLLOW, DTYPE)
     }
     /// Returns true if this represents a directory  (cost free check)
     #[inline]

@@ -463,7 +463,7 @@ impl GetDents {
         self.end_of_stream = no_bytes_left
             || (self.buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes);
 
-        // Reset to start reading from the beginning of the new buffer data for the case where it's got 
+        // Reset to start reading from the beginning of the new buffer data for the case where it's got
         self.offset = 0;
 
         // Return true only if we successfully read non-zero bytes

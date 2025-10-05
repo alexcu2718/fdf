@@ -142,7 +142,9 @@ When I began I had barely used Linux for a few months, I didn't even know C, so 
 Even though fdf is already faster than fd in all cases, I'm planning to experiment with filtering before allocation(I don't stop at good enough!)
 Rust's std::fs has some inefficiencies, too much heap allocation, file descriptor manipulation, constant strlen calculations, usage of readdir (not optimal because it implicitly stat calls every file it sees!). Rewriting all of it  using libc was the ideal way to bypass that and learn in the process.
 
-Currently, filtering-before-allocation is partially implemented in the crate but not yet exposed via the CLI. If the results prove consistently performant, I'll integrate it into the public tool(I will probably leave this until I get datetime working sufficiently.)
+Notably the standard library will keep file descriptors open(UNIX specific) until the last reference to the inner `ReadDir` disappears,
+fundamentally this means that this cause a lot more IO. It will also tend to call 'stat' style calls heavily which seemed inefficient
+(I do have a shell script documenting syscall differences here(it's crude but it works well)) [Available here](https://github.com/alexcu2718/fdf/blob/main/fd_benchmarks/syscalltest.sh)
 
 ### Development Philosophy
 
@@ -187,8 +189,6 @@ While avoiding excessive fragmentation, I plan to extract reusable components (l
 **Windows Support**: Acknowledged as a significant undertaking an almost entire separate codebase(portability ain't fun), but valuable for both usability and learning Windows internals.
 
 ## Enhance shell completions
-
-Meanwhile my shell completions are pretty good, I want to improve them a lot, this shouldn't be too bad(famous last words)
 
 ### Core Philosophy
 

@@ -1,13 +1,12 @@
 use core::fmt;
 use libc::{
     EACCES, EAGAIN, EBADF, EBUSY, EEXIST, EFAULT, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP, EMFILE,
-    EMLINK, ENAMETOOLONG, ENFILE, ENOENT, ENOMEM, ENOTDIR, EOVERFLOW, EPERM, ETXTBSY, EXDEV,
+    ENAMETOOLONG, ENFILE, ENOENT, ENOMEM, ENOTDIR, EOVERFLOW, EPERM, ETXTBSY,
 };
 use std::io;
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]
-/// Comprehensive filesystem I/O error type mapping libc error codes to meaningful variants.
 ///
 /// This enum encapsulates all possible I/O errors that can occur during filesystem
 /// operations, with precise mapping from libc error codes to semantic error variants.
@@ -39,10 +38,6 @@ pub enum FilesystemIOError {
     IsDirectory(io::Error),
     /// File too large (EFBIG, EOVERFLOW)
     FileTooLarge(io::Error),
-    /// Too many hard links (EMLINK)
-    TooManyLinks(io::Error),
-    /// Invalid cross-device link (EXDEV)
-    CrossDeviceLink(io::Error),
     /// Resource busy or locked (EBUSY, ETXTBSY)
     ResourceBusy(io::Error),
     /// Invalid file descriptor (EBADF)
@@ -78,8 +73,6 @@ impl fmt::Display for FilesystemIOError {
             Self::FileExists(e) => write!(f, "File already exists: {e}"),
             Self::IsDirectory(e) => write!(f, "Path refers to a directory: {e}"),
             Self::FileTooLarge(e) => write!(f, "File too large: {e}"),
-            Self::TooManyLinks(e) => write!(f, "Too many hard links: {e}"),
-            Self::CrossDeviceLink(e) => write!(f, "Invalid cross-device link: {e}"),
             Self::ResourceBusy(e) => write!(f, "Resource busy or locked: {e}"),
             Self::InvalidFileDescriptor(e) => write!(f, "Invalid file descriptor: {e}"),
             Self::ProcessFileLimitReached(e) => {
@@ -135,10 +128,7 @@ impl FilesystemIOError {
                 ENOMEM => Self::OutOfMemory,
                 EFBIG | EOVERFLOW => Self::FileTooLarge(error),
 
-                // File system structure errors
-                EMLINK => Self::TooManyLinks(error),
-                EXDEV => Self::CrossDeviceLink(error),
-
+            
                 // File state and locking errors
                 EBUSY | ETXTBSY => Self::ResourceBusy(error),
 
@@ -159,7 +149,6 @@ impl FilesystemIOError {
                 io::ErrorKind::IsADirectory => Self::IsDirectory(error),
                 io::ErrorKind::NotSeekable => Self::InvalidFileDescriptor(error),
                 io::ErrorKind::ResourceBusy => Self::ResourceBusy(error),
-                io::ErrorKind::TooManyLinks => Self::TooManyLinks(error),
                 io::ErrorKind::InvalidFilename => Self::InvalidPath,
                 io::ErrorKind::Unsupported => Self::UnsupportedOperation(error),
                 io::ErrorKind::UnexpectedEof => Self::FilesystemIO(error),

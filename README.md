@@ -93,7 +93,7 @@ It's my personal opinion that a program should always terminate regardless so I'
 
 ### Key Optimisations
 
-- **cstr! macro**: Uses a byte slice as a pointer, automatically initialising memory (no heap allocation) and adding a null terminator for FFI use
+- **Getdents**: Improved the Linux specific implementation of this to be called far fewer types, see the GetDents struct for more information.
 - **find_char_in_word**: Locates the first occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 - **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)
 

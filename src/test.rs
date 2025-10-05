@@ -1150,30 +1150,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_cstr() {
-        let test_bytes = b"randopath";
-        let c_str_test: *const u8 = unsafe { cstr!(test_bytes) };
-        assert!(
-            !c_str_test.is_null(),
-            "this should never return a null pointer if it's under {}",
-            crate::LOCAL_PATH_MAX
-        )
-        //well, it'll not pass the test anyway.
-    }
-
-    #[test]
-    fn test_cstr_n() {
-        let test_bytes = b"randopathmpathinlength";
-        const SIZE_OF_PATH: usize = 23; //this would panic if it was any bigger
-        let c_str_test: *const u8 = unsafe { cstr!(test_bytes, SIZE_OF_PATH) };
-        assert!(
-            !c_str_test.is_null(),
-            "this should never return a null pointer if it's under {}",
-            SIZE_OF_PATH
-        )
-        //well, it'll not pass the test anyway.
-    }
 
     #[test]
     fn test_path_construction() {

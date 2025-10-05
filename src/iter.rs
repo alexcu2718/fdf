@@ -228,25 +228,6 @@ impl Drop for GetDents {
 #[cfg(target_os = "linux")]
 impl GetDents {
     #[inline]
-    /**
-      Advances to the next directory entry in the buffer and returns a pointer to it.
-
-      Increments the internal offset by the entry's record length, positioning the iterator
-      at the next entry for subsequent calls.
-
-      # Safety
-      - The buffer must contain valid `dirent64` structures
-      - You must check if `is_buffer_not_empty` is true before calling.
-    */
-    pub const unsafe fn get_next_entry(&mut self) -> NonNull<dirent64> {
-        // SAFETY: the buffer must contain enough (checked by caller).
-        let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
-        // SAFETY: By precondition
-        self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-        // SAFETY: as above
-        unsafe { NonNull::new_unchecked(d.cast_mut()) } //return the pointer
-    }
-    #[inline]
     #[must_use]
     /// Returns whether the directory stream has reached its end.
     ///
@@ -425,14 +406,6 @@ impl GetDents {
      - Resets `offset = 0` to start reading from the beginning of new buffer data
      - Updates `remaining_bytes` with the actual bytes read from the system call
     */
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "Negative error codes from getdents are explicitly handled by max(0)"
-    )]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "i64 to usize truncation is acceptable as buffer sizes are limited"
-    )]
     pub fn fill_buffer(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.is_end_of_stream() {
@@ -440,8 +413,18 @@ impl GetDents {
         }
 
         // Read directory entries, ignoring negative error codes
-        self.remaining_bytes = self.buffer.getdents(&self.fd).max(0) as usize;
-        let no_bytes_left = self.remaining_bytes == 0;
+        let remaining_bytes = self.buffer.getdents(&self.fd);
+        // Use a bit hack (multiply by 0 or 1) to make this very hot function branchless (or well, less branchy!)
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "hot function, worth some easy optimisation"
+        )]
+        {
+            self.remaining_bytes =
+                usize::from(remaining_bytes.is_positive()) * (remaining_bytes as usize);
+        }
+
+        let has_bytes_remaining: bool = remaining_bytes > 0;
         /*
 
          Smart end-of-stream detection: Avoid unnecessary system calls by detecting when
@@ -460,14 +443,14 @@ impl GetDents {
            system call, it would definitively call 0 bytes on next call, so we skip it!
            Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
         */
-        self.end_of_stream = no_bytes_left
-            || (self.buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes);
+        self.end_of_stream = !has_bytes_remaining
+            || self.buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes; //a boolean
 
         // Reset to start reading from the beginning of the new buffer data for the case where it's got
         self.offset = 0;
 
         // Return true only if we successfully read non-zero bytes
-        !no_bytes_left
+        has_bytes_remaining
     }
 
     /**
@@ -508,6 +491,26 @@ impl GetDents {
         */
         unsafe { libc::readahead(self.fd.0, self.offset as _, count) }
         // Note, not used yet but will be.
+    }
+
+    #[inline]
+    /**
+      Advances to the next directory entry in the buffer and returns a pointer to it.
+
+      Increments the internal offset by the entry's record length, positioning the iterator
+      at the next entry for subsequent calls.
+
+      # Safety
+      - The buffer must contain valid `dirent64` structures
+      - You must check if `is_buffer_not_empty` is true before calling.
+    */
+    pub const unsafe fn get_next_entry(&mut self) -> NonNull<dirent64> {
+        // SAFETY: the buffer must contain enough (checked by caller).
+        let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
+        // SAFETY: By precondition
+        self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
+        // SAFETY: as above
+        unsafe { NonNull::new_unchecked(d.cast_mut()) } //return the pointer
     }
 
     #[inline]

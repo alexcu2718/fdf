@@ -171,6 +171,7 @@ pub use filetype::FileType;
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+//use std::num::
 /**
 // The `Finder` struct is the main entry point for the file search.
 // Its methods are exposed for building the search configuration

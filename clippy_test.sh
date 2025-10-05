@@ -7,8 +7,6 @@ cargo clippy --all -- \
   -W clippy::nursery \
   -D warnings \
   -A clippy::arithmetic_side_effects \
-  -A clippy::cast_possible_truncation \
-  -A clippy::cast_possible_wrap \
   -A clippy::default_numeric_fallback \
   -A clippy::as_conversions \
   -A clippy::question_mark_used \

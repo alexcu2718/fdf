@@ -1,7 +1,8 @@
 use core::num::NonZeroU16;
 
 use crate::{
-    DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError, SizeFilter,
+    DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError,
+    SizeFilter, const_from_env,
 };
 use dashmap::DashSet;
 
@@ -12,6 +13,9 @@ use std::{
     path::Path,
     path::PathBuf,
 };
+
+//Set the threadcount at compile time.
+const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
 
 /// A builder for creating a `Finder` instance with customisable options.
 ///
@@ -50,7 +54,6 @@ impl FinderBuilder {
       * `root` - The root directory to search
     */
     pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
-        let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1); //set default threadcount
         Self {
             root: root.as_ref().to_owned(),
             pattern: None,
@@ -68,7 +71,7 @@ impl FinderBuilder {
             use_glob: false,
             canonicalise: false,
             same_filesystem: false,
-            thread_count,
+            thread_count: THREAD_COUNT,
         }
     }
     #[must_use]

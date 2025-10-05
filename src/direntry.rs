@@ -1,80 +1,81 @@
-//! A high-performance, parallel directory traversal and file search library.
-//!
-//! This library provides efficient file system traversal with features including:
-//! - Parallel directory processing using Rayon
-//! - Low-level system calls for optimal performance on supported platforms
-//! - Flexible filtering by name, size, type, and custom criteria
-//! - Symbolic link handling with cycle detection
-//! - Cross-platform support with platform-specific optimisations
-//!
-//! # Examples
-//! Simple file search example
-//! ```no_run
-//! use fdf::{Finder, SearchConfig};
-//! use std::sync::Arc;
-//!
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let finder= Finder::init("/some/path").pattern("*.txt")
-//!         .build()
-//!         .expect("Failed to build finder");
-//!
-//!     let receiver = finder.traverse()
-//!         .expect("Failed to start traversal");
-//!
-//!     let mut file_count = 0;
-//!     let mut batch_count = 0;
-//!
-//!     for batch in receiver {
-//!         batch_count += 1;
-//!         for entry in batch {
-//!             file_count += 1;
-//!             println!("Found: {:?}", entry);
-//!         }
-//!     }
-//!
-//!     println!("Discovered {} files in {} batches", file_count, batch_count);
-//!
-//!     Ok(())
-//! }
-//! ```
-//!
-//! Advanced file search example
-//! ```no_run
-//! use fdf::{Finder, SizeFilter, FileTypeFilter};
-//!
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let finder = Finder::init("/some/path").pattern("*.txt")
-//!         .keep_hidden(false)
-//!         .case_insensitive(true)
-//!         .keep_dirs(true)
-//!         .max_depth(Some(5))
-//!         .follow_symlinks(false)
-//!         .filter_by_size(Some(SizeFilter::Min(1024)))
-//!         .type_filter(Some(FileTypeFilter::File))
-//!         .show_errors(true)
-//!         .build()
-//!         .map_err(|e| format!("Failed to build finder: {}", e))?;
-//!
-//!     let receiver = finder.traverse()
-//!         .map_err(|e| format!("Failed to start traversal: {}", e))?;
-//!
-//!     let mut file_count = 0;
-//!
-//!     for batch in receiver {
-//!         for entry in batch {
-//!             file_count += 1;
-//!             println!("{:?}  )",
-//!                 entry,
-//!             
-//!             );
-//!         }
-//!     }
-//!
-//!     println!("Search completed! Found {} files", file_count);
-//!
-//!     Ok(())
-//! }
+/*!
+ A high-performance, parallel directory traversal and file search library.
 
+ This library provides efficient file system traversal with features including:
+ - Parallel directory processing using Rayon
+ - Low-level system calls for optimal performance on supported platforms
+ - Flexible filtering by name, size, type, and custom criteria
+ - Symbolic link handling with cycle detection
+ - Cross-platform support with platform-specific optimisations
+
+ # Examples
+ Simple file search example
+ ```no_run
+ use fdf::{Finder, SearchConfig};
+ use std::sync::Arc;
+
+ fn main() -> Result<(), Box<dyn std::error::Error>> {
+     let finder= Finder::init("/some/path").pattern("*.txt")
+         .build()
+         .expect("Failed to build finder");
+
+     let receiver = finder.traverse()
+         .expect("Failed to start traversal");
+
+     let mut file_count = 0;
+     let mut batch_count = 0;
+
+     for batch in receiver {
+         batch_count += 1;
+         for entry in batch {
+             file_count += 1;
+             println!("Found: {:?}", entry);
+         }
+     }
+
+     println!("Discovered {} files in {} batches", file_count, batch_count);
+
+     Ok(())
+ }
+ ```
+
+ Advanced file search example
+ ```no_run
+ use fdf::{Finder, SizeFilter, FileTypeFilter};
+
+ fn main() -> Result<(), Box<dyn std::error::Error>> {
+     let finder = Finder::init("/some/path").pattern("*.txt")
+         .keep_hidden(false)
+         .case_insensitive(true)
+         .keep_dirs(true)
+         .max_depth(Some(5))
+         .follow_symlinks(false)
+         .filter_by_size(Some(SizeFilter::Min(1024)))
+         .type_filter(Some(FileTypeFilter::File))
+         .show_errors(true)
+         .build()
+         .map_err(|e| format!("Failed to build finder: {}", e))?;
+
+     let receiver = finder.traverse()
+         .map_err(|e| format!("Failed to start traversal: {}", e))?;
+
+     let mut file_count = 0;
+
+     for batch in receiver {
+         for entry in batch {
+             file_count += 1;
+             println!("{:?}  )",
+                 entry,
+
+             );
+         }
+     }
+
+     println!("Search completed! Found {} files", file_count);
+
+     Ok(())
+ }
+*/
 #[cfg(target_os = "linux")]
 use crate::GetDents;
 use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::FileType};
@@ -103,6 +104,7 @@ use std::{
   - **Inode**: An 8-byte integer for the file's unique inode number.
   - **Depth**: A 2-byte integer indicating the entry's depth from the root.
   - **File name index**: A 2-byte integer pointing to the start of the file name within the path buffer.
+  - **is traversible cache**: A 1 byte `Cell<Option<bool>>` an Implementation detail that avoids recalling stat on symlinks
 
   # Examples
 
@@ -213,7 +215,7 @@ impl DirEntry {
     pub fn is_executable(&self) -> bool {
         // X_OK is the execute permission, requires access call
         // SAFETY: We know the path is valid because internally it's a cstr
-        self.is_regular_file() && unsafe { access(self.path.as_ptr(), X_OK) == 0 }
+        self.is_regular_file() && unsafe { access(self.as_ptr(), X_OK) == 0 }
     }
 
     /*
@@ -228,7 +230,7 @@ impl DirEntry {
     */
     #[inline]
     pub const fn as_ptr(&self) -> *const c_char {
-        self.path.as_ptr()
+        self.path.as_ptr() //Have to explicitly override the default deref to bytes
     }
 
     #[inline]
@@ -254,27 +256,41 @@ impl DirEntry {
 
     #[inline]
     /**
-     * Opens the directory and returns a file descriptor.
+     Opens the directory and returns a file descriptor.
 
-    This is a low-level operation that opens the directory with the following flags:
+     This is a low-level operation that opens the directory with the following flags:
      - `O_CLOEXEC`: Close the file descriptor on exec
      - `O_DIRECTORY`: Fail if not a directory
-    - `O_NONBLOCK`: Open in non-blocking mode
+     - `O_NONBLOCK`: Open in non-blocking mode
+
+     # Examples
+
+     ```
+     use fdf::{DirEntry,Result};
+
+     # fn main() -> Result<()> {
+     // Open the current directory
+     let dir = DirEntry::new(".").unwrap();
+     let fd = dir.open()?;
+     // File descriptor can now be used for directory operations
+     # Ok(())
+     # }
+     ```
 
      # Errors
 
      Returns an error if:
-    - The directory doesn't exist or can't be opened
-    - The path doesn't point to a directory
-    - Permission is denied
+     - The directory doesn't exist or can't be opened
+     - The path doesn't point to a directory
+     - Permission is denied
     */
-    pub fn open_fd(&self) -> Result<FileDes> {
+    pub fn open(&self) -> Result<FileDes> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
         const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
 
         //   #[cfg(target_os="linux")]
-        //  let fd=unsafe{crate::syscalls::open_asm(self.path.as_ref(),FLAGS)};
+        //  let fd=unsafe{crate::syscalls::open_asm(self.as_ptr(),FLAGS)};
         // #[cfg(not(target_os="linux"))]
         // SAFETY: the pointer is null terminated
         let fd = unsafe { open(self.as_ptr(), FLAGS) };
@@ -283,6 +299,84 @@ impl DirEntry {
             Err(std::io::Error::last_os_error().into())
         } else {
             Ok(crate::types::FileDes(fd))
+        }
+    }
+    /**
+     Opens the directory relative to a directory file descriptor and returns a file descriptor.
+
+     This function uses the `openat` system call to open a directory relative to an already open
+     directory file descriptor. This is useful for avoiding race conditions that can occur when
+     using absolute paths, as it ensures the operation is performed relative to a specific directory.
+
+     The directory is opened with the following flags:
+     - `O_CLOEXEC`: Close the file descriptor on exec
+     - `O_DIRECTORY`: Fail if not a directory
+     - `O_NONBLOCK`: Open in non-blocking mode
+
+     # Examples
+
+     ## Basic usage
+
+     ```
+     use fdf::{DirEntry, FileDes, Result};
+     use std::fs;
+     use std::env::temp_dir;
+
+     # fn main() -> Result<()> {
+     // Create a temporary directory for testing
+     let temp_dir = temp_dir().join("fdf_openat_test");
+     let _ = fs::remove_dir_all(&temp_dir);
+     fs::create_dir_all(&temp_dir)?;
+
+     // Create a subdirectory inside the temp directory
+     let subdir_path = temp_dir.join("test_subdir");
+     fs::create_dir(&subdir_path)?;
+
+     // Open the temporary directory
+     let temp_dir_entry = DirEntry::new(&temp_dir)?;
+     let temp_fd = temp_dir_entry.open()?;
+
+     // Use openat to open the subdirectory relative to the temp directory
+     let subdir_entry = DirEntry::new(&subdir_path)?;
+     let subdir_fd = subdir_entry.openat(&temp_fd)?;
+
+     // Clean up
+     let _ = fs::remove_dir_all(&temp_dir);
+     # Ok(())
+     # }
+     ```
+     # Platform-specific behavior
+
+     - On Linux, this uses the `openat` system call directly
+     - The behavior may vary on other Unix-like systems, but the interface is standardized in POSIX
+
+     # Errors
+
+     Returns an error if:
+     - The directory doesn't exist or can't be opened
+     - The path doesn't point to a directory (fails due to `O_DIRECTORY` flag)
+     - Permission is denied for the directory
+     - The parent file descriptor (`dir_fd`) is invalid or not open
+     - The path contains null bytes
+     - System resources are exhausted (too many open file descriptors)
+
+     # See also
+
+     - [openat(2) - Linux man page](https://man7.org/linux/man-pages/man2/openat.2.html)
+     - [`DirEntry::open`] for opening directories with absolute paths
+    */
+    #[inline]
+    pub fn openat(&self, fd: &FileDes) -> Result<FileDes> {
+        // Opens the file and returns a file descriptor.
+        // This is a low-level operation that may fail if the file does not exist or cannot be opened.
+        const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
+        // SAFETY: the pointer is null terminated
+        let filedes = unsafe { libc::openat(fd.0, self.file_name_cstr().as_ptr(), FLAGS) };
+
+        if filedes < 0 {
+            Err(std::io::Error::last_os_error().into())
+        } else {
+            Ok(crate::types::FileDes(filedes))
         }
     }
 
@@ -301,7 +395,7 @@ impl DirEntry {
      - Permission is denied
      - System resources are exhausted
     */
-    pub fn open_dir(&self) -> Result<NonNull<libc::DIR>> {
+    pub fn opendir(&self) -> Result<NonNull<libc::DIR>> {
         // SAFETY: we are passing a null terminated directory to opendir
 
         let dir = unsafe { opendir(self.as_ptr()) };
@@ -313,6 +407,7 @@ impl DirEntry {
         // SAFETY: know it's non-null
         Ok(unsafe { NonNull::new_unchecked(dir) }) // Return a pointer to the start `DIR` stream
     }
+
     #[inline]
     #[must_use]
     // Converts to a lossy string for ease of use
@@ -1079,7 +1174,6 @@ impl DirEntry {
     /// file type, inode, and some derived metadata such as depth and file name index.
     ///
     ///
-    /// - `DirEntryError::InvalidStat` if the underlying `lstat` call fails. (aka permissions/file doesnt exist)
     ///
     /// # Examples
     /// ```
@@ -1102,7 +1196,7 @@ impl DirEntry {
     ///
     /// # Errors
     ///
-    /// The following returns an `InvalidStat` error when the file doesn't exist:
+    /// The following returns an `DirEntryError::IOError` error when the file doesn't exist:
     ///
     /// ```
     /// use fdf::{DirEntry, DirEntryError};
@@ -1124,8 +1218,7 @@ impl DirEntry {
     /// ```
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
         let path_ref = path.as_ref().as_bytes(); //TODO GET RID OF UNWRAP HERE
-        #[allow(clippy::map_err_ignore)] //lazy(don't want to also increase size of enum)
-        let cstring = std::ffi::CString::new(path_ref).map_err(|_| DirEntryError::NullError)?;
+        let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::NulError)?;
 
         // extract information from successful stat
         let get_stat = stat_syscall!(lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
@@ -1141,8 +1234,11 @@ impl DirEntry {
     }
 
     #[inline]
-    #[expect(clippy::cast_sign_loss, reason = "needs to be in u32 for chrono")]
-    #[expect(clippy::cast_possible_truncation, reason = "same as above")]
+    #[expect(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        reason = "needs to be in u32 for chrono"
+    )]
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     pub fn modified_time(&self) -> Result<DateTime<Utc>> {
         let statted = self.get_lstat()?;

@@ -30,24 +30,25 @@ impl core::fmt::Display for ParseSizeError {
 }
 
 impl core::error::Error for ParseSizeError {}
+/**
+ A filter for file sizes based on various comparison operations.
 
-/// A filter for file sizes based on various comparison operations.
-///
-/// # Examples
-///
-/// ```
-/// use fdf::SizeFilter;
-///
-/// // Files larger than 1MB
-/// let filter = SizeFilter::from_string("+1MB").unwrap();
-/// assert!(filter.is_within_size(2_000_000)); // 2MB passes
-/// assert!(!filter.is_within_size(500_000));  // 500KB fails
-///
-/// // Files exactly 500 bytes
-/// let filter = SizeFilter::from_string("500").unwrap();
-/// assert!(filter.is_within_size(500));
-/// assert!(!filter.is_within_size(501));
-/// ```
+ # Examples
+
+ ```
+ use fdf::SizeFilter;
+
+ // Files larger than 1MB
+ let filter = SizeFilter::from_string("+1MB").unwrap();
+ assert!(filter.is_within_size(2_000_000)); // 2MB passes
+ assert!(!filter.is_within_size(500_000));  // 500KB fails
+
+ // Files exactly 500 bytes
+ let filter = SizeFilter::from_string("500").unwrap();
+ assert!(filter.is_within_size(500));
+ assert!(!filter.is_within_size(501));
+ ```
+*/
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(clippy::exhaustive_enums)]
 pub enum SizeFilter {
@@ -60,7 +61,35 @@ pub enum SizeFilter {
 }
 
 impl SizeFilter {
-    #[allow(clippy::missing_errors_doc)] //private function not doing this
+    /**
+     Parses a size string and returns a `SizeFilter`
+
+     # Arguments
+
+     * `s` - A string slice containing the size specification
+
+     # Returns
+
+     * `Ok(SizeFilter)` - If parsing was successful
+     * `Err(ParseSizeError)` - If the string couldn't be parsed
+
+     # Errors
+
+     Returns `ParseSizeError` in the following cases:
+     - `ParseSizeError::Empty` if the input string is empty
+     - `ParseSizeError::InvalidNumber` if the numeric portion is invalid
+     - `ParseSizeError::InvalidUnit` if the unit suffix is unrecognized
+     - `ParseSizeError::InvalidFormat` if the overall format doesn't match expectations
+
+     # Format
+
+     The expected format is: `[+|=]?<number>[unit]?`
+     - `+` prefix: minimum size filter (files >= size)
+     - `=` prefix: exact size filter (files == size)
+     - No prefix: maximum size filter (files <= size)
+     - Supported units: K, M, G, T (metric) and Ki, Mi, Gi, Ti (binary)
+     - Default unit is bytes if no unit specified
+    */
     pub fn from_string(s: &str) -> Result<Self, ParseSizeError> {
         Self::parse_args(s).ok_or(ParseSizeError::InvalidFormat)
     }

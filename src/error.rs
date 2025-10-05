@@ -178,7 +178,7 @@ pub enum DirEntryError {
     /// Path contains invalid UTF-8 sequences
     Utf8Error(core::str::Utf8Error),
     /// Invalid nulls detected in filename
-    NullError,
+    NulError(std::ffi::NulError),
     /// Filesystem I/O error
     IOError(FilesystemIOError),
 }
@@ -207,7 +207,7 @@ impl fmt::Display for DirEntryError {
         match self {
             Self::TimeError => write!(f, "Invalid time conversion"),
             Self::Utf8Error(e) => write!(f, "UTF-8 conversion error: {e}"),
-            Self::NullError => write!(f, "Invalid nulls detected in name"),
+            Self::NulError(e) => write!(f, "Invalid nulls detected in name {e}"),
             Self::IOError(e) => write!(f, "I/O error: {e}"),
         }
     }

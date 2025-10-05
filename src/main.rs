@@ -1,5 +1,6 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
+use fdf::const_from_env;
 use fdf::{
     FileTypeFilter, FileTypeParser, Finder, LOCAL_PATH_MAX, SearchConfigError, SizeFilter,
     SizeFilterParser,
@@ -8,6 +9,9 @@ use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 use std::str;
+
+// Set threads at compile time, defaulting to 1 in worst case scenario
+const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
 
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -209,12 +213,11 @@ struct Args {
 }
 
 #[allow(clippy::exit)] //exiting for cli use
-#[expect(clippy::print_stderr, reason = "Similar to above")]
 fn main() -> Result<(), SearchConfigError> {
-    if LOCAL_PATH_MAX < libc::PATH_MAX as usize {
-        eprintln!("We do not expect LOCAL_PATH_MAX to be less than PATH_MAX");
-        std::process::exit(1);
-    }
+    const _: () = assert!(
+        LOCAL_PATH_MAX >= libc::PATH_MAX as usize,
+        "LOCAL_PATH_MAX too small!"
+    );
 
     let args = Args::parse();
 
@@ -226,8 +229,6 @@ fn main() -> Result<(), SearchConfigError> {
         generate(generator, &mut cmd, bin_name, &mut stdout());
         return Ok(());
     }
-
-    let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1);
 
     let path = args.directory.unwrap_or_else(|| ".".into());
     let finder = Finder::init(&path)
@@ -246,7 +247,7 @@ fn main() -> Result<(), SearchConfigError> {
         .show_errors(args.show_errors)
         .use_glob(args.glob)
         .same_filesystem(args.same_file_system)
-        .thread_count(args.thread_num.unwrap_or(thread_count))
+        .thread_count(args.thread_num.unwrap_or(THREAD_COUNT))
         .build()?;
 
     finder.print_results(args.no_colour, args.top_n, args.sort)?;

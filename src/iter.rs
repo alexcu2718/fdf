@@ -81,7 +81,7 @@ impl ReadDir {
 
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        let dir_stream = dir_path.open_dir()?; //read the directory and get the pointer to the DIR structure.
+        let dir_stream = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
         // SAFETY:This pointer is forcefully null terminated and below PATH_MAX (system dependent)
         let (path_buffer, path_len) = unsafe { PathBuffer::init_from_direntry(dir_path) };
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
@@ -299,8 +299,7 @@ impl GetDents {
     }
 
     #[inline]
-    #[allow(clippy::integer_division)] // Trust me, you dont want floats.
-    #[allow(clippy::integer_division_remainder_used)]
+    #[allow(clippy::integer_division, clippy::integer_division_remainder_used)] // Trust me, you dont want floats.
     /**
 
      This provides a lower bound by dividing the remaining bytes by the size of a `dirent64`
@@ -374,6 +373,11 @@ impl GetDents {
     }
 
     #[inline]
+    #[expect(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        reason = "hot function, worth some easy optimisation, not caring about 32bit target"
+    )]
     /**
      Fills the buffer with directory entries using the getdents system call.
 
@@ -414,17 +418,15 @@ impl GetDents {
 
         // Read directory entries, ignoring negative error codes
         let remaining_bytes = self.buffer.getdents(&self.fd);
-        // Use a bit hack (multiply by 0 or 1) to make this very hot function branchless (or well, less branchy!)
-        #[expect(
-            clippy::cast_sign_loss,
-            reason = "hot function, worth some easy optimisation"
-        )]
-        {
-            self.remaining_bytes =
-                usize::from(remaining_bytes.is_positive()) * (remaining_bytes as usize);
-        }
 
-        let has_bytes_remaining: bool = remaining_bytes > 0;
+        let has_bytes_remaining = remaining_bytes.is_positive();
+        /*
+         Use a bit hack (multiply by 0 or 1) to make this statement branchless
+         This will naturally wrap for any negative numbers but we're multiplying those ones by 0 anyway!
+         this could've been done via `remaining_bytes.max(0) as usize`  but this maps cleanly to assembly.
+        */
+        self.remaining_bytes = usize::from(has_bytes_remaining) * (remaining_bytes as usize);
+
         /*
 
          Smart end-of-stream detection: Avoid unnecessary system calls by detecting when
@@ -446,6 +448,8 @@ impl GetDents {
         self.end_of_stream = !has_bytes_remaining
             || self.buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes; //a boolean
 
+        // FIXME/TODO: Investigate potential cases of alignment errors on the arithmetic above,
+
         // Reset to start reading from the beginning of the new buffer data for the case where it's got
         self.offset = 0;
 
@@ -464,7 +468,7 @@ impl GetDents {
     }
 
     #[inline]
-    #[allow(clippy::cast_possible_wrap)] // It'll never be high enough (usize->isize)
+    #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
     /**
       Initiates read-ahead for the directory to improve sequential read performance.
 
@@ -515,7 +519,7 @@ impl GetDents {
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
-        let fd = dir.open_fd()?; //getting the file descriptor
+        let fd = dir.open()?; //getting the file descriptor
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
@@ -554,7 +558,7 @@ impl Iterator for GetDents {
                 // SAFETY: we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
                 let drnt = unsafe { self.get_next_entry() }; //get next entry in the buffer,
                 // this is a pointer to the dirent64 structure, which contains the directory entry information
-                // SAFETY: we know the pointer is not null therefor the operations in this macro are fine to use.
+                // SAFETY: we know the pointer is not null.
                 skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
                 //extract non . and .. files
                 return Some(self.construct_direntry(drnt));

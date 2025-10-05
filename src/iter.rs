@@ -52,6 +52,13 @@ impl ReadDir {
         NonNull::new(dirent_ptr)
     }
 
+
+    #[inline]
+    /// Provides read only access to the internal buffer that holds the path used to iterate with
+    pub const fn borrow_path_buffer(&self)->&PathBuffer{
+        &self.path_buffer
+    }
+
     #[inline]
     /**
       Returns the file descriptor for this directory.
@@ -187,7 +194,7 @@ pub struct GetDents {
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// Approximately 4.1KB in size, optimised for typical directory traversal
-    pub(crate) buffer: SyscallBuffer,
+    pub(crate) syscall_buffer: SyscallBuffer,
     /// Stack-allocated buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation
     pub(crate) path_buffer: PathBuffer,
@@ -298,79 +305,6 @@ impl GetDents {
         self.remaining_bytes
     }
 
-    #[inline]
-    #[allow(clippy::integer_division, clippy::integer_division_remainder_used)] // Trust me, you dont want floats.
-    /**
-
-     This provides a lower bound by dividing the remaining bytes by the size of a `dirent64`
-     structure. Since actual directory entries have variable sizes (due to different filename
-     lengths), this represents the worst-case scenario where all remaining entries use the
-     maximum possible space.
-
-     # Note
-     The actual number of entries WILL ALWAYS be higher than this estimate because:
-     - Directory entries with shorter names consume less space
-     - In theory, a buffer can hold up to 11 (extremely short name) files,
-     - EG: 11*24 (minimum reclen/size of `dirent64` struct)==264, while `size_of` a `dirent64` will always be 280
-     # Examples
-     ```
-     use fdf::DirEntry;
-     let start_path=std::env::temp_dir();
-     let getdents=DirEntry::new(start_path).unwrap().getdents().unwrap();
-     // Use for pre-allocation or progress estimation
-     let min_entries = getdents.minimum_direntries_left();
-     if min_entries > 100 {
-         // Likely many entries remaining
-     }
-     ```
-    */
-    pub const fn minimum_direntries_left(&self) -> usize {
-        self.remaining_bytes / size_of::<dirent64>() // floor division = minimum
-        //self.remaining_bytes.div_floor(size_of::<dirent64>())
-        // use this when const num traits is stable FIXME
-    }
-
-    /**
-    Returns the absolute maximum number of directory entries that could theoretically fit
-    in the entire buffer, assuming all entries use the minimum possible size.
-
-       */
-    pub const fn max_direntries_possible(&self) -> usize {
-        self.buffer.max_capacity().div_ceil(24)
-    }
-
-    #[inline]
-    #[allow(clippy::integer_division)]
-    /**
-     This provides an upper bound by dividing the remaining bytes by the minimum possible entry size.
-     Since directory entries have variable sizes but cannot be smaller than the fixed header portion
-     plus at least 1 byte for the filename, this represents the best-case scenario where all
-     remaining entries use the absolute minimum space.
-
-     # Note
-     The actual number of entries WILL ALWAYS be less than or equal to this estimate because:
-     - No directory entry can be smaller than the fixed header overhead
-     - On Linux `x86_64`, the minimum `d_reclen` is typically 24 bytes (header + null terminator)
-     - This gives the theoretical maximum possible entries that could fit in the remaining buffer
-
-     # Examples
-     ```
-     use fdf::DirEntry;
-     let start_path = std::env::temp_dir();
-     let getdents = DirEntry::new(start_path).unwrap().getdents().unwrap();
-     // Use for worst-case memory allocation
-     let max_entries = getdents.maximum_direntries_left();
-     if max_entries < 1000 {
-         // We have a reasonable upper bound
-     }
-     ```
-    */
-    #[allow(clippy::integer_division_remainder_used)]
-    pub const fn maximum_direntries_left(&self) -> usize {
-        //self.remaining_bytes.div_floor(24)
-        // use this when const num traits is stable FIXME
-        self.remaining_bytes / 24
-    }
 
     #[inline]
     #[expect(
@@ -417,7 +351,7 @@ impl GetDents {
         }
 
         // Read directory entries, ignoring negative error codes
-        let remaining_bytes = self.buffer.getdents(&self.fd);
+        let remaining_bytes = self.syscall_buffer.getdents(&self.fd);
 
         let has_bytes_remaining = remaining_bytes.is_positive();
         /*
@@ -446,7 +380,7 @@ impl GetDents {
            Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
         */
         self.end_of_stream = !has_bytes_remaining
-            || self.buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes; //a boolean
+            || self.syscall_buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes; //a boolean
 
         // FIXME/TODO: Investigate potential cases of alignment errors on the arithmetic above,
 
@@ -498,6 +432,7 @@ impl GetDents {
     }
 
     #[inline]
+    #[allow(clippy::cast_ptr_alignment)]
     /**
       Advances to the next directory entry in the buffer and returns a pointer to it.
 
@@ -509,14 +444,26 @@ impl GetDents {
       - You must check if `is_buffer_not_empty` is true before calling.
     */
     pub const unsafe fn get_next_entry(&mut self) -> NonNull<dirent64> {
-        // SAFETY: the buffer must contain enough (checked by caller).
-        let d: *const libc::dirent64 = unsafe { self.buffer.as_ptr().add(self.offset).cast::<_>() };
+        // SAFETY: the buffer must contain enough bytes to do a read (checked by caller).
+        let d:*mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
         // SAFETY: By precondition
         self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         // SAFETY: as above
-        unsafe { NonNull::new_unchecked(d.cast_mut()) } //return the pointer
+        unsafe { NonNull::new_unchecked(d) } //return the pointer
     }
 
+    #[inline]
+    /// Provides read only access to the internal buffer that holds the path used to iterate with
+    pub const fn borrow_path_buffer(&self)->&PathBuffer{
+        &self.path_buffer
+    }
+    #[inline]
+    /// Provides read only access to the internal buffer that holds the bytes read from the syscall
+    pub const fn borrow_syscall_buffer(&self)->&SyscallBuffer{
+        &self.syscall_buffer
+    }
+
+   
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
         let fd = dir.open()?; //getting the file descriptor
@@ -527,7 +474,7 @@ impl GetDents {
         let buffer = SyscallBuffer::new();
         Ok(Self {
             fd,
-            buffer,
+            syscall_buffer: buffer,
             path_buffer,
             file_name_index: path_len,
             parent_depth: dir.depth,

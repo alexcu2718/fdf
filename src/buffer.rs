@@ -2,7 +2,7 @@
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
-
+use core::marker::Copy;
 #[cfg(target_os = "linux")]
 use crate::FileDes;
 use crate::{DirEntry, PathBuffer};
@@ -17,7 +17,8 @@ mod sealed {
 ///
 /// This trait ensures type safety while allowing the buffer to work with both
 /// signed and unsigned byte types, which are equivalent for raw memory operations.
-pub trait ValueType: sealed::Sealed {}
+pub trait ValueType: sealed::Sealed + Copy {}
+
 impl ValueType for i8 {}
 impl ValueType for u8 {}
 
@@ -75,7 +76,7 @@ impl ValueType for u8 {}
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T, const SIZE: usize>
 where
-    T: ValueType, //only generic over i8 and u8!
+    T: ValueType//only generic over i8 and u8!
 {
     //generic over size.
     pub(crate) data: MaybeUninit<[T; SIZE]>,

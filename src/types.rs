@@ -30,6 +30,7 @@ const _: () = assert!(
     "LOCAL_PATH_MAX too small!"
 );
 
+#[cfg(target_os = "linux")] // We only care about the buffer on linux
 const _: () = assert!(
     BUFFER_SIZE >= PAGE_SIZE,
     "We expect the buffer to always be greater in capacity than the page"

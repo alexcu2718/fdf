@@ -59,12 +59,12 @@ mod tests {
     fn test_directory_traversal_permissions() {
         let temp_dir = temp_dir().join("traversal_test_again");
         let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
+        let _=fs::create_dir_all(&temp_dir);
 
         // no read permission
         let no_read_dir = temp_dir.join("no_read");
         let _=fs::remove_dir_all(&no_read_dir);
-        fs::create_dir(&no_read_dir).unwrap();
+        let _=fs::create_dir(&no_read_dir);
 
         let mut perms = fs::metadata(&no_read_dir).unwrap().permissions();
         perms.set_mode(0o000);

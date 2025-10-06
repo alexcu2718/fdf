@@ -63,6 +63,7 @@ mod tests {
 
         // no read permission
         let no_read_dir = temp_dir.join("no_read");
+        let _=fs::remove_dir_all(&no_read_dir);
         fs::create_dir(&no_read_dir).unwrap();
 
         let mut perms = fs::metadata(&no_read_dir).unwrap().permissions();

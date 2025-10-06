@@ -16,10 +16,6 @@ const_from_env!(
 );
 //basically this is the should allow getdents to grab a lot of entries in one go
 
-const_from_env!(
-    /// Set a custom page, fairly useless but helpful for compile time assertions because we don't want the page size to be greater than the IOBLOCK
-    PAGE_SIZE:usize="FDF_PAGE_SIZE",4096
-);
 
 pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
 #[cfg(target_os = "linux")] //we only use a buffer for syscalls on linux because of stable ABI
@@ -28,6 +24,12 @@ pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
 const _: () = assert!(
     LOCAL_PATH_MAX >= libc::PATH_MAX as usize,
     "LOCAL_PATH_MAX too small!"
+);
+
+#[cfg(target_os = "linux")] // We only care about the buffer on linux
+const_from_env!(
+    /// Set a custom page, fairly useless but helpful for compile time assertions because we don't want the page size to be greater than the IOBLOCK
+    PAGE_SIZE:usize="FDF_PAGE_SIZE",4096
 );
 
 #[cfg(target_os = "linux")] // We only care about the buffer on linux

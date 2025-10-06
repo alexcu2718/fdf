@@ -53,11 +53,7 @@ impl FileDes {
         &self.0
     }
 
-    #[inline]
-    pub fn close_fd(&self) {
-        // SAFETY: we've know the fd is valid and we're closing it as our drop impl
-        unsafe { libc::close(self.0) }; //
-    }
+ 
     #[must_use]
     #[inline]
     /// Checks if the file descriptor is currently open

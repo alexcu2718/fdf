@@ -156,7 +156,9 @@ impl Drop for ReadDir {
             self.dirfd.is_open(),
             "We expect the file descriptor to be open before closing"
         );
-        self.dirfd.close_fd()
+        // SAFETY:  not required
+        unsafe{libc::closedir(self.dir.as_ptr())};
+        // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
         //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
@@ -227,7 +229,8 @@ impl Drop for GetDents {
             self.fd.is_open(),
             "We expect the file descriptor to be open before closing"
         );
-        self.fd.close_fd()
+        // SAFETY:  not required
+        unsafe{libc::close(self.fd.0)};
         //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }

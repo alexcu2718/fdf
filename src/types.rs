@@ -16,7 +16,6 @@ const_from_env!(
 );
 //basically this is the should allow getdents to grab a lot of entries in one go
 
-
 pub type PathBuffer = AlignedBuffer<u8, LOCAL_PATH_MAX>;
 #[cfg(target_os = "linux")] //we only use a buffer for syscalls on linux because of stable ABI
 pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
@@ -55,7 +54,6 @@ impl FileDes {
         &self.0
     }
 
- 
     #[must_use]
     #[inline]
     /// Checks if the file descriptor is currently open

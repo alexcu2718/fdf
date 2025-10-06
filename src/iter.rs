@@ -52,10 +52,9 @@ impl ReadDir {
         NonNull::new(dirent_ptr)
     }
 
-
     #[inline]
     /// Provides read only access to the internal buffer that holds the path used to iterate with
-    pub const fn borrow_path_buffer(&self)->&PathBuffer{
+    pub const fn borrow_path_buffer(&self) -> &PathBuffer {
         &self.path_buffer
     }
 
@@ -157,7 +156,7 @@ impl Drop for ReadDir {
             "We expect the file descriptor to be open before closing"
         );
         // SAFETY:  not required
-        unsafe{libc::closedir(self.dir.as_ptr())};
+        unsafe { libc::closedir(self.dir.as_ptr()) };
         // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
         //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
@@ -230,7 +229,7 @@ impl Drop for GetDents {
             "We expect the file descriptor to be open before closing"
         );
         // SAFETY:  not required
-        unsafe{libc::close(self.fd.0)};
+        unsafe { libc::close(self.fd.0) };
         //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
@@ -308,7 +307,6 @@ impl GetDents {
         self.remaining_bytes
     }
 
-
     #[inline]
     #[expect(
         clippy::cast_sign_loss,
@@ -358,11 +356,12 @@ impl GetDents {
 
         let has_bytes_remaining = remaining_bytes.is_positive();
         /*
-         Use a bit hack (multiply by 0 or 1) to make this statement branchless
-         This will naturally wrap for any negative numbers but we're multiplying those ones by 0 anyway!
-         this could've been done via `remaining_bytes.max(0) as usize`  but this maps cleanly to assembly.
+         Use a bit hack to make this statement branchless
+
         */
-        self.remaining_bytes = usize::from(has_bytes_remaining) * (remaining_bytes as usize);
+        const NUM_OF_BYTES_MINUS_1: usize = 8 * core::mem::size_of::<usize>() - 1;
+        self.remaining_bytes =
+            (remaining_bytes & !(remaining_bytes >> NUM_OF_BYTES_MINUS_1)) as usize;
 
         /*
 
@@ -448,7 +447,7 @@ impl GetDents {
     */
     pub const unsafe fn get_next_entry(&mut self) -> NonNull<dirent64> {
         // SAFETY: the buffer must contain enough bytes to do a read (checked by caller).
-        let d:*mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+        let d: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
         // SAFETY: By precondition
         self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
         // SAFETY: as above
@@ -457,16 +456,15 @@ impl GetDents {
 
     #[inline]
     /// Provides read only access to the internal buffer that holds the path used to iterate with
-    pub const fn borrow_path_buffer(&self)->&PathBuffer{
+    pub const fn borrow_path_buffer(&self) -> &PathBuffer {
         &self.path_buffer
     }
     #[inline]
     /// Provides read only access to the internal buffer that holds the bytes read from the syscall
-    pub const fn borrow_syscall_buffer(&self)->&SyscallBuffer{
+    pub const fn borrow_syscall_buffer(&self) -> &SyscallBuffer {
         &self.syscall_buffer
     }
 
-   
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
         let fd = dir.open()?; //getting the file descriptor

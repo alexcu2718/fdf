@@ -128,7 +128,6 @@ impl FilesystemIOError {
                 ENOMEM => Self::OutOfMemory,
                 EFBIG | EOVERFLOW => Self::FileTooLarge(error),
 
-            
                 // File state and locking errors
                 EBUSY | ETXTBSY => Self::ResourceBusy(error),
 

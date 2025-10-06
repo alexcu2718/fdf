@@ -59,12 +59,12 @@ mod tests {
     fn test_directory_traversal_permissions() {
         let temp_dir = temp_dir().join("traversal_test_again");
         let _ = fs::remove_dir_all(&temp_dir);
-        let _=fs::create_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
 
         // no read permission
         let no_read_dir = temp_dir.join("no_read");
-        let _=fs::remove_dir_all(&no_read_dir);
-        let _=fs::create_dir(&no_read_dir);
+        let _ = fs::remove_dir_all(&no_read_dir);
+        let _ = fs::create_dir(&no_read_dir);
 
         let mut perms = fs::metadata(&no_read_dir).unwrap().permissions();
         perms.set_mode(0o000);
@@ -1150,7 +1150,6 @@ mod tests {
             let collected: Vec<_> = std::hint::black_box(result.collect());
         }
     }
-
 
     #[test]
     fn test_path_construction() {

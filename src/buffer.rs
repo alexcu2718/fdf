@@ -1,11 +1,11 @@
 #![allow(clippy::multiple_unsafe_ops_per_block)] //annoying convention
-use core::mem::MaybeUninit;
-use core::ops::{Index, IndexMut};
-use core::slice::SliceIndex;
-use core::marker::Copy;
 #[cfg(target_os = "linux")]
 use crate::FileDes;
 use crate::{DirEntry, PathBuffer};
+use core::marker::Copy;
+use core::mem::MaybeUninit;
+use core::ops::{Index, IndexMut};
+use core::slice::SliceIndex;
 mod sealed {
     /// Sealed trait pattern to restrict `ValueType` implementation to i8 and u8 only
     pub trait Sealed {}
@@ -76,7 +76,7 @@ impl ValueType for u8 {}
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T, const SIZE: usize>
 where
-    T: ValueType//only generic over i8 and u8!
+    T: ValueType, //only generic over i8 and u8!
 {
     //generic over size.
     pub(crate) data: MaybeUninit<[T; SIZE]>,

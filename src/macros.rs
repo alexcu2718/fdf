@@ -158,7 +158,6 @@ macro_rules! access_stat {
     ($stat_struct:expr, $field:ident) => {{ $stat_struct.$field as _ }};
 }
 
-
 #[doc(hidden)]
 /// A macro to skip . and .. entries when traversing a directory.
 ///

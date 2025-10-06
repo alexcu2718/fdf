@@ -2,7 +2,7 @@
 
 #![allow(clippy::undocumented_unsafe_blocks)] // too lazy to comment it all
 use core::ffi::CStr;
-
+use libc::{c_int, c_long};
 //can comment all of this later
 use crate::ValueType;
 #[inline]
@@ -21,7 +21,7 @@ use crate::ValueType;
 /// # Returns
 /// - File descriptor (positive integer) on success
 /// - -1 on error (check errno for details)
-pub fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> c_int {
     use core::arch::asm;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
@@ -51,7 +51,7 @@ pub fn open_asm(cstr: &CStr, flags: i32) -> i32 {
 ///
 /// # Returns
 /// File descriptor on success, -1 on error
-pub fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> c_int {
     use core::arch::asm;
 
     const MODE: i32 = libc::O_RDONLY; // Required even if unused in directory open
@@ -83,7 +83,7 @@ pub fn open_asm(cstr: &CStr, flags: i32) -> i32 {
 ///
 /// # Returns
 /// File descriptor on success, -1 on error
-pub fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> c_int {
     unsafe { libc::open(cstr.as_ptr(), flags) }
 }
 
@@ -168,7 +168,7 @@ pub unsafe fn close_asm(fd: i32) {
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> c_long
 where
     T: ValueType, //i8/u8
 {
@@ -208,7 +208,7 @@ where
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> c_long
 where
     T: ValueType, //i8/u8
 {
@@ -249,7 +249,7 @@ where
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> c_long
 where
     T: ValueType, //i8/u8
 {

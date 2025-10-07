@@ -357,11 +357,13 @@ impl GetDents {
         let has_bytes_remaining = remaining_bytes.is_positive();
         /*
          Use a bit hack to make this statement branchless
+         https://graphics.stanford.edu/~seander/bithacks.html#IntegerAbs
+
 
         */
-        const NUM_OF_BYTES_MINUS_1: usize = 8 * core::mem::size_of::<usize>() - 1;
+        const NUM_OF_BITS_MINUS_1: usize = 8 * core::mem::size_of::<usize>() - 1;
         self.remaining_bytes =
-            (remaining_bytes & !(remaining_bytes >> NUM_OF_BYTES_MINUS_1)) as usize;
+            (remaining_bytes & !(remaining_bytes >> NUM_OF_BITS_MINUS_1)) as usize;
 
         /*
 
@@ -436,22 +438,37 @@ impl GetDents {
     #[inline]
     #[allow(clippy::cast_ptr_alignment)]
     /**
-      Advances to the next directory entry in the buffer and returns a pointer to it.
+    Advances to the next directory entry in the internal buffer and returns a pointer to it.
 
-      Increments the internal offset by the entry's record length, positioning the iterator
-      at the next entry for subsequent calls.
+    This function reads from the current offset within the syscall buffer and interprets the
+    data at that position as a `dirent64` structure. The internal offset is then incremented
+    by the entry’s record length (`d_reclen`), positioning the iterator at the next entry
+    for subsequent calls.
 
-      # Safety
-      - The buffer must contain valid `dirent64` structures
-      - You must check if `is_buffer_not_empty` is true before calling.
+    NOTE: IT DOES RETURN . AND .. ENTRIES.
+
+    # Returns
+    - `Some(NonNull<dirent64>)` if the buffer contains another valid entry.
+    - `None` if the buffer is empty or no more entries are available.
+
+    # Behaviour
+    - On each call, the function:
+        1. Checks if the buffer still has unread bytes.
+        2. Computes the pointer to the next directory entry.
+        3. Increments the internal offset by the entry’s record length.
+        4. Returns a non-null pointer to the entry.
+
     */
-    pub const unsafe fn get_next_entry(&mut self) -> NonNull<dirent64> {
-        // SAFETY: the buffer must contain enough bytes to do a read (checked by caller).
+    pub const fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+        if self.offset >= self.remaining_bytes {
+            return None;
+        }
+        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
         let d: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
-        // SAFETY: By precondition
+        // SAFETY: dirent is not null so field access is safe
         self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-        // SAFETY: as above
-        unsafe { NonNull::new_unchecked(d) } //return the pointer
+        // SAFETY: dirent is not null
+        unsafe { Some(NonNull::new_unchecked(d)) } //return the pointer
     }
 
     #[inline]
@@ -484,14 +501,6 @@ impl GetDents {
             end_of_stream: false,
         })
     }
-
-    #[inline]
-    #[allow(clippy::cast_sign_loss)]
-    #[must_use]
-    /// Checks if the buffer is empty
-    pub const fn is_buffer_not_empty(&self) -> bool {
-        self.offset < self.remaining_bytes
-    }
 }
 
 #[cfg(target_os = "linux")]
@@ -502,13 +511,10 @@ impl Iterator for GetDents {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // If we have remaining data in buffer, process it
-            if self.is_buffer_not_empty() {
-                // SAFETY: we've checked it's not null (albeit, implicitly, so deferencing here is fine.)
-                let drnt = unsafe { self.get_next_entry() }; //get next entry in the buffer,
-                // this is a pointer to the dirent64 structure, which contains the directory entry information
-                // SAFETY: we know the pointer is not null.
-                skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); //provide the continue keyword to skip the current iteration if the entry is invalid or a dot entry
-                //extract non . and .. files
+            if let Some(drnt) = self.get_next_entry() {
+                // this just skips dot entries in a really efficient manner(avoids strlen)
+                skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
+
                 return Some(self.construct_direntry(drnt));
             }
 

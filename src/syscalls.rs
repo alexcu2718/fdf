@@ -99,7 +99,7 @@ pub fn open_asm(cstr: &CStr, flags: i32) -> c_int {
 /// - Invalidates fd after call
 // (we can't check error without A LOT of unnecessarily work, so once we attempt a close, it's over, accept it( we don't want to overcomplicate something simple)
 pub unsafe fn close_asm(fd: i32) {
-    unsafe { libc::close(fd) }; //this is a procedure so there can't be a ret value
+    unsafe { libc::close(fd) }; //dont check ret value
 }
 
 #[inline]

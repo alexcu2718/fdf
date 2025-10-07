@@ -89,7 +89,7 @@ impl ReadDir {
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
         let dir_stream = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
         // SAFETY:This pointer is forcefully null terminated and below PATH_MAX (system dependent)
-        let (path_buffer, path_len) = unsafe { PathBuffer::init_from_direntry(dir_path) };
+        let (path_buffer, path_len) = unsafe { Self::init_from_direntry(dir_path) };
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)
 
@@ -488,7 +488,7 @@ impl GetDents {
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         // SAFETY: The filepath provided is axiomatically less than size `LOCAL_PATH_MAX`
-        let (path_buffer, path_len) = unsafe { PathBuffer::init_from_direntry(dir) };
+        let (path_buffer, path_len) = unsafe { Self::init_from_direntry(dir) };
         let buffer = SyscallBuffer::new();
         Ok(Self {
             fd,

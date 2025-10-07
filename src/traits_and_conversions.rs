@@ -184,6 +184,30 @@ impl core::fmt::Debug for DirEntry {
     }
 }
 
+/*
+    pub(crate) const unsafe fn init_from_direntry(dir_path: &DirEntry) -> (PathBuffer, u16) {
+        let mut path_buffer = PathBuffer::new();
+        let mut base_len = dir_path.len(); // get length of directory path
+
+        let dir_path_in_bytes = dir_path.as_bytes();
+
+        // const hack, partial eq isn't available in const contexts, but this is.
+        let needs_slash = (!matches!(dir_path_in_bytes, b"/")) as u8; // check if we need to append a slash
+
+        let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
+
+        unsafe {
+            core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr.cast(), base_len); // copy path
+            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash // add slash if needed  (this avoids a branch )
+        }; //cast into byte types
+
+        base_len += needs_slash as usize; // update length if slash added
+
+        (path_buffer, base_len as _)
+    }
+
+*/
+
 /**
   Internal trait for constructing directory entries during iteration
 
@@ -234,6 +258,34 @@ pub trait DirentConstructor {
             is_traversible_cache: Cell::new(None), //// Lazy cache for traversal checks
         }
     }
+
+    #[inline]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the length of a path will never be above a u16 (well, i'm just not covering that extreme an edgecase!"
+    )]
+    #[allow(clippy::multiple_unsafe_ops_per_block)] //lazy
+    #[allow(clippy::undocumented_unsafe_blocks)] //too lazy to comment all of this, will do later.
+    unsafe fn init_from_direntry(dir_path: &DirEntry) -> (PathBuffer, u16) {
+        let mut path_buffer = PathBuffer::new();
+        let mut base_len = dir_path.len(); // get length of directory path
+
+        let dir_path_in_bytes = dir_path.as_bytes();
+
+        let needs_slash = u8::from(dir_path_in_bytes != b"/"); // check if we need to append a slash
+
+        let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
+
+        unsafe {
+            core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr.cast(), base_len); // copy path
+            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash // add slash if needed  (this avoids a branch )
+        }; //cast into byte types
+
+        base_len += needs_slash as usize; // update length if slash added
+
+        (path_buffer, base_len as _)
+    }
+
     #[inline]
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(clippy::multiple_unsafe_ops_per_block)] //for the dbug assert

@@ -1,4 +1,4 @@
-use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
+use crate::{DirEntry, DirEntryError, SearchConfig};
 
 ///Generic result type for directory entry operations
 pub type Result<T> = core::result::Result<T, DirEntryError>;
@@ -15,7 +15,7 @@ const_from_env!(
 #[cfg(target_os = "linux")]
 //we only use a buffer for syscalls on linux because of stable ABI(because we don't need to use a buffer for `ReadDir`)
 /// A buffer used to  hold the bytes sent from the OS for `getdents` calls
-pub type SyscallBuffer = AlignedBuffer<u8, BUFFER_SIZE>;
+pub type SyscallBuffer = crate::AlignedBuffer<u8, BUFFER_SIZE>;
 
 #[cfg(target_os = "linux")] // We only care about the buffer on linux
 const_from_env!(

@@ -88,7 +88,7 @@ impl ReadDir {
         unsafe { self.construct_entry(drnt.as_ptr()) }
     }
 
-    /**
+    /** 
      Determines the file type of a directory entry with fallback resolution.
 
      This method attempts to determine the file type using the directory entry's
@@ -111,7 +111,7 @@ impl ReadDir {
        without following the link.
 
      # Examples
-     ```
+    ```
 
     use std::os::unix::ffi::OsStrExt; // for bytes <=> OsStr conversion
     use std::ffi::OsStr;
@@ -119,18 +119,20 @@ impl ReadDir {
     use std::env::temp_dir;
 
     let tmpdir: &OsStr = OsStr::from_bytes(b".");
-     let direntry=DirEntry::new(tmpdir).unwrap();
-     let dir = direntry.readdir().unwrap();
-     let filename = c"filedoesnot exist";
+    let direntry=DirEntry::new(tmpdir).unwrap();
+    let dir = direntry.readdir().unwrap();
+    let filename = c"filedoesnot exist";
 
-     // With known file type (regular file)
-     let file_type = dir.get_filetype(libc::DT_REG, filename);
-     assert!(file_type.is_regular_file());
+    // With known file type (regular file)
+    let file_type = dir.get_filetype(libc::DT_REG, filename);
+    assert!(file_type.is_regular_file());
 
-     // With unknown type requiring stat fallback
-     let file_type = dir.get_filetype(libc::DT_UNKNOWN, filename);
+    
+    
+    // With unknown type requiring stat fallback
+    let file_type = dir.get_filetype(libc::DT_UNKNOWN, filename);
      // Internally calls stat() to determine actual file type
-     ```
+    ```
 
      # Performance Notes
      - Prefer using directory entries with supported `d_type` to avoid stat calls
@@ -197,7 +199,7 @@ impl Iterator for ReadDir {
 }
 impl Drop for ReadDir {
     #[inline]
-    /*
+    /** 
      Closes the directory file descriptor to prevent resource leaks.
 
      File descriptors are limited system resources, so proper cleanup
@@ -399,15 +401,15 @@ impl GetDents {
      has been exhausted.
 
      # Examples
-     ```
-      use fdf::DirEntry;
-     let start_path=std::env::temp_dir();
-       let getdents=DirEntry::new(start_path).unwrap().getdents().unwrap();
-     while getdents.remaining_bytes() > 0 {
+    ```
+    use fdf::DirEntry;
+    let start_path=std::env::temp_dir();
+    let getdents=DirEntry::new(start_path).unwrap().getdents().unwrap();
+    while getdents.remaining_bytes() > 0 {
          // Process entries from current buffer
      }
      // Buffer exhausted, need to read more
-     ```
+    ```
 
     */
     pub const fn remaining_bytes(&self) -> usize {

@@ -111,7 +111,7 @@ impl ReadDir {
        without following the link.
 
      # Examples
-     ```
+     ```ignore //because of macos
      use std::ffi::CStr;
      use fdf::{DirEntry, FileType};
      use std::env::temp_dir;

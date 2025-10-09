@@ -112,10 +112,13 @@ impl ReadDir {
 
      # Examples
      ```
-     use std::ffi::OsStr;
-     use fdf::{DirEntry, FileType};
-     use std::env::temp_dir;
-     let tmpdir:OsStr=".".into().
+
+    use std::os::unix::ffi::OsStrExt; // for bytes <=> OsStr conversion
+    use std::ffi::OsStr;
+    use fdf::{DirEntry, FileType};
+    use std::env::temp_dir;
+
+    let tmpdir: &OsStr = OsStr::from_bytes(b".");
      let direntry=DirEntry::new(tmpdir).unwrap();
      let dir = direntry.readdir().unwrap();
      let filename = c"filedoesnot exist";

@@ -136,10 +136,12 @@ pub use error::{DirEntryError, SearchConfigError};
 
 mod types;
 
+#[cfg(target_os = "linux")]
+pub use types::BUFFER_SIZE;
 pub use types::FileDes;
+pub use types::Result;
 #[cfg(target_os = "linux")]
 pub(crate) use types::SyscallBuffer;
-pub use types::{BUFFER_SIZE, Result};
 pub(crate) use types::{DirEntryFilter, FilterType};
 mod traits_and_conversions;
 pub(crate) use traits_and_conversions::BytePath;

@@ -1,16 +1,15 @@
 #![allow(clippy::must_use_candidate)]
-use crate::{DirEntry, FileDes, Result, traits_and_conversions::DirentConstructor as _};
+use crate::FileType;
 #[cfg(target_os = "linux")]
-use crate::{FileType, SyscallBuffer};
-
+use crate::SyscallBuffer;
+use crate::{DirEntry, FileDes, Result, traits_and_conversions::DirentConstructor as _};
+use core::ffi::CStr;
 use core::ptr::NonNull;
 use libc::DIR;
 #[cfg(not(target_os = "linux"))]
 use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir};
-#[cfg(target_os = "linux")]
-use std::ffi::CStr;
 
 /**
  POSIX-compliant directory iterator using libc's readdir functions.

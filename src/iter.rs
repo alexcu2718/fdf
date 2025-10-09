@@ -111,13 +111,12 @@ impl ReadDir {
        without following the link.
 
      # Examples
-     ```ignore //because of macos
-     use std::ffi::CStr;
+     ```
+     use std::ffi::OsStr;
      use fdf::{DirEntry, FileType};
      use std::env::temp_dir;
-     let tmpdir=temp_dir();
-     let tmp=tmpdir.as_os_str();
-     let direntry=DirEntry::new(tmp).unwrap();
+     let tmpdir:OsStr=".".into().
+     let direntry=DirEntry::new(tmpdir).unwrap();
      let dir = direntry.readdir().unwrap();
      let filename = c"filedoesnot exist";
 

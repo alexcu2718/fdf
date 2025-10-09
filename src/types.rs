@@ -1,4 +1,4 @@
-use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig, const_from_env};
+use crate::{AlignedBuffer, DirEntry, DirEntryError, SearchConfig};
 
 ///Generic result type for directory entry operations
 pub type Result<T> = core::result::Result<T, DirEntryError>;

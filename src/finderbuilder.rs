@@ -113,7 +113,7 @@ impl FinderBuilder {
         if ext.is_empty() {
             self.extension_match = None;
         } else {
-            self.extension_match = Some(Box::from(ext));
+            self.extension_match = Some(ext.into());
         }
 
         self
@@ -124,12 +124,7 @@ impl FinderBuilder {
         match max_depth {
             None => self,
             Some(num) => {
-                if let Some(non_zero) = NonZeroU16::new(num) {
-                    self.max_depth = Some(non_zero);
-                } else {
-                    // num == 0, remove depth limit by setting to None
-                    self.max_depth = None;
-                }
+                self.max_depth = NonZeroU16::new(num);
                 self
             }
         }
@@ -211,22 +206,23 @@ impl FinderBuilder {
         self.same_filesystem = yesorno;
         self
     }
+    /**
+     Builds a [`Finder`] instance with the configured options.
 
-    /// Builds a [`Finder`] instance with the configured options.
-    ///
-    /// This method performs validation of all configuration parameters and
-    /// initialises the necessary components for file system traversal.
-    ///
-    /// # Returns
-    /// Returns `Ok(Finder<S>)` on successful configuration, or
-    /// `Err(SearchConfigError)` if any validation fails.
-    ///
-    /// # Errors
-    /// Returns an error if:
-    /// - The root path is not a directory or cannot be accessed
-    /// - The root path cannot be canonicalised (when enabled)
-    /// - The search pattern cannot be compiled to a valid regular expression
-    /// - File system metadata cannot be retrieved (for same-filesystem tracking)
+     This method performs validation of all configuration parameters and
+     initialises the necessary components for file system traversal.
+
+     # Returns
+     Returns `Ok(Finder<S>)` on successful configuration, or
+     `Err(SearchConfigError)` if any validation fails.
+
+     # Errors
+     Returns an error if:
+     - The root path is not a directory or cannot be accessed
+     - The root path cannot be canonicalised (when enabled)
+     - The search pattern cannot be compiled to a valid regular expression
+     - File system metadata cannot be retrieved (for same-filesystem tracking
+    */
     pub fn build(self) -> core::result::Result<Finder, SearchConfigError> {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;

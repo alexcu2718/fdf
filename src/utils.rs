@@ -71,7 +71,7 @@ where
                 let mask = _mm_movemask_epi8(cmp);
 
                 if mask != 0 {
-                    //U
+                    // stop and the break because of the mask, we've only got every byte that is either 0 or u8::MAX (only the nulls are detected)
                     break offset + mask.trailing_zeros() as usize;
                 }
                 offset += 16; // Process next 16-byte chunk

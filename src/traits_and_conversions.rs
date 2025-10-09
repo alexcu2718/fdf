@@ -3,14 +3,14 @@
 use crate::FileDes;
 //need to add these todo
 use crate::{
-    DirEntry, DirEntryError, FileType, LOCAL_PATH_MAX, PathBuffer, Result, access_dirent,
-    memchr_derivations::memrchr, utils::dirent_name_length,
+    DirEntry, DirEntryError, FileType, Result, access_dirent, memchr_derivations::memrchr,
+    utils::dirent_name_length,
 };
 
 use core::cell::Cell;
 use core::ffi::CStr;
+use core::ptr;
 use core::{fmt, ops::Deref};
-use core::{mem, ptr};
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
@@ -18,6 +18,15 @@ use libc::dirent64;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
+
+const_from_env!(FDF_MAX_FILENAME_LEN:usize="FDF_MAX_FILENAME_LEN",512); //setting the minimum extra memory it'll need
+// this should be ideally 256 but operating systemns can be funky, so i'm being a bit cautious
+// as this is written for unix, most except HURD i think allow the filename to be 255 max, I'm not writing this for hurd ffs.
+const _: () = assert!(
+    //0 cost compile time check that doesnt rely on debug
+    FDF_MAX_FILENAME_LEN >= 255,
+    "Expect it to always be above this value"
+);
 /// A trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.
 /// Explicitly non public to prevent abuse/safety reasons
@@ -184,30 +193,6 @@ impl core::fmt::Debug for DirEntry {
     }
 }
 
-/*
-    pub(crate) const unsafe fn init_from_direntry(dir_path: &DirEntry) -> (PathBuffer, u16) {
-        let mut path_buffer = PathBuffer::new();
-        let mut base_len = dir_path.len(); // get length of directory path
-
-        let dir_path_in_bytes = dir_path.as_bytes();
-
-        // const hack, partial eq isn't available in const contexts, but this is.
-        let needs_slash = (!matches!(dir_path_in_bytes, b"/")) as u8; // check if we need to append a slash
-
-        let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
-
-        unsafe {
-            core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr.cast(), base_len); // copy path
-            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash // add slash if needed  (this avoids a branch )
-        }; //cast into byte types
-
-        base_len += needs_slash as usize; // update length if slash added
-
-        (path_buffer, base_len as _)
-    }
-
-*/
-
 /**
   Internal trait for constructing directory entries during iteration
 
@@ -218,7 +203,7 @@ impl core::fmt::Debug for DirEntry {
 */
 pub trait DirentConstructor {
     /// Returns a mutable reference to the path buffer used for constructing full paths
-    fn path_buffer(&mut self) -> &mut PathBuffer;
+    fn path_buffer(&mut self) -> &mut Vec<u8>;
     /// Returns the current index in the path buffer where the filename should be appended
     ///
     /// This represents the length of the base directory path before adding the current filename.
@@ -247,7 +232,7 @@ pub trait DirentConstructor {
         // SAFETY: The `drnt` must not be null(by precondition)
         let full_path = unsafe { self.construct_path(drnt) };
         let path: Box<CStr> = full_path.into();
-        let file_type = self.get_filetype(dtype, &path);
+        let file_type = self.get_filetype_private(dtype, &path);
 
         DirEntry {
             path,
@@ -264,33 +249,34 @@ pub trait DirentConstructor {
         clippy::cast_possible_truncation,
         reason = "the length of a path will never be above a u16 (well, i'm just not covering that extreme an edgecase!"
     )]
-    #[allow(clippy::multiple_unsafe_ops_per_block)] //lazy
-    #[allow(clippy::undocumented_unsafe_blocks)] //too lazy to comment all of this, will do later.
-    unsafe fn init_from_direntry(dir_path: &DirEntry) -> (PathBuffer, u16) {
-        let mut path_buffer = PathBuffer::new();
-        let mut base_len = dir_path.len(); // get length of directory path
-
+    fn init_from_direntry(dir_path: &DirEntry) -> (Vec<u8>, u16) {
         let dir_path_in_bytes = dir_path.as_bytes();
+        let mut base_len = dir_path_in_bytes.len(); // get length of directory path
 
-        let needs_slash = u8::from(dir_path_in_bytes != b"/"); // check if we need to append a slash
+        let is_root = dir_path_in_bytes == b"/";
 
+        let needs_slash_u8 = u8::from(!is_root); // check if we need to append a slash
+        let needs_slash: usize = usize::from(needs_slash_u8);
+        //set a conservative estimate incase it returns something useless
+        // Initialise buffer with zeros to avoid uninitialised memory then add the max length of a filename on
+        let mut path_buffer = vec![0u8; base_len + needs_slash + FDF_MAX_FILENAME_LEN + 10]; //add 10 for good measure negligible performance cost,
+        // Please note future readers, `PATH_MAX` is not the max length of a path, it's simply the maximum length of a path that POSIX functions will take
+        // I made this mistake then suffered a segfault to the knee. BEWARB
         let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
-
+        // SAFETY: the memory regions do not overlap , src and dst are both valid and alignment is trivial (u8)
+        unsafe { core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr, base_len) }; // copy path
+        #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
+        // SAFETY: write is within buffer bounds
         unsafe {
-            core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr.cast(), base_len); // copy path
-            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash // add slash if needed  (this avoids a branch )
-        }; //cast into byte types
+            *buffer_ptr.add(base_len) = b'/' * needs_slash_u8 // add slash if needed  (this avoids a branch ), either add 0 or  add a slash (multiplication)
+        };
 
-        base_len += needs_slash as usize; // update length if slash added
+        base_len += needs_slash; // update length if slash added
 
         (path_buffer, base_len as _)
     }
 
     #[inline]
-    #[allow(clippy::transmute_ptr_to_ptr)]
-    #[allow(clippy::multiple_unsafe_ops_per_block)] //for the dbug assert
-    #[allow(clippy::debug_assert_with_mut_call)] //for debug assert (it's fine)
-    #[allow(clippy::undocumented_unsafe_blocks)] //for the debug
     /**
       Constructs a full path by appending the directory entry name to the base path
 
@@ -303,58 +289,39 @@ pub trait DirentConstructor {
         // SAFETY: as above
         // Add 1 to include the null terminator
         let name_len = unsafe { dirent_name_length(drnt) + 1 };
-        debug_assert!(
-            name_len + base_len < LOCAL_PATH_MAX,
-            "We don't expect the total length to exceed PATH_MAX!"
-        );
+
         let path_buffer = self.path_buffer();
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
-        // by the caller of this function.
         let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) };
         // SAFETY:
         // - `d_name` and `buffer` don't overlap (different memory regions)
         // - Both pointers are properly aligned for byte copying
         // - `name_len` is within `buffer` bounds (checked by debug assertion)
         unsafe { ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) };
-        debug_assert!(
-            unsafe {
-                CStr::from_ptr(
-                    path_buffer
-                        .get_unchecked(..base_len + name_len)
-                        .as_ptr()
-                        .cast(),
-                ) == mem::transmute::<&[u8], &CStr>(
-                    path_buffer.get_unchecked(..base_len + name_len),
-                )
-            },
-            "we  expect these to be the same"
-        );
+
         /*
-         SAFETY: `d_name` and `buffer` are known not to overlap because `d_name` is
-         from a `dirent64` pointer and `buffer` is a slice of `path_buffer`.
-         The pointers are properly aligned as they point to bytes. The `name_len`
-         is guaranteed to be within the bounds of `buffer` because the total path
-         length (`base_len + name_len`) is always less than or equal to `LOCAL_PATH_MAX`,
-         which is the capacity of `path_buffer`.
+         SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         */
-        unsafe { mem::transmute(path_buffer.get_unchecked(..base_len + name_len)) }
+        #[allow(clippy::multiple_unsafe_ops_per_block)]
+        unsafe {
+            CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..base_len + name_len))
+        }
     }
 
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)]
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(clippy::wildcard_enum_match_arm)]
-    fn get_filetype(&self, d_type: u8, path: &CStr) -> FileType {
+    fn get_filetype_private(&self, d_type: u8, path: &CStr) -> FileType {
         match FileType::from_dtype(d_type) {
             FileType::Unknown => {
                 // Fall back to fstatat for filesystems that don't provide d_type (DT_UNKNOWN)
                 /* SAFETY:
                 - `file_index()` points to the start of the file name within `bytes`
                 - The slice from this index to the end includes the null terminator
-                - The slice is guaranteed to represent a valid C string
-                - We transmute the slice into a `&CStr` reference for zero-copy access */
+                - The slice is guaranteed to represent a valid C string (thus null terminated) */
                 let cstr_name: &CStr = unsafe {
-                    core::mem::transmute(
+                    CStr::from_bytes_with_nul_unchecked(
                         path.to_bytes_with_nul().get_unchecked(self.file_index()..),
                     )
                 };
@@ -367,7 +334,7 @@ pub trait DirentConstructor {
 
 impl DirentConstructor for crate::ReadDir {
     #[inline]
-    fn path_buffer(&mut self) -> &mut PathBuffer {
+    fn path_buffer(&mut self) -> &mut Vec<u8> {
         &mut self.path_buffer
     }
 
@@ -390,7 +357,7 @@ impl DirentConstructor for crate::ReadDir {
 #[cfg(target_os = "linux")]
 impl DirentConstructor for crate::iter::GetDents {
     #[inline]
-    fn path_buffer(&mut self) -> &mut crate::PathBuffer {
+    fn path_buffer(&mut self) -> &mut Vec<u8> {
         &mut self.path_buffer
     }
 

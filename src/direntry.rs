@@ -83,8 +83,8 @@ use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ptr::NonNull;
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, R_OK, W_OK,
-    X_OK, access, c_char, fstatat, lstat, open, opendir, realpath, stat,
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, R_OK,
+    W_OK, X_OK, access, c_char, fstatat, lstat, open, opendir, realpath, stat,
 };
 use std::{
     ffi::{CStr, OsStr},
@@ -383,7 +383,7 @@ impl DirEntry {
     #[inline]
     /**  Opens a directory stream for reading directory entries.
 
-     This function returns a `NonNull<libc::DIR>` pointer to the directory stream,
+     This function returns a `NonNull<DIR>` pointer to the directory stream,
      which can be used with `readdir` to iterate over directory entries.
 
 
@@ -395,7 +395,7 @@ impl DirEntry {
      - Permission is denied
      - System resources are exhausted
     */
-    pub fn opendir(&self) -> Result<NonNull<libc::DIR>> {
+    pub fn opendir(&self) -> Result<NonNull<DIR>> {
         // SAFETY: we are passing a null terminated directory to opendir
 
         let dir = unsafe { opendir(self.as_ptr()) };
@@ -658,136 +658,102 @@ impl DirEntry {
 
     #[inline]
     #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
-    /// Private function for complicated reasons
-    pub(crate) fn get_realpath(&self) -> Result<Box<CStr>> {
-        // SAFETY: Guaranteed null terminated due to underlying CStr representation
-
-        let ptr = unsafe { realpath(self.as_ptr(), core::ptr::null_mut()) }; //realpath implicitly mallocs, hence need to free.
+    /// Private function  because it invokes a closure (to avoid doubly allocating unnecessary)
+    pub(crate) fn get_realpath<F, T>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce(&CStr) -> Result<T>,
+    {
+        // SAFETY: realpath mallocs a null-terminated string that must be freed, the pointer is null terminated
+        let ptr = unsafe { realpath(self.as_ptr(), core::ptr::null_mut()) };
 
         if ptr.is_null() {
             return Err(std::io::Error::last_os_error().into());
         }
 
-        // SAFETY: We know the path is valid because it's a  guaranteed null terminated+non null
-        let boxed = unsafe { Box::from(CStr::from_ptr(ptr)) };
-        // SAFETY: the pointer points to valid malloc'ed memory(we have checked for null), it is safe to free it now
-        unsafe { libc::free(ptr.cast()) } //see definition below to check std library implementation
-        //free the pointer to stop leaking
-        // I wonder if you can do Box::from_raw on the above, I believe rust's allocator would be the libc's version of malloc
-        // however because I am using a custom allocator `MiMalloc` I'm not sure if how they'd interact,
-        // however i've never introspected memory pages until not except primitive methods
-        // however this would be a very amusing micro optimisation, it's too much effort, i'll read into it more when i feel like
-        Ok(boxed)
+        // SAFETY: ptr is valid and points to a null-terminated C string
+        let cstr = unsafe { CStr::from_ptr(ptr) };
+
+        // Run supplied closure; allow propagation of Result errors
+        let result = f(cstr);
+
+        // SAFETY: ptr was allocated by realpath(), so we must free it explicitly(only after function is run)
+        unsafe { libc::free(ptr.cast()) };
+
+        result
     }
-
-    /* (I spent a lot of time debating this function!)
-    https://man7.org/linux/man-pages/man3/realpath.3.html
-    DESCRIPTION         top
-
-       realpath() expands all symbolic links and resolves references to
-       /./, /../ and extra '/' characters in the null-terminated string
-       named by path to produce a canonicalized absolute pathname.  The
-       resulting pathname is stored as a null-terminated string, up to a
-       maximum of PATH_MAX bytes, in the buffer pointed to by
-       resolved_path.  The resulting path will have no symbolic link, /./
-       or /../ components.
-
-       If resolved_path is specified as NULL, then realpath() uses
-       malloc(3) to allocate a buffer of up to PATH_MAX bytes to hold the
-       resolved pathname, and returns a pointer to this buffer.  The
-       caller should deallocate this buffer using free(3).
-
-
-
-        https://github.com/rust-lang/rust/blob/master/library/std/src/sys/fs/unix.rs
-    pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
-        let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
-        if r.is_null() {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(PathBuf::from(OsString::from_vec(unsafe {
-            let buf = CStr::from_ptr(r).to_bytes().to_vec();
-            libc::free(r as *mut _);
-            buf
-        })))
-    }
-
-
-        */
 
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
-    /// Converts a directory entry to a full, canonical path, resolving all symlinks
-    ///
-    /// This is a **costly** operation as it involves a system call (`realpath`).
-    /// If the filetype is a symlink, it invokes a stat call to find the realtype, otherwise stat is not called.
-    ///
-    /// # Errors
-    ///
-    /// Returns an `Err`
-    ///
-    /// It can be one of the following,
-    ///  `FileType::AccessDenied`, (EACCESS)
-    ///  `FileType::TooManySymbolicLinks`, ( ELOOP)
-    ///  `FileType::InvalidPath` (ENOENT)
-    /// (There may be more, this documentation is not complete) TODO!
-    ///
-    ///    
-    ///
-    /// # Examples
-    /// these tests are broken on macos because of funky stuff  with mac's privacy/security settings.
-    /// ```ignore
-    ///
-    /// use fdf::DirEntry;
-    /// use std::path::Path;
-    /// use std::fs;
-    /// use std::sync::Arc;
-    /// use std::os::unix::ffi::OsStrExt as _;
-    /// use std::os::unix::fs::symlink;
-    /// let temp_dir = std::env::temp_dir();
-    /// let target_path = temp_dir.join("target_file_full_path.txt");
-    /// fs::File::create(&target_path).unwrap();
-    /// let symlink_path = temp_dir.join("link_to_target_full_path.txt");
-    /// symlink(&target_path, &symlink_path).unwrap();
-    ///
-    /// // Create a DirEntry from the symlink path
-    /// let entry = DirEntry::new(&symlink_path).unwrap();
-    /// assert!(entry.is_symlink());
-    ///
-    /// // Canonicalise the path
-    /// let full_entry = entry.to_full_path().unwrap();
-    ///
-    /// // The full path of the canonicalised entry should match the target path.
-    /// assert_eq!(full_entry.as_bytes(), target_path.as_os_str().as_bytes());
-    ///
-    /// fs::remove_file(&symlink_path).unwrap();
-    /// fs::remove_file(&target_path).unwrap();
-    ///
-    /// ```
+    /**
+     Converts a directory entry to a full, canonical path, resolving all symlinks
+
+     This is a **costly** operation as it involves a system call (`realpath`).
+     If the filetype is a symlink, it invokes a stat call to find the realtype, otherwise stat is not called.
+
+     # Errors
+
+     Returns an `Err`
+
+     It can be one of the following,
+      `FileType::AccessDenied`, (EACCESS)
+      `FileType::TooManySymbolicLinks`, ( ELOOP)
+      `FileType::InvalidPath` (ENOENT)
+     (There may be more, this documentation is not complete) TODO!
+
+
+
+     # Examples
+     these tests are broken on macos because of funky stuff  with mac's privacy/security settings.
+     ```ignore
+
+     use fdf::DirEntry;
+     use std::path::Path;
+     use std::fs;
+     use std::sync::Arc;
+     use std::os::unix::ffi::OsStrExt as _;
+     use std::os::unix::fs::symlink;
+     let temp_dir = std::env::temp_dir();
+     let target_path = temp_dir.join("target_file_full_path.txt");
+     fs::File::create(&target_path).unwrap();
+     let symlink_path = temp_dir.join("link_to_target_full_path.txt");
+     symlink(&target_path, &symlink_path).unwrap();
+
+     // Create a DirEntry from the symlink path
+     let entry = DirEntry::new(&symlink_path).unwrap();
+     assert!(entry.is_symlink());
+
+     // Canonicalise the path
+     let full_entry = entry.to_full_path().unwrap();
+
+     // The full path of the canonicalised entry should match the target path.
+     assert_eq!(full_entry.as_bytes(), target_path.as_os_str().as_bytes());
+
+     fs::remove_file(&symlink_path).unwrap();
+     fs::remove_file(&target_path).unwrap();
+
+     ```
+    */
+    #[allow(clippy::cast_possible_truncation)]
     pub fn to_full_path(&self) -> Result<Self> {
-        let full_path = self.get_realpath()?;
+        self.get_realpath(|full_path| {
+            let file_name_index = full_path.to_bytes().file_name_index() as u16;
 
-        let file_name_index = full_path.to_bytes().file_name_index() as u16; //used for indexing.
-        // Computing result here to avoid borrow issues
+            let (file_type, ino) = if self.is_symlink() {
+                let statted = self.get_stat()?; // only call stat if it's a symlink, because I don't deduplicate normal files, this works well for symlinks
+                (FileType::from_stat(&statted), access_stat!(statted, st_ino))
+            } else {
+                (self.file_type(), self.ino())
+            };
 
-        let (file_type, ino) = if self.is_symlink() {
-            let statted = self.get_stat()?;
-            //if it's a symlink, we need to resolve it.
-            (FileType::from_stat(&statted), access_stat!(statted, st_ino))
-        } else {
-            (self.file_type(), self.ino()) //ino will not change if it's not a symlink, neither will file type!
-        };
-
-        let boxed = Self {
-            path: full_path,
-            file_type,
-            inode: ino,
-            depth: self.depth, //inherit depth, may need to revisit this
-            file_name_index,
-            is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)), //we can check it's traversibility directly here because of it being resolved
-        };
-
-        Ok(boxed)
+            Ok(Self {
+                path: full_path.into(),
+                file_type,
+                inode: ino,
+                depth: self.depth,
+                file_name_index,
+                is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)),
+            })
+        })
     }
 
     #[inline]
@@ -1025,7 +991,7 @@ impl DirEntry {
     pub fn is_traversible(&self) -> bool {
         match self.file_type {
             FileType::Directory => true,
-            FileType::Symlink => self.check_symlink_traversibility(),
+            FileType::Symlink => self.check_symlink_traversibility(), // we essentially use a cache to avoid recalling this for subsequent calls, see below.
             _ => false,
         }
     }
@@ -1033,11 +999,11 @@ impl DirEntry {
     /// Checks if a symlink points to a traversible directory, caching the result.
     #[inline]
     pub(crate) fn check_symlink_traversibility(&self) -> bool {
-        // Return cached result if available
         debug_assert!(
             self.file_type() == FileType::Symlink,
             "we only expect symlinks to use this function(hence private)"
         );
+        // Return cached result if available
         if let Some(cached) = self.is_traversible_cache.get() {
             return cached;
         }
@@ -1167,55 +1133,57 @@ impl DirEntry {
         clippy::cast_possible_truncation,
         reason = "the path won't be longer than u16"
     )]
-    /// Creates a new [`DirEntry`] from the given path.
-    ///
-    /// This constructor attempts to resolve metadata for the provided path using
-    /// a `lstat` call. If successful, it initialises a `DirEntry` with the path,
-    /// file type, inode, and some derived metadata such as depth and file name index.
-    ///
-    ///
-    ///
-    /// # Examples
-    /// ```
-    /// use fdf::DirEntry;
-    /// use std::env;
-    ///
-    /// # fn main() -> Result<(), fdf::DirEntryError> {
-    /// // Use the system temporary directory
-    /// let tmp = env::temp_dir();
-    ///
-    /// // Create a DirEntry from the temporary directory path
-    /// let entry = DirEntry::new(tmp)?;
-    ///
-    /// println!("inode: {}", entry.ino());
-    ///  Ok(())
-    /// }
-    /// ```
-    ///
-    ///
-    ///
-    /// # Errors
-    ///
-    /// The following returns an `DirEntryError::IOError` error when the file doesn't exist:
-    ///
-    /// ```
-    /// use fdf::{DirEntry, DirEntryError};
-    /// use std::fs;
-    ///
-    /// // Verify the path doesn't exist first
-    /// let nonexistent_path = "/definitely/not/a/real/file/lalalalalalalalalalalal";
-    /// assert!(!fs::metadata(nonexistent_path).is_ok());
-    ///
-    /// // This will return an DirEntry::IOError because the file does not exist
-    /// let result = DirEntry::new(nonexistent_path);
-    /// match result {
-    ///     Ok(_) => panic!("this should never happen!"),
-    ///     Err(DirEntryError::IOError(_)) => {}, // Expected error
-    ///     Err(_) => panic!("Expected  error, got different error"),
-    /// }
-    /// # // The test passes if we reach this point without panicking
-    /// # Ok::<(), DirEntryError>(())
-    /// ```
+    /**
+     Creates a new [`DirEntry`] from the given path.
+
+     This constructor attempts to resolve metadata for the provided path using
+     a `lstat` call. If successful, it initialises a `DirEntry` with the path,
+     file type, inode, and some derived metadata such as depth and file name index.
+
+
+
+     # Examples
+     ```
+     use fdf::DirEntry;
+     use std::env;
+
+     # fn main() -> Result<(), fdf::DirEntryError> {
+     // Use the system temporary directory
+     let tmp = env::temp_dir();
+
+     // Create a DirEntry from the temporary directory path
+     let entry = DirEntry::new(tmp)?;
+
+     println!("inode: {}", entry.ino());
+      Ok(())
+     }
+     ```
+
+
+
+     # Errors
+
+     The following returns an `DirEntryError::IOError` error when the file doesn't exist:
+
+     ```
+     use fdf::{DirEntry, DirEntryError};
+     use std::fs;
+
+     // Verify the path doesn't exist first
+     let nonexistent_path = "/definitely/not/a/real/file/lalalalalalalalalalalal";
+     assert!(!fs::metadata(nonexistent_path).is_ok());
+
+     // This will return an DirEntry::IOError because the file does not exist
+     let result = DirEntry::new(nonexistent_path);
+     match result {
+         Ok(_) => panic!("this should never happen!"),
+         Err(DirEntryError::IOError(_)) => {}, // Expected error
+         Err(_) => panic!("Expected  error, got different error"),
+     }
+     # // The test passes if we reach this point without panicking
+     # Ok::<(), DirEntryError>(())
+     ```
+    */
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
         let path_ref = path.as_ref().as_bytes(); //TODO GET RID OF UNWRAP HERE
         let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::NulError)?;
@@ -1239,6 +1207,37 @@ impl DirEntry {
         clippy::cast_possible_truncation,
         reason = "needs to be in u32 for chrono"
     )]
+    /**
+      Returns the last modification time of the file in UTC.
+
+     This method performs an `lstat` system call to retrieve metadata for the entry.
+     Unlike `stat`, it does **not** follow symbolic links. If the entry is a symlink,
+     the modification time of the link itself is returned rather than that of its target.
+
+     # Errors
+
+     Returns an [`Err`] if:
+     - The `lstat` call fails (for example, due to insufficient permissions or an invalid path).
+     - The timestamp retrieved from the OS cannot be represented as a valid [`DateTime<Utc>`].
+
+     # Notes
+
+     The timestamp is constructed using seconds (`st_mtime`) and nanoseconds (`st_mtimensec`)
+     from the underlying `stat` structure. These values are cast to `u32` internally
+     to match the expected type for [`chrono::DateTime::from_timestamp`].
+
+     # Examples
+
+     ```no_run
+     use fdf::DirEntry;
+     use chrono::Utc;
+
+     let entry = DirEntry::new("/tmp/example.txt").unwrap();
+     let modified = entry.modified_time().unwrap();
+
+     println!("Last modified at: {}", modified.with_timezone(&Utc));
+     ```
+    */
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     pub fn modified_time(&self) -> Result<DateTime<Utc>> {
         let statted = self.get_lstat()?;
@@ -1275,110 +1274,114 @@ impl DirEntry {
         self.get_lstat().map(|s| s.st_size as _)
     }
 
-    /// Returns an iterator over directory entries using the `readdir` API.
-    ///
-    /// This provides a higher-level, more portable interface for directory iteration
-    /// compared to `getdents`. Suitable for most use cases where maximum performance
-    /// isn't critical.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if:
-    /// - The entry is not a directory
-    /// - Permission restrictions prevent reading the directory
-    /// - The directory has been removed or become inaccessible
-    /// - Any other system error occurs during directory opening/reading
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use fdf::DirEntry;
-    /// use std::fs::{self, File};
-    /// use std::io::Write;
-    /// use std::sync::Arc;
-    ///
-    /// // Create a temporary directory with test files
-    /// let temp_dir = std::env::temp_dir().join("test_readdir");
-    /// fs::create_dir(&temp_dir).unwrap();
-    ///
-    /// // Create test files
-    /// File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
-    /// File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
-    /// fs::create_dir(temp_dir.join("subdir")).unwrap();
-    ///
-    /// // Create DirEntry for the temporary directory
-    /// let entry = DirEntry::new(&temp_dir).unwrap();
-    ///
-    /// // Use readdir to iterate through directory contents
-    /// let mut entries: Vec<_> = entry.readdir().unwrap().collect();
-    /// entries.sort_by_key(|e| e.file_name().to_vec());
-    ///
-    /// // Should contain 3 entries: 2 files and 1 directory
-    /// assert_eq!(entries.len(), 3);
-    /// assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
-    /// assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
-    /// assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
-    /// fs::remove_dir_all(&temp_dir).unwrap();
-    /// ```
+    /**
+     Returns an iterator over directory entries using the `readdir` API.
+
+     This provides a higher-level, more portable interface for directory iteration
+     compared to `getdents`. Suitable for most use cases where maximum performance
+     isn't critical.
+
+     # Errors
+
+     Returns `Err` if:
+     - The entry is not a directory
+     - Permission restrictions prevent reading the directory
+     - The directory has been removed or become inaccessible
+     - Any other system error occurs during directory opening/reading
+
+     # Examples
+
+     ```
+     use fdf::DirEntry;
+     use std::fs::{self, File};
+     use std::io::Write;
+     use std::sync::Arc;
+
+     // Create a temporary directory with test files
+     let temp_dir = std::env::temp_dir().join("test_readdir");
+     fs::create_dir(&temp_dir).unwrap();
+
+     // Create test files
+     File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
+     File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
+     fs::create_dir(temp_dir.join("subdir")).unwrap();
+
+     // Create DirEntry for the temporary directory
+     let entry = DirEntry::new(&temp_dir).unwrap();
+
+     // Use readdir to iterate through directory contents
+     let mut entries: Vec<_> = entry.readdir().unwrap().collect();
+     entries.sort_by_key(|e| e.file_name().to_vec());
+
+     // Should contain 3 entries: 2 files and 1 directory
+     assert_eq!(entries.len(), 3);
+     assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
+     assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
+     assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
+     fs::remove_dir_all(&temp_dir).unwrap();
+    ```
+    */
     #[inline]
     pub fn readdir(&self) -> Result<ReadDir> {
         ReadDir::new(self)
     }
     #[inline]
     #[cfg(target_os = "linux")]
-    /// Low-level directory iterator using the `getdents64` system call.
-    ///
-    /// This method provides high-performance directory scanning by using a large buffer
-    /// (typically ~4.1KB) to minimise system calls. It's Linux-specific and generally
-    /// faster than `readdir` for bulk directory operations.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if:
-    /// - The entry is not a directory
-    /// - Permission restrictions prevent reading the directory
-    /// - The directory file descriptor cannot be opened
-    /// - Buffer allocation fails
-    /// - Any other system error occurs during the `getdents` operation
-    ///
-    /// # Platform Specificity
-    ///
-    /// This method is only available on Linux targets due to its dependence on
-    /// the `getdents64` system call.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use fdf::DirEntry;
-    /// use std::fs::{self, File};
-    /// use std::io::Write;
-    /// use std::sync::Arc;
-    ///
-    /// // Create a temporary directory with test files
-    /// let temp_dir = std::env::temp_dir().join("test_getdents");
-    /// fs::create_dir(&temp_dir).unwrap();
-    ///
-    /// // Create test files
-    /// File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
-    /// File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
-    /// fs::create_dir(temp_dir.join("subdir")).unwrap();
-    ///
-    /// // Create DirEntry for the temporary directory
-    /// let entry= DirEntry::new(&temp_dir).unwrap();
-    ///
-    /// // Use getdents to iterate through directory contents
-    /// let mut entries: Vec<_> = entry.getdents().unwrap().collect();
-    /// entries.sort_by_key(|e| e.file_name().to_vec());
-    ///
-    /// // Should contain 3 entries: 2 files and 1 directory
-    /// assert_eq!(entries.len(), 3);
-    /// assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
-    /// assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
-    /// assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
-    ///
-    /// // Clean up
-    /// fs::remove_dir_all(&temp_dir).unwrap();
-    /// ```
+    /**
+     Low-level directory iterator using the `getdents64` system call.
+
+     This method provides high-performance directory scanning by using a large buffer
+     (typically ~4.1KB) to minimise system calls. It's Linux-specific and generally
+     faster than `readdir` for bulk directory operations.
+
+     # Errors
+
+     Returns `Err` if:
+     - The entry is not a directory
+     - Permission restrictions prevent reading the directory
+     - The directory file descriptor cannot be opened
+     - Buffer allocation fails
+     - Any other system error occurs during the `getdents` operation
+
+     # Platform Specificity
+
+     This method is only available on Linux targets due to its dependence on
+     the `getdents64` system call.
+
+     # Examples
+
+     ```
+     use fdf::DirEntry;
+     use std::fs::{self, File};
+     use std::io::Write;
+     use std::sync::Arc;
+
+     // Create a temporary directory with test files
+     let temp_dir = std::env::temp_dir().join("test_getdents");
+     fs::create_dir(&temp_dir).unwrap();
+
+     // Create test files
+     File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
+     File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
+     fs::create_dir(temp_dir.join("subdir")).unwrap();
+
+     // Create DirEntry for the temporary directory
+     let entry= DirEntry::new(&temp_dir).unwrap();
+
+     // Use getdents to iterate through directory contents
+     let mut entries: Vec<_> = entry.getdents().unwrap().collect();
+     entries.sort_by_key(|e| e.file_name().to_vec());
+
+     // Should contain 3 entries: 2 files and 1 directory
+     assert_eq!(entries.len(), 3);
+     assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
+     assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
+     assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
+
+     // Clean up
+     fs::remove_dir_all(&temp_dir).unwrap();
+    ```
+    */
     pub fn getdents(&self) -> Result<GetDents> {
         use crate::iter::GetDents;
         GetDents::new(self)

@@ -130,6 +130,9 @@ where
         self.data.as_mut_ptr().cast()
     }
 
+    // #[inline]
+    //pub fn get_
+
     #[inline]
     #[must_use]
     /// Returns the max capacity of this buffer

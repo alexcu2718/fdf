@@ -2,8 +2,7 @@ use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::const_from_env;
 use fdf::{
-    FileTypeFilter, FileTypeParser, Finder, LOCAL_PATH_MAX, SearchConfigError, SizeFilter,
-    SizeFilterParser,
+    FileTypeFilter, FileTypeParser, Finder, SearchConfigError, SizeFilter, SizeFilterParser,
 };
 use std::env;
 use std::ffi::OsString;
@@ -214,11 +213,6 @@ struct Args {
 
 #[allow(clippy::exit)] //exiting for cli use
 fn main() -> Result<(), SearchConfigError> {
-    const _: () = assert!(
-        LOCAL_PATH_MAX >= libc::PATH_MAX as usize,
-        "LOCAL_PATH_MAX too small!"
-    );
-
     let args = Args::parse();
 
     if let Some(generator) = args.generate {

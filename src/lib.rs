@@ -1,90 +1,92 @@
-//! # fdf - A High-Performance Parallel File System Traversal Library
-//!
-//! `fdf` is a Rust library designed for efficient, parallel directory traversal
-//! with extensive filtering capabilities. It leverages Rayon for parallel processing
-//! and uses platform-specific optimisations for maximum performance.
-//!
-//! **This will be renamed before a 1.0!**
-//!
-//! ## Features
-//!
-//! - **Parallel Processing**: Utilises Rayon's work-stealing scheduler for concurrent
-//!   directory traversal
-//! - **Platform Optimisations**: Linux-specific `getdents` system calls for optimal
-//!   performance, with fallbacks for other platforms
-//! - **Flexible Filtering**: Support for multiple filtering criteria:
-//!   - File name patterns (regex), glob to be added shortly(CLI only for now)
-//!   - File size ranges
-//!   - File types (regular, directory, symlink, etc.)
-//!   - File extensions
-//!   - Hidden file handling
-//!   - Custom filter functions
-//! - **Cycle Detection**: Automatic symlink cycle prevention using inode caching
-//! - **Depth Control**: Configurable maximum search depth
-//! - **Path Canonicalisation**: Optional path resolution to absolute paths
-//! - **Error Handling**: Configurable error reporting with detailed diagnostics
-//!
-//! ## Performance Characteristics
-//!
-//! - Uses mimalloc as global allocator on supported platforms for improved
-//!   memory allocation performance
-//! - Batched result delivery to minimise channel contention
-//! - Zero-copy path handling where possible
-//! - Avoids unnecessary `stat` calls through careful API design
-//! - Makes up to 50% less `getdents` syscalls on linux (Not rigorously tested, check getdents `fill_buffer` docs)
-//!
-//! ## Platform Support
-//!
-//! - **Linux**: Optimised with direct `getdents` system calls
-//! - **macOS/BSD**: Standard `readdir` with potential for future `getattrlistbulk` optimisation
-//! - **Other Unix-like**: Fallback to standard library functions
-//! - **Windows**: Not currently supported (PRs welcome!)
-//!
-//! ## Quick Start
-//!
-//! ```rust
-//! use fdf::{Finder,DirEntry,SearchConfigError};
-//! use std::sync::mpsc::Receiver;
-//!
-//! fn find_files() -> Result<Receiver<Vec<DirEntry>>, SearchConfigError> {
-//!     let finder = Finder::init("/path/to/search")
-//!         .pattern("*.rs")
-//!         .keep_hidden(false)
-//!         .max_depth(Some(3))
-//!         .follow_symlinks(true)
-//!         .canonicalise_root(true)  // Resolve the root to a full path
-//!         .build()?;
-//!
-//!     finder.traverse()
-//! }
+/*!
+ # fdf - A High-Performance Parallel File System Traversal Library
+
+ `fdf` is a Rust library designed for efficient, parallel directory traversal
+ with extensive filtering capabilities. It leverages Rayon for parallel processing
+ and uses platform-specific optimisations for maximum performance.
+
+ **This will be renamed before a 1.0!**
+
+ ## Features
+
+ - **Parallel Processing**: Utilises Rayon's work-stealing scheduler for concurrent
+   directory traversal
+ - **Platform Optimisations**: Linux-specific `getdents` system calls for optimal
+   performance, with fallbacks for other platforms
+ - **Flexible Filtering**: Support for multiple filtering criteria:
+   - File name patterns (regex), glob to be added shortly(CLI only for now)
+   - File size ranges
+   - File types (regular, directory, symlink, etc.)
+   - File extensions
+   - Hidden file handling
+   - Custom filter functions
+ - **Cycle Detection**: Automatic symlink cycle prevention using inode caching
+ - **Depth Control**: Configurable maximum search depth
+ - **Path Canonicalisation**: Optional path resolution to absolute paths
+ - **Error Handling**: Configurable error reporting with detailed diagnostics
+
+ ## Performance Characteristics
+
+ - Uses mimalloc as global allocator on supported platforms for improved
+   memory allocation performance
+ - Batched result delivery to minimise channel contention
+ - Zero-copy path handling where possible
+ - Avoids unnecessary `stat` calls through careful API design
+ - Makes up to 50% less `getdents` syscalls on linux (Not rigorously tested, check getdents `fill_buffer` docs)
+
+ ## Platform Support
+
+ - **Linux**: Optimised with direct `getdents` system calls
+ - **macOS/BSD**: Standard `readdir` with potential for future `getattrlistbulk` optimisation
+ - **Other Unix-like**: Fallback to standard library functions
+ - **Windows**: Not currently supported (PRs welcome!)
+
+ ## Quick Start
+
+ ```rust
+ use fdf::{Finder,DirEntry,SearchConfigError};
+ use std::sync::mpsc::Receiver;
+
+ fn find_files() -> Result<Receiver<Vec<DirEntry>>, SearchConfigError> {
+     let finder = Finder::init("/path/to/search")
+         .pattern("*.rs")
+         .keep_hidden(false)
+         .max_depth(Some(3))
+         .follow_symlinks(true)
+         .canonicalise_root(true)  // Resolve the root to a full path
+         .build()?;
+
+     finder.traverse()
+ }
+ ```
+
+ ## Safety Considerations
+
+ - **Symlink Following**: Enabled by `follow_symlinks(true)`, but use with caution
+   to avoid infinite recursion (though we have guards against this!)
+ - **Depth Limits**: Always consider setting `max_depth` for large directory trees
+ - **Error Handling**: Use `show_errors(true)` to get diagnostic information about
+   permission errors and other issues
+
+ ## Examples
+
+ ### Basic Usage
+ ```rust
+ # use fdf::{Finder};
+ let receiver = Finder::init(".")
+     .pattern(".*txt")
+     .build()
+     .unwrap()
+     .traverse()
+     .unwrap();
+
+ for batch in receiver {
+     for entry in batch {
+         println!("Found: {}", entry.to_string_lossy());
+     }
+ }
 //! ```
-//!
-//! ## Safety Considerations
-//!
-//! - **Symlink Following**: Enabled by `follow_symlinks(true)`, but use with caution
-//!   to avoid infinite recursion (though we have guards against this!)
-//! - **Depth Limits**: Always consider setting `max_depth` for large directory trees
-//! - **Error Handling**: Use `show_errors(true)` to get diagnostic information about
-//!   permission errors and other issues
-//!
-//! ## Examples
-//!
-//! ### Basic Usage
-//! ```rust
-//! # use fdf::{Finder};
-//! let receiver = Finder::init(".")
-//!     .pattern(".*txt")
-//!     .build()
-//!     .unwrap()
-//!     .traverse()
-//!     .unwrap();
-//!
-//! for batch in receiver {
-//!     for entry in batch {
-//!         println!("Found: {}", entry.to_string_lossy());
-//!     }
-//! }
-//! ```
+*/
 
 use rayon::prelude::*;
 
@@ -137,8 +139,8 @@ mod types;
 pub use types::FileDes;
 #[cfg(target_os = "linux")]
 pub(crate) use types::SyscallBuffer;
-pub use types::{BUFFER_SIZE, LOCAL_PATH_MAX, Result};
-pub(crate) use types::{DirEntryFilter, FilterType, PathBuffer};
+pub use types::{BUFFER_SIZE, Result};
+pub(crate) use types::{DirEntryFilter, FilterType};
 mod traits_and_conversions;
 pub(crate) use traits_and_conversions::BytePath;
 mod utils;
@@ -335,10 +337,12 @@ impl Finder {
         reason = "Borrowing doesn't work on this extreme lint"
     )]
     #[expect(clippy::option_if_let_else, reason = "Complicates it even more ")]
-    /// Advanced filtering for directories and symlinks with filesystem constraints.
-    ///
-    /// Handles same-filesystem constraints, inode caching, and symlink resolution
-    /// to prevent infinite loops and duplicate traversal.
+    /**
+     Advanced filtering for directories and symlinks with filesystem constraints.
+
+     Handles same-filesystem constraints, inode caching, and symlink resolution
+     to prevent infinite loops and duplicate traversal.
+    */
     fn directory_or_symlink_filter(&self, dir: &DirEntry) -> bool {
         match dir.file_type {
             // Normal directories
@@ -372,10 +376,12 @@ impl Finder {
 
                 // Check if we've already traversed this inode
                 self.inode_cache.as_ref().is_none_or(|cache| {
-                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))) &&
-                // if we're traversing in the same root, then we'll find it anyway so skip it
-                dir.get_realpath().is_ok_and(|path| !path.to_bytes().starts_with(self.root_dir().as_bytes()))
-                })
+                cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))) &&
+                // Run get_realpath using its closure form
+                dir.get_realpath(|path| {
+                    Ok(!path.to_bytes().starts_with(self.root_dir().as_bytes()))
+                }).unwrap_or(false)
+            })
             })
             }
 
@@ -391,14 +397,16 @@ impl Finder {
     )]
     #[inline]
     #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
-    /// Recursively processes a directory, sending found files to a channel.
-    ///
-    /// This method uses a depth-first traversal with `rayon` to process directories
-    /// in parallel.
-    ///
-    /// # Arguments
-    /// * `dir` - The `DirEntry` representing the directory to process.
-    /// * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
+    /**
+     Recursively processes a directory, sending found files to a channel.
+
+     This method uses a depth-first traversal with `rayon` to process directories
+     in parallel.
+
+     # Arguments
+     * `dir` - The `DirEntry` representing the directory to process.
+     * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
+    */
     fn process_directory(&self, dir: DirEntry, sender: &Sender<Vec<DirEntry>>) {
         if !self.directory_or_symlink_filter(&dir) {
             return; //check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info

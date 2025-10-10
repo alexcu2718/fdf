@@ -89,7 +89,8 @@ impl ReadDir {
        without following the link.
 
      # Examples
-     ```
+     ```no-run
+     // These tests are disabled due to macos pecularities with tmp dir's
      use std::ffi::CStr;
      use fdf::{DirEntry, FileType};
      use std::env::temp_dir;

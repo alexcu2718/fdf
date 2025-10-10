@@ -2,7 +2,8 @@
 use crate::FileType;
 #[cfg(target_os = "linux")]
 use crate::SyscallBuffer;
-use crate::{DirEntry, FileDes, Result, traits_and_conversions::DirentConstructor as _};
+use crate::{DirEntry, FileDes, Result};
+use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
 use libc::DIR;
@@ -11,6 +12,14 @@ use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir};
 
+const_from_env!(FDF_MAX_FILENAME_LEN:usize="FDF_MAX_FILENAME_LEN",512); //setting the minimum extra memory it'll need
+// this should be ideally 256 but operating systemns can be funky, so i'm being a bit cautious
+// as this is written for unix, most except HURD i think allow the filename to be 255 max, I'm not writing this for hurd ffs.
+const _: () = assert!(
+    //0 cost compile time check that doesnt rely on debug
+    FDF_MAX_FILENAME_LEN >= 255,
+    "Expect it to always be above this value"
+);
 /**
  POSIX-compliant directory iterator using libc's readdir functions.
 
@@ -57,6 +66,54 @@ impl ReadDir {
         &self.path_buffer
     }
 
+    /**
+     Determines the file type of a directory entry with fallback resolution.
+
+     This method attempts to determine the file type using the directory entry's
+     `d_type` field when available, with a fallback to fstat-based resolution
+     when the type is unknown or unsupported by the filesystem.
+
+     # Arguments
+     * `d_type` - The file type byte from the directory entry's `d_type` field;This corresponds to DT_* constants in libc (e.g., `DT_REG`, `DT_DIR`).
+     * `filename` - The filename as a C string, used for fallback stat resolution;when `d_type` is `DT_UNKNOWN`
+
+     # Returns
+     A `FileType` enum variant representing the determined file type.
+
+     # Behavior
+     - **Fast Path**: When `d_type` contains a known file type (not `DT_UNKNOWN`),
+       returns the corresponding `FileType` without additional system calls.
+     - **Fallback Path**: When `d_type` is `DT_UNKNOWN`, performs a `fstat` call
+       on the file to determine its actual type.
+     - **Symlink Handling**: For `DT_LNK`, returns `FileType::Symlink` directly
+       without following the link.
+
+     # Examples
+     ```
+     use std::ffi::CStr;
+     use fdf::{DirEntry, FileType};
+     use std::env::temp_dir;
+     let tmpdir=temp_dir();
+     let tmp=tmpdir.as_os_str();
+     let direntry=DirEntry::new(tmp).unwrap();
+     let dir = direntry.readdir().unwrap();
+     let filename = c"filedoesnot exist";
+
+     // With known file type (regular file)
+     let file_type = dir.get_filetype(libc::DT_REG, filename);
+     assert!(file_type.is_regular_file());
+
+     // With unknown type requiring stat fallback
+     let file_type = dir.get_filetype(libc::DT_UNKNOWN, filename);
+     // Internally calls stat() to determine actual file type
+     ```
+
+     # Performance Notes
+     - Prefer using directory entries with supported `d_type` to avoid stat calls
+     - The fallback stat call adds filesystem overhead but ensures correctness
+     - Some filesystems (e.g., older XFS, NTFS) may (I haven't checked) return `DT_UNKNOWN`
+    */
+    #[inline]
     pub fn get_filetype(&self, d_type: u8, filename: &CStr) -> FileType {
         self.get_filetype_private(d_type, filename) //use an internal trait because i want to avoid code deduplication.
     }
@@ -88,7 +145,7 @@ impl ReadDir {
         unsafe { self.construct_entry(drnt.as_ptr()) }
     }
 
-    /** 
+    /**
      Determines the file type of a directory entry with fallback resolution.
 
      This method attempts to determine the file type using the directory entry's
@@ -127,8 +184,8 @@ impl ReadDir {
     let file_type = dir.get_filetype(libc::DT_REG, filename);
     assert!(file_type.is_regular_file());
 
-    
-    
+
+
     // With unknown type requiring stat fallback
     let file_type = dir.get_filetype(libc::DT_UNKNOWN, filename);
      // Internally calls stat() to determine actual file type
@@ -199,7 +256,7 @@ impl Iterator for ReadDir {
 }
 impl Drop for ReadDir {
     #[inline]
-    /** 
+    /**
      Closes the directory file descriptor to prevent resource leaks.
 
      File descriptors are limited system resources, so proper cleanup
@@ -633,5 +690,188 @@ impl Iterator for GetDents {
 
             return None; //signal end of directory
         }
+    }
+}
+
+/**
+  Internal trait for constructing directory entries during iteration
+
+ This trait provides the necessary components to construct `DirEntry` objects
+ from raw `dirent64` structures while maintaining path buffer state, tracking
+ file name positions, and managing directory traversal depth.
+
+*/
+pub trait DirentConstructor {
+    /// Returns a mutable reference to the path buffer used for constructing full paths
+    fn path_buffer(&mut self) -> &mut Vec<u8>;
+    /// Returns the current index in the path buffer where the filename should be appended
+    ///
+    /// This represents the length of the base directory path before adding the current filename.
+    fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
+    /// Returns the depth of the parent directory in the traversal hierarchy
+    ///
+    /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
+    fn parent_depth(&self) -> u16;
+    /// Returns the file descriptor for the current directory being read
+    fn file_descriptor(&self) -> &FileDes;
+
+    #[inline]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Not expecting a filepath to be >u16::MAX"
+    )]
+    /// Constructs a `DirEntry` from a raw directory entry pointer
+    #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
+    unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {
+        let base_len = self.file_index();
+        // SAFETY: The `drnt` must not be null (checked before using)
+        let dtype = unsafe { access_dirent!(drnt, d_type) }; //need to optimise this for illumos/solaris TODO!
+        // SAFETY: Same as above^
+        let inode = unsafe { access_dirent!(drnt, d_ino) };
+
+        // SAFETY: The `drnt` must not be null(by precondition)
+        let full_path = unsafe { self.construct_path(drnt) };
+        let path: Box<CStr> = full_path.into();
+        let file_type = self.get_filetype_private(dtype, &path);
+
+        DirEntry {
+            path,
+            file_type,
+            inode,
+            depth: self.parent_depth() + 1,
+            file_name_index: base_len as _,
+            is_traversible_cache: Cell::new(None), //// Lazy cache for traversal checks
+        }
+    }
+
+    #[inline]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the length of a path will never be above a u16 (well, i'm just not covering that extreme an edgecase!"
+    )]
+    fn init_from_direntry(dir_path: &DirEntry) -> (Vec<u8>, u16) {
+        let dir_path_in_bytes = dir_path.as_bytes();
+        let mut base_len = dir_path_in_bytes.len(); // get length of directory path
+
+        let is_root = dir_path_in_bytes == b"/";
+
+        let needs_slash_u8 = u8::from(!is_root); // check if we need to append a slash
+        let needs_slash: usize = usize::from(needs_slash_u8);
+        //set a conservative estimate incase it returns something useless
+        // Initialise buffer with zeros to avoid uninitialised memory then add the max length of a filename on
+        let mut path_buffer = vec![0u8; base_len + needs_slash + FDF_MAX_FILENAME_LEN + 10]; //add 10 for good measure negligible performance cost,
+        // Please note future readers, `PATH_MAX` is not the max length of a path, it's simply the maximum length of a path that POSIX functions will take
+        // I made this mistake then suffered a segfault to the knee. BEWARB
+        let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
+        // SAFETY: the memory regions do not overlap , src and dst are both valid and alignment is trivial (u8)
+        unsafe { core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr, base_len) }; // copy path
+        #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
+        // SAFETY: write is within buffer bounds
+        unsafe {
+            *buffer_ptr.add(base_len) = b'/' * needs_slash_u8 // add slash if needed  (this avoids a branch ), either add 0 or  add a slash (multiplication)
+        };
+
+        base_len += needs_slash; // update length if slash added
+
+        (path_buffer, base_len as _)
+    }
+
+    #[inline]
+    /**
+      Constructs a full path by appending the directory entry name to the base path
+
+
+    */
+    unsafe fn construct_path(&mut self, drnt: *const dirent64) -> &CStr {
+        let base_len = self.file_index();
+        // SAFETY: The `drnt` must not be null (checked before using)
+        let d_name = unsafe { access_dirent!(drnt, d_name) };
+        // SAFETY: as above
+        // Add 1 to include the null terminator
+        let name_len = unsafe { crate::utils::dirent_name_length(drnt) + 1 };
+
+        let path_buffer = self.path_buffer();
+        // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
+        let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) };
+        // SAFETY:
+        // - `d_name` and `buffer` don't overlap (different memory regions)
+        // - Both pointers are properly aligned for byte copying
+        // - `name_len` is within `buffer` bounds (checked by debug assertion)
+        unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) };
+
+        /*
+         SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
+        */
+        #[allow(clippy::multiple_unsafe_ops_per_block)]
+        unsafe {
+            CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..base_len + name_len))
+        }
+    }
+
+    #[inline]
+    #[allow(clippy::multiple_unsafe_ops_per_block)]
+    #[allow(clippy::transmute_ptr_to_ptr)]
+    #[allow(clippy::wildcard_enum_match_arm)]
+    fn get_filetype_private(&self, d_type: u8, path: &CStr) -> FileType {
+        match FileType::from_dtype(d_type) {
+            FileType::Unknown => {
+                // Fall back to fstatat for filesystems that don't provide d_type (DT_UNKNOWN)
+                /* SAFETY:
+                - `file_index()` points to the start of the file name within `bytes`
+                - The slice from this index to the end includes the null terminator
+                - The slice is guaranteed to represent a valid C string (thus null terminated) */
+                let cstr_name: &CStr = unsafe {
+                    CStr::from_bytes_with_nul_unchecked(
+                        path.to_bytes_with_nul().get_unchecked(self.file_index()..),
+                    )
+                };
+                FileType::from_fd_no_follow(self.file_descriptor(), cstr_name)
+            }
+            known_type => known_type,
+        }
+    }
+}
+
+impl DirentConstructor for ReadDir {
+    #[inline]
+    fn path_buffer(&mut self) -> &mut Vec<u8> {
+        &mut self.path_buffer
+    }
+
+    #[inline]
+    fn file_index(&self) -> usize {
+        self.file_name_index as _
+    }
+
+    #[inline]
+    fn parent_depth(&self) -> u16 {
+        self.parent_depth
+    }
+
+    #[inline]
+    fn file_descriptor(&self) -> &FileDes {
+        self.dirfd()
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl DirentConstructor for GetDents {
+    #[inline]
+    fn path_buffer(&mut self) -> &mut Vec<u8> {
+        &mut self.path_buffer
+    }
+
+    #[inline]
+    fn file_index(&self) -> usize {
+        self.file_name_index as _
+    }
+
+    #[inline]
+    fn parent_depth(&self) -> u16 {
+        self.parent_depth
+    }
+    #[inline]
+    fn file_descriptor(&self) -> &FileDes {
+        &self.fd
     }
 }

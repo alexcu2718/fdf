@@ -98,6 +98,7 @@ use std::{
 
 // Re-exports
 pub use libc;
+pub use chrono;
 
 mod finderbuilder;
 pub use finderbuilder::FinderBuilder;
@@ -169,7 +170,11 @@ use dashmap::DashSet;
 pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
-#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
+#[cfg(all(
+    any(target_os = "linux", target_os = "macos"), 
+    not(miri),
+    not(debug_assertions)
+))]
 //miri doesnt support custom allocators
 //not sure which platforms support this, BSD doesnt from testing, will test others as appropriate(GREAT DOCS!!!)
 #[global_allocator]
@@ -177,14 +182,14 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 //use std::num::
 /**
-// The `Finder` struct is the main entry point for the file search.
-// Its methods are exposed for building the search configuration
+The `Finder` struct is the main entry point for the file search.
+Its methods are exposed for building the search configuration
 
-  The main entry point for file system search operations.
+The main entry point for file system search operations.
 
-  `Finder` provides a high-performance, parallel file system traversal API
-  with configurable filtering and search criteria. It uses Rayon for parallel
-  execution and provides both synchronous and asynchronous result handling.
+`Finder` provides a high-performance, parallel file system traversal API
+with configurable filtering and search criteria. It uses Rayon for parallel
+execution and provides both synchronous and asynchronous result handling.
 
 */
 #[derive(Debug)]

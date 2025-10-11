@@ -7,6 +7,7 @@
  - Flexible filtering by name, size, type, and custom criteria
  - Symbolic link handling with cycle detection
  - Cross-platform support with platform-specific optimisations
+ - Provides easy access to `CStr` for FFI use.
 
  # Examples
  Simple file search example
@@ -103,7 +104,7 @@ use std::{
   - **File type**: A 1-byte enum representing the entry's type (file, directory, etc.).
   - **Inode**: An 8-byte integer for the file's unique inode number.
   - **Depth**: A 2-byte integer indicating the entry's depth from the root.
-  - **File name index**: A 2-byte integer pointing to the start of the file name within the path buffer.
+  - **File name index**: A 8-byte integer pointing to the start of the file name within the path buffer.
   - **is traversible cache**: A 1 byte `Cell<Option<bool>>` an Implementation detail that avoids recalling stat on symlinks
 
   # Examples

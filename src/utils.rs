@@ -204,7 +204,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
         let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
         /* Note, I don't index as a u64 with eg (reclen-8)/8 because that adds a division which is a costly operations, relatively speaking
-        let last_word: u64 = unsafe { *(dirent.cast::<u64>()).add((reclen - 8)/8)}; //this will also work but it's less performant (MINUTELY)
+        let last_word: u64 = unsafe { *(dirent.cast::<u64>()).add((reclen - 8)/8 (or >>3))}; //this will also work but it's less performant (MINUTELY)
         */
 
         #[cfg(target_endian = "little")]

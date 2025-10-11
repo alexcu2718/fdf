@@ -313,7 +313,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
 
 */
-
+use core::num::NonZeroU64;
 #[inline]
 pub(crate) const fn repeat_u8(x: u8) -> usize {
     usize::from_ne_bytes([x; size_of::<usize>()])
@@ -332,32 +332,38 @@ const LO_U64: u64 = repeat_u64(0x01);
 const HI_U64: u64 = repeat_u64(0x80);
 
 #[inline]
-/// Returns the index (0..=7) of the first zero byte** in a `u64` word
-///
-/// This uses a branchless, bitwise technique that identifies zero bytes
-/// by subtracting `0x01` from each byte and masking out non-zero bytes.
-///
-///
-/// The computation:
-/// - `x.wrapping_sub(LO_U64)`: subtracts 1 from each byte
-/// - `& !x`: clears bits where x had 1s (preserves potential zero bytes)
-/// - `& HI_U64`: isolates the high bit of each byte
-///
-/// The resulting word will have high bits set only for zero bytes in `x`.
-/// We then use `trailing_zeros() >> 3` to get the byte index (0-based).
-/// >> 3 converts from bit position to byte index (divides by 8)
-/// Returns:
-/// - The byte index of the first zero byte in `x`
-pub const fn find_zero_byte_u64(x: u64) -> usize {
-    let zero_bit = (x.wrapping_sub(LO_U64) & !x & HI_U64);
+/**
+ Returns the index (0–7) of the first zero byte in a `u64` word.
 
-    #[cfg(target_endian = "little")]
-    {
-        (zero_bit.trailing_zeros() >> 3) as usize
-    }
-    #[cfg(not(target_endian = "little"))]
-    {
-        (zero_bit.leading_zeros() >> 3) as usize
+ This function uses a **branchless bitwise method** to detect zero bytes
+ efficiently, avoiding per-byte comparisons.
+
+ **How it works:**
+ - `x.wrapping_sub(LO_U64)` subtracts 1 from each byte.
+ - `& !x` clears bits that were set in `x`, leaving candidates for zero bytes.
+ - `& HI_U64` isolates the high bit of each byte.
+
+ The resulting value has the high bit set only in bytes that were zero in `x`.
+
+ We then use either:
+ - `trailing_zeros() >> 3` on little-endian systems, or
+ - `leading_zeros() >> 3` on big-endian systems
+ to convert the bit index of the first match into a byte index (dividing by 8).
+
+ **Returns:**
+ - `Some(index)` where `index` is the byte position (0–7) of the first zero byte
+ - `None` if no zero byte is present
+*/
+pub const fn find_zero_byte_u64(x: u64) -> Option<usize> {
+    let matches = NonZeroU64::new(x.wrapping_sub(LO_U64) & !x & HI_U64);
+
+    if let Some(nonzero_matches) = matches {
+        #[cfg(target_endian = "big")]
+        return Some((nonzero_matches.leading_zeros() >> 3) as usize);
+        #[cfg(target_endian = "little")]
+        return Some((nonzero_matches.trailing_zeros() >> 3) as usize);
+    } else {
+        None
     }
 }
 
@@ -365,8 +371,8 @@ pub const fn find_zero_byte_u64(x: u64) -> usize {
 pub(crate) const unsafe fn find_zero_byte_u64_optimised(x: u64) -> usize {
     // use ctl_nonzero's for this via  nonzero u64
     // This skips the need to for all 0's then uses instruction bsf on most architectures
-    let zero_bit =
-        unsafe { core::num::NonZeroU64::new_unchecked(x.wrapping_sub(LO_U64) & !x & HI_U64) };
+    // this function is only used privately.
+    let zero_bit = unsafe { NonZeroU64::new_unchecked(x.wrapping_sub(LO_U64) & !x & HI_U64) };
 
     #[cfg(target_endian = "little")]
     {
@@ -441,13 +447,14 @@ assert_eq!(find_char_in_word(b'l', bytes), Some(2)); // first 'l'
 pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     let char_array = u64::from_ne_bytes(bytestr);
     let xor_result = char_array ^ repeat_u64(c);
-    let matches = (xor_result.wrapping_sub(LO_U64)) & !xor_result & HI_U64;
+    let matches = NonZeroU64::new(xor_result.wrapping_sub(LO_U64) & !xor_result & HI_U64);
 
-    if matches != 0 {
+    if let Some(nonzero_matches) = matches {
+        // Using the trick for ctlz_nonzero where it's perfectly defined here
         #[cfg(target_endian = "big")]
-        return Some((matches.leading_zeros() >> 3) as usize);
+        return Some((nonzero_matches.leading_zeros() >> 3) as usize);
         #[cfg(target_endian = "little")]
-        return Some((matches.trailing_zeros() >> 3) as usize);
+        return Some((nonzero_matches.trailing_zeros() >> 3) as usize);
     } else {
         None
     }

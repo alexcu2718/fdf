@@ -85,7 +85,7 @@
          println!("Found: {}", entry.to_string_lossy());
      }
  }
-//! ```
+ ```
 */
 
 use rayon::prelude::*;
@@ -97,8 +97,8 @@ use std::{
 };
 
 // Re-exports
-pub use libc;
 pub use chrono;
+pub use libc;
 
 mod finderbuilder;
 pub use finderbuilder::FinderBuilder;
@@ -171,7 +171,7 @@ pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(all(
-    any(target_os = "linux", target_os = "macos"), 
+    any(target_os = "linux", target_os = "macos"),
     not(miri),
     not(debug_assertions)
 ))]

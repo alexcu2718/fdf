@@ -158,13 +158,11 @@ pub struct DirEntry {
     /// Offset in the path buffer where the file name starts.
     ///
     /// This helps quickly extract the file name from the full path.
-    pub(crate) file_name_index: u16, //2bytes
+    pub(crate) file_name_index: usize, //8 bytes
     ///
     /// `None` means not computed yet, `Some(bool)` means cached result.
     pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
-                                                         //30 bytes, rounded to 32
-                                                         // We could add an extra bool on it? and still abuse null pointer optimisation for Options
-}
+} //36 bytes
 
 impl core::ops::Deref for DirEntry {
     type Target = [u8];
@@ -175,11 +173,17 @@ impl core::ops::Deref for DirEntry {
     }
 }
 
-// Also implement AsRef<[u8]> for convenience
 impl AsRef<[u8]> for DirEntry {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.as_bytes()
+    }
+}
+
+impl<'drnt> From<&'drnt DirEntry> for &'drnt CStr {
+    #[inline]
+    fn from(entry: &'drnt DirEntry) -> &'drnt CStr {
+        &entry.path
     }
 }
 
@@ -736,7 +740,7 @@ impl DirEntry {
     #[allow(clippy::cast_possible_truncation)]
     pub fn to_full_path(&self) -> Result<Self> {
         self.get_realpath(|full_path| {
-            let file_name_index = full_path.to_bytes().file_name_index() as u16;
+            let file_name_index = full_path.to_bytes().file_name_index();
 
             let (file_type, ino) = if self.is_symlink() {
                 let statted = self.get_stat()?; // only call stat if it's a symlink, because I don't deduplicate normal files, this works well for symlinks
@@ -908,9 +912,8 @@ impl DirEntry {
     /// Cost free conversion to bytes (because it is already is bytes)
     pub const fn as_bytes(&self) -> &[u8] {
         // SAFETY: Avoid UB check, it's guaranteed to be in range due to having 1 less than the 'true' len
-        // and guaranteed non null
         unsafe {
-            &*core::ptr::slice_from_raw_parts(self.path.to_bytes_with_nul().as_ptr(), self.len())
+            core::slice::from_raw_parts(self.path.to_bytes_with_nul().as_ptr(), self.len())
             // len is the length of the internal `CStr` -1
         }
     }
@@ -978,7 +981,7 @@ impl DirEntry {
     #[must_use]
     /// Returns the length of the base path (eg /home/user/ is 6 '/home/')
     pub const fn file_name_index(&self) -> usize {
-        self.file_name_index as _
+        self.file_name_index
     }
 
     #[inline]
@@ -1129,10 +1132,6 @@ impl DirEntry {
     }
 
     #[inline]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "the path won't be longer than u16"
-    )]
     /**
      Creates a new [`DirEntry`] from the given path.
 
@@ -1196,7 +1195,7 @@ impl DirEntry {
             file_type: get_stat.into(),
             inode,
             depth: 0,
-            file_name_index: path_ref.file_name_index() as u16,
+            file_name_index: path_ref.file_name_index(),
             is_traversible_cache: Cell::new(None), //no need to check
         })
     }

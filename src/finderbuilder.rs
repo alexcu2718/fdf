@@ -303,9 +303,7 @@ impl FinderBuilder {
 
         // Apply canonicalisation if requested
         if self.canonicalise {
-            Ok(path_check
-                .canonicalize()
-                .map(|p| p.into_os_string().into_boxed_os_str())?)
+            Ok(path_check.canonicalize().map(|p| p.as_os_str().into())?)
         } else {
             Ok(dir_to_use.into_boxed_os_str())
         }

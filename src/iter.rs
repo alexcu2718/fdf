@@ -35,7 +35,7 @@ pub struct ReadDir {
     /// Buffer storing the full directory path for constructing entry paths
     pub(crate) path_buffer: Vec<u8>,
     /// Index into `path_buffer` where filenames start (avoids recalculating)
-    pub(crate) file_name_index: u16,
+    pub(crate) file_name_index: usize,
     /// Depth of this directory relative to traversal root
     pub(crate) parent_depth: u16,
     /// The file descriptor of this directory, for use in calls like openat/statat etc.
@@ -314,7 +314,7 @@ pub struct GetDents {
     pub(crate) path_buffer: Vec<u8>,
     /// Length of the base directory path including the trailing slash
     /// Used for efficient filename extraction and path construction
-    pub(crate) file_name_index: u16,
+    pub(crate) file_name_index: usize,
     /// Depth of the parent directory in the directory tree hierarchy
     /// Used to calculate depth for child entries during recursive traversal
     pub(crate) parent_depth: u16,
@@ -717,10 +717,6 @@ pub trait DirentConstructor {
     fn file_descriptor(&self) -> &FileDes;
 
     #[inline]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "Not expecting a filepath to be >u16::MAX"
-    )]
     /// Constructs a `DirEntry` from a raw directory entry pointer
     #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {
@@ -746,11 +742,7 @@ pub trait DirentConstructor {
     }
 
     #[inline]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "the length of a path will never be above a u16 (well, i'm just not covering that extreme an edgecase!"
-    )]
-    fn init_from_direntry(dir_path: &DirEntry) -> (Vec<u8>, u16) {
+    fn init_from_direntry(dir_path: &DirEntry) -> (Vec<u8>, usize) {
         let dir_path_in_bytes = dir_path.as_bytes();
         let mut base_len = dir_path_in_bytes.len(); // get length of directory path
 
@@ -774,7 +766,7 @@ pub trait DirentConstructor {
 
         base_len += needs_slash; // update length if slash added
 
-        (path_buffer, base_len as _)
+        (path_buffer, base_len)
     }
 
     #[inline]
@@ -841,7 +833,7 @@ impl DirentConstructor for ReadDir {
 
     #[inline]
     fn file_index(&self) -> usize {
-        self.file_name_index as _
+        self.file_name_index
     }
 
     #[inline]
@@ -864,7 +856,7 @@ impl DirentConstructor for GetDents {
 
     #[inline]
     fn file_index(&self) -> usize {
-        self.file_name_index as _
+        self.file_name_index
     }
 
     #[inline]

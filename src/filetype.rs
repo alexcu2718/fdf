@@ -1,7 +1,7 @@
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
-    DT_SOCK, DT_UNKNOWN, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
-    fstatat, mode_t,
+    DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, fstatat,
+    mode_t,
 };
 
 use crate::FileDes;
@@ -84,10 +84,7 @@ impl FileType {
             DT_FIFO => Self::Pipe,
             DT_LNK => Self::Symlink,
             DT_SOCK => Self::Socket,
-            DT_UNKNOWN => Self::Unknown,
-            // SAFETY: d_type can only be one of the above
-            // Provide a hint to the optimiser to realise it can only take these values
-            _ => unsafe { core::hint::unreachable_unchecked() },
+            _ /*DT_UNKNOWN */=> Self::Unknown,
         }
     }
 

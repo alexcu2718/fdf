@@ -758,6 +758,14 @@ pub trait DirentConstructor {
         let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
         // SAFETY: the memory regions do not overlap , src and dst are both valid and alignment is trivial (u8)
         unsafe { core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr, base_len) }; // copy path
+
+        /*
+
+        Essentially  what we're doing here is creating 1 vector per  directory, with enough space allocated to hold any filename
+
+
+         */
+
         #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
         // SAFETY: write is within buffer bounds
         unsafe {

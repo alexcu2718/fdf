@@ -7,10 +7,11 @@ use std::io;
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]
-///
-/// This enum encapsulates all possible I/O errors that can occur during filesystem
-/// operations, with precise mapping from libc error codes to semantic error variants.
-/// Comprehensive filesystem I/O error type mapping libc error codes to meaningful variants.
+/**
+This enum encapsulates all possible I/O errors that can occur during filesystem
+operations, with precise mapping from libc error codes to semantic error variants.
+Comprehensive filesystem I/O error type mapping libc error codes to meaningful variants.
+*/
 pub enum FilesystemIOError {
     /// Permission denied for file system access (EACCES, EPERM)
     AccessDenied(io::Error),
@@ -160,6 +161,8 @@ impl FilesystemIOError {
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]
+/// A simple error enum (needs more documentation )
+//TODO!
 pub enum DirEntryError {
     /// Time conversion or timestamp processing failed
     TimeError,

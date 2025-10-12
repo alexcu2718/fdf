@@ -163,8 +163,7 @@ impl SizeFilter {
 
 use clap::builder::TypedValueParser;
 
-// Custom parser that provides helpful error messages and suggestions
-// Custom parser that provides helpful error messages and suggestions
+/// A Custom parser that provides helpful error messages and suggestions
 #[derive(Clone, Debug)]
 #[allow(clippy::exhaustive_structs)]
 pub struct SizeFilterParser;
@@ -242,7 +241,7 @@ impl TypedValueParser for SizeFilterParser {
     fn possible_values(
         &self,
     ) -> Option<Box<dyn Iterator<Item = clap::builder::PossibleValue> + '_>> {
-        // Provide examples but don't restrict to only these values
+        // Provide examples but don't restrict to only these values (allow user to have custom entries but allows to use these as a template)
         Some(Box::new(
             [
                 // No prefix - exact size
@@ -267,6 +266,7 @@ impl TypedValueParser for SizeFilterParser {
 
 #[derive(Clone, Debug)]
 #[allow(clippy::exhaustive_structs)]
+/// A struct to provide completions for filetype completions in CLI
 pub struct FileTypeParser;
 
 impl TypedValueParser for FileTypeParser {
@@ -283,14 +283,14 @@ impl TypedValueParser for FileTypeParser {
             .ok_or_else(|| clap::Error::new(clap::error::ErrorKind::InvalidUtf8).with_cmd(cmd))?;
 
         match value_str.to_lowercase().as_str() {
-            "d" | "dir" | "directory" => Ok(FileTypeFilter::Directory),
+            "d" | "dir" | "hardlink" | "directory" => Ok(FileTypeFilter::Directory),
             "u" | "unknown" => Ok(FileTypeFilter::Unknown),
             "l" | "symlink" | "link" => Ok(FileTypeFilter::Symlink),
             "f" | "file" | "regular" => Ok(FileTypeFilter::File),
             "p" | "pipe" | "fifo" => Ok(FileTypeFilter::Pipe),
             "c" | "char" | "chardev" | "chardevice" => Ok(FileTypeFilter::CharDevice),
             "b" | "block" | "blockdev" | "blockdevice" => Ok(FileTypeFilter::BlockDevice),
-            "s" | "socket" => Ok(FileTypeFilter::Socket),
+            "s" | "socket" | "sock" => Ok(FileTypeFilter::Socket),
             "e" | "empty" => Ok(FileTypeFilter::Empty),
             "x" | "exec" | "executable" => Ok(FileTypeFilter::Executable),
             _ => {
@@ -318,7 +318,7 @@ impl TypedValueParser for FileTypeParser {
                 error.insert(
                     clap::error::ContextKind::ValidValue,
                     clap::error::ContextValue::Strings(vec![
-                        "d, dir, directory".into(),
+                        "d, dir, directory, hardlink".into(),
                         "u, unknown".into(),
                         "l, symlink, link".into(),
                         "f, file, regular".into(),
@@ -327,7 +327,7 @@ impl TypedValueParser for FileTypeParser {
                         "b, block, blockdev".into(),
                         "s, socket".into(),
                         "e, empty".into(),
-                        "x, exec, executable".into(),
+                        "x, exec, exe ,executable".into(),
                     ]),
                 );
 
@@ -342,7 +342,7 @@ impl TypedValueParser for FileTypeParser {
         Some(Box::new(
             [
                 clap::builder::PossibleValue::new("d")
-                    .aliases(["dir", "directory"])
+                    .aliases(["dir", "directory", "hardlink"])
                     .help("Directory"),
                 clap::builder::PossibleValue::new("u")
                     .aliases(["unknown"])
@@ -360,16 +360,16 @@ impl TypedValueParser for FileTypeParser {
                     .aliases(["char", "chardev"])
                     .help("Character device"),
                 clap::builder::PossibleValue::new("b")
-                    .aliases(["block", "blockdev"])
+                    .aliases(["block", "blockdev", "block-device"])
                     .help("Block device"),
                 clap::builder::PossibleValue::new("s")
-                    .aliases(["socket"])
+                    .aliases(["socket", "sock"])
                     .help("Socket"),
                 clap::builder::PossibleValue::new("e")
                     .aliases(["empty"])
                     .help("Empty file"),
                 clap::builder::PossibleValue::new("x")
-                    .aliases(["exec", "executable"])
+                    .aliases(["exec", "executable", "exe"])
                     .help("Executable file"),
             ]
             .into_iter(),

@@ -311,6 +311,13 @@ macro_rules! send_files_if_not_empty {
     };
 }
 
+/// Extremely simple macro for getting rid of boiler blates
+macro_rules! return_os_error {
+    () => {{
+        return Err(std::io::Error::last_os_error().into());
+    }};
+}
+
 /// Macro for safely calling stat-like functions and handling the result, I might make it public?
 macro_rules! stat_syscall {
     // For fstatat with flags

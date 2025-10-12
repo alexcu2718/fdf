@@ -85,7 +85,7 @@ use core::cell::Cell;
 use core::ptr::NonNull;
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, R_OK,
-    W_OK, X_OK, access, c_char, fstatat, lstat, open, opendir, realpath, stat,
+    W_OK, X_OK, access, c_char, faccessat, fstatat, lstat, open, openat, opendir, realpath, stat,
 };
 use std::{
     ffi::{CStr, OsStr},
@@ -109,33 +109,32 @@ use std::{
 
   # Examples
 
-  ```
-  use fdf::DirEntry;
-  use std::path::Path;
-  use std::fs::File;
-  use std::io::Write;
-  use std::sync::Arc;
+    ```
+    use fdf::DirEntry;
+    use std::path::Path;
+    use std::fs::File;
+    use std::io::Write;
+    use std::sync::Arc;
 
 
 
-  // Create a temporary directory for the test
-  let temp_dir = std::env::temp_dir();
-
-  let file_path = temp_dir.join("test_file.txt");
-
-  // Create a file inside the temporary directory
-  {
-      let mut file = File::create(&file_path).expect("Failed to create file");
-      writeln!(file, "Hello, world!").expect("Failed to write to file");
-  }
-
-  // Create a DirEntry from the temporary file path
-   let entry = DirEntry::new(&file_path).unwrap();
-  assert!(entry.is_regular_file());
-  assert_eq!(entry.file_name(), b"test_file.txt");
+    // Create a temporary directory for the test
+    let temp_dir = std::env::temp_dir();
 
 
-  ```
+    let file_path = temp_dir.join("test_file.txt");
+
+    // Create a file inside the temporary directory
+
+    let mut file = File::create(&file_path).expect("Failed to create file");
+    writeln!(file, "Hello, world!").expect("Failed to write to file");
+
+
+    // Create a DirEntry from the temporary file path
+    let entry = DirEntry::new(&file_path).unwrap();
+    assert!(entry.is_regular_file());
+    assert_eq!(entry.file_name(), b"test_file.txt");
+    ```
 */
 #[derive(Clone)] //could probably implement a more specialised clone.
 pub struct DirEntry {
@@ -242,7 +241,7 @@ impl DirEntry {
     /// Returns the underlying path as a `Path`
     pub const fn as_path(&self) -> &Path {
         // SAFETY: bytes <=> OsStr <=> Path on unix
-        unsafe { core::mem::transmute(self.as_bytes()) }
+        unsafe { core::mem::transmute(self.as_bytes()) } //admittedly this and below are a const hack. Why not make it const if you can?
     }
 
     #[inline]
@@ -290,21 +289,15 @@ impl DirEntry {
      - Permission is denied
     */
     pub fn open(&self) -> Result<FileDes> {
-        // Opens the file and returns a file descriptor.
-        // This is a low-level operation that may fail if the file does not exist or cannot be opened.
+        // Opens the file and returns a file descriptor..
         const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
-
-        //   #[cfg(target_os="linux")]
-        //  let fd=unsafe{crate::syscalls::open_asm(self.as_ptr(),FLAGS)};
-        // #[cfg(not(target_os="linux"))]
         // SAFETY: the pointer is null terminated
         let fd = unsafe { open(self.as_ptr(), FLAGS) };
 
         if fd < 0 {
-            Err(std::io::Error::last_os_error().into())
-        } else {
-            Ok(crate::types::FileDes(fd))
+            return_os_error!()
         }
+        Ok(crate::types::FileDes(fd))
     }
     /**
      Opens the directory relative to a directory file descriptor and returns a file descriptor.
@@ -376,13 +369,12 @@ impl DirEntry {
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
         const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
         // SAFETY: the pointer is null terminated
-        let filedes = unsafe { libc::openat(fd.0, self.file_name_cstr().as_ptr(), FLAGS) };
+        let filedes = unsafe { openat(fd.0, self.file_name_cstr().as_ptr(), FLAGS) };
 
         if filedes < 0 {
-            Err(std::io::Error::last_os_error().into())
-        } else {
-            Ok(crate::types::FileDes(filedes))
+            return_os_error!()
         }
+        Ok(FileDes(filedes))
     }
 
     #[inline]
@@ -407,7 +399,7 @@ impl DirEntry {
         // This function reads the directory entries and populates the iterator.
         // It is called when the iterator is created or when it needs to be reset.
         if dir.is_null() {
-            return Err(std::io::Error::last_os_error().into());
+            return_os_error!()
         }
         // SAFETY: know it's non-null
         Ok(unsafe { NonNull::new_unchecked(dir) }) // Return a pointer to the start `DIR` stream
@@ -632,14 +624,9 @@ impl DirEntry {
         // - `file_name_index()` points to the start of the file name within `bytes`.
         // - The slice from this index to the end includes the null terminator.
         // - The slice is guaranteed to represent a valid C string.
-        // We transmute the slice into a `&CStr` reference for zero-copy access.
         #[allow(clippy::multiple_unsafe_ops_per_block)]
-        #[expect(
-            clippy::transmute_ptr_to_ptr,
-            reason = "They have the same representation due to repr transparent on cstr"
-        )]
         unsafe {
-            core::mem::transmute(bytes.get_unchecked(self.file_name_index()..))
+            CStr::from_bytes_with_nul_unchecked(bytes.get_unchecked(self.file_name_index()..))
         }
     }
 
@@ -666,13 +653,13 @@ impl DirEntry {
     /// Private function  because it invokes a closure (to avoid doubly allocating unnecessary)
     pub(crate) fn get_realpath<F, T>(&self, f: F) -> Result<T>
     where
-        F: FnOnce(&CStr) -> Result<T>,
+        F: Fn(&CStr) -> Result<T>,
     {
         // SAFETY: realpath mallocs a null-terminated string that must be freed, the pointer is null terminated
         let ptr = unsafe { realpath(self.as_ptr(), core::ptr::null_mut()) };
 
         if ptr.is_null() {
-            return Err(std::io::Error::last_os_error().into());
+            return_os_error!()
         }
 
         // SAFETY: ptr is valid and points to a null-terminated C string
@@ -786,8 +773,6 @@ impl DirEntry {
     This uses the `access` system call with `W_OK` to check write permissions
     without actually opening the file. It follows symlinks.
 
-    Note: This may perform unnecessary syscalls for obviously unwritable paths
-    like system directories. Future optimizations could exclude certain paths.
 
     # Returns
 
@@ -799,6 +784,52 @@ impl DirEntry {
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
         // SAFETY: The path is guaranteed to be a null terminated
         unsafe { access(self.as_ptr(), W_OK) == 0 }
+    }
+
+    #[inline]
+    /**
+     Checks if the file or directory is writable relative to a directory file descriptor.
+
+     This uses the `faccessat` system call with `W_OK` to check write permissions
+     without actually opening the file. It follows symlinks unless `AT_SYMLINK_NOFOLLOW`
+     is specified in the future.
+
+     # Arguments
+
+     * `fd` - A directory file descriptor to use as the base for relative path resolution
+
+     # Returns
+
+     `true` if the current process has write permission, `false` otherwise.
+     `false` if the file doesn't exist or on permission errors.
+
+    */
+    pub fn is_writable_at(&self, fd: &FileDes) -> bool {
+        // SAFETY: The path is guaranteed to be null-terminated and the file descriptor is valid
+        unsafe { faccessat(fd.0, self.file_name_cstr().as_ptr(), W_OK, 0) == 0 }
+    }
+
+    #[inline]
+    /**
+     Checks if the file or directory is writable relative to a directory file descriptor.
+
+     This uses the `faccessat` system call with `W_OK` to check write permissions
+     without actually opening the file. It follows symlinks unless `AT_SYMLINK_NOFOLLOW`
+     is specified in the future.
+
+     # Arguments
+
+     * `fd` - A directory file descriptor to use as the base for relative path resolution
+
+     # Returns
+
+     `true` if the current process has write permission, `false` otherwise.
+     `false` if the file doesn't exist or on permission errors.
+
+    */
+    pub fn exists_at(&self, fd: &FileDes) -> bool {
+        // SAFETY: The path is guaranteed to be null-terminated and the file descriptor is valid
+        unsafe { faccessat(fd.0, self.file_name_cstr().as_ptr(), F_OK, 0) == 0 }
     }
 
     #[inline]
@@ -829,7 +860,7 @@ impl DirEntry {
      Returns `DirEntryError::IOError` if the stat operation fails
     */
     pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(fstatat, fd, self, AT_SYMLINK_NOFOLLOW)
+        stat_syscall!(fstatat, fd, self.file_name_cstr(), AT_SYMLINK_NOFOLLOW)
     }
 
     #[inline]
@@ -905,7 +936,7 @@ impl DirEntry {
     *
     */
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(fstatat, fd, self, AT_SYMLINK_FOLLOW)
+        stat_syscall!(fstatat, fd, self.file_name_cstr(), AT_SYMLINK_FOLLOW)
     }
 
     #[inline]
@@ -1383,7 +1414,6 @@ impl DirEntry {
     ```
     */
     pub fn getdents(&self) -> Result<GetDents> {
-        use crate::iter::GetDents;
         GetDents::new(self)
     }
 }

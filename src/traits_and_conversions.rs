@@ -36,11 +36,7 @@ where
 
     /// Converts to UTF-8 string (with validation)
     fn as_str(&self) -> Result<&str>;
-    /// Converts to UTF-8 string without validation
-    ///
-    /// # Safety
-    /// Requires valid UTF-8 bytes (true on Unix)
-    unsafe fn as_str_unchecked(&self) -> &str;
+
     /// Converts to string with invalid UTF-8 replaced
     fn to_string_lossy(&self) -> std::borrow::Cow<'_, str>;
 }
@@ -99,16 +95,6 @@ where
     /// Returns the path as a `Result<&str>`
     fn as_str(&self) -> Result<&str> {
         core::str::from_utf8(self).map_err(crate::DirEntryError::Utf8Error)
-    }
-
-    #[inline]
-    /// Returns the path as a &str without checking if it is valid UTF-8.
-    /// # Safety
-    /// The caller must ensure that the bytes in `self.path` form valid UTF-8.
-    #[allow(clippy::missing_panics_doc)]
-    unsafe fn as_str_unchecked(&self) -> &str {
-        // SAFETY: The caller must ensure the path is valid utf8 before hand
-        unsafe { core::str::from_utf8_unchecked(self) }
     }
 
     #[inline]

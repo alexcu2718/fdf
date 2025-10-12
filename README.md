@@ -117,7 +117,7 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 The following function provides an elegant solution to avoid branch mispredictions/SIMD instructions during directory entry parsing (a performance-critical loop):
 
-See source for bigendian/`true`  version [found here](https://github.com/alexcu2718/fdf/blob/3fc7c2c13ec62e9004409e21dcd7c5ce0a31b438/src/utils.rs#L180)
+See source for bigendian/original version [found here](https://github.com/alexcu2718/fdf/blob/3fc7c2c13ec62e9004409e21dcd7c5ce0a31b438/src/utils.rs#L180)
 
 ```rust
 // Computational complexity: O(1) - truly constant time
@@ -336,30 +336,35 @@ Options:
 
 ### Potential Future Enhancements
 
-**1. io_uring System Call Batching**  
--- Explore batched stat operations (and others as appropriate)  
--- Significant challenges:  
--- Current lack of `getdents` support in io_uring  
--- Necessitates async runtime integration (potential Tokio dependency)  
--- Conflicts with minimal-dependency philosophy  
--- Linux only, that isn't too appealing for such a difficult addition (I'll probably not do it)
+#### 1. io_uring System Call Batching  
 
-**2. Native Threading Implementation**  
--- Replace Rayon dependency  
--- Develop custom work-distribution algorithm  
--- Current status: Experimental approaches underway  
+- Investigate batching of `stat` and similar operations.  
+- **Key challenges:**  
+  - No native `getdents` support in `io_uring`.  
+  - Would require async runtime integration (e.g. Tokio).  
+  - Conflicts with the project’s minimal-dependency design.  
+  - Linux-only feature, making it a low-priority and high-effort addition.  
 
-**3. Allocation-Optimised Iterator Adaptor**  
--- Design filter mechanism avoiding:  
--- Unnecessary directory allocations(via a closure with a function called on readdir/getdent)
+#### 2. Native Threading Implementation  
 
-**4. MacOS/*BSD((potentially) Specific Optimisations)**
--- Implement an iterator using getattrlistbulk (this may be possible for bsd too? or perhaps just linking getdirentries for BSD systems)
--- Test repo found at <https://github.com/alexcu2718/mac_os_getattrlistbulk_ls>
--- This allows for much more efficient syscalls to get filesystem entries
--- (Admittedly I've been a bit hesitant about this, because the API is quite complex and unwieldy!)
+- Replace the Rayon dependency with a custom threading model.
+- Develop a bespoke work-distribution algorithm.  
+- **Status:** Experimental work in progress.  
 
-**5. Possible Solaris/Illumos/Android optimisations**
--- While I only expose the getdents API for Linux (and it's far for documented),
--- I believe android/solaris/qemu allow for direct libc syscalls (essentially the BSD kernel/user space divide is quite )    (yes, Mac is heavily BSD based)
--- Luckily I believe this would be fairly easy to implement, probably a few hours at most(due to already existing plumbing)
+#### 3. Allocation-Optimised Iterator Adaptor  
+
+- Implement a filtering mechanism that avoids unnecessary directory allocations.  
+- Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.  
+
+#### 4. macOS/*BSD-Specific Optimisations  
+
+- Explore using `getattrlistbulk` on macOS (and possibly `getdirentries` on BSD).  
+- **Test repository:** [mac_os_getattrlistbulk_ls](https://github.com/alexcu2718/mac_os_getattrlistbulk_ls).  
+- Enables more efficient filesystem entry retrieval.  
+- Currently low priority due to API complexity and limited portability.  
+
+#### 5. Solaris / Illumos / Android Optimisations  
+
+- Although `getdents` is Linux-specific, other systems (Android, Solaris, QEMU) expose compatible libc syscalls.  
+- These could be integrated with minimal effort using existing code infrastructure.  
+- Implementation would likely take only a few hours once prioritised.  

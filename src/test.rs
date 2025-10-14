@@ -920,7 +920,7 @@ mod tests {
     }
 
     #[test]
-     #[cfg(target_os = "linux")]
+    #[cfg(target_os = "linux")]
     fn test_entries_linux() {
         let dir = temp_dir().join("test_dirlinux");
         let _ = fs::remove_dir(&dir);
@@ -935,7 +935,7 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-      #[test]
+    #[test]
     fn test_entries() {
         let dir = temp_dir().join("test_dir");
         let _ = fs::remove_dir(&dir);

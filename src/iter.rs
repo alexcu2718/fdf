@@ -202,22 +202,17 @@ impl ReadDir {
 
 impl Iterator for ReadDir {
     type Item = DirEntry;
+
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let entry = self.get_next_entry()?; //read the next entry from the directory, this is a pointer to the dirent structure.
-            //and early return if none
-            // SAFETY: we know the pointer is not null therefor the operations in this macro are fine to use.
-            skip_dot_or_dot_dot_entries!(entry.as_ptr(), continue); //we provide the continue here to make it explicit.
-            //skip . and .. entries, this macro is a bit evil, makes the code here a lot more concise
-
-            return Some(
-                self.construct_direntry(entry), //construct the dirent from the pointer, and the path buffer.
-                                                //this is safe because we've already checked if it's null
-            );
+        while let Some(drnt) = self.get_next_entry() {
+            skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); // this just skips dot entries in a really efficient manner(avoids strlen)
+            return Some(self.construct_direntry(drnt));
         }
+        None // signal end of directory
     }
 }
+
 impl Drop for ReadDir {
     #[inline]
     /**
@@ -296,7 +291,6 @@ impl Drop for GetDents {
       Drops the iterator, closing the file descriptor.
       we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
 
-      basically you can only have X number of file descriptors open at once, so we need to close them when we are done.
     */
     #[inline]
     fn drop(&mut self) {
@@ -420,32 +414,6 @@ impl GetDents {
         clippy::cast_possible_truncation,
         reason = "hot function, worth some easy optimisation, not caring about 32bit target"
     )]
-    /**
-     Fills the buffer with directory entries using the getdents system call.
-
-     This method attempts to read more directory entries into the internal buffer.
-     If the directory stream has already ended, returns immediately.
-
-     # Smart End-of-Stream Detection
-
-     This method uses an optimisation to minimise system calls by detecting when
-     the directory has been exhausted before getdents returns 0 bytes:
-
-     - A full directory read returns exactly `buffer.max_capacity()` bytes
-     - A partial read (end approaching) returns fewer bytes
-     - If returned bytes ≤ `(max_capacity - size_of::<dirent64>())`, there cannot be
-       another full buffer's worth of data remaining, indicating EOF
-
-     This avoids making an extra system call that would return 0 bytes.
-
-
-
-     # State Transitions
-
-     - Sets `end_of_stream = true` when EOF is detected via zero bytes or the optimisation
-     - Resets `offset = 0` to start reading from the beginning of new buffer data
-     - Updates `remaining_bytes` with the actual bytes read from the system call
-    */
     pub(crate) fn fill_buffer(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.is_end_of_stream() {
@@ -484,8 +452,20 @@ impl GetDents {
            system call, it would definitively call 0 bytes on next call, so we skip it!
            Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
         */
+        const MAX_SIZED_DIRENT: usize = 2 * size_of::<dirent64>() - 24; //this is `true` maximum dirent size for NTFS/CIFS, (deducting the 24 for fields)
+        // See proof at bottom of page.
         self.end_of_stream = !has_bytes_remaining
-            || self.syscall_buffer.max_capacity() - size_of::<dirent64>() >= self.remaining_bytes; //a boolean
+            || self.syscall_buffer.max_capacity() - MAX_SIZED_DIRENT >= self.remaining_bytes; //a boolean
+
+        /*
+        I have to make an edgecase for CIFS/NTFS file systems here, otherwise it would skip entries on these systems
+        Luckily rerunning benchmarks showed negligible, if any, perf cost, it probably only calls getdents a handful of times for the edgecases
+        you can't have perfection in systems programming, so many variables!
+        Ultimately this is a heuristic way, it's not fool proof, it won't however miss any entries but it CAN sometimes will call `getdents64` to get a 0
+        which (officially) indicates EOF
+
+        Actually, it's funny because this optimisation will be even MORE helpful for network file systems!
+        */
 
         // Reset to start reading from the beginning of the new buffer data for the case where it's got
         self.offset = 0;
@@ -616,19 +596,15 @@ impl GetDents {
 #[cfg(target_os = "linux")]
 impl Iterator for GetDents {
     type Item = DirEntry;
+
     #[inline]
-    /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.get_next_entry() {
-                Some(drnt) => {
-                    // this just skips dot entries in a really efficient manner(avoids strlen)
-                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
-                    return Some(self.construct_direntry(drnt));
-                }
-                None => return None, // signal end of directory
-            }
+        while let Some(drnt) = self.get_next_entry() {
+            skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); // this just skips dot entries in a really efficient manner(avoids strlen)
+            return Some(self.construct_direntry(drnt));
         }
+        None // signal end of directory
+        // annoying as hell to code to match the *exact* semantics of the readdir iterator, worth it tho, damn clean.
     }
 }
 
@@ -680,21 +656,28 @@ pub trait DirentConstructor {
     }
 
     #[inline]
+    #[expect(clippy::cast_lossless, reason = "stylistic stupidity")]
     fn init_from_direntry(dir_path: &DirEntry) -> (Vec<u8>, usize) {
         let dir_path_in_bytes = dir_path.as_bytes();
         let mut base_len = dir_path_in_bytes.len(); // get length of directory path
 
         let is_root = dir_path_in_bytes == b"/";
 
-        let needs_slash_u8 = u8::from(!is_root); // check if we need to append a slash
-        let needs_slash: usize = usize::from(needs_slash_u8);
+        let needs_slash: usize = usize::from(!is_root);
         //set a conservative estimate incase it returns something useless
         // Initialise buffer with zeros to avoid uninitialised memory then add the max length of a filename on
-        let mut path_buffer = vec![0u8; base_len + needs_slash + FDF_MAX_FILENAME_LEN + 10]; //add 10 for good measure negligible performance cost,
-        // Please note future readers, `PATH_MAX` is not the max length of a path, it's simply the maximum length of a path that POSIX functions will take
-        // I made this mistake then suffered a segfault to the knee. BEWARB
+        let mut path_buffer = vec![0u8; base_len + needs_slash + 510 + 10]; //add 10 just incase(superstitious, dont want to think anymore. could easily remove), trivial impact 
+
+        /*
+        Essentially because of CIFS/NTFS supporting 255 as a max length, you would think you're safe, NO
+        Unfortunately this characters are encoded as utf16 so they can be TWICE the usual `NAME_MAX`, ordinarily it'd be 255
+        https://longpathtool.com/blog/maximum-filename-length-in-ntfs/, see proof at bottom of page.
+        (Negligible performance cost but I choose these numbers for a reason, see man page copy paste below and the test at the bottom of the page!)
+        Please note future readers, `PATH_MAX` is not the max length of a path, it's simply the maximum length of a path that POSIX functions will take
+        I made this mistake then suffered a segfault to the knee. BEWARB
+         */
         let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
-        // SAFETY: the memory regions do not overlap , src and dst are both valid and alignment is trivial (u8)
+        // SAFETY: the memory regions do not overlap , src and dst are both valid, trivial
         unsafe { core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr, base_len) }; // copy path
 
         /*
@@ -705,7 +688,7 @@ pub trait DirentConstructor {
         #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
         // SAFETY: write is within buffer bounds
         unsafe {
-            *buffer_ptr.add(base_len) = b'/' * needs_slash_u8 // add slash if needed  (this avoids a branch ), either add 0 or  add a slash (multiplication)
+            *buffer_ptr.add(base_len) = b'/' * (!is_root as u8) // add slash if needed  (this avoids a branch ), either add 0 or  add a slash (multiplication)
         };
 
         base_len += needs_slash; // update length if slash added
@@ -811,3 +794,31 @@ impl DirentConstructor for GetDents {
         &self.fd
     }
 }
+
+/// basic code to show that the NTFS/CIFS edge case approximation is reasonable
+#[test] // usually I chuck my tests in the test.rs file but this one is *highly* specific to this page
+fn max_size_dirent() {
+    #[repr(C)]
+    struct DirentNTFS {
+        _ino: u64,
+        _offset: u64,
+        _d_reclen: u16,
+        _d_type: u8,
+        _d_name: [u8; 512],
+    }
+
+    debug_assert!(core::mem::size_of::<DirentNTFS>() == 536);
+    debug_assert!(core::mem::size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - 24); //technically the maximum size
+}
+
+/*
+
+   Copypaste from https://man7.org/linux/man-pages/man3/readdir.3.html
+
+  returns the value 255 for most filesystems, on some filesystems
+  (e.g., CIFS, Windows SMB servers), the null-terminated filename
+  that is (correctly) returned in d_name can actually exceed this
+  size.  In such cases, the d_reclen field will contain a value that
+  exceeds the size of the glibc dirent structure shown above.
+
+*/

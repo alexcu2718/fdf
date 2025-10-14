@@ -85,7 +85,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     fn test_directory_traversal_permissions_linux() {
         let temp_dir = temp_dir().join("traversal_test_again_linux");
         let _ = fs::remove_dir_all(&temp_dir);
@@ -552,12 +552,11 @@ mod tests {
         assert_eq!(names[1], "visible.txt");
     }
 
-
-       #[test]
-    #[cfg(target_os="linux")]
+    #[test]
+    #[cfg(target_os = "linux")]
     fn test_hidden_files_linux() {
         let dir_path = std::env::temp_dir().join("test_hidden_linux");
-        let _ =std::fs::remove_dir(&dir_path);
+        let _ = std::fs::remove_dir(&dir_path);
         let _ = std::fs::create_dir_all(&dir_path);
 
         let _ = std::fs::File::create(dir_path.join("visible.txt"));
@@ -755,9 +754,8 @@ mod tests {
         let _ = fs::remove_dir_all(dir_path.as_path());
     }
 
-
     #[test]
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     fn test_iterator_linux() {
         // make a unique test directory inside temp_dir
         let unique_id = "fdf_iterator_test_linux";
@@ -893,8 +891,8 @@ mod tests {
         let _ = fs::remove_dir_all(dir_path);
     }
 
-
-        #[test]
+    #[test]
+    #[cfg(target_os = "linux")]
     fn test_basic_iteration_linux() {
         let dir_path = temp_dir().join("THROWAWAYANYTHINGLINUX");
         let _ = fs::remove_dir_all(&dir_path);
@@ -921,11 +919,26 @@ mod tests {
         let _ = fs::remove_dir_all(dir_path);
     }
 
-
     #[test]
+     #[cfg(target_os = "linux")]
+    fn test_entries_linux() {
+        let dir = temp_dir().join("test_dirlinux");
+        let _ = fs::remove_dir(&dir);
+        let _ = fs::create_dir_all(&dir);
+        let dir_entry = DirEntry::new(&dir).unwrap();
+        let iter = dir_entry.getdents().unwrap();
+        let entries: Vec<_> = iter.collect();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(dir_entry.is_dir());
+        assert_eq!(entries.len(), 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+      #[test]
     fn test_entries() {
         let dir = temp_dir().join("test_dir");
-        let _ =fs::remove_dir(&dir);
+        let _ = fs::remove_dir(&dir);
         let _ = fs::create_dir_all(&dir);
         let dir_entry = DirEntry::new(&dir).unwrap();
         let iter = ReadDir::new(&dir_entry).unwrap();
@@ -1031,7 +1044,7 @@ mod tests {
     #[test]
     fn test_size_filter_matches() {
         let temp_dir = temp_dir();
- 
+
         let file_path = temp_dir.join("size_test.txt");
         let _ = fs::remove_file(&file_path);
         let content = vec![0u8; 100]; // 100 bytes

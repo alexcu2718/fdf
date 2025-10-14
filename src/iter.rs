@@ -797,6 +797,7 @@ impl DirentConstructor for GetDents {
 
 /// basic code to show that the NTFS/CIFS edge case approximation is reasonable
 #[test] // usually I chuck my tests in the test.rs file but this one is *highly* specific to this page
+#[cfg(target_os = "linux")] //only relevant for linux
 fn max_size_dirent() {
     #[repr(C)]
     struct DirentNTFS {

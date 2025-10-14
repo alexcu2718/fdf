@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.7.2"
+version = "0.7.3"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"

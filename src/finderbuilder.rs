@@ -302,8 +302,10 @@ impl FinderBuilder {
         }
 
         // Apply canonicalisation if requested
-        if self.canonicalise {
-            Ok(path_check.canonicalize().map(|p| p.as_os_str().into())?)
+        if self.canonicalise
+            && let Ok(good_path) = path_check.canonicalize()
+        {
+            Ok(good_path.as_os_str().into())
         } else {
             Ok(dir_to_use.into_boxed_os_str())
         }

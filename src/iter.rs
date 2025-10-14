@@ -45,13 +45,27 @@ pub struct ReadDir {
 impl ReadDir {
     #[inline]
     /**
-    Reads the next directory entry, returning a pointer to it.
+    Reads the next directory entry using the libc `readdir` function.
 
-    Wraps the libc `readdir` call.
+    This function provides a safe wrapper around the libc `readdir` call, advancing
+    the directory stream and returning a pointer to the next directory entry.
 
-    Returns `None` when the end of the directory is reached or an error occurs.
+    The function handles the underlying directory stream management automatically,
+    including positioning and error conditions.
 
-     */
+    IMPORTANT: This function returns ALL directory entries, including "." and ".." entries.
+    Filtering of these entries should be handled by the caller if desired.
+
+    # Returns
+    - `Some(NonNull<dirent64>)` when a directory entry is successfully read
+    - `None` when the end of directory is reached or if an error occurs
+
+    # Notes
+    - Unlike the `getdents64` system call approach, this implementation uses the
+      standard libc directory handling functions
+    - The function returns `None` both at end-of-directory and on errors, following
+      the traditional `readdir` semantics
+    */
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
         let dirent_ptr = unsafe { readdir(self.dir.as_ptr()) };
@@ -550,42 +564,6 @@ impl GetDents {
     }
 
     #[inline]
-    #[allow(clippy::cast_ptr_alignment)]
-    /**
-    Advances to the next directory entry in the internal buffer and returns a pointer to it.
-
-    This function reads from the current offset within the syscall buffer and interprets the
-    data at that position as a `dirent64` structure. The internal offset is then incremented
-    by the entry’s record length (`d_reclen`), positioning the iterator at the next entry
-    for subsequent calls.
-
-    NOTE: IT DOES RETURN . AND .. ENTRIES.
-
-    # Returns
-    - `Some(NonNull<dirent64>)` if the buffer contains another valid entry.
-    - `None` if the buffer is empty or no more entries are available.
-
-    # Behaviour
-    - On each call, the function:
-        1. Checks if the buffer still has unread bytes.
-        2. Computes the pointer to the next directory entry.
-        3. Increments the internal offset by the entry’s record length.
-        4. Returns a non-null pointer to the entry.
-
-    */
-    pub const fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
-        if self.offset >= self.remaining_bytes {
-            return None;
-        }
-        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
-        let d: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
-        // SAFETY: dirent is not null so field access is safe
-        self.offset += unsafe { access_dirent!(d, d_reclen) }; //increment the offset by the size of the dirent structure, this is a pointer to the next entry in the buffer
-        // SAFETY: dirent is not null
-        unsafe { Some(NonNull::new_unchecked(d)) } //return the pointer
-    }
-
-    #[inline]
     /// Provides read only access to the internal buffer that holds the path used to iterate with
     pub const fn borrow_path_buffer(&self) -> &Vec<u8> {
         &self.path_buffer
@@ -614,6 +592,54 @@ impl GetDents {
             end_of_stream: false,
         })
     }
+    #[inline]
+    #[allow(clippy::cast_ptr_alignment)]
+    /**
+        Advances the iterator to the next directory entry in the buffer and returns a pointer to it.
+
+        This function processes the internal buffer filled by `getdents64` system calls, interpreting
+        the data at the current offset as a `dirent64` structure. After reading an entry, the internal
+        offset is advanced by the entry's record length (`d_reclen`), positioning the iterator for
+        the next subsequent call.
+
+        IMPORTANT: This function returns ALL directory entries, including "." and ".." entries.
+        Filtering of these entries should be handled by the caller if desired.
+
+        # Returns
+        - `Some(NonNull<dirent64>)` when a valid directory entry is available
+        - `None` when the buffer is exhausted and no more entries can be read
+
+        # Behavior
+        The function performs the following steps:
+        1. Checks if unread data remains in the internal buffer
+        2. Casts the current buffer position to a `dirent64` pointer
+        3. Extracts the entry's record length to advance the internal offset
+        4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
+    */
+    pub(crate) fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+        loop {
+            //we have to use a loop essentially because of the iterative buffer filling semantics, I dislike the complexity!
+            // If we have data in buffer, try to get next entry
+            if self.offset < self.remaining_bytes {
+                // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
+                let d: *mut dirent64 =
+                    unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+                // SAFETY: dirent is not null so field access is safe
+                let reclen = unsafe { access_dirent!(d, d_reclen) };
+
+                self.offset += reclen; // increment the offset by the size of the dirent structure
+
+                // SAFETY: dirent is not null
+                return unsafe { Some(NonNull::new_unchecked(d)) };
+            }
+
+            // Buffer is empty, try to fill it
+            if !self.fill_buffer() {
+                return None; // No more data to read
+            }
+            // Buffer filled successfully, loop to try reading again
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -623,20 +649,14 @@ impl Iterator for GetDents {
     /// Returns the next directory entry in the iterator.
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            // If we have remaining data in buffer, process it
-            if let Some(drnt) = self.get_next_entry() {
-                // this just skips dot entries in a really efficient manner(avoids strlen)
-                skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
-
-                return Some(self.construct_direntry(drnt));
+            match self.get_next_entry() {
+                Some(drnt) => {
+                    // this just skips dot entries in a really efficient manner(avoids strlen)
+                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
+                    return Some(self.construct_direntry(drnt));
+                }
+                None => return None, // signal end of directory
             }
-
-            // Issue a syscall once out of entries
-            if self.fill_buffer() {
-                continue; // New entries available, restart loop
-            }
-
-            return None; //signal end of directory
         }
     }
 }

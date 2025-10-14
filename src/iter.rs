@@ -316,31 +316,8 @@ impl GetDents {
     #[must_use]
     /**
      Returns whether the directory stream has reached its end.
-
-     This method indicates that no more directory entries can be read from this stream.
-     Once `true`, subsequent calls to [`fill_buffer()`](Self::fill_buffer) will return `false`
-     and the iterator will return `None`.
-
-     # Returns
-     - `true` if the directory stream has ended (EOF reached or buffer capacity insufficient)
-     - `false` if more directory entries may be available to read
-
-     # Examples
-     ```
-     use fdf::DirEntry;
-     let dir = DirEntry::new("/tmp").unwrap();
-     let mut getdents = dir.getdents().unwrap();
-
-     // Process entries until end of stream
-     while !getdents.is_end_of_stream() {
-         if getdents.fill_buffer() {
-             // Process entries in buffer...
-         }
-     }
-     println!("Reached end of directory");
-     ```
     */
-    pub const fn is_end_of_stream(&self) -> bool {
+    pub(crate) const fn is_end_of_stream(&self) -> bool {
         self.end_of_stream
     }
 
@@ -461,13 +438,7 @@ impl GetDents {
 
      This avoids making an extra system call that would return 0 bytes.
 
-     # Returns
 
-     - `true` if new directory entries were read into the buffer
-     - `false` if:
-       - The directory stream has already ended (`is_end_of_stream()` was `true`)
-       - No entries were read (0 bytes returned)
-       - The optimisation detected EOF (partial buffer read with insufficient remaining data)
 
      # State Transitions
 

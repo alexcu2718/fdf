@@ -475,7 +475,7 @@ impl GetDents {
      - Resets `offset = 0` to start reading from the beginning of new buffer data
      - Updates `remaining_bytes` with the actual bytes read from the system call
     */
-    pub fn fill_buffer(&mut self) -> bool {
+    pub(crate) fn fill_buffer(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.is_end_of_stream() {
             return false;
@@ -616,7 +616,7 @@ impl GetDents {
         3. Extracts the entry's record length to advance the internal offset
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
     */
-    pub(crate) fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+    pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         loop {
             //we have to use a loop essentially because of the iterative buffer filling semantics, I dislike the complexity!
             // If we have data in buffer, try to get next entry

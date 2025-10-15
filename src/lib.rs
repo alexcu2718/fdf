@@ -14,7 +14,7 @@
  - **Platform Optimisations**: Linux-specific `getdents` system calls for optimal
    performance, with fallbacks for other platforms
  - **Flexible Filtering**: Support for multiple filtering criteria:
-   - File name patterns (regex), glob to be added shortly(CLI only for now)
+   - File name patterns (regex,glob)
    - File size ranges
    - File types (regular, directory, symlink, etc.)
    - File extensions

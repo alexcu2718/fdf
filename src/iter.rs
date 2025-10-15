@@ -12,14 +12,7 @@ use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir};
 
-const_from_env!(FDF_MAX_FILENAME_LEN:usize="FDF_MAX_FILENAME_LEN",512); //setting the minimum extra memory it'll need
-// this should be ideally 256 but operating systemns can be funky, so i'm being a bit cautious
-// as this is written for unix, most except HURD i think allow the filename to be 255 max, I'm not writing this for hurd ffs.
-const _: () = assert!(
-    //0 cost compile time check that doesnt rely on debug
-    FDF_MAX_FILENAME_LEN >= 255,
-    "Expect it to always be above this value"
-);
+
 /**
  POSIX-compliant directory iterator using libc's readdir functions.
 
@@ -30,7 +23,7 @@ const _: () = assert!(
 */
 #[derive(Debug)]
 pub struct ReadDir {
-    /// Raw directory pointer from libc's `opendir()`
+    /// Raw directory pointer from libc's `opendir() wrapped in a nonnull`
     pub(crate) dir: NonNull<DIR>,
     /// Buffer storing the full directory path for constructing entry paths
     pub(crate) path_buffer: Vec<u8>,
@@ -80,58 +73,7 @@ impl ReadDir {
         &self.path_buffer
     }
 
-    /**
-     Determines the file type of a directory entry with fallback resolution.
-
-     This method attempts to determine the file type using the directory entry's
-     `d_type` field when available, with a fallback to fstat-based resolution
-     when the type is unknown or unsupported by the filesystem.
-
-     # Arguments
-     * `d_type` - The file type byte from the directory entry's `d_type` field;This corresponds to DT_* constants in libc (e.g., `DT_REG`, `DT_DIR`).
-     * `filename` - The filename as a C string, used for fallback stat resolution;when `d_type` is `DT_UNKNOWN`
-
-     # Returns
-     A `FileType` enum variant representing the determined file type.
-
-     # Behavior
-     - **Fast Path**: When `d_type` contains a known file type (not `DT_UNKNOWN`),
-       returns the corresponding `FileType` without additional system calls.
-     - **Fallback Path**: When `d_type` is `DT_UNKNOWN`, performs a `fstat` call
-       on the file to determine its actual type.
-     - **Symlink Handling**: For `DT_LNK`, returns `FileType::Symlink` directly
-       without following the link.
-
-     # Examples
-     ```ignore
-     // These tests are disabled due to macos pecularities with tmp dir's
-     use std::ffi::CStr;
-     use fdf::{DirEntry, FileType};
-     use std::env::temp_dir;
-     let tmpdir=temp_dir();
-     let tmp=tmpdir.as_os_str();
-     let direntry=DirEntry::new(tmp).unwrap();
-     let dir = direntry.readdir().unwrap();
-     let filename = c"filedoesnot exist";
-
-     // With known file type (regular file)
-     let file_type = dir.get_filetype(libc::DT_REG, filename);
-     assert!(file_type.is_regular_file());
-
-     // With unknown type requiring stat fallback
-     let file_type = dir.get_filetype(libc::DT_UNKNOWN, filename);
-     // Internally calls stat() to determine actual file type
-     ```
-
-     # Performance Notes
-     - Prefer using directory entries with supported `d_type` to avoid stat calls
-     - The fallback stat call adds filesystem overhead but ensures correctness
-     - Some filesystems (e.g., older XFS, NTFS) may (I haven't checked) return `DT_UNKNOWN`
-    */
-    #[inline]
-    pub fn get_filetype(&self, d_type: u8, filename: &CStr) -> FileType {
-        self.get_filetype_private(d_type, filename) //use an internal trait because i want to avoid code deduplication.
-    }
+  
 
     #[inline]
     /**
@@ -315,57 +257,6 @@ impl GetDents {
         self.end_of_stream
     }
 
-    /**
-     Determines the file type of a directory entry with fallback resolution.
-
-     This method attempts to determine the file type using the directory entry's
-     `d_type` field when available, with a fallback to fstat-based resolution
-     when the type is unknown or unsupported by the filesystem.
-
-     # Arguments
-     * `d_type` - The file type byte from the directory entry's `d_type` field;This corresponds to DT_* constants in libc (e.g., `DT_REG`, `DT_DIR`).
-     * `filename` - The filename as a C string, used for fallback stat resolution;when `d_type` is `DT_UNKNOWN`
-
-     # Returns
-     A `FileType` enum variant representing the determined file type.
-
-     # Behavior
-     - **Fast Path**: When `d_type` contains a known file type (not `DT_UNKNOWN`),
-       returns the corresponding `FileType` without additional system calls.
-     - **Fallback Path**: When `d_type` is `DT_UNKNOWN`, performs a `fstat` call
-       on the file to determine its actual type.
-     - **Symlink Handling**: For `DT_LNK`, returns `FileType::Symlink` directly
-       without following the link.
-
-     # Examples
-     ```no_run
-     use std::ffi::CStr;
-     use fdf::{DirEntry, FileType};
-     use std::env::temp_dir;
-     let tmpdir=temp_dir();
-     let tmp=tmpdir.as_os_str();
-     let direntry=DirEntry::new(tmp).unwrap();
-     let dir = direntry.getdents().unwrap();
-     let filename = c"filedoesnot exist";
-
-     // With known file type (regular file)
-     let file_type = dir.get_filetype(libc::DT_REG, filename);
-     assert!(file_type.is_regular_file());
-
-     // With unknown type requiring stat fallback
-     let file_type = dir.get_filetype(libc::DT_UNKNOWN, filename);
-     // Internally calls stat() to determine actual file type
-     ```
-
-     # Performance Notes
-     - Prefer using directory entries with supported `d_type` to avoid stat calls
-     - The fallback stat call adds filesystem overhead but ensures correctness
-     - Some filesystems (e.g., older XFS, NTFS) may (I haven't checked) return `DT_UNKNOWN`
-    */
-    #[inline]
-    pub fn get_filetype(&self, d_type: u8, filename: &CStr) -> FileType {
-        self.get_filetype_private(d_type, filename) //use an internal trait because i want to avoid code deduplication.
-    }
 
     #[inline]
     /**
@@ -430,7 +321,7 @@ impl GetDents {
 
 
         */
-        const NUM_OF_BITS_MINUS_1: usize = 8 * core::mem::size_of::<usize>() - 1;
+        const NUM_OF_BITS_MINUS_1: usize = (usize::BITS -1) as usize;
         self.remaining_bytes =
             (remaining_bytes & !(remaining_bytes >> NUM_OF_BITS_MINUS_1)) as usize;
 
@@ -453,6 +344,7 @@ impl GetDents {
            Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
         */
         const MAX_SIZED_DIRENT: usize = 2 * size_of::<dirent64>() - 24; //this is `true` maximum dirent size for NTFS/CIFS, (deducting the 24 for fields)
+
         // See proof at bottom of page.
         self.end_of_stream = !has_bytes_remaining
             || self.syscall_buffer.max_capacity() - MAX_SIZED_DIRENT >= self.remaining_bytes; //a boolean
@@ -666,7 +558,9 @@ pub trait DirentConstructor {
         let needs_slash: usize = usize::from(!is_root);
         //set a conservative estimate incase it returns something useless
         // Initialise buffer with zeros to avoid uninitialised memory then add the max length of a filename on
-        let mut path_buffer = vec![0u8; base_len + needs_slash + 510 + 10]; //add 10 just incase(superstitious, dont want to think anymore. could easily remove), trivial impact 
+        const MAX_SIZED_DIRENT_LENGTH:usize=2*size_of::<dirent64>()-48; //deduct the fields
+        // we deduct the size of the fixed fields (ie `d_reclen` etc..), so to get the max size of the dynamic array, see proof at bottom
+        let mut path_buffer = vec![0u8; base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH];  
 
         /*
         Essentially because of CIFS/NTFS supporting 255 as a max length, you would think you're safe, NO
@@ -751,6 +645,54 @@ pub trait DirentConstructor {
     }
 }
 
+
+//cheap macro to avoid duplicate code maintenance.
+macro_rules! impl_get_filetype {
+    ($struct:ty, $fd_field:ident) => {
+        impl $struct {
+            /**
+             Determines the file type of a directory entry with fallback resolution.
+
+             This method attempts to determine the file type using the directory entry's
+             `d_type` field when available, with a fallback to fstat-based resolution
+             when the type is unknown or unsupported by the filesystem.
+
+             # Arguments
+             * `d_type` - The file type byte from the directory entry's `d_type` field; 
+               This corresponds to DT_* constants in libc (e.g., `DT_REG`, `DT_DIR`).
+             * `filename` - The filename as a C string, used for fallback stat resolution
+               when `d_type` is `DT_UNKNOWN`
+
+             # Returns
+             A `FileType` enum variant representing the determined file type.
+
+             # Behavior
+             - **Fast Path**: When `d_type` contains a known file type (not `DT_UNKNOWN`),
+               returns the corresponding `FileType` without additional system calls.
+             - **Fallback Path**: When `d_type` is `DT_UNKNOWN`, performs a `fstat` call
+               on the file to determine its actual type.
+             - **Symlink Handling**: For `DT_LNK`, returns `FileType::Symlink` directly
+               without following the link.
+
+             # Performance Notes
+             - Prefer using directory entries with supported `d_type` to avoid stat calls
+             - The fallback stat call adds filesystem overhead but ensures correctness
+             - Some filesystems (e.g., older XFS, NTFS) may return `DT_UNKNOWN`
+            */
+            #[inline]
+            pub fn get_filetype(&self, d_type: u8, filename: &core::ffi::CStr) -> $crate::FileType {
+                self.get_filetype_private(d_type, filename)
+            }
+            
+         
+        }
+    };
+}
+
+impl_get_filetype!(ReadDir, dirfd);
+#[cfg(target_os = "linux")]
+impl_get_filetype!(GetDents, fd);
+
 impl DirentConstructor for ReadDir {
     #[inline]
     fn path_buffer(&mut self) -> &mut Vec<u8> {
@@ -808,8 +750,8 @@ fn max_size_dirent() {
         _d_name: [u8; 512],
     }
 
-    debug_assert!(core::mem::size_of::<DirentNTFS>() == 536);
-    debug_assert!(core::mem::size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - 24); //technically the maximum size
+    assert!(size_of::<DirentNTFS>() == 536);
+    assert!(size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - 24); //technically the maximum size
 }
 
 /*

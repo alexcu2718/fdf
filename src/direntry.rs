@@ -297,7 +297,7 @@ impl DirEntry {
         if fd < 0 {
             return_os_error!()
         }
-        Ok(crate::types::FileDes(fd))
+        Ok(FileDes(fd))
     }
     /**
      Opens the directory relative to a directory file descriptor and returns a file descriptor.

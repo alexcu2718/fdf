@@ -12,7 +12,6 @@ use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir};
 
-
 /**
  POSIX-compliant directory iterator using libc's readdir functions.
 
@@ -69,17 +68,17 @@ impl ReadDir {
 
     #[inline]
     /// Provides read only access to the internal buffer that holds the path used to iterate with
-    pub const fn borrow_path_buffer(&self) -> &Vec<u8> {
-        &self.path_buffer
+    pub const fn borrow_path_buffer(&self) -> &[u8] {
+        self.path_buffer.as_slice()
     }
-
-  
 
     #[inline]
     /**
       Returns the file descriptor for this directory.
 
-      Useful for operations that need the raw
+      Useful for operations that need the raw directory
+
+      ISSUE: this file descriptor is only closed by the iterator due to current limitations
     */
     pub const fn dirfd(&self) -> &FileDes {
         &self.dirfd
@@ -249,16 +248,6 @@ impl Drop for GetDents {
 #[cfg(target_os = "linux")]
 impl GetDents {
     #[inline]
-    #[must_use]
-    /**
-     Returns whether the directory stream has reached its end.
-    */
-    pub(crate) const fn is_end_of_stream(&self) -> bool {
-        self.end_of_stream
-    }
-
-
-    #[inline]
     /**
       Constructs a `DirEntry` from a directory entry pointer.
 
@@ -307,7 +296,7 @@ impl GetDents {
     )]
     pub(crate) fn fill_buffer(&mut self) -> bool {
         // Early return if we've already reached end of stream
-        if self.is_end_of_stream() {
+        if self.end_of_stream {
             return false;
         }
 
@@ -321,7 +310,7 @@ impl GetDents {
 
 
         */
-        const NUM_OF_BITS_MINUS_1: usize = (usize::BITS -1) as usize;
+        const NUM_OF_BITS_MINUS_1: usize = (usize::BITS - 1) as usize;
         self.remaining_bytes =
             (remaining_bytes & !(remaining_bytes >> NUM_OF_BITS_MINUS_1)) as usize;
 
@@ -343,6 +332,7 @@ impl GetDents {
            system call, it would definitively call 0 bytes on next call, so we skip it!
            Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
         */
+
         const MAX_SIZED_DIRENT: usize = 2 * size_of::<dirent64>() - 24; //this is `true` maximum dirent size for NTFS/CIFS, (deducting the 24 for fields)
 
         // See proof at bottom of page.
@@ -370,6 +360,8 @@ impl GetDents {
     Returns the file descriptor for this directory.
 
     Useful for operations that need the raw directory FD.
+
+    ISSUE: this file descriptor is only closed by the iterator due to current limitations
     */
     #[inline]
     pub const fn dirfd(&self) -> &FileDes {
@@ -408,8 +400,8 @@ impl GetDents {
 
     #[inline]
     /// Provides read only access to the internal buffer that holds the path used to iterate with
-    pub const fn borrow_path_buffer(&self) -> &Vec<u8> {
-        &self.path_buffer
+    pub const fn borrow_path_buffer(&self) -> &[u8] {
+        self.path_buffer.as_slice()
     }
     #[inline]
     /// Provides read only access to the internal buffer that holds the bytes read from the syscall
@@ -542,7 +534,7 @@ pub trait DirentConstructor {
             file_type,
             inode,
             depth: self.parent_depth() + 1,
-            file_name_index: base_len as _,
+            file_name_index: base_len,
             is_traversible_cache: Cell::new(None), //// Lazy cache for traversal checks
         }
     }
@@ -556,11 +548,15 @@ pub trait DirentConstructor {
         let is_root = dir_path_in_bytes == b"/";
 
         let needs_slash: usize = usize::from(!is_root);
+
+        const SIZE_OF_DIRENT_WITHOUT_D_NAME: usize =
+            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
+        const MAX_SIZED_DIRENT_LENGTH: usize =
+            2 * size_of::<dirent64>() - 2 * SIZE_OF_DIRENT_WITHOUT_D_NAME;
         //set a conservative estimate incase it returns something useless
         // Initialise buffer with zeros to avoid uninitialised memory then add the max length of a filename on
-        const MAX_SIZED_DIRENT_LENGTH:usize=2*size_of::<dirent64>()-48; //deduct the fields
         // we deduct the size of the fixed fields (ie `d_reclen` etc..), so to get the max size of the dynamic array, see proof at bottom
-        let mut path_buffer = vec![0u8; base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH];  
+        let mut path_buffer = vec![0u8; base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH];
 
         /*
         Essentially because of CIFS/NTFS supporting 255 as a max length, you would think you're safe, NO
@@ -645,9 +641,8 @@ pub trait DirentConstructor {
     }
 }
 
-
 //cheap macro to avoid duplicate code maintenance.
-macro_rules! impl_get_filetype {
+macro_rules! impl_iter {
     ($struct:ty, $fd_field:ident) => {
         impl $struct {
             /**
@@ -658,7 +653,7 @@ macro_rules! impl_get_filetype {
              when the type is unknown or unsupported by the filesystem.
 
              # Arguments
-             * `d_type` - The file type byte from the directory entry's `d_type` field; 
+             * `d_type` - The file type byte from the directory entry's `d_type` field;
                This corresponds to DT_* constants in libc (e.g., `DT_REG`, `DT_DIR`).
              * `filename` - The filename as a C string, used for fallback stat resolution
                when `d_type` is `DT_UNKNOWN`
@@ -683,15 +678,13 @@ macro_rules! impl_get_filetype {
             pub fn get_filetype(&self, d_type: u8, filename: &core::ffi::CStr) -> $crate::FileType {
                 self.get_filetype_private(d_type, filename)
             }
-            
-         
         }
     };
 }
 
-impl_get_filetype!(ReadDir, dirfd);
+impl_iter!(ReadDir, dirfd);
 #[cfg(target_os = "linux")]
-impl_get_filetype!(GetDents, fd);
+impl_iter!(GetDents, fd);
 
 impl DirentConstructor for ReadDir {
     #[inline]

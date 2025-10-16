@@ -31,7 +31,7 @@ pub struct ReadDir {
     /// Depth of this directory relative to traversal root
     pub(crate) parent_depth: u16,
     /// The file descriptor of this directory, for use in calls like openat/statat etc.
-    pub(crate) dirfd: FileDes,
+    pub(crate) fd: FileDes,
 }
 
 impl ReadDir {
@@ -67,41 +67,6 @@ impl ReadDir {
     }
 
     #[inline]
-    /// Provides read only access to the internal buffer that holds the path used to iterate with
-    pub const fn borrow_path_buffer(&self) -> &[u8] {
-        self.path_buffer.as_slice()
-    }
-
-    #[inline]
-    /**
-      Returns the file descriptor for this directory.
-
-      Useful for operations that need the raw directory
-
-      ISSUE: this file descriptor is only closed by the iterator due to current limitations
-    */
-    pub const fn dirfd(&self) -> &FileDes {
-        &self.dirfd
-    }
-
-    #[inline]
-    /**
-     Constructs a `DirEntry` from a directory entry pointer.
-
-     This method converts a raw `dirent64` pointer into a safe `DirEntry`
-     by combining the directory entry metadata with the parent directory's
-     path information stored in the path buffer.
-
-     # Arguments
-     * `drnt` - Non-null pointer to a valid `dirent64` structure
-
-    */
-    pub fn construct_direntry(&mut self, drnt: NonNull<dirent64>) -> DirEntry {
-        // SAFETY:  Because the pointer is already checked to not be null before it can be used here safely
-        unsafe { self.construct_entry(drnt.as_ptr()) }
-    }
-
-    #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
         let dir_stream = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
         let (path_buffer, path_len) = Self::init_from_direntry(dir_path);
@@ -117,7 +82,7 @@ impl ReadDir {
             path_buffer,
             file_name_index: path_len,
             parent_depth: dir_path.depth, //inherit depth
-            dirfd,
+            fd: dirfd,
         })
     }
 }
@@ -164,7 +129,7 @@ impl Drop for ReadDir {
     */
     fn drop(&mut self) {
         debug_assert!(
-            self.dirfd.is_open(),
+            self.fd.is_open(),
             "We expect the file descriptor to be open before closing"
         );
         // SAFETY:  not required
@@ -249,23 +214,6 @@ impl Drop for GetDents {
 impl GetDents {
     #[inline]
     /**
-      Constructs a `DirEntry` from a directory entry pointer.
-
-      This method converts a raw `dirent64` pointer into a safe `DirEntry`
-      by combining the directory entry metadata with path information from
-      the internal path buffer. The resulting `DirEntry` contains the full
-      path and metadata for filesystem traversal.
-
-      # Arguments
-      * `drnt` - Pointer to a valid `dirent64` structure from the getdents buffer
-    */
-    pub fn construct_direntry(&mut self, drnt: NonNull<dirent64>) -> DirEntry {
-        // SAFETY:  Because the pointer is already checked to not be null before it can be used here.
-        unsafe { self.construct_entry(drnt.as_ptr()) }
-    }
-
-    #[inline]
-    /**
      Returns the number of unprocessed bytes remaining in the current kernel buffer.
 
      This indicates how much data is still available to be processed before needing
@@ -308,6 +256,7 @@ impl GetDents {
          Use a bit hack to make this statement branchless
          https://graphics.stanford.edu/~seander/bithacks.html#IntegerAbs
 
+        basically equivalent to .max(0) as usize but without branching
 
         */
         const NUM_OF_BITS_MINUS_1: usize = (usize::BITS - 1) as usize;
@@ -356,18 +305,6 @@ impl GetDents {
         has_bytes_remaining
     }
 
-    /**
-    Returns the file descriptor for this directory.
-
-    Useful for operations that need the raw directory FD.
-
-    ISSUE: this file descriptor is only closed by the iterator due to current limitations
-    */
-    #[inline]
-    pub const fn dirfd(&self) -> &FileDes {
-        &self.fd
-    }
-
     #[inline]
     #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
     /**
@@ -398,11 +335,6 @@ impl GetDents {
         // Note, not used yet but will be.
     }
 
-    #[inline]
-    /// Provides read only access to the internal buffer that holds the path used to iterate with
-    pub const fn borrow_path_buffer(&self) -> &[u8] {
-        self.path_buffer.as_slice()
-    }
     #[inline]
     /// Provides read only access to the internal buffer that holds the bytes read from the syscall
     pub const fn borrow_syscall_buffer(&self) -> &SyscallBuffer {
@@ -549,10 +481,8 @@ pub trait DirentConstructor {
 
         let needs_slash: usize = usize::from(!is_root);
 
-        const SIZE_OF_DIRENT_WITHOUT_D_NAME: usize =
-            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
-        const MAX_SIZED_DIRENT_LENGTH: usize =
-            2 * size_of::<dirent64>() - 2 * SIZE_OF_DIRENT_WITHOUT_D_NAME;
+        const MAX_SIZED_DIRENT_LENGTH: usize = 2 * 256; // 2* `NAME_MAX` (due to cifs/ntfs issue seen below)
+
         //set a conservative estimate incase it returns something useless
         // Initialise buffer with zeros to avoid uninitialised memory then add the max length of a filename on
         // we deduct the size of the fixed fields (ie `d_reclen` etc..), so to get the max size of the dynamic array, see proof at bottom
@@ -643,7 +573,7 @@ pub trait DirentConstructor {
 
 //cheap macro to avoid duplicate code maintenance.
 macro_rules! impl_iter {
-    ($struct:ty, $fd_field:ident) => {
+    ($struct:ty) => {
         impl $struct {
             /**
              Determines the file type of a directory entry with fallback resolution.
@@ -678,13 +608,57 @@ macro_rules! impl_iter {
             pub fn get_filetype(&self, d_type: u8, filename: &core::ffi::CStr) -> $crate::FileType {
                 self.get_filetype_private(d_type, filename)
             }
+
+            #[inline]
+            /// Provides read only access to the internal buffer that holds the path used to iterate with
+            pub const fn borrow_path_buffer(&self) -> &[u8] {
+                self.path_buffer.as_slice()
+            }
+
+            #[inline]
+            /// Index into `path_buffer` where filenames start (avoids recalculating)
+            pub const fn file_name_index(&self) -> usize {
+                self.file_name_index
+            }
+
+            /**
+            Returns the file descriptor for this directory.
+
+            Useful for operations that need the raw directory FD.
+
+            ISSUE: this file descriptor is only closed by the iterator due to current limitations
+            */
+            #[inline]
+            pub const fn dirfd(&self) -> &crate::FileDes {
+                &self.fd
+            }
+
+            #[inline]
+            /**
+             Constructs a `DirEntry` from a directory entry pointer.
+
+             This method converts a raw `dirent64` pointer into a safe `DirEntry`
+             by combining the directory entry metadata with the parent directory's
+             path information stored in the path buffer.
+
+             # Arguments
+             * `drnt` - Non-null pointer to a valid `dirent64` structure
+
+            */
+            pub fn construct_direntry(
+                &mut self,
+                drnt: core::ptr::NonNull<dirent64>,
+            ) -> $crate::DirEntry {
+                // SAFETY:  Because the pointer is already checked to not be null before it can be used here safely
+                unsafe { self.construct_entry(drnt.as_ptr()) }
+            }
         }
     };
 }
 
-impl_iter!(ReadDir, dirfd);
+impl_iter!(ReadDir);
 #[cfg(target_os = "linux")]
-impl_iter!(GetDents, fd);
+impl_iter!(GetDents);
 
 impl DirentConstructor for ReadDir {
     #[inline]

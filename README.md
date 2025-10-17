@@ -32,7 +32,7 @@ While the CLI is usable, the internal library is NOT suggested for use
 
 *Note: GitHub Actions does not yet provide Rust 2024 support for some(most of these) platforms. Additional checks will be added when available.*
 
-- OpenBSD, NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise)
+- OpenBSD, NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
 - Android (tested on device)
 - Illumos and Solaris (x86_64, verified with QEMU)
 
@@ -87,9 +87,6 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 | Regex pattern (home dir)              | 69,964       | 331.2 ms        | 544.6 ms       | 1.64 ± 0.04  | No differences |
 | Size >1MB (home dir)                  | 12,097       | 893.5 ms        | 2.089 s        | 2.34 ± 0.54  | No differences |
 | Size <1MB (home dir)                  | 1,968,643    | 1.007 s         | 1.866 s        | 1.85 ± 0.13  | No differences |
-
-**Overall:**  
-Across all benchmarks, `fdf` consistently outperformed `fd`, producing identical results in every test.
 
 **Average speedup:** **1.74× faster**
 

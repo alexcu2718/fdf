@@ -213,7 +213,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         const MASK: u64 = 0xFFFF_FF00_0000_0000u64; // byte order is shifted unintuitively on big endian!
 
         /* When the record length is 24, the kernel may insert nulls before d_name.
-        Which will exist on index's 17/18
+        Which will exist on index's 17/18 (or opposite, for big endian...sigh.,)
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
         let mask: u64 = MASK * ((reclen == 24) as u64);
@@ -226,9 +226,11 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         */
         let candidate_pos: u64 = last_word | mask;
 
+     
         /*
          Locate the first null byte in constant time using SWAR.
          Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.
+         
          SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation that won't be made public
         (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
         */

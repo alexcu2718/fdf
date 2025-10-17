@@ -158,51 +158,125 @@ macro_rules! access_stat {
     ($stat_struct:expr, $field:ident) => {{ $stat_struct.$field as _ }};
 }
 
-#[doc(hidden)]
-/// A macro to skip . and .. entries when traversing a directory.
-///
-/// ## Usage
-/// ```ignore
-/// skip_dot_or_dot_dot_entries!(entry, continue);
-/// ```
-///
-/// Takes:
-/// - `$entry`: pointer to a dirent struct
-/// - `$action`: a control-flow statement (e.g., `continue`, `break`, `return ...`)
-///
-/// Handles Linux vs BSD vs others and optional field differences.
+#[cfg(not(target_os = "linux"))]
+use libc::dirent as dirent64;
+#[cfg(target_os = "linux")]
+use libc::dirent64;
+
+#[cfg(any(target_os = "linux", target_os = "solaris", target_os = "illumos"))]
+pub const OFFSET_OF_NAME: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8); //==24 for the platforms we care about
+// Finding the minimum struct size, which is basically all the fields minus the variable part
+
+const _: () = assert!(
+    OFFSET_OF_NAME == 24,
+    "the minimum struct size isn't 24! BIG ERROR"
+);
+
+/**
+ An optimised macro for skipping "." and ".." directory entries
+
+ This macro employs several heuristics to efficiently skip the common "." and ".."
+ entries present in every directory. The approach reduces unnecessary work during
+ directory traversal and improves CPU branch prediction behaviour.
+
+ Optimisation Strategy:
+ 1. TYPE FILTERING:
+    Since "." and ".." are always directories (or occasionally unknown on unusual
+    filesystems), the macro checks `d_type` or `d_namlen` first. This takes advantage
+    of the fact that only about ten percent of filesystem entries are directories.
+    Consequently:
+    - The branch is easier for the CPU to predict
+    - Expensive string length or comparison operations are avoided for roughly ninety percent of entries
+
+ 2. PLATFORM-SPECIFIC OPTIMISATIONS:
+    - Linux, Solaris, Illumos: Uses the known property that `d_reclen` equals
+      `OFFSET_OF_NAME(24)` for the "." and ".." entries.
+    - BSD systems (macOS, FreeBSD, OpenBSD, NetBSD): Uses `d_namlen` for quick
+      length checks.
+    - Other systems: Falls back to a safe byte-by-byte comparison.
+
+ Why this matters:
+ - These checks are performed for every directory entry during traversal.
+ - Standard traversal code often relies on `strcmp` or `strlen`; this approach
+   avoids those calls where possible.
+ - Improved branch prediction provides cumulative performance benefits
+   across large directory trees.
+*/
+
 macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]
         #[allow(clippy::multiple_unsafe_ops_per_block)]
-        // SAFETY: when calling this macro, the pointer has already been ensured to be non null
+        /*
+        SAFETY: when calling this macro, the pointer has already been ensured to be non-null
+        This is internal only because it relies on internal heuristics/guarantees
+        */
         unsafe {
-            match access_dirent!($entry, d_type) {
-                //get the file type from my macro
-                libc::DT_DIR | libc::DT_UNKNOWN => {
-                    #[cfg(target_os = "linux")]
-                    {
-                        // Linux optimisation: reclen is always 24 for . and .. on linux
-                        if access_dirent!($entry, d_reclen) == 24 {
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
+            {
+                // BSD/macOS optimisation: check d_namlen first as primary filter
+                let namelen = access_dirent!($entry, d_namlen);
+                if namelen <= 2 {
+                    // Only check d_type for potential "." or ".." entries
+                    match access_dirent!($entry, d_type) {
+                        libc::DT_DIR | libc::DT_UNKNOWN => {
+                            let name_ptr = access_dirent!($entry, d_name);
+                            // Combined check using pattern
+                            match (namelen, *name_ptr.add(0), *name_ptr.add(1)) {
+                                (1, b'.', _) => $action,    // "." - length 1, first char '.'
+                                (2, b'.', b'.') => $action, // ".." - length 2, both chars '.'
+                                _ => (),
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                // If namelen > 2, skip all checks entirely (covers ~99% of entries)
+            }
+
+            #[cfg(any(target_os = "linux", target_os = "solaris", target_os = "illumos"))]
+            {
+                // Linux/Solaris/Illumos optimisation: check d_type first
+                match access_dirent!($entry, d_type) {
+                    libc::DT_DIR | libc::DT_UNKNOWN => {
+                        if access_dirent!($entry, d_reclen) == 24{
                             let name_ptr = access_dirent!($entry, d_name);
                             match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
-                                (b'.', 0, _) | (b'.', b'.', 0) => $action,
+                                (b'.', 0, _) | (b'.', b'.', 0) => $action, //similar to above
                                 _ => (),
                             }
                         }
                     }
+                    _ => (),
+                }
+            }
 
-                    #[cfg(not(target_os = "linux"))]
-                    {
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "macos",
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd",
+                target_os = "solaris",
+                target_os = "illumos"
+            )))]
+            {
+                // Fallback for other systems: check d_type first
+                match access_dirent!($entry, d_type) {
+                    libc::DT_DIR | libc::DT_UNKNOWN => {
                         let name_ptr = access_dirent!($entry, d_name);
                         match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                             (b'.', 0, _) | (b'.', b'.', 0) => $action,
                             _ => (),
                         }
                     }
+                    _ => (),
                 }
-                // For all other file types, no action needed
-                _ => (),
             }
         }
     }};

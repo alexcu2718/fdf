@@ -167,6 +167,9 @@ use libc::dirent64;
 pub const OFFSET_OF_NAME: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8); //==24 for the platforms we care about
 // Finding the minimum struct size, which is basically all the fields minus the variable part
 
+
+
+#[cfg(any(target_os = "linux", target_os = "solaris", target_os = "illumos"))]
 const _: () = assert!(
     OFFSET_OF_NAME == 24,
     "the minimum struct size isn't 24! BIG ERROR"
@@ -202,7 +205,6 @@ const _: () = assert!(
  - Improved branch prediction provides cumulative performance benefits
    across large directory trees.
 */
-
 macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]

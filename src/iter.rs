@@ -282,7 +282,11 @@ impl GetDents {
            Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
         */
 
-        const MAX_SIZED_DIRENT: usize = 2 * size_of::<dirent64>() - 24; //this is `true` maximum dirent size for NTFS/CIFS, (deducting the 24 for fields)
+        // Access the last field and then round up to find the minimum struct size
+        const MINIMUM_DIRENT_SIZE: usize =
+            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
+
+        const MAX_SIZED_DIRENT: usize = 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE; //this is `true` maximum dirent size for NTFS/CIFS, (deducting the 24 for fields)
 
         // See proof at bottom of page.
         self.end_of_stream = !has_bytes_remaining
@@ -467,7 +471,7 @@ pub trait DirentConstructor {
             inode,
             depth: self.parent_depth() + 1,
             file_name_index: base_len,
-            is_traversible_cache: Cell::new(None), //// Lazy cache for traversal checks
+            is_traversible_cache: Cell::new(None), // Lazy cache for traversal checks
         }
     }
 
@@ -480,8 +484,8 @@ pub trait DirentConstructor {
         let is_root = dir_path_in_bytes == b"/";
 
         let needs_slash: usize = usize::from(!is_root);
-
-        const MAX_SIZED_DIRENT_LENGTH: usize = 2 * 256; // 2* `NAME_MAX` (due to cifs/ntfs issue seen below)
+        const_from_env!(NAME_MAX:usize="NAME_MAX",255); // Get `NAME_MAX` from build script, because `libc` doesn't expose it in Rust, weirdly...
+        const MAX_SIZED_DIRENT_LENGTH: usize = 2 * (NAME_MAX + 1); // 2* (`NAME_MAX`+1) (account for null terminator) (due to cifs/ntfs issue seen below)
 
         //set a conservative estimate incase it returns something useless
         // Initialise buffer with zeros to avoid uninitialised memory then add the max length of a filename on
@@ -629,7 +633,7 @@ macro_rules! impl_iter {
             ISSUE: this file descriptor is only closed by the iterator due to current limitations
             */
             #[inline]
-            pub const fn dirfd(&self) -> &crate::FileDes {
+            pub const fn dirfd(&self) -> &$crate::FileDes {
                 &self.fd
             }
 
@@ -716,9 +720,9 @@ fn max_size_dirent() {
         _d_type: u8,
         _d_name: [u8; 512],
     }
-
+    const MINIMUM_DIRENT_SIZE: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
     assert!(size_of::<DirentNTFS>() == 536);
-    assert!(size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - 24); //technically the maximum size
+    assert!(size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE); //technically the maximum size
 }
 
 /*

@@ -316,6 +316,7 @@ impl SearchConfig {
     #[inline]
     #[must_use]
     #[expect(clippy::cast_lossless, reason = "overcomplicates it")]
+    #[expect(clippy::indexing_slicing,reason="used for debug assert")]
     /// Checks if the path or file name matches the regex filter
     /// If `full_path` is false, only checks the filename
     ///
@@ -324,6 +325,11 @@ impl SearchConfig {
         debug_assert!(
             !dir.file_name().contains(&b'/'),
             "file_name contains a directory separator"
+        );
+
+        debug_assert!(
+            &dir.as_bytes()[dir.file_name_index()..] == dir.file_name(),
+            "showing the below works"
         );
 
         self.regex_match.as_ref().is_none_or(|reg|

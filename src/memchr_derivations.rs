@@ -327,9 +327,9 @@ pub(crate) const fn repeat_u64(byte: u8) -> u64 {
 const LO_USIZE: usize = repeat_u8(0x01);
 
 const HI_USIZE: usize = repeat_u8(0x80);
-const LO_U64: u64 = repeat_u64(0x01);
+pub const LO_U64: u64 = repeat_u64(0x01);
 
-const HI_U64: u64 = repeat_u64(0x80);
+pub const HI_U64: u64 = repeat_u64(0x80);
 
 #[inline]
 /**
@@ -364,24 +364,6 @@ pub const fn find_zero_byte_u64(x: u64) -> Option<usize> {
         return Some((nonzero_matches.trailing_zeros() >> 3) as usize);
     } else {
         None
-    }
-}
-
-#[inline]
-pub(crate) const unsafe fn find_zero_byte_u64_optimised(x: u64) -> usize {
-    // use ctl_nonzero's for this via  nonzero u64
-    // This skips the need to for all 0's then uses instruction bsf on most architectures
-    // this function is only used privately.
-    debug_assert!((x.wrapping_sub(LO_U64) & !x & HI_U64)!=0,"This should never be 0 post SWAR in this internal function");
-    let zero_bit = unsafe { NonZeroU64::new_unchecked(x.wrapping_sub(LO_U64) & !x & HI_U64) };
-
-    #[cfg(target_endian = "little")]
-    {
-        (zero_bit.trailing_zeros() >> 3) as usize
-    }
-    #[cfg(not(target_endian = "little"))]
-    {
-        (zero_bit.leading_zeros() >> 3) as usize
     }
 }
 

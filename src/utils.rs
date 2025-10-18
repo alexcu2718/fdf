@@ -130,6 +130,33 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     }
 }
 
+#[allow(dead_code)] //this will be optimised out on non relevant platforms
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
+const unsafe fn find_zero_byte_u64_optimised(x: u64) -> usize {
+    use crate::memchr_derivations::HI_U64;
+    use crate::memchr_derivations::LO_U64;
+    use core::num::NonZeroU64;
+    // use ctl_nonzero's for this via  nonzero u64
+    // This skips the need to for all 0's then uses instruction bsf on most architectures
+    // this function is only used privately.
+    debug_assert!(
+        (x.wrapping_sub(LO_U64) & !x & HI_U64) != 0,
+        "This should never be 0 post SWAR in this internal function"
+    );
+    // SAFETY: When used on dirent's, this will always be non 0
+    let zero_bit = unsafe { NonZeroU64::new_unchecked(x.wrapping_sub(LO_U64) & !x & HI_U64) };
+
+    #[cfg(target_endian = "little")]
+    {
+        (zero_bit.trailing_zeros() >> 3) as usize
+    }
+    #[cfg(not(target_endian = "little"))]
+    {
+        (zero_bit.leading_zeros() >> 3) as usize
+    }
+}
+
 /*
 Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
  (c) Alexander Curtis .
@@ -182,12 +209,16 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
     return unsafe { access_dirent!(dirent, d_namlen) }; //trivial operation for macos/bsds 
     #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
-    // Linux/solaris etc type ones where we need a bit of Black magic
+    // Linux/solaris etc type ones where we need a bit of 'black magic'
     {
-        use crate::memchr_derivations::find_zero_byte_u64_optimised;
-
         // Offset from the start of the struct to the beginning of d_name.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
+        // Access the last field and then round up to find the minimum struct size
+        const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
+        const _: () = assert!(
+            MINIMUM_DIRENT_SIZE == 24,
+            "Minimum struct size should be 24 on these platforms!"
+        ); //compile time assert
 
         /*  Accessing `d_reclen` is safe because the struct is kernel-provided.
         / SAFETY: `dirent` is valid by precondition */
@@ -212,11 +243,11 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         #[cfg(target_endian = "big")]
         const MASK: u64 = 0xFFFF_FF00_0000_0000u64; // byte order is shifted unintuitively on big endian!
 
-        /* When the record length is 24, the kernel may insert nulls before d_name.
+        /* When the record length is 24/`MINIMUM_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 17/18 (or opposite, for big endian...sigh.,)
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
-        let mask: u64 = MASK * ((reclen == 24) as u64);
+        let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.
          Result:
@@ -226,11 +257,10 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         */
         let candidate_pos: u64 = last_word | mask;
 
-     
         /*
          Locate the first null byte in constant time using SWAR.
          Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.
-         
+
          SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation that won't be made public
         (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
         */

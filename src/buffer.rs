@@ -20,57 +20,58 @@ pub trait ValueType: sealed::Sealed + Copy {}
 
 impl ValueType for i8 {}
 impl ValueType for u8 {}
+/**
+ A highly optimised, aligned buffer for system call operations
 
-/// A highly optimised, aligned buffer for system call operations
-///
-/// This buffer provides memory-aligned storage with several key features:
-/// - Guaranteed 8-byte alignment required by various system calls
-/// - Zero-cost abstraction for working with raw memory
-/// - Support for both i8 and u8 types (equivalent for byte operations)
-/// - Safe access methods with proper bounds checking
-/// - Lazy initialisation to avoid unnecessary memory writes
-///
-/// # Type Parameters
-/// - `T`: The element type (i8 or u8)
-/// - `SIZE`: The fixed capacity of the buffer
-///
-/// # Safety
-/// The buffer uses `MaybeUninit` internally, so users must ensure proper
-/// initialisation before accessing the contents. All unsafe methods document
-/// their safety requirements.
-///
-/// # Examples
-/// ```
-/// use fdf::AlignedBuffer;
-///
-/// // Create a new aligned buffer
-/// // Purposely set a non-aligned amount to show alignment is forced.
-/// let mut buffer = AlignedBuffer::<u8, 1026>::new(); //You should really use 1024 here.
-///
-/// // Initialise the buffer with data
-/// let data = b"Hello, World!";
-/// unsafe {
-///     // Copy data into the buffer
-///     core::ptr::copy_nonoverlapping(
-///         data.as_ptr(),
-///         buffer.as_mut_ptr(),
-///         data.len()
-///     );
-///     
-///     // Access the initialised data
-///     let slice = buffer.get_unchecked(0..data.len());
-///     assert_eq!(slice, data);
-///     
-///     // Modify the buffer contents
-///     let mut_slice = buffer.get_unchecked_mut(0..data.len());
-///     mut_slice[0] = b'h'; // Change 'H' to 'h'
-///     assert_eq!(&mut_slice[0..5], b"hello");
-/// }
-///
-/// // The buffer maintains proper alignment for syscalls
-/// //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
-/// assert!((buffer.as_ptr() as usize).is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
-/// ```
+ This buffer provides memory-aligned storage with several key features:
+ - Guaranteed 8-byte alignment required by various system calls
+ - Zero-cost abstraction for working with raw memory
+ - Support for both i8 and u8 types (equivalent for byte operations)
+ - Safe access methods with proper bounds checking
+ - Lazy initialisation to avoid unnecessary memory writes
+
+ # Type Parameters
+ - `T`: The element type (i8 or u8)
+ - `SIZE`: The fixed capacity of the buffer
+
+ # Safety
+ The buffer uses `MaybeUninit` internally, so users must ensure proper
+ initialisation before accessing the contents. All unsafe methods document
+ their safety requirements.
+
+ # Examples
+ ```
+ use fdf::AlignedBuffer;
+
+ // Create a new aligned buffer
+ // Purposely set a non-aligned amount to show alignment is forced.
+ let mut buffer = AlignedBuffer::<u8, 1026>::new(); //You should really use 1024 here.
+
+ // Initialise the buffer with data
+ let data = b"Hello, World!";
+ unsafe {
+     // Copy data into the buffer
+     core::ptr::copy_nonoverlapping(
+         data.as_ptr(),
+         buffer.as_mut_ptr(),
+         data.len()
+     );
+
+     // Access the initialised data
+     let slice = buffer.get_unchecked(0..data.len());
+     assert_eq!(slice, data);
+
+     // Modify the buffer contents
+     let mut_slice = buffer.get_unchecked_mut(0..data.len());
+     mut_slice[0] = b'h'; // Change 'H' to 'h'
+     assert_eq!(&mut_slice[0..5], b"hello");
+ }
+
+ // The buffer maintains proper alignment for syscalls
+ //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
+ assert!((buffer.as_ptr() as usize).is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
+ ```
+*/
 #[derive(Debug)]
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T, const SIZE: usize>
@@ -129,9 +130,6 @@ where
     pub const fn as_mut_ptr(&mut self) -> *mut T {
         self.data.as_mut_ptr().cast()
     }
-
-    // #[inline]
-    //pub fn get_
 
     #[inline]
     #[must_use]

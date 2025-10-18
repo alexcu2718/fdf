@@ -378,16 +378,16 @@ impl Finder {
             FileType::Symlink if self.search_config.follow_symlinks => {
                 dir.get_stat().is_ok_and(|stat| {
                 FileType::from_stat(&stat) == FileType::Directory &&
+                // if the path is also in the root of the search directory skip it.
+                 dir.get_realpath(|path| {
+                    Ok(!path.to_bytes().starts_with(self.root_dir().as_bytes()))
+                }).unwrap_or(false) &&
                 // Check filesystem boundary
                 self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
-
                 // Check if we've already traversed this inode
                 self.inode_cache.as_ref().is_none_or(|cache| {
-                cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino))) &&
-                // Run get_realpath using its closure form
-                dir.get_realpath(|path| {
-                    Ok(!path.to_bytes().starts_with(self.root_dir().as_bytes()))
-                }).unwrap_or(false)
+                cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
+                //TODO? investigate the semantics of hidden file and relative directories
             })
             })
             }

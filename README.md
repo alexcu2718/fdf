@@ -104,7 +104,7 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 ### Key Optimisations
 
--**Getdents: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code [at this link](https://github.com/alexcu2718/fdf/blob/3fc7c2c13ec62e9004409e21dcd7c5ce0a31b438/src/iter.rs#L515)
+-**Getdents: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#245)
 
 - **find_char_in_word**: Locates the first occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 
@@ -114,11 +114,13 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 The following function provides an elegant solution to avoid branch mispredictions/SIMD instructions during directory entry parsing (a performance-critical loop):
 
-See source for bigendian/original version [found here](https://github.com/alexcu2718/fdf/blob/3fc7c2c13ec62e9004409e21dcd7c5ce0a31b438/src/utils.rs#L180)
+See source for bigendian/original version [found here](./src/utils.rs#L180)
+(This version is a bit wrong but shows the logic used in the true implementation, trying to save space on the readme!)
 
 ```rust
 // Computational complexity: O(1) - truly constant time
-// This is the little-endian implementation; see source for big-endian version(with better explanations!) 
+// This is the little-endian implementation;
+// PLEASE SEE source for big-endian version(with better explanations!) 
 // Used on Linux/Solaris/Illumos systems; OpenBSD/macOS store name length trivially
 // SIMD within a register, so no architecture dependence
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))] 
@@ -131,7 +133,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // reclen is always multiple of 8 so alignment is guaranteed
     let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // branchless mask
     let candidate_pos = last_word | mask;
-    let byte_pos = 8 - find_zero_byte_u64(candidate_pos); // branchless SWAR
+    let byte_pos = 8 - find_zero_byte_u64_optimised(candidate_pos); // branchless SWAR
     reclen - DIRENT_HEADER_START - byte_pos
 }
 
@@ -179,10 +181,6 @@ I've found a much more rigorous way of doing some bit tricks via this.
 I additionally emailed the author of memchr and got some nice tips, great guy, someone I respect whole heartedly!
 
 ## Future Plans
-
-### Modularisation
-
-While avoiding excessive fragmentation, I plan to extract reusable components (like platform-specific FFI utilities) into separate crates. This will improve maintainability without sacrificing the project's cohesive design.
 
 ### Feature Enhancements (Planned)
 
@@ -362,6 +360,6 @@ Options:
 
 #### 5. Solaris / Illumos / Android Optimisations  
 
-- Although `getdents` is Linux-specific, other systems (Android, Solaris, QEMU) expose compatible libc syscalls.  
+- Although `getdents` is Linux-specific, other systems (Android, Solaris,Illumos) expose  libc syscalls (I haven't extensively checked)
 - These could be integrated with minimal effort using existing code infrastructure.  
-- Implementation would likely take only a few hours once prioritised.  
+- Implementation would likely take only a few hours once prioritised.  Low priority naturally due to extremely fringe use case.

@@ -16,5 +16,5 @@ fn main() {
     println!("cargo:rustc-env=FDF_PAGE_SIZE={}", page_size);
 
     let max_filename_len = unsafe { libc::pathconf(c"/".as_ptr(), libc::_PC_NAME_MAX) };
-    println!("cargo:rustc-env=FDF_MAX_FILENAME_LEN={}", max_filename_len);
+    println!("cargo:rustc-env=NAME_MAX={}", max_filename_len);
 }

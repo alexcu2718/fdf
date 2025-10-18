@@ -167,8 +167,6 @@ use libc::dirent64;
 pub const OFFSET_OF_NAME: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8); //==24 for the platforms we care about
 // Finding the minimum struct size, which is basically all the fields minus the variable part
 
-
-
 #[cfg(any(target_os = "linux", target_os = "solaris", target_os = "illumos"))]
 const _: () = assert!(
     OFFSET_OF_NAME == 24,
@@ -246,7 +244,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 // Linux/Solaris/Illumos optimisation: check d_type first
                 match access_dirent!($entry, d_type) {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
-                        if access_dirent!($entry, d_reclen) == 24{
+                        if access_dirent!($entry, d_reclen) == $crate::macros::OFFSET_OF_NAME {
                             let name_ptr = access_dirent!($entry, d_name);
                             match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                                 (b'.', 0, _) | (b'.', b'.', 0) => $action, //similar to above

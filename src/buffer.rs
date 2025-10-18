@@ -1,4 +1,7 @@
 #![allow(clippy::multiple_unsafe_ops_per_block)] //annoying convention
+#[cfg(target_os = "linux")]
+use crate::FileDes;
+use core::marker::Copy;
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
@@ -13,60 +16,62 @@ mod sealed {
 ///
 /// This trait ensures type safety while allowing the buffer to work with both
 /// signed and unsigned byte types, which are equivalent for raw memory operations.
-pub trait ValueType: sealed::Sealed {}
+pub trait ValueType: sealed::Sealed + Copy {}
+
 impl ValueType for i8 {}
 impl ValueType for u8 {}
+/**
+ A highly optimised, aligned buffer for system call operations
 
-/// A highly optimised, aligned buffer for system call operations
-///
-/// This buffer provides memory-aligned storage with several key features:
-/// - Guaranteed 8-byte alignment required by various system calls
-/// - Zero-cost abstraction for working with raw memory
-/// - Support for both i8 and u8 types (equivalent for byte operations)
-/// - Safe access methods with proper bounds checking
-/// - Lazy initialisation to avoid unnecessary memory writes
-///
-/// # Type Parameters
-/// - `T`: The element type (i8 or u8)
-/// - `SIZE`: The fixed capacity of the buffer
-///
-/// # Safety
-/// The buffer uses `MaybeUninit` internally, so users must ensure proper
-/// initialisation before accessing the contents. All unsafe methods document
-/// their safety requirements.
-///
-/// # Examples
-/// ```
-/// use fdf::AlignedBuffer;
-///
-/// // Create a new aligned buffer
-/// // Purposely set a non-aligned amount to show alignment is forced.
-/// let mut buffer = AlignedBuffer::<u8, 1026>::new(); //You should really use 1024 here.
-///
-/// // Initialise the buffer with data
-/// let data = b"Hello, World!";
-/// unsafe {
-///     // Copy data into the buffer
-///     core::ptr::copy_nonoverlapping(
-///         data.as_ptr(),
-///         buffer.as_mut_ptr(),
-///         data.len()
-///     );
-///     
-///     // Access the initialised data
-///     let slice = buffer.get_unchecked(0..data.len());
-///     assert_eq!(slice, data);
-///     
-///     // Modify the buffer contents
-///     let mut_slice = buffer.get_unchecked_mut(0..data.len());
-///     mut_slice[0] = b'h'; // Change 'H' to 'h'
-///     assert_eq!(&mut_slice[0..5], b"hello");
-/// }
-///
-/// // The buffer maintains proper alignment for syscalls
-/// //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
-/// assert!((buffer.as_ptr() as usize).is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
-/// ```
+ This buffer provides memory-aligned storage with several key features:
+ - Guaranteed 8-byte alignment required by various system calls
+ - Zero-cost abstraction for working with raw memory
+ - Support for both i8 and u8 types (equivalent for byte operations)
+ - Safe access methods with proper bounds checking
+ - Lazy initialisation to avoid unnecessary memory writes
+
+ # Type Parameters
+ - `T`: The element type (i8 or u8)
+ - `SIZE`: The fixed capacity of the buffer
+
+ # Safety
+ The buffer uses `MaybeUninit` internally, so users must ensure proper
+ initialisation before accessing the contents. All unsafe methods document
+ their safety requirements.
+
+ # Examples
+ ```
+ use fdf::AlignedBuffer;
+
+ // Create a new aligned buffer
+ // Purposely set a non-aligned amount to show alignment is forced.
+ let mut buffer = AlignedBuffer::<u8, 1026>::new(); //You should really use 1024 here.
+
+ // Initialise the buffer with data
+ let data = b"Hello, World!";
+ unsafe {
+     // Copy data into the buffer
+     core::ptr::copy_nonoverlapping(
+         data.as_ptr(),
+         buffer.as_mut_ptr(),
+         data.len()
+     );
+
+     // Access the initialised data
+     let slice = buffer.get_unchecked(0..data.len());
+     assert_eq!(slice, data);
+
+     // Modify the buffer contents
+     let mut_slice = buffer.get_unchecked_mut(0..data.len());
+     mut_slice[0] = b'h'; // Change 'H' to 'h'
+     assert_eq!(&mut_slice[0..5], b"hello");
+ }
+
+ // The buffer maintains proper alignment for syscalls
+ //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
+ assert!((buffer.as_ptr() as usize).is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
+ ```
+*/
 #[derive(Debug)]
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T, const SIZE: usize>
@@ -128,6 +133,13 @@ where
 
     #[inline]
     #[must_use]
+    /// Returns the max capacity of this buffer
+    pub const fn max_capacity(&self) -> usize {
+        SIZE
+    }
+
+    #[inline]
+    #[must_use]
     /// Returns a const pointer to the buffer's data
     pub const fn as_ptr(&self) -> *const T {
         self.data.as_ptr().cast()
@@ -160,12 +172,6 @@ where
     /// This method bypasses libc to directly invoke the getdents64 system call,
     /// which is necessary to avoid certain libc quirks and limitations.
     ///
-    /// # Safety
-    /// This method uses inline assembly and directly interacts with the kernel.
-    /// The caller must ensure:
-    /// - The file descriptor is valid and open for reading
-    /// - The buffer is properly aligned and sized
-    /// - Proper error handling is implemented
     ///
     /// # Platform Specificity
     /// This implementation is specific to Linux on supported architectures (currently x86 and aarch64)
@@ -174,12 +180,9 @@ where
     // A RISC-V implementation is currently pending(might do others because i'm learning assembly)
     #[inline]
     #[cfg(target_os = "linux")]
-    pub unsafe fn getdents(&mut self, fd: i32) -> i64 {
-        // SAFETY: Caller must ensure:
-        // - fd is a valid open file descriptor
-        // - Buffer is properly aligned and sized
-        // - Buffer memory is valid and accessible
-        unsafe { crate::syscalls::getdents_asm(fd, self.as_mut_ptr(), SIZE) }
+    pub fn getdents(&mut self, fd: &FileDes) -> i64 {
+        // SAFETY: we're passing a valid buffer
+        unsafe { crate::syscalls::getdents_asm(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
     /// Returns a reference to a subslice without doing bounds checking
@@ -201,44 +204,10 @@ where
 
     #[inline]
     #[allow(clippy::undocumented_unsafe_blocks)] //too lazy to comment all of this, will do later.
-    /// Initialises the buffer with directory path contents
-    ///
-    /// This method prepares the buffer for directory traversal operations by
-    /// copying the directory path and appending a slash if needed.
-    ///
-    /// # Parameters
-    /// - `dir_path`: The directory entry containing the path to initialise
-    ///
-    /// # Returns
-    /// The new base length after writing into the buffer
-    ///
-    /// # Safety
-    /// The caller must ensure:
-    /// - The buffer is zeroed and has sufficient capacity (at least `LOCAL_PATH_MAX`) (4096 on Linux or 1024 on non-Linux (dependent on `libc::PATH_MAX`))
-    pub(crate) const unsafe fn init_from_direntry(&mut self, dir_path: &crate::DirEntry) -> usize {
-        let buffer_ptr = self.as_mut_ptr(); // get the mutable pointer to the buffer
-
-        let mut base_len = dir_path.len(); // get length of directory path
-
-        let dir_path_in_bytes = dir_path.as_bytes();
-
-        // const hack, partial eq isn't available in const contexts, but this is.
-        let needs_slash = (!matches!(dir_path_in_bytes, b"/")) as u8; // check if we need to append a slash
-
-        unsafe {
-            core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr.cast(), base_len); // copy path
-            *buffer_ptr.cast::<u8>().add(base_len) = b'/' * needs_slash // add slash if needed  (this avoids a branch )
-        }; //cast into byte types
-
-        base_len += needs_slash as usize; // update length if slash added
-
-        base_len
-    }
     /// Returns a mutable reference to a subslice without doing bounds checking
     ///
     /// # Safety
     /// The range must be within initialised portion of the buffer
-    #[inline]
     pub unsafe fn get_unchecked_mut<R>(&mut self, range: R) -> &mut R::Output
     where
         R: SliceIndex<[T]>,

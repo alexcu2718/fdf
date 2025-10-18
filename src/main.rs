@@ -1,10 +1,16 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
-use fdf::{FileTypeFilter, Finder, LOCAL_PATH_MAX, SearchConfigError, SizeFilter};
+use fdf::const_from_env;
+use fdf::{
+    FileTypeFilter, FileTypeParser, Finder, SearchConfigError, SizeFilter, SizeFilterParser,
+};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 use std::str;
+
+// Set threads at compile time, defaulting to 1 in worst case scenario
+const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
 
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -56,7 +62,7 @@ struct Args {
     #[arg(
         short = 'a',
         long = "absolute-path",
-        help = "Show absolute paths of results, defaults to false"
+        help = "Starts with the directory entered being resolved to full"
     )]
     absolute_path: bool,
 
@@ -171,14 +177,14 @@ struct Args {
     ///   --size +1gi        Files larger than 1 gibibyte
     ///   --size 500ki       Files exactly 500 kibibytes
     #[arg(
-        long = "size",
-        allow_hyphen_values = true,
-        value_name = "size",
-        help = "Filter by size. Examples '10k' (exactly 10KB),'+1M' (>=1MB),'-1GB' (<= 1GB)\n",
-        long_help,
-        verbatim_doc_comment
-    )]
-    size: Option<String>,
+    long = "size",
+    allow_hyphen_values = true,
+    value_name = "SIZE",
+    value_parser = SizeFilterParser,
+    help = "Filter by file size (supports custom sizes with +/- prefixes)",
+    verbatim_doc_comment
+)]
+    size: Option<SizeFilter>,
     /// Filter by file type, eg -d (directory) -f (regular file)
     ///
     /// Available options are:
@@ -192,24 +198,21 @@ struct Args {
     /// s: Socket
     /// e: Empty
     /// x: Executable
+    /// Filter by file type, eg -d (directory) -f (regular file)
     #[arg(
-        short = 't',
-        long = "type",
-        required = false,
-        help = "Filter by file type, eg -d (directory) -f(regular file)",
-        verbatim_doc_comment
-    )]
-    type_of: Option<String>,
+    short = 't',
+    long = "type",
+    required = false,
+    value_parser = FileTypeParser,
+    help = "Filter by file type",
+    long_help = "Filter by file type:\n  d, dir, directory    - Directory\n  u, unknown           - Unknown type\n  l, symlink, link     - Symbolic link\n  f, file, regular     - Regular file\n  p, pipe, fifo        - Pipe/FIFO\n  c, char, chardev     - Character device\n  b, block, blockdev   - Block device\n  s, socket            - Socket\n  e, empty             - Empty file\n  x, exec, executable  - Executable file",
+    verbatim_doc_comment
+)]
+    type_of: Option<FileTypeFilter>,
 }
 
 #[allow(clippy::exit)] //exiting for cli use
-#[expect(clippy::print_stderr, reason = "Similar to above")]
 fn main() -> Result<(), SearchConfigError> {
-    if LOCAL_PATH_MAX < libc::PATH_MAX as usize {
-        eprintln!("We do not expect LOCAL_PATH_MAX to be less than PATH_MAX");
-        std::process::exit(1);
-    }
-
     let args = Args::parse();
 
     if let Some(generator) = args.generate {
@@ -221,37 +224,7 @@ fn main() -> Result<(), SearchConfigError> {
         return Ok(());
     }
 
-    let size_of_file = args.size.map(|file_size| {
-        match SizeFilter::from_string(&file_size) {
-            Ok(filter) => filter,
-            Err(err) => {
-                //todo! make these errors prettier
-                eprintln!(
-                    "Error parsing size filter, please check fdf --help '{file_size}': {err}",
-                );
-                std::process::exit(1);
-            }
-        }
-    });
-
-    let type_filter = args.type_of.map(|type_str| {
-        type_str.chars().next().map_or_else(
-            || {
-                eprintln!("Error: Empty file type argument");
-                std::process::exit(1);
-            },
-            |c| match FileTypeFilter::from_char(c) {
-                Ok(filter) => filter,
-                Err(err) => {
-                    eprintln!("Error parsing file type: {err}");
-                    std::process::exit(1);
-                }
-            },
-        )
-    });
-    let thread_count = env!("CPU_COUNT").parse::<usize>().unwrap_or(1);
-
-    let path = args.directory.unwrap_or_else(|| OsString::from("."));
+    let path = args.directory.unwrap_or_else(|| ".".into());
     let finder = Finder::init(&path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
         .keep_hidden(!args.hidden)
@@ -263,12 +236,12 @@ fn main() -> Result<(), SearchConfigError> {
         .extension_match(args.extension.unwrap_or_else(String::new))
         .max_depth(args.depth)
         .follow_symlinks(args.follow_symlinks)
-        .filter_by_size(size_of_file)
-        .type_filter(type_filter)
+        .filter_by_size(args.size)
+        .type_filter(args.type_of)
         .show_errors(args.show_errors)
         .use_glob(args.glob)
         .same_filesystem(args.same_file_system)
-        .thread_count(args.thread_num.unwrap_or(thread_count))
+        .thread_count(args.thread_num.unwrap_or(THREAD_COUNT))
         .build()?;
 
     finder.print_results(args.no_colour, args.top_n, args.sort)?;

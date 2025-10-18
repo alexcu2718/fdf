@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
+    use crate::cli_helpers::*;
     use crate::memchr_derivations::{find_char_in_word, find_zero_byte_u64};
-    use crate::size_filter::*;
     use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, FileType, ReadDir};
     use chrono::{Duration as ChronoDuration, Utc};
@@ -57,13 +57,14 @@ mod tests {
 
     #[test]
     fn test_directory_traversal_permissions() {
-        let temp_dir = temp_dir().join("traversal_test");
+        let temp_dir = temp_dir().join("traversal_test_again");
         let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
+        let _ = fs::create_dir_all(&temp_dir);
 
         // no read permission
         let no_read_dir = temp_dir.join("no_read");
-        fs::create_dir(&no_read_dir).unwrap();
+        let _ = fs::remove_dir_all(&no_read_dir);
+        let _ = fs::create_dir(&no_read_dir);
 
         let mut perms = fs::metadata(&no_read_dir).unwrap().permissions();
         perms.set_mode(0o000);
@@ -71,6 +72,36 @@ mod tests {
 
         let entry = DirEntry::new(&temp_dir).unwrap();
         let iter = ReadDir::new(&entry).unwrap();
+
+        let entries: Vec<_> = iter.collect();
+
+        let mut perms = fs::metadata(&no_read_dir).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&no_read_dir, perms).unwrap();
+        //cleanup code
+
+        fs::remove_dir_all(temp_dir).unwrap();
+        assert!(entries.len() == 1)
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_directory_traversal_permissions_linux() {
+        let temp_dir = temp_dir().join("traversal_test_again_linux");
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+
+        // no read permission
+        let no_read_dir = temp_dir.join("no_read");
+        let _ = fs::remove_dir_all(&no_read_dir);
+        let _ = fs::create_dir(&no_read_dir);
+
+        let mut perms = fs::metadata(&no_read_dir).unwrap().permissions();
+        perms.set_mode(0o000);
+        fs::set_permissions(&no_read_dir, perms).unwrap();
+
+        let entry = DirEntry::new(&temp_dir).unwrap();
+        let iter = entry.getdents().unwrap();
 
         let entries: Vec<_> = iter.collect();
 
@@ -171,6 +202,7 @@ mod tests {
     #[test]
     fn test_iterating_nested_structure() {
         let dir = temp_dir().join("nested_struct");
+        let _ = fs::remove_dir_all(&dir);
         let subdir = dir.join("sub");
         fs::create_dir_all(&subdir).unwrap();
         fs::write(subdir.join("file.txt"), "data").unwrap();
@@ -521,6 +553,30 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
+    fn test_hidden_files_linux() {
+        let dir_path = std::env::temp_dir().join("test_hidden_linux");
+        let _ = std::fs::remove_dir(&dir_path);
+        let _ = std::fs::create_dir_all(&dir_path);
+
+        let _ = std::fs::File::create(dir_path.join("visible.txt"));
+        let _ = std::fs::File::create(dir_path.join(".hidden"));
+
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let entries: Vec<_> = dir_entry.getdents().unwrap().collect();
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+
+        let _ = std::fs::remove_dir_all(&dir_path);
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0], ".hidden");
+        assert_eq!(names[1], "visible.txt");
+    }
+
+    #[test]
     fn filename_test() {
         let temp_dir = std::env::temp_dir();
         let new_dir = temp_dir.as_path().join("testdir_filename");
@@ -699,6 +755,56 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
+    fn test_iterator_linux() {
+        // make a unique test directory inside temp_dir
+        let unique_id = "fdf_iterator_test_linux";
+        let dir_path: PathBuf = temp_dir().join(unique_id);
+        let _ = fs::remove_dir_all(dir_path.as_path());
+        let _ = fs::create_dir(dir_path.as_path());
+
+        // create test files and subdirectory
+        fs::write(dir_path.join("file1.txt"), "content").unwrap();
+        fs::write(dir_path.join("file2.txt"), "content").unwrap();
+        fs::create_dir(dir_path.join("subdir")).unwrap();
+
+        // init a DirEntry for testing
+
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
+
+        // get iterator
+        let iter = dir_entry.getdents().unwrap();
+
+        // collect entries
+        let mut entries = Vec::new();
+
+        for entry in iter {
+            entries.push(entry)
+        }
+
+        //verify results
+
+        //let _ = fs::remove_dir_all(dir_entry.as_path());
+        assert_eq!(entries.len(), 3, "Should find two files and one subdir");
+
+        assert!(
+            entries.clone().iter().filter(|e| e.is_dir()).count() == 1,
+            "Should find one directory"
+        );
+        assert!(
+            entries
+                .clone()
+                .iter()
+                .filter(|e| e.is_regular_file())
+                .count()
+                == 2,
+            "Should find two regular files"
+        );
+
+        let _ = fs::remove_dir_all(dir_path.as_path());
+    }
+
+    #[test]
     fn test_handles_various_tests() {
         // create empty directory
         let tdir = temp_dir().join("NOTAREALPATHLALALA");
@@ -761,6 +867,7 @@ mod tests {
     #[test]
     fn test_basic_iteration() {
         let dir_path = temp_dir().join("THROWAWAYANYTHING");
+        let _ = fs::remove_dir_all(&dir_path);
         let _ = fs::create_dir_all(&dir_path);
 
         // create test files
@@ -785,8 +892,53 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
+    fn test_basic_iteration_linux() {
+        let dir_path = temp_dir().join("THROWAWAYANYTHINGLINUX");
+        let _ = fs::remove_dir_all(&dir_path);
+        let _ = fs::create_dir_all(&dir_path);
+
+        // create test files
+        let _ = File::create(dir_path.join("file1.txt"));
+        let _ = fs::create_dir(dir_path.join("subdir"));
+
+        let dir_entry = DirEntry::new(&dir_path).unwrap();
+        let iter = dir_entry.getdents().unwrap();
+        let entries: Vec<_> = iter.collect();
+
+        assert_eq!(entries.len(), 2);
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|e| e.as_os_str().to_string_lossy())
+            .collect();
+        names.sort();
+
+        assert!(names[0].ends_with("file1.txt"));
+        assert!(names[1].ends_with("subdir"));
+
+        let _ = fs::remove_dir_all(dir_path);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_entries_linux() {
+        let dir = temp_dir().join("test_dirlinux");
+        let _ = fs::remove_dir(&dir);
+        let _ = fs::create_dir_all(&dir);
+        let dir_entry = DirEntry::new(&dir).unwrap();
+        let iter = dir_entry.getdents().unwrap();
+        let entries: Vec<_> = iter.collect();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(dir_entry.is_dir());
+        assert_eq!(entries.len(), 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn test_entries() {
         let dir = temp_dir().join("test_dir");
+        let _ = fs::remove_dir(&dir);
         let _ = fs::create_dir_all(&dir);
         let dir_entry = DirEntry::new(&dir).unwrap();
         let iter = ReadDir::new(&dir_entry).unwrap();
@@ -892,7 +1044,9 @@ mod tests {
     #[test]
     fn test_size_filter_matches() {
         let temp_dir = temp_dir();
+
         let file_path = temp_dir.join("size_test.txt");
+        let _ = fs::remove_file(&file_path);
         let content = vec![0u8; 100]; // 100 bytes
         fs::write(&file_path, content).unwrap();
 
@@ -979,6 +1133,7 @@ mod tests {
     #[test]
     fn test_non_recursive_iteration() {
         let top_dir = std::env::temp_dir().join("test_nested");
+        let _ = fs::remove_dir_all(&top_dir);
         let sub_dir = top_dir.join("subdir");
 
         let _ = std::fs::create_dir_all(&sub_dir);
@@ -1148,31 +1303,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cstr() {
-        let test_bytes = b"randopath";
-        let c_str_test: *const u8 = unsafe { cstr!(test_bytes) };
-        assert!(
-            !c_str_test.is_null(),
-            "this should never return a null pointer if it's under {}",
-            crate::LOCAL_PATH_MAX
-        )
-        //well, it'll not pass the test anyway.
-    }
-
-    #[test]
-    fn test_cstr_n() {
-        let test_bytes = b"randopathmpathinlength";
-        const SIZE_OF_PATH: usize = 23; //this would panic if it was any bigger
-        let c_str_test: *const u8 = unsafe { cstr!(test_bytes, SIZE_OF_PATH) };
-        assert!(
-            !c_str_test.is_null(),
-            "this should never return a null pointer if it's under {}",
-            SIZE_OF_PATH
-        )
-        //well, it'll not pass the test anyway.
-    }
-
-    #[test]
     fn test_path_construction() {
         let dir = temp_dir().join("test_pathXXX");
         let _ = fs::create_dir_all(&dir);
@@ -1190,6 +1320,45 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(dir);
         assert!(v);
+    }
+
+    #[test]
+    fn test_filedes_readdir() {
+        let dir = temp_dir().join("test_filedes_readdir");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let dir_entry = DirEntry::new(&dir).unwrap();
+
+        let _ = File::create(dir.join("regular.txt"));
+        let entries = dir_entry.readdir().unwrap();
+        let file_des = entries.dirfd();
+        assert!(file_des.is_open());
+        let entries_collected: Vec<_> = entries.collect();
+
+        assert_eq!(entries_collected.len(), 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_filedes_getdents() {
+        use crate::GetDents;
+
+        let dir = temp_dir().join("test_filedes_getdents");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let dir_entry = DirEntry::new(&dir).unwrap();
+
+        let _ = File::create(dir.join("regular.txt"));
+        let entries = dir_entry.getdents().unwrap();
+        let file_des = entries.dirfd();
+        assert!(file_des.is_open());
+        let entries_collected: Vec<_> = entries.collect();
+
+        assert_eq!(entries_collected.len(), 1);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

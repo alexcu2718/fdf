@@ -1,25 +1,27 @@
 // honestly i should probably delete this and rely on just libc but I ideally would like to not dynamically link glibc in future on  Linux
-#![cfg(all(target_os = "linux", target_arch = "x86_64"))]
+
 #![allow(clippy::undocumented_unsafe_blocks)] // too lazy to comment it all
 use core::ffi::CStr;
-
+use libc::{c_int, c_long};
 //can comment all of this later
 use crate::ValueType;
 #[inline]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "SYS_OPEN is typically very low"
+)]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 // x86_64-specific implementation
 /// Opens a directory using direct syscall via assembly
 ///
 ///
-/// # Safety
-/// - Requires cstr to be a valid directory
 ///
 /// # Returns
 /// - File descriptor (positive integer) on success
 /// - -1 on error (check errno for details)
-pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> c_int {
     use core::arch::asm;
     const SYSCALL_NUM: i32 = libc::SYS_open as _;
 
@@ -46,12 +48,10 @@ pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
 /// ARM64 uses `openat` instead of `open` for better path resolution.
 /// Uses `AT_FDCWD` to indicate relative to current working directory.
 ///
-/// # Safety
-/// - Requires byte path to be a valid directory
 ///
 /// # Returns
 /// File descriptor on success, -1 on error
-pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> c_int {
     use core::arch::asm;
 
     const MODE: i32 = libc::O_RDONLY; // Required even if unused in directory open
@@ -80,12 +80,10 @@ pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
 ))]
 /// Opens a directory using `libc::open`
 ///
-/// # Safety
-/// - Requires byte path to be a valid directory
 ///
 /// # Returns
 /// File descriptor on success, -1 on error
-pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
+pub fn open_asm(cstr: &CStr, flags: i32) -> c_int {
     unsafe { libc::open(cstr.as_ptr(), flags) }
 }
 
@@ -101,7 +99,7 @@ pub unsafe fn open_asm(cstr: &CStr, flags: i32) -> i32 {
 /// - Invalidates fd after call
 // (we can't check error without A LOT of unnecessarily work, so once we attempt a close, it's over, accept it( we don't want to overcomplicate something simple)
 pub unsafe fn close_asm(fd: i32) {
-    unsafe { libc::close(fd) }; //this is a procedure so there can't be a ret value
+    unsafe { libc::close(fd) }; //dont check ret value
 }
 
 #[inline]
@@ -170,7 +168,7 @@ pub unsafe fn close_asm(fd: i32) {
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> c_long
 where
     T: ValueType, //i8/u8
 {
@@ -210,7 +208,7 @@ where
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> c_long
 where
     T: ValueType, //i8/u8
 {
@@ -251,7 +249,7 @@ where
 /// - Positive: Number of bytes read
 /// - 0: End of directory
 /// - Negative: Error code (check errno)
-pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> i64
+pub unsafe fn getdents_asm<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> c_long
 where
     T: ValueType, //i8/u8
 {

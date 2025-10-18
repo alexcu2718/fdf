@@ -1,10 +1,9 @@
+use crate::cli_helpers::SizeFilter;
 use crate::glob_to_regex;
-use crate::size_filter::SizeFilter;
 use crate::traits_and_conversions::BytePath as _;
 use crate::{DirEntry, FileType, SearchConfigError};
 use core::num::NonZeroU16;
 use regex::bytes::{Regex, RegexBuilder};
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// File type filter for directory traversal
 #[expect(clippy::exhaustive_enums, reason = "This list is exhaustive")]
@@ -317,6 +316,7 @@ impl SearchConfig {
     #[inline]
     #[must_use]
     #[expect(clippy::cast_lossless, reason = "overcomplicates it")]
+    #[expect(clippy::indexing_slicing,reason="used for debug assert")]
     /// Checks if the path or file name matches the regex filter
     /// If `full_path` is false, only checks the filename
     ///
@@ -325,6 +325,11 @@ impl SearchConfig {
         debug_assert!(
             !dir.file_name().contains(&b'/'),
             "file_name contains a directory separator"
+        );
+
+        debug_assert!(
+            &dir.as_bytes()[dir.file_name_index()..] == dir.file_name(),
+            "showing the below works"
         );
 
         self.regex_match.as_ref().is_none_or(|reg|

@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.7.4"
+version = "0.7.5"
 rust-version = "1.87.0"
 edition = "2024"
 license = "MIT"
@@ -17,7 +17,7 @@ libc = { version = "0.2.175" }
 chrono = { version = "0.4.42", default-features = false, features = ["std"] }
 clap = { version = "4.5.49", features = ["derive"] }
 clap_complete = "4.5.59"
-compile_time_ls_colours = "0.4.1"
+compile_time_ls_colours = "0.4.9"
 dashmap = { version = "6.1.0", features = ["inline"] }
 libc = { version = "0.2.175" }
 rayon = "1.10.0"
@@ -30,6 +30,7 @@ mimalloc = "0.1.43"
 criterion = { version = "0.7.0", features = [
   "cargo_bench_support",
   "real_blackbox",
+     "html_reports"
 ] }
 filetime = "0.2"
 
@@ -55,3 +56,5 @@ overflow-checks = false
 [[bench]]
 name = "dirent_bench"
 harness = false
+
+

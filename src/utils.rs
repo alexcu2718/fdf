@@ -1,90 +1,51 @@
-use crate::buffer::ValueType;
-
 #[cfg(not(target_os = "linux"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;
 
-/// Calculates the length of a null-terminated string pointed to by `ptr`,
-/// Via specialised instructions, AVX2 if available, then SSE2 then libc's strlen
-///
-/// # Returns the number of bytes not including the null terminator.
-///
-/// # Safety
-/// This function is `unsafe` because it dereferences a raw pointer, it will not work on 0 length strings, they MUST be null-terminated.
-///
-/// Uses AVX2 if compiled with flags otherwise SSE2 if available, failng that, `libc::strlen`.
-/// Interesting benchmarks resuls:
-/// It's faster than my constant time strlen for dirents for small strings, but after 32 bytes, it becomes slower.
-/// It is also faster than the libc implementation but only for size below 128...?wtf.
-#[inline]
-#[allow(clippy::undocumented_unsafe_blocks)] //not commenting all of this.
-#[allow(clippy::multiple_unsafe_ops_per_block)] //DIS
-pub unsafe fn strlen<T>(ptr: *const T) -> usize
+use crate::memchr_derivations::memrchr;
+use core::ops::Deref;
+
+/// A trait for types that dereference to a byte slice (`[u8]`) representing file paths.
+/// Provides efficient path operations, FFI compatibility, and filesystem interactions.
+pub trait BytePath<T>
 where
-    T: ValueType,
+    T: Deref<Target = [u8]> + ?Sized,
 {
-    #[cfg(all(
-        target_arch = "x86_64",
-        any(target_feature = "avx2", target_feature = "sse2")
-    ))]
-    {
-        #[cfg(target_feature = "avx2")]
-        unsafe {
-            use core::arch::x86_64::{
-                __m256i,
-                _mm256_cmpeq_epi8,    // Compare 32 bytes at once
-                _mm256_loadu_si256,   // Unaligned 32-byte load
-                _mm256_movemask_epi8, // Bitmask of null matches
-                _mm256_setzero_si256, // Zero vector
-            };
+    fn extension(&self) -> Option<&[u8]>;
+    /// Checks if file extension matches given bytes (case-insensitive)
+    fn matches_extension(&self, ext: &[u8]) -> bool;
 
-            let mut offset = 0;
-            loop {
-                let chunk = _mm256_loadu_si256(ptr.add(offset).cast::<__m256i>()); //load the pointer, add offset, cast to simd type
-                let zeros = _mm256_setzero_si256(); //zeroise vector
-                let cmp = _mm256_cmpeq_epi8(chunk, zeros); //compare each byte in the chunk to 0, 32 at a time,
-                let mask = _mm256_movemask_epi8(cmp); //
+    /// Gets index of filename component start
+    fn file_name_index(&self) -> usize;
+}
 
-                if mask != 0 {
-                    //find the
-                    break offset + mask.trailing_zeros() as usize;
-                }
-                offset += 32; // Process next 32-byte chunk
-            }
-        }
-
-        #[cfg(not(target_feature = "avx2"))]
-        use core::arch::x86_64::{
-            __m128i,
-            _mm_cmpeq_epi8,    // Compare 16 bytes
-            _mm_loadu_si128,   // Unaligned 16-byte load
-            _mm_movemask_epi8, // Bitmask of null matches
-            _mm_setzero_si128, // Zero vector
-        };
-        unsafe {
-            let mut offset = 0;
-            loop {
-                let chunk = _mm_loadu_si128(ptr.add(offset).cast::<__m128i>()); //same as above but for diff instructions
-                let zeros = _mm_setzero_si128();
-                let cmp = _mm_cmpeq_epi8(chunk, zeros);
-                let mask = _mm_movemask_epi8(cmp);
-
-                if mask != 0 {
-                    // stop and the break because of the mask, we've only got every byte that is either 0 or u8::MAX (only the nulls are detected)
-                    break offset + mask.trailing_zeros() as usize;
-                }
-                offset += 16; // Process next 16-byte chunk
-            }
-        }
+impl<T> BytePath<T> for T
+where
+    T: Deref<Target = [u8]>,
+{
+    #[inline]
+    fn extension(&self) -> Option<&[u8]> {
+        // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
+        memrchr(b'.', unsafe { self.get_unchecked(..self.len() - 1) }) //exclude cases where the . is the final character
+            // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
+            // The slice `..self.len() - 1` is a subslice of `self`.
+            // Therefore, `pos` is a valid index into `self`.
+            // `pos + 1` is also guaranteed to be a valid index.
+            // We do this to avoid any runtime checks
+            .map(|pos| unsafe { self.get_unchecked(pos + 1..) })
     }
 
-    #[cfg(not(all(
-        target_arch = "x86_64",
-        any(target_feature = "avx2", target_feature = "sse2")
-    )))]
-    {
-        unsafe { libc::strlen(ptr.cast::<_>()) } //not reinventing the wheel
+    #[inline]
+    fn matches_extension(&self, ext: &[u8]) -> bool {
+        self.extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
+    }
+
+    /// Get the length of the basename of a path (up to and including the last '/')
+    #[inline]
+    fn file_name_index(&self) -> usize {
+        memrchr(b'/', self).map_or(1, |pos| pos + 1)
     }
 }
 
@@ -127,33 +88,6 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { libc::strlen(access_dirent!(drnt, d_name).cast::<_>()) }
         // Fallback for other OSes
-    }
-}
-
-#[allow(dead_code)] //this will be optimised out on non relevant platforms
-#[inline]
-#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
-const unsafe fn find_zero_byte_u64_optimised(x: u64) -> usize {
-    use crate::memchr_derivations::HI_U64;
-    use crate::memchr_derivations::LO_U64;
-    use core::num::NonZeroU64;
-    // use ctl_nonzero's for this via  nonzero u64
-    // This skips the need to for all 0's then uses instruction bsf on most architectures
-    // this function is only used privately.
-    debug_assert!(
-        (x.wrapping_sub(LO_U64) & !x & HI_U64) != 0,
-        "This should never be 0 post SWAR in this internal function"
-    );
-    // SAFETY: When used on dirent's, this will always be non 0
-    let zero_bit = unsafe { NonZeroU64::new_unchecked(x.wrapping_sub(LO_U64) & !x & HI_U64) };
-
-    #[cfg(target_endian = "little")]
-    {
-        (zero_bit.trailing_zeros() >> 3) as usize
-    }
-    #[cfg(not(target_endian = "little"))]
-    {
-        (zero_bit.leading_zeros() >> 3) as usize
     }
 }
 
@@ -209,7 +143,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
     return unsafe { access_dirent!(dirent, d_namlen) }; //trivial operation for macos/bsds 
     #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
-    // Linux/solaris etc type ones where we need a bit of 'black magic'
+    // Linux/Solaris/Illumos where we need a bit of 'black magic'
     {
         // Offset from the start of the struct to the beginning of d_name.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
@@ -219,24 +153,22 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
             MINIMUM_DIRENT_SIZE == 24,
             "Minimum struct size should be 24 on these platforms!"
         ); //compile time assert
+        use crate::memchr_derivations::HI_U64;
+        use crate::memchr_derivations::LO_U64;
+        use core::num::NonZeroU64;
+
+        //ignore boiler plate above
 
         /*  Accessing `d_reclen` is safe because the struct is kernel-provided.
         / SAFETY: `dirent` is valid by precondition */
         let reclen = unsafe { (*dirent).d_reclen } as usize;
 
-        debug_assert!(
-            reclen.is_multiple_of(8),
-            "d_reclen must always be a multiple of 8"
-        );
-
         /*
           Read the last 8 bytes of the struct as a u64.
-        This works because dirents are always 8-byte aligned. */
-        // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
+        This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
+
+        // SAFETY: We're indexing in bounds within the pointer.
         let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
-        /* Note, I don't index as a u64 with eg (reclen-8)/8 because that adds a division which is a costly operations, relatively speaking
-        let last_word: u64 = unsafe { *(dirent.cast::<u64>()).add((reclen - 8)/8 (or >>3))}; //this will also work but it's less performant (MINUTELY)
-        */
 
         #[cfg(target_endian = "little")]
         const MASK: u64 = 0x00FF_FFFFu64;
@@ -244,7 +176,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         const MASK: u64 = 0xFFFF_FF00_0000_0000u64; // byte order is shifted unintuitively on big endian!
 
         /* When the record length is 24/`MINIMUM_DIRENT_SIZE`, the kernel may insert nulls before d_name.
-        Which will exist on index's 17/18 (or opposite, for big endian...sigh.,)
+        Which will exist on index's 17/18 (or opposite, for big endian...sigh...)
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
         let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
@@ -261,10 +193,20 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
          Locate the first null byte in constant time using SWAR.
          Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.
 
-         SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation that won't be made public
+         SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation
+        https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
+        (`NonZeroU64` uses this under the hood)
         (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
         */
-        let byte_pos = 8 - unsafe { find_zero_byte_u64_optimised(candidate_pos) };
+        let zero_bit = unsafe {
+            NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
+        };
+
+        // Find the position then deduct deduct it from 7 (then add 1 to account for the null ) from the position of the null byte pos
+        #[cfg(target_endian = "little")]
+        let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
+        #[cfg(not(target_endian = "little"))]
+        let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
 
         /*  Final length:
         total record length - header size - null byte position

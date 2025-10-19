@@ -1,6 +1,6 @@
+use crate::BytePath as _;
 use crate::cli_helpers::SizeFilter;
 use crate::glob_to_regex;
-use crate::traits_and_conversions::BytePath as _;
 use crate::{DirEntry, FileType, SearchConfigError};
 use core::num::NonZeroU16;
 use regex::bytes::{Regex, RegexBuilder};
@@ -316,7 +316,7 @@ impl SearchConfig {
     #[inline]
     #[must_use]
     #[expect(clippy::cast_lossless, reason = "overcomplicates it")]
-    #[expect(clippy::indexing_slicing,reason="used for debug assert")]
+    #[expect(clippy::indexing_slicing, reason = "used for debug assert")]
     /// Checks if the path or file name matches the regex filter
     /// If `full_path` is false, only checks the filename
     ///

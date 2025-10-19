@@ -128,7 +128,7 @@ mod test;
 pub use buffer::{AlignedBuffer, ValueType};
 
 mod memchr_derivations;
-pub use memchr_derivations::{contains_zero_byte, find_char_in_word, memrchr};
+pub use memchr_derivations::{contains_zero_byte, find_char_in_word, find_zero_byte_u64, memrchr};
 mod direntry;
 pub use direntry::DirEntry;
 
@@ -144,9 +144,9 @@ pub use types::Result;
 #[cfg(target_os = "linux")]
 pub(crate) use types::SyscallBuffer;
 pub(crate) use types::{DirEntryFilter, FilterType};
-mod traits_and_conversions;
-pub(crate) use traits_and_conversions::BytePath;
+
 mod utils;
+pub(crate) use utils::BytePath;
 #[cfg(any(
     target_os = "linux",
     target_os = "illumos",
@@ -158,8 +158,6 @@ mod utils;
     target_os = "netbsd"
 ))]
 pub use utils::dirent_const_time_strlen;
-
-pub use utils::strlen;
 
 mod glob;
 pub use glob::glob_to_regex;

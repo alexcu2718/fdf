@@ -1,26 +1,6 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use fdf::strlen as asm_strlen;
+
 use std::hint::black_box;
-
-#[inline(always)]
-//modified version to work for this test function(copy pasted really)
-pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(LibcDirent64, d_name);
-    let reclen = unsafe { (*dirent).d_reclen } as usize;
-    #[cfg(target_endian = "little")]
-    const MASK: u64 = 0x00FF_FFFFu64;
-    #[cfg(target_endian = "big")]
-    const MASK: u64 = 0xFFFF_FF00_0000_0000u64;
-
-    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
-    let mask = MASK * ((reclen == 24) as u64);
-
-    let candidate_pos = last_word | mask;
-
-    let byte_pos = 8 - unsafe { find_zero_byte_u64_optimised(candidate_pos) };
-
-    reclen - DIRENT_HEADER_START - byte_pos
-}
 
 #[inline]
 pub(crate) const fn repeat_u64(byte: u8) -> u64 {
@@ -30,22 +10,73 @@ pub(crate) const fn repeat_u64(byte: u8) -> u64 {
 const LO_U64: u64 = repeat_u64(0x01);
 
 const HI_U64: u64 = repeat_u64(0x80);
+
 #[inline]
-pub(crate) const unsafe fn find_zero_byte_u64_optimised(x: u64) -> usize {
-    let zero_bit =
-        unsafe { core::num::NonZeroU64::new_unchecked(x.wrapping_sub(LO_U64) & !x & HI_U64) };
+//modified version to work for this test function(copy pasted really)
+pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
+    // Offset from the start of the struct to the beginning of d_name.
+    const DIRENT_HEADER_START: usize = core::mem::offset_of!(LibcDirent64, d_name);
+    // Access the last field and then round up to find the minimum struct size
+    const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
+
+    use core::num::NonZeroU64;
+
+    /*  Accessing `d_reclen` is safe because the struct is kernel-provided.
+    / SAFETY: `dirent` is valid by precondition */
+    let reclen = unsafe { (*dirent).d_reclen } as usize;
+
+    /*
+      Read the last 8 bytes of the struct as a u64.
+    This works because dirents are always 8-byte aligned. */
+    // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
+    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+    /* Note, I don't index as a u64 with eg (reclen-8)/8 or (reclen-8)>>3 because that adds a division which is a costly operation, relatively speaking
+    let last_word: u64 = unsafe { *(dirent.cast::<u64>()).add((reclen - 8)/8 (or >>3))}; //this will also work but it's less performant (MINUTELY)
+    */
 
     #[cfg(target_endian = "little")]
-    {
-        (zero_bit.trailing_zeros() >> 3) as usize
-    }
+    const MASK: u64 = 0x00FF_FFFFu64;
+    #[cfg(target_endian = "big")]
+    const MASK: u64 = 0xFFFF_FF00_0000_0000u64; // byte order is shifted unintuitively on big endian!
+
+    /* When the record length is 24/`MINIMUM_DIRENT_SIZE`, the kernel may insert nulls before d_name.
+    Which will exist on index's 17/18 (or opposite, for big endian...sigh.,)
+    Mask them out to avoid false detection of a terminator.
+    Multiplying by 0 or 1 applies the mask conditionally without branching. */
+    let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
+    /*
+     Apply the mask to ignore non-name bytes while preserving name bytes.
+     Result:
+     - Name bytes remain unchanged
+     - Non-name bytes become 0xFF (guaranteed non-zero)
+     - Any null terminator in the name remains detectable
+    */
+    let candidate_pos: u64 = last_word | mask;
+
+    /*
+     Locate the first null byte in constant time using SWAR.
+     Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.
+
+     SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation
+     https://doc.rust-lang.org/std/num/struct.NonZero.html#tymethod.trailing_zeros
+     https://doc.rust-lang.org/std/num/struct.NonZero.html#tymethod.leading_zeros
+    (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
+    */
+    let zero_bit = unsafe {
+        NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
+    };
+    #[cfg(target_endian = "little")]
+    let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
     #[cfg(not(target_endian = "little"))]
-    {
-        (zero_bit.leading_zeros() >> 3) as usize
-    }
+    let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
+
+    /*  Final length:
+    total record length - header size - null byte position
+    */
+    reclen - DIRENT_HEADER_START - byte_pos
 }
 
-#[repr(C, align(8))]
+#[repr(C)]
 pub struct LibcDirent64 {
     // Fake a structure similar to libc::dirent64
     pub d_ino: u64,
@@ -58,7 +89,8 @@ pub struct LibcDirent64 {
 const fn calculate_min_reclen(name_len: usize) -> u16 {
     const HEADER_SIZE: usize = std::mem::offset_of!(LibcDirent64, d_name);
     let total_size = HEADER_SIZE + name_len + 1;
-    ((total_size + 7) / 8 * 8) as u16 //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
+    total_size.next_multiple_of(8) as _
+    //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
     //this works because it's given the same representation in memory so repr C will ensure the layout is compatible
 }
 
@@ -124,12 +156,6 @@ fn bench_strlen(c: &mut Criterion) {
                     })
                 },
             );
-
-            group.bench_with_input(BenchmarkId::new("asm_strlen", size_name), &entry, |b, e| {
-                b.iter(|| unsafe {
-                    black_box(asm_strlen(black_box(e.d_name.as_ptr() as *const _)))
-                })
-            });
         }
         group.finish();
     }
@@ -162,17 +188,6 @@ fn bench_strlen(c: &mut Criterion) {
                 black_box(total) //make sure compiler does not optimise this away
             })
         });
-        batch_group.bench_function("asm_strlen_batch", |b| {
-            b.iter(|| {
-                let mut total = 0;
-                for entry in &all_entries {
-                    total += unsafe {
-                        black_box(asm_strlen(black_box(entry.d_name.as_ptr() as *const _)))
-                    };
-                }
-                black_box(total)
-            })
-        });
 
         batch_group.finish();
     }
@@ -181,9 +196,9 @@ fn bench_strlen(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default()
-        .sample_size(5000)
+        .sample_size(10000)
         .warm_up_time(std::time::Duration::from_millis(500))
-        .measurement_time(std::time::Duration::from_secs(3));
+        .measurement_time(std::time::Duration::from_secs(2));
     targets = bench_strlen
 }
 

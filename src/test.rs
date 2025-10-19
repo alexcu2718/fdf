@@ -1,13 +1,15 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
+    use crate::BytePath;
+    use crate::Finder;
     use crate::cli_helpers::*;
-    use crate::memchr_derivations::{find_char_in_word, find_zero_byte_u64};
-    use crate::traits_and_conversions::BytePath;
     use crate::{DirEntry, FileType, ReadDir};
+    use crate::{find_char_in_word, find_zero_byte_u64};
     use chrono::{Duration as ChronoDuration, Utc};
     use filetime::{FileTime, set_file_times};
     use std::env::temp_dir;
+    use std::ffi::OsStr;
     use std::fs;
     use std::fs::File;
     use std::io::Write;
@@ -16,13 +18,9 @@ mod tests {
     use std::os::unix::fs::symlink;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
+    use std::{ffi::OsString, str::FromStr};
 
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-    //helper func to save verbosity
-    fn as_bytes(path: &std::path::Path) -> &[u8] {
-        path.to_str().unwrap().as_bytes()
-    }
 
     fn create_byte_array(s: &str) -> [u8; 8] {
         let mut bytes = [0u8; 8];
@@ -145,7 +143,7 @@ mod tests {
         // Apply custom time
         set_file_times(&file_path, custom_ft, custom_ft).expect("failed to set file time");
 
-        let dt = DirEntry::new(as_bytes(&file_path).as_os_str())
+        let dt = DirEntry::new(&file_path.as_os_str())
             .unwrap()
             .modified_time()
             .expect("should return custom datetime");
@@ -169,7 +167,7 @@ mod tests {
             writeln!(f, "initial contents").unwrap();
         }
 
-        let first_time = DirEntry::new(as_bytes(&file_path).as_os_str())
+        let first_time = DirEntry::new(file_path.as_os_str())
             .unwrap()
             .modified_time()
             .expect("should get initial modified time");
@@ -185,7 +183,7 @@ mod tests {
             writeln!(f, "new contents").unwrap();
         }
 
-        let second_time = DirEntry::new(as_bytes(&file_path).as_os_str())
+        let second_time = DirEntry::new(file_path.as_os_str())
             .unwrap()
             .modified_time()
             .expect("should get updated modified time");
@@ -262,7 +260,7 @@ mod tests {
             writeln!(f, "hello world").unwrap();
         }
 
-        let dt = DirEntry::new(as_bytes(&file_path).as_os_str())
+        let dt = DirEntry::new(file_path.as_os_str())
             .unwrap()
             .modified_time()
             .expect("should return valid datetime");
@@ -542,7 +540,7 @@ mod tests {
         let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
         let mut names: Vec<_> = entries
             .iter()
-            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .map(|e| String::from_utf8_lossy(e.file_name()))
             .collect();
         names.sort();
 
@@ -566,7 +564,7 @@ mod tests {
         let entries: Vec<_> = dir_entry.getdents().unwrap().collect();
         let mut names: Vec<_> = entries
             .iter()
-            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .map(|e| String::from_utf8_lossy(e.file_name()))
             .collect();
         names.sort();
 
@@ -1145,7 +1143,7 @@ mod tests {
 
         let mut names: Vec<_> = entries
             .iter()
-            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .map(|e| String::from_utf8(e.file_name().to_vec()).unwrap())
             .collect();
         names.sort();
 
@@ -1193,11 +1191,10 @@ mod tests {
     fn test_root_linux() {
         //essentially i had a VERY hard to diagnose issue regarding a segfault searching SPECIFICALLY
         //only from root dir (so not applicable to mac, altho ive never used mac fulltime, i am too poor for that)
-        use crate::Finder;
-        let start_path: &[u8] = b"/";
+        let start_path = "/";
         let pattern: &str = ".";
 
-        let finder = Finder::init(start_path.as_os_str())
+        let finder = Finder::init(OsString::from_str(&start_path).unwrap())
             .pattern(&pattern)
             .keep_hidden(true)
             .keep_dirs(true)
@@ -1217,11 +1214,11 @@ mod tests {
     #[test]
     fn test_root_linux_symlinks() {
         // Quick test for symlink recursion detection
-        use crate::Finder;
-        let start_path: &[u8] = b"/";
+
+        let start_path: &str = "/";
         let pattern: &str = ".";
 
-        let finder = Finder::init(start_path.as_os_str())
+        let finder = Finder::init(OsString::from_str(&start_path).unwrap())
             .pattern(&pattern)
             .keep_hidden(true)
             .keep_dirs(true)
@@ -1241,7 +1238,6 @@ mod tests {
     #[test]
     #[allow(unused)]
     fn test_home() {
-        use crate::Finder;
         let pattern: &str = ".";
         let home_dir = std::env::home_dir();
 
@@ -1262,7 +1258,6 @@ mod tests {
     #[test]
     #[allow(unused)]
     fn test_home_symlink() {
-        use crate::Finder;
         let pattern: &str = ".";
         let home_dir = std::env::home_dir();
 
@@ -1284,7 +1279,6 @@ mod tests {
     #[test]
     #[allow(unused)]
     fn test_home_nonhidden() {
-        use crate::Finder;
         let pattern: &str = ".";
         let home_dir = std::env::home_dir();
 
@@ -1363,11 +1357,11 @@ mod tests {
 
     #[test]
     fn test_error_handling() {
-        let use_path:&[u8]= b"/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
+        let use_path: &str = "/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
 
-        let std_path = Path::new(use_path.as_os_str());
+        let std_path = Path::new(use_path);
         if std_path.exists() {
-            let non_existent = DirEntry::new(use_path.as_os_str());
+            let non_existent = DirEntry::new(std_path.as_os_str());
             assert!(non_existent.is_err(), "ok, stop being an ass")
         };
     }

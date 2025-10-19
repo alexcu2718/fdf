@@ -80,8 +80,10 @@
 #[cfg(target_os = "linux")]
 use crate::GetDents;
 use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::FileType};
+
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
+use core::fmt;
 use core::ptr::NonNull;
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, R_OK,
@@ -184,6 +186,56 @@ impl<'drnt> From<&'drnt DirEntry> for &'drnt CStr {
     #[inline]
     fn from(entry: &'drnt DirEntry) -> &'drnt CStr {
         &entry.path
+    }
+}
+
+impl fmt::Display for DirEntry {
+    //i might need to change this to show other metadata.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_string_lossy())
+    }
+}
+
+impl From<DirEntry> for std::path::PathBuf {
+    #[inline]
+    fn from(entry: DirEntry) -> Self {
+        entry.as_os_str().into()
+    }
+}
+impl TryFrom<&[u8]> for DirEntry {
+    type Error = DirEntryError;
+    #[inline]
+    fn try_from(path: &[u8]) -> Result<Self> {
+        Self::new(OsStr::from_bytes(path))
+    }
+}
+
+impl TryFrom<&OsStr> for DirEntry {
+    type Error = DirEntryError;
+    #[inline]
+    fn try_from(path: &OsStr) -> Result<Self> {
+        Self::new(path)
+    }
+}
+
+impl AsRef<Path> for DirEntry {
+    #[inline]
+    fn as_ref(&self) -> &Path {
+        self.as_path()
+    }
+}
+
+impl fmt::Debug for DirEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Dirent")
+            .field("path", &self.to_string_lossy())
+            .field("file_name", &String::from_utf8_lossy(self.file_name()))
+            .field("depth", &self.depth)
+            .field("file_type", &self.file_type)
+            .field("file_name_index", &self.file_name_index)
+            .field("inode", &self.inode)
+            .field("traversible_cache", &self.is_traversible_cache)
+            .finish()
     }
 }
 
@@ -1216,7 +1268,7 @@ impl DirEntry {
      ```
     */
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
-        let path_ref = path.as_ref().as_bytes(); //TODO GET RID OF UNWRAP HERE
+        let path_ref = path.as_ref().as_bytes();
         let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::NulError)?;
 
         // extract information from successful stat

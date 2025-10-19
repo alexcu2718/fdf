@@ -296,7 +296,8 @@ impl GetDents {
         I have to make an edgecase for CIFS/NTFS file systems here, otherwise it would skip entries on these systems
         Luckily rerunning benchmarks showed negligible, if any, perf cost, it probably only calls getdents a handful of times for the edgecases
         you can't have perfection in systems programming, so many variables!
-        Ultimately this is a heuristic way, it's not fool proof, it won't however miss any entries but it CAN sometimes will call `getdents64` to get a 0
+        Ultimately this is a heuristic way, it's not fool proof,
+        it won't however miss any entries but it CAN sometimes call `getdents64` to get a 0
         which (officially) indicates EOF
 
         Actually, it's funny because this optimisation will be even MORE helpful for network file systems!

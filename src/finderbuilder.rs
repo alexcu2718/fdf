@@ -14,7 +14,7 @@ use std::{
     path::PathBuf,
 };
 
-//Set the threadcount at compile time.
+//Set the threadcount at compile time (backing to a minimum of 1, **this should never happen**)
 const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
 
 /// A builder for creating a `Finder` instance with customisable options.

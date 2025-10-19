@@ -30,7 +30,7 @@ pub struct ReadDir {
     pub(crate) file_name_index: usize,
     /// Depth of this directory relative to traversal root
     pub(crate) parent_depth: u16,
-    /// The file descriptor of this directory, for use in calls like openat/statat etc.
+    /// The file descriptor of this directory, for use in calls like openat/statat etc. Provides it's own drop
     pub(crate) fd: FileDes,
 }
 
@@ -68,21 +68,21 @@ impl ReadDir {
 
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        let dir_stream = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
+        let fd = dir_path.open()?; //read the directory and get the raw fd
         let (path_buffer, path_len) = Self::init_from_direntry(dir_path);
         //mutate the buffer to contain the full path, then add a null terminator and record the new length
         //we use this length to index to get the filename (store full path -> index to get filename)
 
-        // SAFETY:   dir is a non null pointer,the pointer is guaranteed to be valid
-        let dirfd = unsafe { FileDes(libc::dirfd(dir_stream.as_ptr())) };
-        debug_assert!(dirfd.is_open(), "We expect it to be open");
+        // SAFETY:  fd is valid/open so guaranteed non null
+        let dir=unsafe{NonNull::new_unchecked(libc::fdopendir(fd.0))};
+        debug_assert!(fd.is_open(), "We expect it to be open");
 
         Ok(Self {
-            dir: dir_stream,
+            dir,
             path_buffer,
             file_name_index: path_len,
             parent_depth: dir_path.depth, //inherit depth
-            fd: dirfd,
+            fd
         })
     }
 }
@@ -119,25 +119,7 @@ impl Iterator for ReadDir {
     }
 }
 
-impl Drop for ReadDir {
-    #[inline]
-    /**
-     Closes the directory file descriptor to prevent resource leaks.
 
-     File descriptors are limited system resources, so proper cleanup
-     is essential.
-    */
-    fn drop(&mut self) {
-        debug_assert!(
-            self.fd.is_open(),
-            "We expect the file descriptor to be open before closing"
-        );
-        // SAFETY:  not required
-        unsafe { libc::closedir(self.dir.as_ptr()) };
-        // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
-        //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
-    }
-}
 
 /*
 interesting when testing blk size of via stat calls on my own pc, none had an IO block>4096
@@ -191,24 +173,7 @@ pub struct GetDents {
     /// A marker for when the `FileDes` can give no more entries
     pub(crate) end_of_stream: bool,
 }
-#[cfg(target_os = "linux")]
-impl Drop for GetDents {
-    /**
-      Drops the iterator, closing the file descriptor.
-      we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
 
-    */
-    #[inline]
-    fn drop(&mut self) {
-        debug_assert!(
-            self.fd.is_open(),
-            "We expect the file descriptor to be open before closing"
-        );
-        // SAFETY:  not required
-        unsafe { libc::close(self.fd.0) };
-        //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
-    }
-}
 
 #[cfg(target_os = "linux")]
 impl GetDents {

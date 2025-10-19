@@ -67,3 +67,22 @@ impl FileDes {
         !self.is_open()
     }
 }
+
+
+impl Drop for FileDes {
+    #[inline]
+    /**
+     Closes the directory file descriptor to prevent resource leaks.
+
+     File descriptors are limited system resources, so proper cleanup
+     is essential.
+    */
+    fn drop(&mut self) {
+        debug_assert!(
+            self.is_open(),
+            "We expect the file descriptor to be open before closing"
+        );
+        // SAFETY:  valid to close
+        unsafe { libc::close(self.0) };
+    }
+}

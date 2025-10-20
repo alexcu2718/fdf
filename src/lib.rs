@@ -47,17 +47,18 @@
  use fdf::{Finder,DirEntry,SearchConfigError};
  use std::sync::mpsc::Receiver;
 
- fn find_files() -> Result<Receiver<Vec<DirEntry>>, SearchConfigError> {
-     let finder = Finder::init("/path/to/search")
-         .pattern("*.rs")
-         .keep_hidden(false)
-         .max_depth(Some(3))
-         .follow_symlinks(true)
-         .canonicalise_root(true)  // Resolve the root to a full path
-         .build()?;
+ fn find_files() -> Result<impl Iterator<Item = DirEntry>, SearchConfigError> {
+    let finder = Finder::init("/path/to/search")
+        .pattern("*.rs")
+        .keep_hidden(false)
+        .max_depth(Some(3))
+        .follow_symlinks(true)
+        .canonicalise_root(true) // Resolve the root to a full path
+        .build()?;
 
-     finder.traverse()
- }
+    finder.traverse()
+}
+
  ```
 
  ## Safety Considerations
@@ -80,12 +81,45 @@
      .traverse()
      .unwrap();
 
- for batch in receiver {
-     for entry in batch {
-         println!("Found: {}", entry.to_string_lossy());
-     }
+ for entry in receiver {
+       println!("Found: {}", entry.to_string_lossy());
  }
  ```
+
+
+
+Setting custom filters example
+```no_run
+
+use fdf::{Finder, FileTypeFilter};
+use std::error::Error;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let finder = Finder::init("/var/log")
+        .pattern("*.log")
+        .keep_hidden(false)
+        .type_filter(Some(FileTypeFilter::File))
+        //set the custom filter
+        .filter(Some(|entry| {
+            let path = entry.as_path();
+            path.extension()
+                .and_then(|ext| ext.to_str()) //I don't recommend doing this, since it can be converted to bytes!
+                .map_or(false, |ext| ext.eq_ignore_ascii_case("log"))
+        }))
+        .build()?;
+
+    let entries = finder.traverse()?;
+    let mut count = 0;
+
+    for entry in entries {
+        count += 1;
+        println!("Matched: {}", entry.as_path().display());
+    }
+
+    println!("Found {} log files", count);
+    Ok(())
+}
+```
 */
 
 use rayon::prelude::*;
@@ -246,20 +280,23 @@ impl Finder {
       - Entries are sent in batches to minimise channel contention
       - Traversal runs in parallel using Rayon's work-stealing scheduler
     */
-    pub fn traverse(self) -> core::result::Result<Receiver<Vec<DirEntry>>, SearchConfigError> {
+    pub fn traverse(
+        self,
+    ) -> core::result::Result<impl Iterator<Item = DirEntry>, SearchConfigError> {
         let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
 
-        // try to construct the starting directory entry
+        // Construct starting entry
         let entry = DirEntry::new(self.root_dir()).map_err(SearchConfigError::TraversalError)?;
 
-        // only continue if it is traversible
+        // Check if traversible
         if entry.is_traversible() {
-            // spawn the search in a new thread
+            // Spawn the directory traversal asynchronously
+
             rayon::spawn(move || {
                 self.process_directory(entry, &sender);
             });
 
-            Ok(receiver)
+            Ok(receiver.into_iter().flatten())
         } else {
             Err(SearchConfigError::NotADirectory)
         }
@@ -289,7 +326,7 @@ impl Finder {
         sort: bool,
     ) -> core::result::Result<(), SearchConfigError> {
         //TODO clean this up
-        write_paths_coloured(self.traverse()?.iter(), result_count, use_colours, sort)
+        write_paths_coloured(self.traverse()?, result_count, use_colours, sort)
     }
 
     #[inline]

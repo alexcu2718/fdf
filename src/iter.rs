@@ -29,7 +29,7 @@ pub struct ReadDir {
     /// Index into `path_buffer` where filenames start (avoids recalculating)
     pub(crate) file_name_index: usize,
     /// Depth of this directory relative to traversal root
-    pub(crate) parent_depth: u16,
+    pub(crate) parent_depth: u32,
     /// The file descriptor of this directory, for use in calls like openat/statat etc.
     pub(crate) fd: FileDes,
 }
@@ -181,7 +181,7 @@ pub struct GetDents {
     pub(crate) file_name_index: usize,
     /// Depth of the parent directory in the directory tree hierarchy
     /// Used to calculate depth for child entries during recursive traversal
-    pub(crate) parent_depth: u16,
+    pub(crate) parent_depth: u32,
     /// Current read position within the directory entry buffer
     /// Tracks progress through the currently loaded batch of entries
     pub(crate) offset: usize,
@@ -447,7 +447,7 @@ pub trait DirentConstructor {
     /// Returns the depth of the parent directory in the traversal hierarchy
     ///
     /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
-    fn parent_depth(&self) -> u16;
+    fn parent_depth(&self) -> u32;
     /// Returns the file descriptor for the current directory being read
     fn file_descriptor(&self) -> &FileDes;
 
@@ -677,7 +677,7 @@ impl DirentConstructor for ReadDir {
     }
 
     #[inline]
-    fn parent_depth(&self) -> u16 {
+    fn parent_depth(&self) -> u32 {
         self.parent_depth
     }
 
@@ -700,7 +700,7 @@ impl DirentConstructor for GetDents {
     }
 
     #[inline]
-    fn parent_depth(&self) -> u16 {
+    fn parent_depth(&self) -> u32 {
         self.parent_depth
     }
     #[inline]
@@ -722,8 +722,14 @@ fn max_size_dirent() {
         _d_name: [u8; 512],
     }
     const MINIMUM_DIRENT_SIZE: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
-    assert!(size_of::<DirentNTFS>() == 536);
-    assert!(size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE); //technically the maximum size
+    assert!(
+        size_of::<DirentNTFS>() == 536,
+        "the maximum size of a theoretical NTFS dirent should be 536 bytes!"
+    );
+    assert!(
+        size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE,
+        "the maximum size of a theoretical NTFS dirent should be 536 bytes!"
+    ); //technically the maximum size
 }
 
 /*

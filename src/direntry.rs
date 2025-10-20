@@ -13,69 +13,69 @@
  Simple file search example
  ```no_run
  use fdf::{Finder, SearchConfig};
+ use std::error::Error;
  use std::sync::Arc;
 
- fn main() -> Result<(), Box<dyn std::error::Error>> {
-     let finder= Finder::init("/some/path").pattern("*.txt")
-         .build()
-         .expect("Failed to build finder");
+fn main() -> Result<(), Box<dyn Error>> {
+    let finder = Finder::init("/some/path")
+        .pattern("*.txt")
+        .build()
+        .expect("Failed to build finder");
 
-     let receiver = finder.traverse()
-         .expect("Failed to start traversal");
+    let entries = finder
+        .traverse()
+        .expect("Failed to start traversal");
 
-     let mut file_count = 0;
-     let mut batch_count = 0;
+    let mut file_count = 0;
 
-     for batch in receiver {
-         batch_count += 1;
-         for entry in batch {
-             file_count += 1;
-             println!("Found: {:?}", entry);
-         }
-     }
+    for entry in entries {
+        file_count += 1;
+        println!("Found: {:?}", entry);
+    }
 
-     println!("Discovered {} files in {} batches", file_count, batch_count);
+    println!("Discovered {} files", file_count);
 
-     Ok(())
- }
+    Ok(())
+}
+
  ```
 
  Advanced file search example
  ```no_run
- use fdf::{Finder, SizeFilter, FileTypeFilter};
+use fdf::{Finder, SizeFilter, FileTypeFilter};
+use std::error::Error;
 
- fn main() -> Result<(), Box<dyn std::error::Error>> {
-     let finder = Finder::init("/some/path").pattern("*.txt")
-         .keep_hidden(false)
-         .case_insensitive(true)
-         .keep_dirs(true)
-         .max_depth(Some(5))
-         .follow_symlinks(false)
-         .filter_by_size(Some(SizeFilter::Min(1024)))
-         .type_filter(Some(FileTypeFilter::File))
-         .show_errors(true)
-         .build()
-         .map_err(|e| format!("Failed to build finder: {}", e))?;
+fn main() -> Result<(), Box<dyn Error>> {
+    let finder = Finder::init("/some/path")
+        .pattern("*.txt")
+        .keep_hidden(false)
+        .case_insensitive(true)
+        .keep_dirs(true)
+        .max_depth(Some(5))
+        .follow_symlinks(false)
+        .filter_by_size(Some(SizeFilter::Min(1024)))
+        .type_filter(Some(FileTypeFilter::File))
+        .show_errors(true)
+        .build()
+        .map_err(|e| format!("Failed to build finder: {}", e))?;
 
-     let receiver = finder.traverse()
-         .map_err(|e| format!("Failed to start traversal: {}", e))?;
+    let entries = finder
+        .traverse()
+        .map_err(|e| format!("Failed to start traversal: {}", e))?;
 
-     let mut file_count = 0;
+    let mut file_count = 0;
 
-     for batch in receiver {
-         for entry in batch {
-             file_count += 1;
-             println!("{:?}  )",
-                 entry,
+    for entry in entries {
+        file_count += 1;
+        println!("{:?}", entry);
+    }
 
-             );
-         }
-     }
+    println!("Search completed! Found {} files", file_count);
 
-     println!("Search completed! Found {} files", file_count);
+    Ok(())
+}
+```
 
-     Ok(())
- }
 */
 #[cfg(target_os = "linux")]
 use crate::GetDents;
@@ -102,12 +102,12 @@ use std::{
   and efficient access to its components.
 
   The struct's memory footprint is
-  - **Path**: 16 bytes, `Box<CStr>`, retaining compatibility for use in libc but converting to &[u8] trivially(as deref)
-  - **File type**: A 1-byte enum representing the entry's type (file, directory, etc.).
-  - **Inode**: An 8-byte integer for the file's unique inode number.
-  - **Depth**: A 2-byte integer indicating the entry's depth from the root.
-  - **File name index**: A 8-byte integer pointing to the start of the file name within the path buffer.
-  - **is traversible cache**: A 1 byte `Cell<Option<bool>>` an Implementation detail that avoids recalling stat on symlinks
+  - **Path**: 16 bytes, `Box<CStr>`, retaining compatibility for use in libc but converting to `&[u8]` trivially(as deref)
+  - **File type**:  1-byte enum representing the entry's type (file, directory, etc.).
+  - **Inode**:  8-byte integer for the file's unique inode number.
+  - **Depth**:  4-byte integer indicating the entry's depth from the root.
+  - **File name index**:  8-byte integer pointing to the start of the file name within the path buffer.
+  - **is traversible cache**:  1 byte `Cell<Option<bool>>` an Implementation detail that avoids recalling stat on symlinks
 
   # Examples
 
@@ -142,7 +142,7 @@ use std::{
 pub struct DirEntry {
     /// Path to the entry, stored as a Boxed `CStr`
     //(to avoid storing the capacity)
-    /// This allows easy C ffi by just calling `.as_cstr().as_ptr()`
+    /// This allows easy C ffi by just calling `.as_ptr()`
     pub(crate) path: Box<CStr>, //16 bytes
 
     /// File type (file, directory, symlink, etc.).
@@ -155,7 +155,7 @@ pub struct DirEntry {
     //
     /// Depth of the directory entry relative to the root.
     ///
-    pub(crate) depth: u16, //2bytes
+    pub(crate) depth: u32, //4bytes
 
     /// Offset in the path buffer where the file name starts.
     ///
@@ -164,7 +164,7 @@ pub struct DirEntry {
     ///
     /// `None` means not computed yet, `Some(bool)` means cached result.
     pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
-} //36 bytes
+} //38 bytes, rounded to 40
 
 impl core::ops::Deref for DirEntry {
     type Target = [u8];
@@ -721,7 +721,7 @@ impl DirEntry {
         let result = f(cstr);
 
         // SAFETY: ptr was allocated by realpath(), so we must free it explicitly(only after function is run)
-        unsafe { libc::free(ptr.cast()) };
+        unsafe { libc::free(ptr.cast()) }
 
         result
     }
@@ -1183,7 +1183,7 @@ impl DirEntry {
     pub const fn is_hidden(&self) -> bool {
         // SAFETY: file_name_index() is guaranteed to be within bounds
         // and we're using pointer arithmetic which is const-compatible (slight const hack)
-        unsafe { *self.as_cstr().as_ptr().add(self.file_name_index()) as u8 == b'.' }
+        unsafe { *self.as_ptr().add(self.file_name_index()) as u8 == b'.' }
     }
     #[inline]
     #[must_use]

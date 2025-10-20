@@ -1,7 +1,7 @@
-use core::num::NonZeroU16;
+use core::num::NonZeroUsize;
 
 use crate::{
-    DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError,
+    DirEntry, DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError,
     SizeFilter, const_from_env,
 };
 use dashmap::DashSet;
@@ -34,7 +34,7 @@ pub struct FinderBuilder {
     pub(crate) keep_dirs: bool,
     pub(crate) file_name_only: bool,
     pub(crate) extension_match: Option<Box<[u8]>>,
-    pub(crate) max_depth: Option<NonZeroU16>,
+    pub(crate) max_depth: Option<NonZeroUsize>,
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter>,
     pub(crate) size_filter: Option<SizeFilter>,
@@ -120,11 +120,11 @@ impl FinderBuilder {
     }
     #[must_use]
     /// Set maximum search depth
-    pub const fn max_depth(mut self, max_depth: Option<u16>) -> Self {
+    pub const fn max_depth(mut self, max_depth: Option<usize>) -> Self {
         match max_depth {
             None => self,
             Some(num) => {
-                self.max_depth = NonZeroU16::new(num);
+                self.max_depth = core::num::NonZeroUsize::new(num);
                 self
             }
         }
@@ -148,7 +148,7 @@ impl FinderBuilder {
 
     /// Set a custom filter
     #[must_use]
-    pub const fn filter(mut self, filter: Option<DirEntryFilter>) -> Self {
+    pub const fn filter(mut self, filter: Option<fn(&DirEntry) -> bool>) -> Self {
         self.filter = filter;
         self
     }

@@ -2,7 +2,7 @@ use crate::BytePath as _;
 use crate::cli_helpers::SizeFilter;
 use crate::glob_to_regex;
 use crate::{DirEntry, FileType, SearchConfigError};
-use core::num::NonZeroU16;
+use core::num::NonZeroUsize;
 use regex::bytes::{Regex, RegexBuilder};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// File type filter for directory traversal
@@ -152,7 +152,7 @@ pub struct SearchConfig {
     ///if this is Some, then we match against the extension of the file otherwise accept (if none)
     pub(crate) file_name_only: bool,
     ///if true, then we only match against the file name, otherwise we match against the full path when regexing
-    pub(crate) depth: Option<NonZeroU16>,
+    pub(crate) depth: Option<NonZeroUsize>,
     ///the maximum depth to search, if None then no limit
     pub(crate) follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
     /// a size filter
@@ -167,7 +167,7 @@ impl SearchConfig {
     // Constructor for SearchConfig
     // Builds a regex matcher if a valid pattern is provided, otherwise stores None
     // Returns an error if the regex compilation fails
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools, reason = "Internal convenience")]
     #[expect(clippy::too_many_arguments, reason = "Internal convenience")]
     pub(crate) fn new<A: AsRef<str>>(
         pattern: Option<&A>,
@@ -176,7 +176,7 @@ impl SearchConfig {
         keep_dirs: bool,
         filenameonly: bool,
         extension_match: Option<Box<[u8]>>,
-        depth: Option<NonZeroU16>,
+        depth: Option<NonZeroUsize>,
         follow_symlinks: bool,
         size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,

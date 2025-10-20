@@ -10,7 +10,7 @@ use core::ops::Deref;
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.
 pub trait BytePath<T>
 where
-    T: Deref<Target = [u8]> + ?Sized,
+    T: Deref<Target = [u8]>,
 {
     fn extension(&self) -> Option<&[u8]>;
     /// Checks if file extension matches given bytes (case-insensitive)
@@ -149,10 +149,10 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
         // Access the last field and then round up to find the minimum struct size
         const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
-        const _: () = assert!(
+        const_assert!(
             MINIMUM_DIRENT_SIZE == 24,
             "Minimum struct size should be 24 on these platforms!"
-        ); //compile time assert
+        );
         use crate::memchr_derivations::HI_U64;
         use crate::memchr_derivations::LO_U64;
         use core::num::NonZeroU64;
@@ -205,7 +205,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         // Find the position then deduct deduct it from 7 (then add 1 to account for the null ) from the position of the null byte pos
         #[cfg(target_endian = "little")]
         let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
-        #[cfg(not(target_endian = "little"))]
+        #[cfg(target_endian = "big")]
         let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
 
         /*  Final length:

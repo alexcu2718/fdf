@@ -76,7 +76,7 @@ pub fn write_paths_coloured<I>(
     sort: bool,
 ) -> Result<(), SearchConfigError>
 where
-    I: Iterator<Item = Vec<DirEntry>>,
+    I: Iterator<Item = DirEntry>,
 {
     let std_out = stdout();
     let mut writer = BufWriter::new(std_out.lock());
@@ -91,7 +91,7 @@ where
      */
 
     if sort {
-        let mut collected: Vec<_> = paths.flatten().collect();
+        let mut collected: Vec<_> = paths.collect();
         collected.par_sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
 
         let iter_paths = collected.into_iter().take(true_limit);
@@ -104,7 +104,7 @@ where
             write_nocolour(&mut writer, iter_paths)?;
         }
     } else {
-        let iter_paths = paths.flatten().take(true_limit);
+        let iter_paths = paths.take(true_limit);
 
         if use_colour {
             write_coloured(&mut writer, iter_paths)?

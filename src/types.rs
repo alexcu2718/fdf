@@ -24,7 +24,7 @@ const_from_env!(
 );
 
 #[cfg(target_os = "linux")] // We only care about the buffer on linux
-const _: () = assert!(
+const_assert!(
     BUFFER_SIZE >= PAGE_SIZE,
     "We expect the buffer to always be greater in capacity than the page"
 );

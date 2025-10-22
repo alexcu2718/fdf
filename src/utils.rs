@@ -6,7 +6,36 @@ use libc::dirent64;
 use crate::memchr_derivations::memrchr;
 use core::ops::Deref;
 
-/// A trait for types that dereference to a byte slice (`[u8]`) representing file paths.
+#[inline]
+#[cfg(target_os = "linux")]
+/*
+  Wrapper for direct getdents syscalls
+
+
+ # Arguments
+ - `fd`: Open directory file descriptor
+ - `buffer_ptr`: Raw pointer to output buffer
+ - `buffer_size`: Size of output buffer in bytes
+
+ # Safety
+ - Requires valid open directory descriptor
+ - Buffer must be valid for writes of `buffer_size` bytes
+ - No type checking on generic pointer(T  must be i8/u8)
+
+ # Returns
+ - Positive: Number of bytes read
+ - 0: End of directory
+ - Negative: Error code (check errno)
+*/
+pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> libc::c_long
+where
+    T: crate::ValueType, //i8/u8
+{
+    // SAFETY:Syscall has no other implicit safety requirements beyond pointer validity
+    unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
+}
+
+/// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.
 pub trait BytePath<T>
 where

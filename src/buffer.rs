@@ -182,7 +182,7 @@ where
     #[cfg(target_os = "linux")]
     pub fn getdents(&mut self, fd: &FileDes) -> i64 {
         // SAFETY: we're passing a valid buffer
-        unsafe { crate::syscalls::getdents_asm(fd.0, self.as_mut_ptr(), SIZE) }
+        unsafe { crate::utils::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
     /// Returns a reference to a subslice without doing bounds checking

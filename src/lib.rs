@@ -149,11 +149,6 @@ mod iter;
 pub use iter::GetDents;
 pub use iter::ReadDir;
 
-#[cfg(target_os = "linux")]
-mod syscalls;
-#[cfg(target_os = "linux")]
-pub use syscalls::{close_asm, getdents_asm, open_asm};
-
 mod printer;
 pub(crate) use printer::write_paths_coloured;
 
@@ -264,7 +259,7 @@ impl Finder {
       background thread and sends batches of directory entries through an unbounded channel.
 
       # Returns
-      Returns a `Receiver<Vec<DirEntry>>` that will receive batches of directory entries
+      Returns a `Receiver<Iterator<Item = DirEntry>>` that will receive batches of directory entries
       as they are found during the traversal. The receiver can be used to iterate over the
       results as they become available.
 
@@ -288,10 +283,7 @@ impl Finder {
         // Construct starting entry
         let entry = DirEntry::new(self.root_dir()).map_err(SearchConfigError::TraversalError)?;
 
-        // Check if traversible
         if entry.is_traversible() {
-            // Spawn the directory traversal asynchronously
-
             rayon::spawn(move || {
                 self.process_directory(entry, &sender);
             });
@@ -316,7 +308,6 @@ impl Finder {
       =`sort` - Enable sorting of the final results (has significant computational cost)
 
      # Errors
-     -Returns [`SearchConfigError::TraversalError`] if the search operation fails
      -Returns [`SearchConfigError::IOError`] if the search operation fails
     */
     pub fn print_results(

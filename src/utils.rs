@@ -55,6 +55,9 @@ where
 {
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
+        
+        debug_assert!(self.as_ref() != b"/", "root should never go here");
+        debug_assert!(!self.is_empty(), "should never be empty");
         // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
         memrchr(b'.', unsafe { self.get_unchecked(..self.len() - 1) }) //exclude cases where the . is the final character
             // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
@@ -74,6 +77,7 @@ where
     /// Get the length of the basename of a path (up to and including the last '/')
     #[inline]
     fn file_name_index(&self) -> usize {
+        debug_assert!(!self.is_empty(), "should never be empty");
         memrchr(b'/', self).map_or(1, |pos| pos + 1)
     }
 }
@@ -127,7 +131,7 @@ My Cat Diavolo is cute.
 
 */
 
-#[inline]
+#[inline(never)]
 #[cfg(any(
     target_os = "linux",
     target_os = "illumos",
@@ -237,6 +241,35 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         #[cfg(target_endian = "big")]
         let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
 
+
+
+
+
+
+        //check final calculation
+        #[expect(clippy::missing_panics_doc,reason="debug only")]
+        #[expect(clippy::undocumented_unsafe_blocks,reason="debug only")]
+        #[cfg(debug_assertions)]
+        {   //copied from stdlib out of laziness
+            const fn const_strlen(ptr: *const u8) -> usize {
+                let mut len = 0;
+                while unsafe { *ptr.add(len) } != 0 {
+                    len += 1;
+                }
+
+                len
+            }
+
+            assert!(
+                reclen - DIRENT_HEADER_START - byte_pos
+                    == const_strlen(unsafe { access_dirent!(dirent, d_name).cast() }),"const dirent length calculation failed!"
+            )
+        }
+
+
+
+        
+
         /*  Final length:
         total record length - header size - null byte position
         */
@@ -245,24 +278,24 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
 }
 
 /*
-copypasted from
-https://linux.die.net/man/2/getdents64
+     assembly output:
 
-
-
-struct linux_dirent {
-    unsigned long  d_ino;     /* Inode number */
-    unsigned long  d_off;     /* Offset to next linux_dirent */
-    unsigned short d_reclen;  /* Length of this linux_dirent */
-    char           d_name[];  /* Filename (null-terminated) */
-                        /* length is actually (d_reclen - 2 -
-                           offsetof(struct linux_dirent, d_name) */  <-------this is the most important bit, we just need to be careful about padding!
-    /*
-    char           pad;       // Zero padding byte
-    char           d_type;    // File type (only since Linux 2.6.4;
-                              // offset is (d_reclen - 1))
-    */
-
-}
+        movzx eax, word ptr [rdi + 16]
+        xor ecx, ecx
+        cmp rax, 24
+        mov edx, 16777215
+        cmovne rdx, rcx
+        or rdx, qword ptr [rdi + rax - 8]
+        movabs rcx, -72340172838076673
+        add rcx, rdx
+        andn rcx, rdx, rcx
+        movabs rdx, -9187201950435737472
+        and rdx, rcx
+        tzcnt rcx, rdx
+        shr ecx, 3
+        add rax, rcx
+        add rax, -27
+        ret
 
 */
+

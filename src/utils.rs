@@ -131,7 +131,7 @@ My Cat Diavolo is cute.
 
 */
 
-#[inline(never)]
+#[inline]
 #[cfg(any(
     target_os = "linux",
     target_os = "illumos",

@@ -174,6 +174,9 @@ pub use types::Result;
 pub(crate) use types::SyscallBuffer;
 pub(crate) use types::{DirEntryFilter, FilterType};
 
+#[cfg(target_os="macos")]
+mod macos_iter;
+
 mod utils;
 pub(crate) use utils::BytePath;
 #[cfg(any(
@@ -452,10 +455,10 @@ impl Finder {
         #[cfg(target_os = "linux")]
         // linux with getdents (only linux has stable ABI, so we can lower down to assembly/syscalls here, not for any other system tho)
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
-        #[cfg(not(target_os = "linux"))]
-        let direntries = dir.readdir(); // in theory I can use getattrlistbulk on macos(bsd potentially?), this has a LOT of complexity!
-        // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls (I'll get around to this eventually)
-        // I could get getdirentries alternatively for bsd
+        #[cfg(not(any(target_os = "linux",target_os="macos")))]
+        let direntries = dir.readdir(); 
+        #[cfg(target_os="macos")]
+        let direntries=dir.getattrlistbulk();
 
         match direntries {
             Ok(entries) => {

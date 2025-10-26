@@ -1468,4 +1468,10 @@ impl DirEntry {
     pub fn getdents(&self) -> Result<GetDents> {
         GetDents::new(self)
     }
+
+    #[inline]
+    #[cfg(target_os = "macos")]
+    pub fn getattrlistbulk(&self) -> Result<crate::macos_iter::DirIterator> {
+        crate::macos_iter::DirIterator::new(self).map_err(|e| e.into())
+    }
 }

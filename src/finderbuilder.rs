@@ -226,10 +226,18 @@ impl FinderBuilder {
     pub fn build(self) -> core::result::Result<Finder, SearchConfigError> {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
+
+
+        #[cfg(not(target_os="macos"))]
         let _ = rayon::ThreadPoolBuilder::new()
             .num_threads(self.thread_count)
             .build_global(); //Skip the error, it only errors if it's already been initialised
         //we do this to avoid passing pools to every iterator (shared access locks etc.)
+        #[cfg(target_os="macos")]
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(self.thread_count)
+            .stack_size(16 * 1024 * 1024)
+            .build_global(); // Use a bigger stack for macos threads
 
         let starting_filesystem = if self.same_filesystem {
             // Get the filesystem ID of the root directory directly

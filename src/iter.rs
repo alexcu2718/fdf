@@ -1,7 +1,7 @@
 #![allow(clippy::must_use_candidate)]
 use crate::FileType;
-#[cfg(target_os = "linux")]
-use crate::SyscallBuffer;
+#[cfg(any(target_os = "linux",target_os="macos"))]
+use crate::types::SyscallBuffer;
 use crate::{DirEntry, FileDes, Result};
 use core::cell::Cell;
 use core::ffi::CStr;
@@ -206,9 +206,8 @@ impl Drop for GetDents {
             self.fd.is_open(),
             "We expect the file descriptor to be open before closing"
         );
-        // SAFETY:  not required
+         // SAFETY: only closing HERE
         unsafe { libc::close(self.fd.0) };
-        //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
 
@@ -667,6 +666,7 @@ impl_iter!(ReadDir);
 #[cfg(target_os = "linux")]
 impl_iter!(GetDents);
 
+
 impl DirentConstructor for ReadDir {
     #[inline]
     fn path_buffer(&mut self) -> &mut Vec<u8> {
@@ -745,3 +745,179 @@ fn max_size_dirent() {
   exceeds the size of the glibc dirent structure shown above.
 
 */
+
+
+
+
+
+
+#[cfg(target_os = "macos")]
+/**
+macos directory iterator using the `getdents` system call.
+
+ Provides more efficient directory traversal than `readdir` for large directories
+ by performing batched reads into a kernel buffer. This reduces system call overhead
+ and improves performance when scanning directories with many entries.
+
+ Unlike some directory iteration methods, this does not implicitly call `stat`
+ on each entry unless required by unusual filesystem behaviour.
+*/
+pub struct GetDirEntries {
+    /// File descriptor of the open directory, wrapped for automatic resource management
+    pub(crate) fd: FileDes,
+    /// Kernel buffer for batch reading directory entries via system call I/O
+    /// Approximately 4.1KB in size, optimised for typical directory traversal
+    pub(crate) syscall_buffer: SyscallBuffer,
+    /// buffer for constructing full entry paths
+    /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
+    pub(crate) path_buffer: Vec<u8>,
+    /// Length of the base directory path including the trailing slash
+    /// Used for efficient filename extraction and path construction
+    pub(crate) file_name_index: usize,
+    /// Depth of the parent directory in the directory tree hierarchy
+    /// Used to calculate depth for child entries during recursive traversal
+    pub(crate) parent_depth: u32,
+    /// Current read position within the directory entry buffer
+    /// Tracks progress through the currently loaded batch of entries
+    pub(crate) offset: usize,
+    /// Number of bytes remaining to be processed in the current buffer
+    /// Indicates when a new system call is needed to fetch more entries
+    pub(crate) remaining_bytes: usize,
+    /// A marker for when the `FileDes` can give no more entries
+    pub(crate) end_of_stream: bool,
+
+    pub(crate) off_t:i64
+}
+
+#[cfg(target_os = "macos")]
+impl DirentConstructor for GetDirEntries {
+    #[inline]
+    fn path_buffer(&mut self) -> &mut Vec<u8> {
+        &mut self.path_buffer
+    }
+
+    #[inline]
+    fn file_index(&self) -> usize {
+        self.file_name_index
+    }
+
+    #[inline]
+    fn parent_depth(&self) -> u32 {
+        self.parent_depth
+    }
+
+    #[inline]
+    fn file_descriptor(&self) -> &FileDes {
+        &self.fd
+    }
+}
+#[cfg(target_os = "macos")]
+impl GetDirEntries {
+    #[inline]
+    #[expect(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        reason = "hot function, worth some easy optimisation, not caring about 32bit target"
+    )]
+    pub(crate) fn fill_buffer(&mut self) -> bool {
+        // Early return if we've already reached end of stream
+        if self.end_of_stream {
+            return false;
+        }
+
+        // Read directory entries using macOS getdirentries64
+        let remaining_bytes = unsafe {
+            crate::utils::getdirentries64(
+                self.fd.0,
+                self.syscall_buffer.as_mut_ptr() as *mut libc::c_char,
+                self.syscall_buffer.max_capacity(),
+                &mut self.off_t
+            )
+        };
+
+        // Check for error or end of directory
+        if remaining_bytes <= 0 {
+            self.end_of_stream = true;
+            self.remaining_bytes = 0;
+            return false;
+        }
+
+        self.remaining_bytes = remaining_bytes as usize;
+        self.offset = 0;
+        true
+    }
+
+    pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+        loop {
+            // If we have data in buffer, try to get next entry
+            if self.offset < self.remaining_bytes {
+                // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
+                let d: *mut dirent64 =
+                    unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+                // SAFETY: dirent is not null so field access is safe
+                let reclen = unsafe { access_dirent!(d, d_reclen) };
+
+                self.offset += reclen; // increment the offset by the size of the dirent structure
+
+                // SAFETY: dirent is not null
+                return unsafe { Some(NonNull::new_unchecked(d)) };
+            }
+
+            // Buffer is empty, try to fill it
+            if !self.fill_buffer() {
+                return None; // No more data to read
+            }
+            // Buffer filled successfully, loop to try reading again
+        }
+    }
+
+    #[inline]
+    pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
+        let fd = dir.open()?; //getting the file descriptor
+        debug_assert!(fd.is_open(), "We expect it to always be open");
+
+        let (path_buffer, path_len) = Self::init_from_direntry(dir);
+        let buffer = SyscallBuffer::new();
+        Ok(Self {
+            fd,
+            syscall_buffer: buffer,
+            path_buffer,
+            file_name_index: path_len,
+            parent_depth: dir.depth,
+            offset: 0,
+            remaining_bytes: 0,
+            end_of_stream: false,
+            off_t: 0,
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Iterator for GetDirEntries {
+    type Item = DirEntry;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(drnt) = self.get_next_entry() {
+            skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); // this just skips dot entries in a really efficient manner(avoids strlen)
+            return Some(unsafe{self.construct_entry(drnt.as_ptr())});
+        }
+        None // signal end of directory
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for GetDirEntries {
+    #[inline]
+    fn drop(&mut self) {
+        debug_assert!(
+            self.fd.is_open(),
+            "We expect the file descriptor to be open before closing"
+        );
+        // SAFETY: only closing HERE
+        unsafe { libc::close(self.fd.0) };
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl_iter!(GetDirEntries);

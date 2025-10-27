@@ -803,55 +803,6 @@ mod tests {
     }
 
 
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_iterator_macos() {
-        // make a unique test directory inside temp_dir
-        let unique_id = "fdf_iterator_test_macos";
-        let dir_path: PathBuf = temp_dir().join(unique_id);
-        let _ = fs::remove_dir_all(dir_path.as_path());
-        let _ = fs::create_dir(dir_path.as_path());
-
-        // create test files and subdirectory
-        fs::write(dir_path.join("file1.txt"), "content").unwrap();
-        fs::write(dir_path.join("file2.txt"), "content").unwrap();
-        fs::create_dir(dir_path.join("subdir")).unwrap();
-
-        // init a DirEntry for testing
-
-        let dir_entry = DirEntry::new(&dir_path).unwrap();
-
-        // get iterator
-        let iter = dir_entry.getattrlistbulk().unwrap();
-
-        // collect entries
-        let mut entries = Vec::new();
-
-        for entry in iter {
-            entries.push(entry)
-        }
-
-        //verify results
-
-        //let _ = fs::remove_dir_all(dir_entry.as_path());
-        assert_eq!(entries.len(), 3, "Should find two files and one subdir");
-
-        assert!(
-            entries.clone().iter().filter(|e| e.is_dir()).count() == 1,
-            "Should find one directory"
-        );
-        assert!(
-            entries
-                .clone()
-                .iter()
-                .filter(|e| e.is_regular_file())
-                .count()
-                == 2,
-            "Should find two regular files"
-        );
-
-        let _ = fs::remove_dir_all(dir_path.as_path());
-    }
 
     #[test]
     fn test_handles_various_tests() {
@@ -940,33 +891,7 @@ mod tests {
         let _ = fs::remove_dir_all(dir_path);
     }
 
-     #[test]
-     #[cfg(target_os="macos")]
-    fn test_basic_iteration_macos() {
-        let dir_path = temp_dir().join("THROWAWAYANYTHINGMACOS");
-        let _ = fs::remove_dir_all(&dir_path);
-        let _ = fs::create_dir_all(&dir_path);
-
-        // create test files
-        let _ = File::create(dir_path.join("file1.txt"));
-        let _ = fs::create_dir(dir_path.join("subdir"));
-
-        let dir_entry = DirEntry::new(&dir_path).unwrap();
-        let iter = dir_entry.getattrlistbulk().unwrap();
-        let entries: Vec<_> = iter.collect();
-
-        assert_eq!(entries.len(), 2);
-        let mut names: Vec<_> = entries
-            .iter()
-            .map(|e| e.as_os_str().to_string_lossy())
-            .collect();
-        names.sort();
-
-        assert!(names[0].ends_with("file1.txt"));
-        assert!(names[1].ends_with("subdir"));
-
-        let _ = fs::remove_dir_all(dir_path);
-    }
+ 
 
 
     #[test]

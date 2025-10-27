@@ -174,8 +174,7 @@ pub use types::Result;
 pub(crate) use types::SyscallBuffer;
 pub(crate) use types::{DirEntryFilter, FilterType};
 
-#[cfg(target_os="macos")]
-mod macos_iter;
+
 
 mod utils;
 pub(crate) use utils::BytePath;
@@ -458,7 +457,7 @@ impl Finder {
         #[cfg(not(any(target_os = "linux",target_os="macos")))]
         let direntries = dir.readdir(); 
         #[cfg(target_os="macos")]
-        let direntries=dir.getattrlistbulk();
+        let direntries=dir.getdirentries();
 
         match direntries {
             Ok(entries) => {

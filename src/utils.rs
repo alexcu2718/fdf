@@ -6,6 +6,19 @@ use libc::dirent64;
 use crate::memchr_derivations::memrchr;
 use core::ops::Deref;
 
+
+#[cfg(target_os="macos")]
+#[inline]
+pub unsafe fn getdirentries64(
+        fd: libc::c_int,
+        buf: *mut libc::c_char,
+        nbytes: libc::size_t,
+        basep: *mut libc::off_t)->i32{
+            const  SYS_GETDIRENTRIES64:libc::c_int=  344;
+    unsafe{libc::syscall(SYS_GETDIRENTRIES64,fd,buf,nbytes,basep)}
+        }
+
+
 #[inline]
 #[cfg(target_os = "linux")]
 /*

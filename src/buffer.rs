@@ -185,6 +185,15 @@ where
         unsafe { crate::utils::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
+
+    #[inline]
+    #[cfg(target_os = "macos")]
+    pub fn getdirentries(&mut self, fd: &crate::FileDes,basep:*mut libc::off_t) -> i32 {
+        // SAFETY: we're passing a valid buffer
+        unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr().cast(), SIZE,basep) }
+    }
+
+
     /// Returns a reference to a subslice without doing bounds checking
     ///
     /// # Safety

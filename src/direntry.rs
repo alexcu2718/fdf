@@ -1471,7 +1471,7 @@ impl DirEntry {
 
     #[inline]
     #[cfg(target_os = "macos")]
-    pub fn getattrlistbulk(&self) -> Result<crate::macos_iter::DirIterator> {
-        crate::macos_iter::DirIterator::new(self).map_err(|e| e.into())
+    pub fn getdirentries(&self) -> Result<crate::iter::GetDirEntries> {
+        crate::iter::GetDirEntries::new(self).map_err(|e| e.into())
     }
 }

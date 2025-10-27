@@ -19,7 +19,9 @@ pub type SyscallBuffer = crate::AlignedBuffer<u8, BUFFER_SIZE>;
 
 
 #[cfg(target_os="macos")]
-pub type SyscallBuffer = crate::AlignedBuffer<u8,8192>;
+const BUFFER_SIZE:usize=8*4096;
+#[cfg(target_os="macos")]
+pub type SyscallBuffer = crate::AlignedBuffer<u8,BUFFER_SIZE>; //default for readdir buffer  on macos
 
 
 #[cfg(target_os = "linux")] // We only care about the buffer on linux

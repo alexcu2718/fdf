@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+command -v strace >/dev/null 2>&1 || { echo "strace not found"; exit 1; }
 
 set -euo pipefail
 source "new_prelude.sh"

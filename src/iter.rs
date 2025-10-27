@@ -753,7 +753,7 @@ fn max_size_dirent() {
 
 #[cfg(target_os = "macos")]
 /**
-macos directory iterator using the `getdents` system call.
+macos directory iterator using the `getdirentries` system call.
 
  Provides more efficient directory traversal than `readdir` for large directories
  by performing batched reads into a kernel buffer. This reduces system call overhead
@@ -824,29 +824,38 @@ impl GetDirEntries {
         if self.end_of_stream {
             return false;
         }
-
+        //   pub fn getdirentries(&mut self, fd: &crate::FileDes,basep:*mut i64) -> i32 {
         // Read directory entries using macOS getdirentries64
-        let remaining_bytes = unsafe {
-            crate::utils::getdirentries64(
-                self.fd.0,
-                self.syscall_buffer.as_mut_ptr() as *mut libc::c_char,
-                self.syscall_buffer.max_capacity(),
-                &mut self.off_t
-            )
-        };
+    
+          
 
-        // Check for error or end of directory
-        if remaining_bytes <= 0 {
-            self.end_of_stream = true;
-            self.remaining_bytes = 0;
-            return false;
-        }
+        let remaining_bytes=self.syscall_buffer.getdirentries(&self.fd,&mut self.off_t);
 
-        self.remaining_bytes = remaining_bytes as usize;
+
+
+        
+        self.remaining_bytes =remaining_bytes.max(0) as usize;
+
+        const MINIMUM_DIRENT_SIZE: usize =
+            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
+        
+
+        const MAX_SIZED_DIRENT: usize = 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE; //this is `true` maximum dirent size for NTFS/CIFS, (deducting the 24 for fields)
+
+        let has_bytes_remaining = remaining_bytes.is_positive();
+
+    
+        self.end_of_stream = !has_bytes_remaining
+            || self.syscall_buffer.max_capacity() - MAX_SIZED_DIRENT >= self.remaining_bytes; //a boolean
+
+      
         self.offset = 0;
-        true
-    }
+        
 
+        // Return true only if we successfully read non-zero bytes
+        has_bytes_remaining
+    }
+    #[inline]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         loop {
             // If we have data in buffer, try to get next entry

@@ -170,8 +170,6 @@ mod types;
 pub use types::BUFFER_SIZE;
 pub use types::FileDes;
 pub use types::Result;
-#[cfg(target_os = "linux")]
-pub(crate) use types::SyscallBuffer;
 pub(crate) use types::{DirEntryFilter, FilterType};
 
 

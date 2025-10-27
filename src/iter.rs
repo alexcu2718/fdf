@@ -667,87 +667,43 @@ impl_iter!(ReadDir);
 impl_iter!(GetDents);
 
 
-impl DirentConstructor for ReadDir {
-    #[inline]
-    fn path_buffer(&mut self) -> &mut Vec<u8> {
-        &mut self.path_buffer
-    }
+#[cfg(target_os = "macos")]
+impl_iter!(GetDirEntries);
 
-    #[inline]
-    fn file_index(&self) -> usize {
-        self.file_name_index
-    }
-
-    #[inline]
-    fn parent_depth(&self) -> u32 {
-        self.parent_depth
-    }
-
-    #[inline]
-    fn file_descriptor(&self) -> &FileDes {
-        self.dirfd()
-    }
+// simple repetition avoider
+macro_rules! impl_dirent_constructor {
+    ($type:ty) => {
+        impl DirentConstructor for $type {
+            #[inline]
+            fn path_buffer(&mut self) -> &mut Vec<u8> {
+                &mut self.path_buffer
+            }
+            
+            #[inline]
+            fn file_index(&self) -> usize {
+                self.file_name_index
+            }
+            
+            #[inline]
+            fn parent_depth(&self) -> u32 {
+                self.parent_depth
+            }
+            
+            #[inline]
+            fn file_descriptor(&self) -> &FileDes {
+                &self.fd
+            }
+        }
+    };
 }
+
+impl_dirent_constructor!(ReadDir);
 
 #[cfg(target_os = "linux")]
-impl DirentConstructor for GetDents {
-    #[inline]
-    fn path_buffer(&mut self) -> &mut Vec<u8> {
-        &mut self.path_buffer
-    }
+impl_dirent_constructor!(GetDents);
 
-    #[inline]
-    fn file_index(&self) -> usize {
-        self.file_name_index
-    }
-
-    #[inline]
-    fn parent_depth(&self) -> u32 {
-        self.parent_depth
-    }
-    #[inline]
-    fn file_descriptor(&self) -> &FileDes {
-        &self.fd
-    }
-}
-
-/// basic code to show that the NTFS/CIFS edge case approximation is reasonable
-#[test] // usually I chuck my tests in the test.rs file but this one is *highly* specific to this page
-#[cfg(target_os = "linux")] //only relevant for linux
-fn max_size_dirent() {
-    #[repr(C)]
-    struct DirentNTFS {
-        _ino: u64,
-        _offset: u64,
-        _d_reclen: u16,
-        _d_type: u8,
-        _d_name: [u8; 512],
-    }
-    const MINIMUM_DIRENT_SIZE: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
-    assert!(
-        size_of::<DirentNTFS>() == 536,
-        "the maximum size of a theoretical NTFS dirent should be 536 bytes!"
-    );
-    assert!(
-        size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE,
-        "the maximum size of a theoretical NTFS dirent should be 536 bytes!"
-    ); //technically the maximum size
-}
-
-/*
-
-   Copypaste from https://man7.org/linux/man-pages/man3/readdir.3.html
-
-  returns the value 255 for most filesystems, on some filesystems
-  (e.g., CIFS, Windows SMB servers), the null-terminated filename
-  that is (correctly) returned in d_name can actually exceed this
-  size.  In such cases, the d_reclen field will contain a value that
-  exceeds the size of the glibc dirent structure shown above.
-
-*/
-
-
-
+#[cfg(target_os = "macos")] 
+impl_dirent_constructor!(GetDirEntries);
 
 
 
@@ -928,5 +884,43 @@ impl Drop for GetDirEntries {
     }
 }
 
-#[cfg(target_os = "macos")]
-impl_iter!(GetDirEntries);
+
+
+/// basic code to show that the NTFS/CIFS edge case approximation is reasonable
+#[test] // usually I chuck my tests in the test.rs file but this one is *highly* specific to this page
+#[cfg(target_os = "linux")] //only relevant for linux
+fn max_size_dirent() {
+    #[repr(C)]
+    struct DirentNTFS {
+        _ino: u64,
+        _offset: u64,
+        _d_reclen: u16,
+        _d_type: u8,
+        _d_name: [u8; 512],
+    }
+    const MINIMUM_DIRENT_SIZE: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
+    assert!(
+        size_of::<DirentNTFS>() == 536,
+        "the maximum size of a theoretical NTFS dirent should be 536 bytes!"
+    );
+    assert!(
+        size_of::<DirentNTFS>() == 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE,
+        "the maximum size of a theoretical NTFS dirent should be 536 bytes!"
+    ); //technically the maximum size
+}
+
+/*
+
+   Copypaste from https://man7.org/linux/man-pages/man3/readdir.3.html
+
+  returns the value 255 for most filesystems, on some filesystems
+  (e.g., CIFS, Windows SMB servers), the null-terminated filename
+  that is (correctly) returned in d_name can actually exceed this
+  size.  In such cases, the d_reclen field will contain a value that
+  exceeds the size of the glibc dirent structure shown above.
+
+*/
+
+
+
+

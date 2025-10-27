@@ -108,18 +108,7 @@ impl ReadDir {
 
          */
 
-impl Iterator for ReadDir {
-    type Item = DirEntry;
 
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(drnt) = self.get_next_entry() {
-            skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); // this just skips dot entries in a really efficient manner(avoids strlen)
-            return Some(self.construct_direntry(drnt));
-        }
-        None // signal end of directory
-    }
-}
 
 impl Drop for ReadDir {
     #[inline]
@@ -141,22 +130,7 @@ impl Drop for ReadDir {
     }
 }
 
-/*
-interesting when testing blk size of via stat calls on my own pc, none had an IO block>4096
 
-// also see reference https://github.com/golang/go/issues/64597, to test this TODO!
-
-libc source code for reference on blk size.
-  size_t allocation = default_allocation;
-#ifdef _STATBUF_ST_BLKSIZE
-  /* Increase allocation if requested, but not if the value appears to
-     be bogus.  */
-  if (statp != NULL)
-    allocation = MIN (MAX ((size_t) statp->st_blksize, default_allocation),
-              MAX_DIR_BUFFER_SIZE);
-#endif
-
-*/
 
 #[cfg(target_os = "linux")]
 /**
@@ -415,20 +389,6 @@ impl GetDents {
     }
 }
 
-#[cfg(target_os = "linux")]
-impl Iterator for GetDents {
-    type Item = DirEntry;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(drnt) = self.get_next_entry() {
-            skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); // this just skips dot entries in a really efficient manner(avoids strlen)
-            return Some(self.construct_direntry(drnt));
-        }
-        None // signal end of directory
-        // annoying as hell to code to match the *exact* semantics of the readdir iterator, worth it tho, damn clean.
-    }
-}
 
 /**
   Internal trait for constructing directory entries during iteration
@@ -665,8 +625,6 @@ macro_rules! impl_iter {
 impl_iter!(ReadDir);
 #[cfg(target_os = "linux")]
 impl_iter!(GetDents);
-
-
 #[cfg(target_os = "macos")]
 impl_iter!(GetDirEntries);
 
@@ -690,12 +648,39 @@ macro_rules! impl_dirent_constructor {
             }
             
             #[inline]
-            fn file_descriptor(&self) -> &FileDes {
+            fn file_descriptor(&self) -> &$crate::FileDes {
                 &self.fd
             }
         }
     };
 }
+
+macro_rules! impl_iterator_for_dirent {
+    ($type:ty) => {
+        impl Iterator for $type {
+            type Item = DirEntry;
+
+            #[inline]
+            fn next(&mut self) -> Option<Self::Item> {
+                while let Some(drnt) = self.get_next_entry() {
+                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); // this just skips dot entries in a really efficient manner(avoids strlen)
+                    return Some(self.construct_direntry(drnt));
+                }
+                None // signal end of directory
+            }
+        }
+    };
+}
+
+
+impl_iterator_for_dirent!(ReadDir);
+
+#[cfg(target_os = "linux")]
+impl_iterator_for_dirent!(GetDents);
+
+#[cfg(target_os = "macos")]
+impl_iterator_for_dirent!(GetDirEntries);
+
 
 impl_dirent_constructor!(ReadDir);
 
@@ -741,40 +726,14 @@ pub struct GetDirEntries {
     pub(crate) remaining_bytes: usize,
     /// A marker for when the `FileDes` can give no more entries
     pub(crate) end_of_stream: bool,
-
-    pub(crate) off_t:i64
+    /// The base pointer for the getdirentries call
+    pub(crate) base_pointer:i64
 }
 
-#[cfg(target_os = "macos")]
-impl DirentConstructor for GetDirEntries {
-    #[inline]
-    fn path_buffer(&mut self) -> &mut Vec<u8> {
-        &mut self.path_buffer
-    }
 
-    #[inline]
-    fn file_index(&self) -> usize {
-        self.file_name_index
-    }
-
-    #[inline]
-    fn parent_depth(&self) -> u32 {
-        self.parent_depth
-    }
-
-    #[inline]
-    fn file_descriptor(&self) -> &FileDes {
-        &self.fd
-    }
-}
 #[cfg(target_os = "macos")]
 impl GetDirEntries {
     #[inline]
-    #[expect(
-        clippy::cast_sign_loss,
-        clippy::cast_possible_truncation,
-        reason = "hot function, worth some easy optimisation, not caring about 32bit target"
-    )]
     pub(crate) fn fill_buffer(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.end_of_stream {
@@ -785,11 +744,11 @@ impl GetDirEntries {
     
           
 
-        let remaining_bytes=self.syscall_buffer.getdirentries(&self.fd,&mut self.off_t);
+        let remaining_bytes=self.syscall_buffer.getdirentries(&self.fd,&mut self.base_pointer);
 
 
 
-        
+        //ignore the negative returns, we can't do the bitshifting because macos complains :(
         self.remaining_bytes =remaining_bytes.max(0) as usize;
 
         const MINIMUM_DIRENT_SIZE: usize =
@@ -852,24 +811,12 @@ impl GetDirEntries {
             offset: 0,
             remaining_bytes: 0,
             end_of_stream: false,
-            off_t: 0,
+            base_pointer: 0,
         })
     }
 }
 
-#[cfg(target_os = "macos")]
-impl Iterator for GetDirEntries {
-    type Item = DirEntry;
 
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(drnt) = self.get_next_entry() {
-            skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); // this just skips dot entries in a really efficient manner(avoids strlen)
-            return Some(unsafe{self.construct_entry(drnt.as_ptr())});
-        }
-        None // signal end of directory
-    }
-}
 
 #[cfg(target_os = "macos")]
 impl Drop for GetDirEntries {

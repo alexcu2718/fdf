@@ -172,8 +172,6 @@ pub use types::FileDes;
 pub use types::Result;
 pub(crate) use types::{DirEntryFilter, FilterType};
 
-
-
 mod utils;
 pub(crate) use utils::BytePath;
 #[cfg(any(
@@ -452,10 +450,10 @@ impl Finder {
         #[cfg(target_os = "linux")]
         // linux with getdents (only linux has stable ABI, so we can lower down to assembly/syscalls here, not for any other system tho)
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
-        #[cfg(not(any(target_os = "linux",target_os="macos")))]
-        let direntries = dir.readdir(); 
-        #[cfg(target_os="macos")]
-        let direntries=dir.getdirentries();
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let direntries = dir.readdir();
+        #[cfg(target_os = "macos")]
+        let direntries = dir.getdirentries();
 
         match direntries {
             Ok(entries) => {

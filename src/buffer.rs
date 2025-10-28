@@ -173,11 +173,6 @@ where
     /// which is necessary to avoid certain libc quirks and limitations.
     ///
     ///
-    /// # Platform Specificity
-    /// This implementation is specific to Linux on supported architectures (currently x86 and aarch64)
-    /// Otherwise backing up to libc
-    // the main idea is to avoid dynamically linking glibc eventually.
-    // A RISC-V implementation is currently pending(might do others because i'm learning assembly)
     #[inline]
     #[cfg(target_os = "linux")]
     pub fn getdents(&mut self, fd: &FileDes) -> i64 {
@@ -185,14 +180,13 @@ where
         unsafe { crate::utils::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
-
     #[inline]
     #[cfg(target_os = "macos")]
-    pub fn getdirentries(&mut self, fd: &crate::FileDes,basep:*mut i64) -> i32 {
+    #[allow(clippy::not_unsafe_ptr_arg_deref)] //shutup
+    pub fn getdirentries(&mut self, fd: &crate::FileDes, basep: *mut i64) -> i32 {
         // SAFETY: we're passing a valid buffer
-        unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr().cast(), SIZE,basep) }
+        unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
     }
-
 
     /// Returns a reference to a subslice without doing bounds checking
     ///

@@ -802,8 +802,6 @@ mod tests {
         let _ = fs::remove_dir_all(dir_path.as_path());
     }
 
-
-
     #[test]
     fn test_handles_various_tests() {
         // create empty directory
@@ -890,9 +888,6 @@ mod tests {
 
         let _ = fs::remove_dir_all(dir_path);
     }
-
- 
-
 
     #[test]
     #[cfg(target_os = "linux")]

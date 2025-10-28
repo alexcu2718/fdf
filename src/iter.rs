@@ -1,6 +1,6 @@
 #![allow(clippy::must_use_candidate)]
 use crate::FileType;
-#[cfg(any(target_os = "linux",target_os="macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::types::SyscallBuffer;
 use crate::{DirEntry, FileDes, Result};
 use core::cell::Cell;
@@ -11,8 +11,6 @@ use libc::DIR;
 use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir};
-
-
 
 /**
  POSIX-compliant directory iterator using libc's readdir functions.
@@ -108,8 +106,6 @@ impl ReadDir {
 
          */
 
-
-
 impl Drop for ReadDir {
     #[inline]
     /**
@@ -129,8 +125,6 @@ impl Drop for ReadDir {
         //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
     }
 }
-
-
 
 #[cfg(target_os = "linux")]
 /**
@@ -180,7 +174,7 @@ impl Drop for GetDents {
             self.fd.is_open(),
             "We expect the file descriptor to be open before closing"
         );
-         // SAFETY: only closing HERE
+        // SAFETY: only closing HERE
         unsafe { libc::close(self.fd.0) };
     }
 }
@@ -388,7 +382,6 @@ impl GetDents {
         }
     }
 }
-
 
 /**
   Internal trait for constructing directory entries during iteration
@@ -636,17 +629,17 @@ macro_rules! impl_dirent_constructor {
             fn path_buffer(&mut self) -> &mut Vec<u8> {
                 &mut self.path_buffer
             }
-            
+
             #[inline]
             fn file_index(&self) -> usize {
                 self.file_name_index
             }
-            
+
             #[inline]
             fn parent_depth(&self) -> u32 {
                 self.parent_depth
             }
-            
+
             #[inline]
             fn file_descriptor(&self) -> &$crate::FileDes {
                 &self.fd
@@ -672,7 +665,6 @@ macro_rules! impl_iterator_for_dirent {
     };
 }
 
-
 impl_iterator_for_dirent!(ReadDir);
 
 #[cfg(target_os = "linux")]
@@ -681,16 +673,13 @@ impl_iterator_for_dirent!(GetDents);
 #[cfg(target_os = "macos")]
 impl_iterator_for_dirent!(GetDirEntries);
 
-
 impl_dirent_constructor!(ReadDir);
 
 #[cfg(target_os = "linux")]
 impl_dirent_constructor!(GetDents);
 
-#[cfg(target_os = "macos")] 
+#[cfg(target_os = "macos")]
 impl_dirent_constructor!(GetDirEntries);
-
-
 
 #[cfg(target_os = "macos")]
 /**
@@ -727,50 +716,46 @@ pub struct GetDirEntries {
     /// A marker for when the `FileDes` can give no more entries
     pub(crate) end_of_stream: bool,
     /// The base pointer for the getdirentries call
-    pub(crate) base_pointer:i64
+    pub(crate) base_pointer: i64,
 }
-
 
 #[cfg(target_os = "macos")]
 impl GetDirEntries {
     #[inline]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "using bit trick to avoid branch but compiler cant see it"
+    )]
     pub(crate) fn fill_buffer(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.end_of_stream {
             return false;
         }
-        //   pub fn getdirentries(&mut self, fd: &crate::FileDes,basep:*mut i64) -> i32 {
-        // Read directory entries using macOS getdirentries64
-    
-          
 
-        let remaining_bytes=self.syscall_buffer.getdirentries(&self.fd,&mut self.base_pointer);
+        let remaining_bytes = self
+            .syscall_buffer
+            .getdirentries(&self.fd, &raw mut self.base_pointer);
 
+        //use a slightly different bit trick to the one above.
+        const NUM_OF_BITS_MINUS_1: usize = (i32::BITS - 1) as usize;
+        self.remaining_bytes =
+            (remaining_bytes & !(remaining_bytes >> NUM_OF_BITS_MINUS_1)) as usize;
 
-
-        //ignore the negative returns, we can't do the bitshifting because macos complains :(
-        self.remaining_bytes =remaining_bytes.max(0) as usize;
-
-        const MINIMUM_DIRENT_SIZE: usize =
-            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
-        
-
-        const MAX_SIZED_DIRENT: usize = 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE; //this is `true` maximum dirent size for NTFS/CIFS, (deducting the 24 for fields)
+        const MAX_SIZED_DIRENT: usize = size_of::<dirent64>();
 
         let has_bytes_remaining = remaining_bytes.is_positive();
 
-    
+        //unlike the above for getdents, the max sized `dirent64` is appropriately sized
         self.end_of_stream = !has_bytes_remaining
             || self.syscall_buffer.max_capacity() - MAX_SIZED_DIRENT >= self.remaining_bytes; //a boolean
 
-      
         self.offset = 0;
-        
 
         // Return true only if we successfully read non-zero bytes
         has_bytes_remaining
     }
     #[inline]
+    #[expect(clippy::cast_ptr_alignment, reason = "compiler is blind to ffi")]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         loop {
             // If we have data in buffer, try to get next entry
@@ -816,8 +801,6 @@ impl GetDirEntries {
     }
 }
 
-
-
 #[cfg(target_os = "macos")]
 impl Drop for GetDirEntries {
     #[inline]
@@ -830,8 +813,6 @@ impl Drop for GetDirEntries {
         unsafe { libc::close(self.fd.0) };
     }
 }
-
-
 
 /// basic code to show that the NTFS/CIFS edge case approximation is reasonable
 #[test] // usually I chuck my tests in the test.rs file but this one is *highly* specific to this page
@@ -867,7 +848,3 @@ fn max_size_dirent() {
   exceeds the size of the glibc dirent structure shown above.
 
 */
-
-
-
-

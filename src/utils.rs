@@ -6,18 +6,42 @@ use libc::dirent64;
 use crate::memchr_derivations::memrchr;
 use core::ops::Deref;
 
-
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 #[inline]
-pub unsafe fn getdirentries64(
-        fd: libc::c_int,
-        buf: *mut libc::c_char,
-        nbytes: libc::size_t,
-        basep: *mut libc::off_t)->i32{
-            const  SYS_GETDIRENTRIES64:libc::c_int=  344;
-    unsafe{libc::syscall(SYS_GETDIRENTRIES64,fd,buf,nbytes,basep)}
-        }
+/**
+  Wrapper for direct getdirentries64 syscalls
 
+ # Arguments
+ - `fd`: Open directory file descriptor
+ - `buffer_ptr`: Raw pointer to output buffer
+ - `nbytes`: Size of output buffer in bytes
+ - `basep`: Pointer to location where telldir position is stored
+
+ # Safety
+ - Requires valid open directory descriptor
+ - Buffer must be valid for writes of `nbytes` bytes
+ - No type checking on generic pointer (T must be i8/u8)
+ - basep must point to valid memory for `libc::off_t`
+
+ # Returns
+ - Positive: Number of bytes read
+ - 0: End of directory
+ - Negative: Error code (check errno)
+*/
+pub unsafe fn getdirentries64<T>(
+    fd: libc::c_int,
+    buffer_ptr: *mut T,
+    nbytes: libc::size_t,
+    basep: *mut libc::off_t,
+) -> i32
+where
+    T: crate::ValueType,
+{
+    const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
+    //https://phrack.org/issues/66/16
+    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
+    unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
+}
 
 #[inline]
 #[cfg(target_os = "linux")]
@@ -68,7 +92,6 @@ where
 {
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        
         debug_assert!(self.as_ref() != b"/", "root should never go here");
         debug_assert!(!self.is_empty(), "should never be empty");
         // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
@@ -254,16 +277,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         #[cfg(target_endian = "big")]
         let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
 
-
-
-
-
-
         //check final calculation
-        #[expect(clippy::missing_panics_doc,reason="debug only")]
-        #[expect(clippy::undocumented_unsafe_blocks,reason="debug only")]
+        #[expect(clippy::missing_panics_doc, reason = "debug only")]
+        #[expect(clippy::undocumented_unsafe_blocks, reason = "debug only")]
         #[cfg(debug_assertions)]
-        {   //copied from stdlib out of laziness
+        {
+            //copied from stdlib out of laziness
             const fn const_strlen(ptr: *const u8) -> usize {
                 let mut len = 0;
                 while unsafe { *ptr.add(len) } != 0 {
@@ -275,13 +294,10 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
 
             assert!(
                 reclen - DIRENT_HEADER_START - byte_pos
-                    == const_strlen(unsafe { access_dirent!(dirent, d_name).cast() }),"const dirent length calculation failed!"
+                    == const_strlen(unsafe { access_dirent!(dirent, d_name).cast() }),
+                "const dirent length calculation failed!"
             )
         }
-
-
-
-        
 
         /*  Final length:
         total record length - header size - null byte position
@@ -311,4 +327,3 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         ret
 
 */
-

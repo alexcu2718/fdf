@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 command -v strace >/dev/null 2>&1 || { echo "strace not found"; exit 1; }
+#TODO make a dtruss variation for macos, bsds...maybe...if i can be bothered
 
 set -euo pipefail
 source "new_prelude.sh"

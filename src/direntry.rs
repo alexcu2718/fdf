@@ -1471,7 +1471,61 @@ impl DirEntry {
 
     #[inline]
     #[cfg(target_os = "macos")]
+    /**
+    Low-level directory iterator using the `getdirentries64` system call.
+
+    This method provides high-performance directory scanning on macOS by using
+    the BSD-style `getdirentries64` system call with a large buffer (typically ~4.1KB)
+    to minimise system calls. It's macOS-specific and generally faster than `readdir`
+    for bulk directory operations.
+
+    # Errors
+
+    Returns `Err` if:
+    - The entry is not a directory
+    - Permission restrictions prevent reading the directory
+    - The directory file descriptor cannot be opened
+    - Buffer allocation fails
+    - Any other system error occurs during the `getdirentries` operation
+
+    # Platform Specificity
+
+    This method is only available on macOS targets due to its dependence on
+    the `getdirentries64` system call.
+
+    # Examples
+    ```
+             use fdf::DirEntry;
+        use std::fs::{self, File};
+        use std::io::Write;
+
+        // Create a temporary directory with test files
+        let temp_dir = std::env::temp_dir().join("test_getdirentries");
+        fs::create_dir(&temp_dir).unwrap();
+
+        // Create test files
+        File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
+        File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
+        fs::create_dir(temp_dir.join("subdir")).unwrap();
+
+        // Create DirEntry for the temporary directory
+        let entry = DirEntry::new(&temp_dir).unwrap();
+
+        // Use getdirentries to iterate through directory contents
+        let mut entries: Vec<_> = entry.getdirentries().unwrap().collect();
+        entries.sort_by_key(|e| e.file_name().to_vec());
+
+        // Should contain 3 entries: 2 files and 1 directory
+        assert_eq!(entries.len(), 3);
+        assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
+        assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
+        assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
+
+        // Clean up
+        fs::remove_dir_all(&temp_dir).unwrap();
+        ```
+             */
     pub fn getdirentries(&self) -> Result<crate::iter::GetDirEntries> {
-        crate::iter::GetDirEntries::new(self).map_err(|e| e.into())
+        crate::iter::GetDirEntries::new(self)
     }
 }

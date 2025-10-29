@@ -2,6 +2,7 @@
 
 cd "$(dirname "$0" )" || exit
 
+
 LLVM_DIR="/tmp/llvm-project"
 
 # Check if llvm-project already exists
@@ -52,19 +53,22 @@ else
 fi
 
 
-read -rp "Do you want to run the syscall test? [y/n] " response
+if [[ "$(uname -s)" == "Linux" ]]; then
+    read -rp "Do you want to run the syscall test? [y/n] " response
 
-if [[ "$response" =~ ^[Yy]$ ]]; then
-    if command -v strace &> /dev/null; then
-        echo "Running the syscall test..."
-        ./syscalltest.sh
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        if command -v strace &> /dev/null; then
+            echo "Running the syscall test..."
+            ./syscalltest.sh
+        else
+            echo "Error: strace is not installed. Please install it to run this test."
+        fi
     else
-        echo "Error: strace is not installed. Please install it to run this test."
+        echo "Skipping the syscall test."
     fi
 else
-    echo "Skipping the syscall test."
+    echo "Skipping syscall test because it is only supported on Linux."
 fi
-
 
 
 read -rp "Do you want to run cargo test? [y/n]" response_test

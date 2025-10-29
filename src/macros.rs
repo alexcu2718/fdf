@@ -158,7 +158,7 @@ macro_rules! access_stat {
     ($stat_struct:expr, $field:ident) => {{ $stat_struct.$field as _ }};
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "solaris", target_os = "illumos"))]
 use libc::dirent as dirent64;
 #[cfg(target_os = "linux")]
 use libc::dirent64;

@@ -53,7 +53,7 @@ impl ReadDir {
     - `None` when the end of directory is reached or if an error occurs
 
     # Notes
-    - Unlike the `getdents64` system call approach, this implementation uses the
+    - Unlike the `getdents64`/`getdirentries64` system calls type approach, this implementation uses the
       standard libc directory handling functions
     - The function returns `None` both at end-of-directory and on errors, following
       the traditional `readdir` semantics
@@ -86,25 +86,6 @@ impl ReadDir {
         })
     }
 }
-
-/*
-   This operations is essentially just a struct field access cost(no syscall/blocking io), the pointer is guaranteed to be valid because
- I found reading into this interesting, never heard of opaque pointers in C before this, i assumed C was public everything,
- see this below
-
-                struct __dirstream
-{
-    off_t tell;
-    int fd;
-    int buf_pos;
-    int buf_end;
-    volatile int lock[1];
-    /* Any changes to this struct must preserve the property:
-     * offsetof(struct __dirent, buf) % sizeof(off_t) == 0 */
-    char buf[2048];
-};
-
-         */
 
 impl Drop for ReadDir {
     #[inline]
@@ -410,6 +391,7 @@ pub trait DirentConstructor {
     #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {
         let base_len = self.file_index();
+        debug_assert!(!drnt.is_null(), "drnt should never be null!");
         // SAFETY: The `drnt` must not be null (checked before using)
         let dtype = unsafe { access_dirent!(drnt, d_type) }; //need to optimise this for illumos/solaris TODO!
         // SAFETY: Same as above^
@@ -696,7 +678,7 @@ pub struct GetDirEntries {
     /// File descriptor of the open directory, wrapped for automatic resource management
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
-    /// Approximately 4.1KB in size, optimised for typical directory traversal
+    /// ~32kb in size (8*4096, matching macos readdir semantics) in size, optimised for typical directory traversal
     pub(crate) syscall_buffer: SyscallBuffer,
     /// buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
@@ -736,18 +718,22 @@ impl GetDirEntries {
             .syscall_buffer
             .getdirentries(&self.fd, &raw mut self.base_pointer);
 
-        //use a slightly different bit trick to the one above.
+        // Use a slightly different bit trick to the one above(because of i32 syscall return value)
         const NUM_OF_BITS_MINUS_1: usize = (i32::BITS - 1) as usize;
         self.remaining_bytes =
             (remaining_bytes & !(remaining_bytes >> NUM_OF_BITS_MINUS_1)) as usize;
 
-        const MAX_SIZED_DIRENT: usize = size_of::<dirent64>();
-
         let has_bytes_remaining = remaining_bytes.is_positive();
 
-        //unlike the above for getdents, the max sized `dirent64` is appropriately sized
+        // Unlike getdents, the max size is appropriate for macos, (the array size is bounded>1000)
+        const MAX_SIZED_DIRENT: usize = size_of::<dirent64>();
+        const_assert!(
+            MAX_SIZED_DIRENT > 1000,
+            "macos dirent size is not following expectations!"
+        );
+
         self.end_of_stream = !has_bytes_remaining
-            || self.syscall_buffer.max_capacity() - MAX_SIZED_DIRENT >= self.remaining_bytes; //a boolean
+            || self.syscall_buffer.max_capacity() - MAX_SIZED_DIRENT >= self.remaining_bytes;
 
         self.offset = 0;
 
@@ -763,6 +749,11 @@ impl GetDirEntries {
                 // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
                 let d: *mut dirent64 =
                     unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+
+                debug_assert!(
+                    !d.is_null(),
+                    "dirent should never be null due to remaining bytes existing!"
+                );
                 // SAFETY: dirent is not null so field access is safe
                 let reclen = unsafe { access_dirent!(d, d_reclen) };
 

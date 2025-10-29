@@ -1495,36 +1495,36 @@ impl DirEntry {
 
     # Examples
     ```
-             use fdf::DirEntry;
-        use std::fs::{self, File};
-        use std::io::Write;
+    use fdf::DirEntry;
+    use std::fs::{self, File};
+    use std::io::Write;
 
-        // Create a temporary directory with test files
-        let temp_dir = std::env::temp_dir().join("test_getdirentries");
-        fs::create_dir(&temp_dir).unwrap();
+    // Create a temporary directory with test files
+    let temp_dir = std::env::temp_dir().join("test_getdirentries");
+    fs::create_dir(&temp_dir).unwrap();
 
-        // Create test files
-        File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
-        File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
-        fs::create_dir(temp_dir.join("subdir")).unwrap();
+    // Create test files
+    File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
+    File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
+    fs::create_dir(temp_dir.join("subdir")).unwrap();
 
-        // Create DirEntry for the temporary directory
-        let entry = DirEntry::new(&temp_dir).unwrap();
+    // Create DirEntry for the temporary directory
+    let entry = DirEntry::new(&temp_dir).unwrap();
 
-        // Use getdirentries to iterate through directory contents
-        let mut entries: Vec<_> = entry.getdirentries().unwrap().collect();
-        entries.sort_by_key(|e| e.file_name().to_vec());
+    // Use getdirentries to iterate through directory contents
+    let mut entries: Vec<_> = entry.getdirentries().unwrap().collect();
+    entries.sort_by_key(|e| e.file_name().to_vec());
 
-        // Should contain 3 entries: 2 files and 1 directory
-        assert_eq!(entries.len(), 3);
-        assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
-        assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
-        assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
+    // Should contain 3 entries: 2 files and 1 directory
+    assert_eq!(entries.len(), 3);
+    assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
+    assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
+    assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
 
-        // Clean up
-        fs::remove_dir_all(&temp_dir).unwrap();
-        ```
-             */
+    // Clean up
+    fs::remove_dir_all(&temp_dir).unwrap();
+    ```
+    */
     pub fn getdirentries(&self) -> Result<crate::iter::GetDirEntries> {
         crate::iter::GetDirEntries::new(self)
     }

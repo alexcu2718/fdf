@@ -368,6 +368,7 @@ impl Finder {
         reason = "Borrowing doesn't work on this extreme lint"
     )]
     #[expect(clippy::option_if_let_else, reason = "Complicates it even more ")]
+    #[allow(clippy::cast_sign_loss)]
     /**
      Advanced filtering for directories and symlinks with filesystem constraints.
 

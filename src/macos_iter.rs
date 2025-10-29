@@ -87,6 +87,8 @@ pub struct DirIterator {
     file_name_index: usize,
     depth: u32,
     is_finished: bool,
+    first_syscall:bool
+
 }
 
 impl DirIterator {
@@ -116,7 +118,7 @@ impl DirIterator {
         
         let attrbuf = [0u8; 128 * 1024];
         let (path_buffer, base_len) =<DirIterator as DirentConstructor>::init_from_direntry(dir_path);
-        let depth = (dir_path.depth() + 1) as u32;
+        let depth = dir_path.depth + 1;
 
         Ok(Self {
             dirfd:FileDes(fd),
@@ -128,6 +130,8 @@ impl DirIterator {
             file_name_index:base_len,
             depth,
             is_finished: false,
+            first_syscall:true
+
         })
     }
 
@@ -136,6 +140,7 @@ impl DirIterator {
     pub(crate) fn get_next_entry(&mut self) -> Option<DirEntry> {
         // If buffer is empty, read next batch
         if self.remaining_entries <= 0 && !self.is_finished {
+           // eprintln!("offset! {}",self.current_offset);
             match self.read_next_batch() {
                 Ok(0) => {
                     self.is_finished = true;
@@ -244,6 +249,10 @@ impl DirIterator {
     }
     #[inline]
     pub(crate) fn read_next_batch(&mut self) -> Result<i32, io::Error> {
+
+
+
+        if !self.first_syscall && self.current_offset<(self.attrbuf.len()-size_of::<libc::dirent>()){self.is_finished=true;return Ok(0)}
         let retcount = unsafe {
             libc::getattrlistbulk(
                 self.dirfd.0,
@@ -254,6 +263,9 @@ impl DirIterator {
             )
         };
 
+        self.first_syscall=false;
+
+
         if retcount < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -263,6 +275,10 @@ impl DirIterator {
         }
 
         self.remaining_entries = retcount;
+
+ 
+
+        //eprintln!("retcount {} offset {}",retcount,self.current_offset);
         self.current_offset = 0;
         Ok(retcount)
     }

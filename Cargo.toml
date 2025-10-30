@@ -58,3 +58,5 @@ name = "dirent_bench"
 harness = false
 
 
+[features] #no idea why rust-analyzer is nagging about this..
+ssr=[]

@@ -4,7 +4,11 @@ mod tests {
     use crate::BytePath;
     use crate::Finder;
     use crate::cli_helpers::*;
-    use crate::{DirEntry, FileType, ReadDir};
+    use crate::{DirEntry, FileType};
+    #[cfg(not(target_os="android"))]
+    use crate::ReadDir;
+    #[cfg(target_os="android")]
+    use crate::GetDents as ReadDir;
     use crate::{find_char_in_word, find_zero_byte_u64};
     use chrono::{Duration as ChronoDuration, Utc};
     use filetime::{FileTime, set_file_times};
@@ -530,6 +534,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os="android"))]
     fn test_read_dir() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
@@ -573,6 +578,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os="android"))]
     fn test_hidden_files() {
         let dir_path = std::env::temp_dir().join("test_hidden");
         let _ = std::fs::create_dir_all(&dir_path);
@@ -596,8 +602,8 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "linux")]
-    fn test_hidden_files_linux() {
-        let dir_path = std::env::temp_dir().join("test_hidden_linux");
+    fn test_hidden_files_linux_android() {
+        let dir_path = std::env::temp_dir().join("test_hidden_linux_android");
         let _ = std::fs::remove_dir(&dir_path);
         let _ = std::fs::create_dir_all(&dir_path);
 

@@ -7,10 +7,12 @@ use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
 use libc::DIR;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux",target_os="android")))]
 use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
 use libc::{dirent64, readdir64 as readdir};
+#[cfg(target_os = "android")]
+use libc::dirent64;
 
 /*
 

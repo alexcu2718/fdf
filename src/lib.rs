@@ -164,6 +164,7 @@ pub use types::Result;
 mod iter;
 #[cfg(any(target_os = "linux",target_os="android"))]
 pub use iter::GetDents;
+#[cfg(not(target_os="android"))] //explicitly excluded due to fdsan issues.
 pub use iter::ReadDir;
 
 mod printer;

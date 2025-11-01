@@ -1,22 +1,32 @@
 #!/usr/bin/env bash
 
 
-llvm_link=https://github.com/llvm/llvm-project
-LLVM=/tmp/llvm-project
 
-fdf_location=/tmp/fdf_test
+TMP_DIR="${TMP:-/tmp}"
+
+llvm_link=https://github.com/llvm/llvm-project
+LLVM="$TMP_DIR/llvm-project"
+
+fdf_location="$TMP_DIR/fdf_test"
 
 fdf_repo=https://github.com/alexcu2718/fdf
-alias sort='sort --parallel=$(nproc)' #speed up sorting speed
-SEARCH_ROOT="$LLVM"
-#basically unsetting the default search root
 
-# Clone llvm-project if not already present
-if [ ! -e "$LLVM" ]; then
-	echo "cloning llvm repo $llvm_link, this may take a while sorry!"
-	git clone "$llvm_link" "$LLVM" >/dev/null 2>&1
+SEARCH_ROOT="$LLVM"
+
+
+
+alias sort='sort --parallel=$(nproc)' #speed up sorting speed
+
+
+
+if [ ! -e "$LLVM" ] && [ -e "$HOME/llvm-project" ]; then
+    echo "Found llvm-project in HOME directory, copying to $LLVM" #internal convenience trick for me, since cloning llvm is a pain in the ass.
+    cp -r "$HOME/llvm-project" "$TMP_DIR/"
+elif [ ! -e "$LLVM" ]; then
+    echo "cloning llvm repo $llvm_link, this may take a while sorry!"
+    git clone "$llvm_link" "$LLVM" >/dev/null 2>&1
 else
-	:
+    :
 fi
 
 # Clone and build fdf if not already installed

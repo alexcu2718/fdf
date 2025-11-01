@@ -53,8 +53,17 @@ Note: Miri validation (Rust's undefined behaviour detector) cannot be used due t
 **Running the Full Test Suite:**
 
 ```bash
-git clone https://github.com/alexcu2718/fdf /tmp/fdf_test
-cd /tmp/fdf_test/fd_benchmarks
+
+TMP_DIR="${TMP:-/tmp}"
+git clone https://github.com/alexcu2718/fdf "$TMP_DIR/fdf_test"
+cd "$TMP_DIR/fdf_test/fd_benchmarks"
+
+
+# If on Android, ensure the script is executable
+if [[ "$(uname -o)" == "Android" ]]; then
+    chmod +x run_all_tests_USE_ME.sh
+fi
+
 ./run_all_tests_USE_ME.sh
 ```
 

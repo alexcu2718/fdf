@@ -347,13 +347,11 @@ Options:
   - No native `getdents` support in `io_uring`.  
   - Would require async runtime integration (e.g. Tokio).  
   - Conflicts with the project’s minimal-dependency design.  
-  - Linux-only feature, making it a low-priority and high-effort addition.  
+  - Linux-only feature, making it a low-priority and high-effort addition.  **I will likely NOT do this**
 
 #### 2. Native Threading Implementation  
 
-- Replace the Rayon dependency with a custom threading model.
-- Develop a bespoke work-distribution algorithm.  
-- **Status:** Experimental work in progress.  
+- Replace the Rayon dependency with a custom threading model. Honestly probably impossible for me to outperform it.  
 
 #### 3. Allocation-Optimised Iterator Adaptor  
 

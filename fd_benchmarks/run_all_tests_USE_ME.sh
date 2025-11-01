@@ -3,7 +3,9 @@
 cd "$(dirname "$0" )" || exit
 
 
-LLVM_DIR="/tmp/llvm-project"
+TMP_DIR="${TMP:-/tmp}"
+
+LLVM_DIR="$TMP_DIR/llvm-project"
 
 # Check if llvm-project already exists
 if [[ -d "$LLVM_DIR" ]]; then

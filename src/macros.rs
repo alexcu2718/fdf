@@ -173,7 +173,7 @@ macro_rules! access_stat {
 
 #[cfg(any(target_os = "solaris", target_os = "illumos"))]
 use libc::dirent as dirent64;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 use libc::dirent64;
 
 macro_rules! const_assert {

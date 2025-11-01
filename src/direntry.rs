@@ -79,8 +79,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 */
 #[cfg(any(target_os = "linux",target_os="android"))]
 use crate::GetDents;
-use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::FileType};
-
+use crate::{BytePath as _, DirEntryError, FileDes, Result, filetype::FileType};
+#[cfg(not(target_os="android"))]
+use crate::ReadDir;
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::fmt;
@@ -1388,7 +1389,9 @@ impl DirEntry {
     ```
     */
     #[inline]
+    #[cfg(not(target_os="android"))]
     pub fn readdir(&self) -> Result<ReadDir> {
+        
         ReadDir::new(self)
     }
     #[inline]

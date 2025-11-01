@@ -26,6 +26,7 @@ PLEASE NOTE, `FileDes` does not currently implement drop.
  a safe Rust interface over the underlying C library functions.
 
 */
+#[cfg(not(target_os="android"))]
 #[derive(Debug)]
 pub struct ReadDir {
     /// Raw directory pointer from libc's `opendir() wrapped in a nonnull`
@@ -39,7 +40,7 @@ pub struct ReadDir {
     /// The file descriptor of this directory, for use in calls like openat/statat etc.
     pub(crate) fd: FileDes,
 }
-
+#[cfg(not(target_os="android"))]
 impl ReadDir {
     #[inline]
     /**
@@ -92,7 +93,7 @@ impl ReadDir {
         })
     }
 }
-
+#[cfg(not(target_os="android"))]
 impl Drop for ReadDir {
     #[inline]
     /**
@@ -609,7 +610,7 @@ macro_rules! impl_iter {
         }
     };
 }
-
+#[cfg(not(target_os="android"))]
 impl_iter!(ReadDir);
 #[cfg(any(target_os = "linux", target_os = "macos",target_os="android"))]
 impl_iter!(GetDents);
@@ -659,7 +660,7 @@ macro_rules! impl_iterator_for_dirent {
         }
     };
 }
-
+#[cfg(not(target_os="android"))]
 impl_iterator_for_dirent!(ReadDir);
 
 #[cfg(any(target_os = "linux",target_os="android"))]
@@ -668,6 +669,7 @@ impl_iterator_for_dirent!(GetDents);
 #[cfg(target_os = "macos")]
 impl_iterator_for_dirent!(GetDirEntries);
 
+#[cfg(not(target_os="android"))]
 impl_dirent_constructor!(ReadDir);
 
 #[cfg(any(target_os = "linux",target_os="android"))]

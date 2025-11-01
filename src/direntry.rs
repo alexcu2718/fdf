@@ -552,14 +552,16 @@ impl DirEntry {
         match self.file_type() {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux",target_os="android"))]
                 let result = self
                     .getdents() //use getdents on linux to avoid  extra stat calls
                     .is_ok_and(|mut entries| entries.next().is_none());
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(any(target_os = "linux",target_os="android",target_os="macos")))]
                 let result = self
                     .readdir()
                     .is_ok_and(|mut entries| entries.next().is_none());
+                #[cfg(target_os="android")]
+                let result=self.getdirentries().is_ok_and(|mut entries| entries.next().is_none());
                 result
             }
             _ => false,

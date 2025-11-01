@@ -6,7 +6,6 @@ use crate::{DirEntry, FileDes, Result};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
-use libc::DIR;
 #[cfg(not(any(target_os = "linux",target_os="android")))]
 use libc::{dirent as dirent64, readdir};
 #[cfg(target_os = "linux")]
@@ -32,7 +31,7 @@ PLEASE NOTE, `FileDes` does not currently implement drop.
 #[derive(Debug)]
 pub struct ReadDir {
     /// Raw directory pointer from libc's `opendir() wrapped in a nonnull`
-    pub(crate) dir: NonNull<DIR>,
+    pub(crate) dir: NonNull<libc::DIR>,
     /// Buffer storing the full directory path for constructing entry paths
     pub(crate) path_buffer: Vec<u8>,
     /// Index into `path_buffer` where filenames start (avoids recalculating)

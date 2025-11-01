@@ -85,7 +85,7 @@ use crate::ReadDir;
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::fmt;
-use core::ptr::NonNull;
+
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, c_char, faccessat,
     fstatat, lstat, /*openat*/  realpath, stat,
@@ -429,7 +429,7 @@ impl DirEntry {
      - System resources are exhausted
     */
     #[cfg(not(target_os = "android"))]
-    pub fn opendir(&self) -> Result<NonNull<libc::DIR>> {
+    pub fn opendir(&self) -> Result<core::ptr::NonNull<libc::DIR>> {
         // SAFETY: we are passing a null terminated directory to opendir
 
         let dir = unsafe { libc::opendir(self.as_ptr()) };
@@ -439,7 +439,7 @@ impl DirEntry {
             return_os_error!()
         }
         // SAFETY: know it's non-null
-        Ok(unsafe { NonNull::new_unchecked(dir) }) // Return a pointer to the start `DIR` stream
+        Ok(unsafe { core::ptr::NonNull::new_unchecked(dir) }) // Return a pointer to the start `DIR` stream
     }
 
     #[inline]

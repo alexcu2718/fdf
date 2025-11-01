@@ -1,6 +1,6 @@
 #![allow(clippy::must_use_candidate)]
 use crate::FileType;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos",target_os="android"))]
 use crate::types::SyscallBuffer;
 use crate::{DirEntry, FileDes, Result};
 use core::cell::Cell;
@@ -113,7 +113,7 @@ impl Drop for ReadDir {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 /**
  Linux-specific directory iterator using the `getdents` system call.
 

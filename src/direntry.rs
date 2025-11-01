@@ -86,7 +86,7 @@ use core::cell::Cell;
 use core::fmt;
 use core::ptr::NonNull;
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, R_OK,
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, R_OK,
     W_OK, X_OK, access, c_char, faccessat, fstatat, lstat, /*openat*/ opendir, realpath, stat,
 };
 use std::{
@@ -323,7 +323,7 @@ impl DirEntry {
     */
     pub(crate) fn open(&self) -> Result<FileDes> {
         // Opens the file and returns a file descriptor..
-        const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
+        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
         // SAFETY: the pointer is null terminated
         let fd = unsafe { libc::open(self.as_ptr(), FLAGS) };
 

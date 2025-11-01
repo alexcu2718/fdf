@@ -362,8 +362,9 @@ Options:
 
 - Explore using `getattrlistbulk` on macOS (and possibly `getdirentries` on BSD).  
 - **Test repository:** [mac_os_getattrlistbulk_ls](https://github.com/alexcu2718/mac_os_getattrlistbulk_ls).  
-- Enables more efficient filesystem entry retrieval.  
-- Currently low priority due to API complexity and limited portability.  
+--EDIT--
+** getattrlistbulk was less performant than readdir, I have left the branch open for posterity/research purposes in future but I have abandoned this approach
+in favour of readdir/getdirentries64, see [test repo here](https://github.com/alexcu2718/fdf/tree/macos_test_getdirentries)
 
 #### 5. Solaris / Illumos / Android Optimisations  
 

@@ -122,6 +122,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 */
 
+#[cfg(target_os = "vita")]
+compile_error!(
+    "This application is not supported on PlayStation Vita, It may be if I'm ever bothered!"
+);
+
+#[cfg(target_os = "windows")]
+compile_error!("This application is not supported on Windows (yet)");
+
 use rayon::prelude::*;
 
 use std::{
@@ -184,7 +192,8 @@ pub(crate) use utils::BytePath;
     target_os = "freebsd",
     target_os = "dragonfly",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "android"
 ))]
 pub use utils::dirent_const_time_strlen;
 
@@ -450,12 +459,10 @@ impl Finder {
         handle_depth_limit!(self, dir, should_send_dir_or_symlink, sender); // a convenience macro to clear up code here
 
         #[cfg(target_os = "linux")]
-        // linux with getdents (only linux has stable ABI, so we can lower down to assembly/syscalls here, not for any other system tho)
+        // linux with getdents, I may implement this for android too.
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
         #[cfg(not(target_os = "linux"))]
-        let direntries = dir.readdir(); // in theory I can use getattrlistbulk on macos(bsd potentially?), this has a LOT of complexity!
-        // TODO! FIX THIS SEPARATE REPO https://github.com/alexcu2718/mac_os_getattrlistbulk_ls (I'll get around to this eventually)
-        // I could get getdirentries alternatively for bsd
+        let direntries = dir.readdir(); // in theory I can use direct syscalls on illumos/solaris/android, just not on BSD systems
 
         match direntries {
             Ok(entries) => {

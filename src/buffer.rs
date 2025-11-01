@@ -167,17 +167,7 @@ where
         unsafe { &mut *self.data.as_mut_ptr() }
     }
 
-    /// Executes the getdents64 system call using inline assembly
-    ///
-    /// This method bypasses libc to directly invoke the getdents64 system call,
-    /// which is necessary to avoid certain libc quirks and limitations.
-    ///
-    ///
-    /// # Platform Specificity
-    /// This implementation is specific to Linux on supported architectures (currently x86 and aarch64)
-    /// Otherwise backing up to libc
-    // the main idea is to avoid dynamically linking glibc eventually.
-    // A RISC-V implementation is currently pending(might do others because i'm learning assembly)
+    /// Executes the getdents64 system call using <unistd.h>/direct `libc` syscalls
     #[inline]
     #[cfg(target_os = "linux")]
     pub fn getdents(&mut self, fd: &FileDes) -> i64 {

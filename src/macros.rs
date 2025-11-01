@@ -49,11 +49,24 @@ macro_rules! access_dirent {
     }};
 
          ($entry_ptr:expr, d_type) => {{
-        #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+        #[cfg(any(
+        target_os = "solaris",
+        target_os = "illumos",
+        target_os = "aix",
+        target_os = "nto",
+        target_os = "vita",
+    ))]
         {
             libc::DT_UNKNOWN //return D_TYPE unknown on these OS'es, because the struct does not hold the type!
+            //https://github.com/rust-lang/rust/blob/d85276b256a8ab18e03b6394b4f7a7b246176db7/library/std/src/sys/fs/unix.rs#L314
         }
-        #[cfg(not(any(target_os = "solaris", target_os = "illumos")))]
+        #[cfg(not(any(
+        target_os = "solaris",
+        target_os = "illumos",
+        target_os = "aix",
+        target_os = "nto",
+        target_os = "vita", // via is still broken because it does not possess ino, i will NOT FIX THIS
+    )))]
         {
             (*$entry_ptr).d_type
         }}};

@@ -55,7 +55,6 @@ where
 {
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        
         debug_assert!(self.as_ref() != b"/", "root should never go here");
         debug_assert!(!self.is_empty(), "should never be empty");
         // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
@@ -100,7 +99,8 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "openbsd",
-        target_os = "netbsd"
+        target_os = "netbsd",
+        target_os = "android"
     ))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -116,6 +116,7 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "netbsd",
         target_os = "dragonfly",
         target_os = "macos",
+        target_os = "android"
     )))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -140,7 +141,8 @@ My Cat Diavolo is cute.
     target_os = "freebsd",
     target_os = "dragonfly",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "android"
 ))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
@@ -241,16 +243,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         #[cfg(target_endian = "big")]
         let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
 
-
-
-
-
-
         //check final calculation
-        #[expect(clippy::missing_panics_doc,reason="debug only")]
-        #[expect(clippy::undocumented_unsafe_blocks,reason="debug only")]
+        #[expect(clippy::missing_panics_doc, reason = "debug only")]
+        #[expect(clippy::undocumented_unsafe_blocks, reason = "debug only")]
         #[cfg(debug_assertions)]
-        {   //copied from stdlib out of laziness
+        {
+            //copied from stdlib out of laziness
             const fn const_strlen(ptr: *const u8) -> usize {
                 let mut len = 0;
                 while unsafe { *ptr.add(len) } != 0 {
@@ -262,13 +260,10 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
 
             assert!(
                 reclen - DIRENT_HEADER_START - byte_pos
-                    == const_strlen(unsafe { access_dirent!(dirent, d_name).cast() }),"const dirent length calculation failed!"
+                    == const_strlen(unsafe { access_dirent!(dirent, d_name).cast() }),
+                "const dirent length calculation failed!"
             )
         }
-
-
-
-        
 
         /*  Final length:
         total record length - header size - null byte position
@@ -298,4 +293,3 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         ret
 
 */
-

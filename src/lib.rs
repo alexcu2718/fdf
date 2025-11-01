@@ -207,7 +207,7 @@ pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(all(
-    any(target_os = "linux", target_os = "macos"),
+    any(target_os = "linux", target_os = "macos",target_os="android"),
     not(miri),
     not(debug_assertions)
 ))]

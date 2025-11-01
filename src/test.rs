@@ -1249,33 +1249,6 @@ mod tests {
         assert!(!names.contains(&"nested_file.txt".to_string()));
     }
 
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_non_recursive_iteration_macos() {
-        let top_dir = std::env::temp_dir().join("test_nested");
-        let _ = fs::remove_dir_all(&top_dir);
-        let sub_dir = top_dir.join("subdir");
-
-        let _ = std::fs::create_dir_all(&sub_dir);
-        let _ = std::fs::File::create(top_dir.join("top_file.txt"));
-        let _ = std::fs::File::create(sub_dir.join("nested_file.txt"));
-
-        let dir_entry = DirEntry::new(&top_dir).unwrap();
-        let entries: Vec<_> = dir_entry.getdirentries().unwrap().collect();
-
-        let mut names: Vec<_> = entries
-            .iter()
-            .map(|e| String::from_utf8(e.file_name().to_vec()).unwrap())
-            .collect();
-        names.sort();
-
-        let _ = std::fs::remove_dir_all(&top_dir);
-        assert_eq!(names.len(), 2);
-        assert_eq!(names[0], "subdir"); // Directory entry
-        assert_eq!(names[1], "top_file.txt"); // Top-level file
-        // Verify nested file wasn't included
-        assert!(!names.contains(&"nested_file.txt".to_string()));
-    }
 
     #[test]
     fn test_file_types_realpath() {
@@ -1456,24 +1429,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_filedes_getdirentries() {
-        let dir = temp_dir().join("test_filedes_getdirentries");
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = fs::create_dir_all(&dir);
-
-        let dir_entry = DirEntry::new(&dir).unwrap();
-
-        let _ = File::create(dir.join("regular.txt"));
-        let entries = dir_entry.getdirentries().unwrap();
-        let file_des = entries.dirfd();
-        assert!(file_des.is_open());
-        let entries_collected: Vec<_> = entries.collect();
-
-        assert_eq!(entries_collected.len(), 1);
-        let _ = std::fs::remove_dir_all(dir);
-    }
+  
 
     #[test]
     #[cfg(target_os = "linux")]

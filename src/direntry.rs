@@ -560,7 +560,7 @@ impl DirEntry {
                 let result = self
                     .readdir()
                     .is_ok_and(|mut entries| entries.next().is_none());
-                #[cfg(target_os="android")]
+                #[cfg(target_os="macos")]
                 let result=self.getdirentries().is_ok_and(|mut entries| entries.next().is_none());
                 result
             }

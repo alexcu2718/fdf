@@ -1,6 +1,6 @@
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux",target_os="android")))]
 use libc::dirent as dirent64;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 use libc::dirent64;
 
 use crate::memchr_derivations::memrchr;
@@ -225,7 +225,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         target_os = "solaris",
         target_os = "android"
     ))]
-    // Linux/Solaris/Illumos where we need a bit of 'black magic'
+    // Linux/Solaris/Illumos/Android where we need a bit of 'black magic'
     {
         // Offset from the start of the struct to the beginning of d_name.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);

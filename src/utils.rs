@@ -214,7 +214,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     #[cfg(not(any(target_os = "linux", target_os = "illumos", target_os = "solaris")))]
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
     return unsafe { access_dirent!(dirent, d_namlen) }; //trivial operation for macos/bsds 
-    #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "android"
+    ))]
     // Linux/Solaris/Illumos where we need a bit of 'black magic'
     {
         // Offset from the start of the struct to the beginning of d_name.

@@ -37,8 +37,8 @@
  ## Platform Support
 
  - **Linux**: Optimised with direct `getdents` system calls
- - **MacOS** Optimised with direct `getdirentries64` system calls
- - **BSD's**: Standard `readdir` with potential for future `getattrlistbulk` optimisation
+ - **Macos** Optimised with direct `getdirentries64` system calls
+ - **BSD's**: Standard `readdir` with potential for future `getdirentries` optimisation.
  - **Other Unix-like**: Fallback to standard library functions
  - **Windows**: Not currently supported (PRs welcome!)
 

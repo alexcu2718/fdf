@@ -123,7 +123,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 */
 
-#[cfg(any(target_os = "vita",target_os="hurd"))]
+#[cfg(any(target_os = "vita", target_os = "hurd"))]
 compile_error!(
     "This application is not supported on PlayStation Vita/hurd, It may be if I'm ever bothered!"
 );
@@ -465,7 +465,6 @@ impl Finder {
         let direntries = dir.readdir();
         #[cfg(target_os = "macos")]
         let direntries = dir.getdirentries();
-
 
         match direntries {
             Ok(entries) => {

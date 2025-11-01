@@ -87,7 +87,8 @@ use core::fmt;
 use core::ptr::NonNull;
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, R_OK,
-    W_OK, X_OK, access, c_char, faccessat, fstatat, lstat, open, /*openat*/ opendir, realpath, stat,
+    W_OK, X_OK, access, c_char, faccessat, fstatat, lstat, open, /*openat*/ opendir, realpath,
+    stat,
 };
 use std::{
     ffi::{CStr, OsStr},
@@ -331,7 +332,7 @@ impl DirEntry {
         }
         Ok(FileDes(fd))
     }
-    /* 
+    /*
     Commented out temporarily while I work on API
     /**
      Opens the directory relative to a directory file descriptor and returns a file descriptor.

@@ -13,7 +13,7 @@ use libc::{dirent as dirent64, readdir};
 use libc::{dirent64, readdir64 as readdir};
 
 /*
- 
+
 PLEASE NOTE, `FileDes` does not currently implement drop.
 
  */
@@ -428,7 +428,10 @@ pub trait DirentConstructor {
 
         let needs_slash: usize = usize::from(!is_root);
         const_from_env!(NAME_MAX:usize="NAME_MAX",255); // Get `NAME_MAX` from build script, because `libc` doesn't expose it in Rust, weirdly...
-        const_assert!(NAME_MAX>=255,"Expected NAME_MAX to be greater or equal to 255");
+        const_assert!(
+            NAME_MAX >= 255,
+            "Expected NAME_MAX to be greater or equal to 255"
+        );
         const MAX_SIZED_DIRENT_LENGTH: usize = 2 * (NAME_MAX + 1); // 2* (`NAME_MAX`+1) (account for null terminator) (due to cifs/ntfs issue seen below)
 
         //set a conservative estimate incase it returns something useless

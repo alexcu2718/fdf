@@ -19,7 +19,7 @@ clap = { version = "4.5.49", features = ["derive"] }
 clap_complete = "4.5.59"
 compile_time_ls_colours = {version="0.5.0",features=["phf"]}
 dashmap = { version = "6.1.0", features = ["inline"] }
-libc = { version = "0.2.175" }
+libc = "0.2.175" 
 rayon = "1.10.0"
 regex = { version = "1.12.2", features = ["perf"] }
 [target.'cfg(any(target_os = "linux",target_os="macos"))'.dependencies]

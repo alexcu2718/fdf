@@ -193,11 +193,21 @@ macro_rules! const_assert {
     };
 }
 
-#[cfg(any(target_os = "linux", target_os = "solaris", target_os = "illumos",target_os="android"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "solaris",
+    target_os = "illumos",
+    target_os = "android"
+))]
 pub const MINIMUM_DIRENT_SIZE: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8); //==24 for the platforms we care about
 // Finding the minimum struct size, which is basically all the fields minus the variable part
 
-#[cfg(any(target_os = "linux", target_os = "solaris", target_os = "illumos",target_os="android"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "solaris",
+    target_os = "illumos",
+    target_os = "android"
+))]
 const_assert!(
     MINIMUM_DIRENT_SIZE == 24,
     "the minimum struct size isn't 24! BIG ERROR"
@@ -269,7 +279,12 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 // If namelen > 2, skip all checks entirely (covers ~99% of entries)
             }
 
-            #[cfg(any(target_os = "linux", target_os = "solaris", target_os = "illumos",target_os="android"))]
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "solaris",
+                target_os = "illumos",
+                target_os = "android"
+            ))]
             {
                 // Linux/Solaris/Illumos optimisation: check d_type first
                 match access_dirent!($entry, d_type) {
@@ -294,7 +309,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 target_os = "netbsd",
                 target_os = "solaris",
                 target_os = "illumos",
-                target_os="android"
+                target_os = "android"
             )))]
             {
                 // Fallback for other systems: check d_type first

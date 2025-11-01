@@ -35,7 +35,6 @@ where
     unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
 }
 
-
 #[cfg(target_os = "macos")]
 #[inline]
 /**
@@ -72,7 +71,6 @@ where
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
     unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
 }
-
 
 /// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.

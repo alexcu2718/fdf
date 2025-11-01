@@ -611,7 +611,7 @@ macro_rules! impl_iter {
 }
 
 impl_iter!(ReadDir);
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos",target_os="android"))]
 impl_iter!(GetDents);
 #[cfg(target_os = "macos")]
 impl_iter!(GetDirEntries);

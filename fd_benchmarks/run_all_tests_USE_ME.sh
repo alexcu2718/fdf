@@ -25,8 +25,13 @@ if [[ "$run_benchmarks" =~ ^[Yy]$ ]]; then
     done
 
     if [[ "$(uname -s)" == "Linux" ]]; then
-        echo "Running cold cache test..."
-        ./cold-cache-simple-pattern.sh
+        # Check if sudo exists(not available on android, well, it is, but i'm lazy and not rooting my phone!)
+        if command -v sudo &> /dev/null; then
+            echo "Running cold cache test..."
+            ./cold-cache-simple-pattern.sh
+        else
+            echo "Skipping cold cache test because sudo is not available."
+        fi
     else
         echo "Skipping cold cache test because it is only supported on Linux."
     fi

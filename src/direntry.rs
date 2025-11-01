@@ -87,8 +87,7 @@ use core::fmt;
 use core::ptr::NonNull;
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, R_OK,
-    W_OK, X_OK, access, c_char, faccessat, fstatat, lstat, open, /*openat*/ opendir, realpath,
-    stat,
+    W_OK, X_OK, access, c_char, faccessat, fstatat, lstat, /*openat*/ opendir, realpath, stat,
 };
 use std::{
     ffi::{CStr, OsStr},
@@ -312,6 +311,7 @@ impl DirEntry {
     }
 
     #[inline]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     /**
      Opens the directory and returns a file descriptor.
 
@@ -325,7 +325,7 @@ impl DirEntry {
         // Opens the file and returns a file descriptor..
         const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
         // SAFETY: the pointer is null terminated
-        let fd = unsafe { open(self.as_ptr(), FLAGS) };
+        let fd = unsafe { libc::open(self.as_ptr(), FLAGS) };
 
         if fd < 0 {
             return_os_error!()

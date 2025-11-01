@@ -211,7 +211,12 @@ This is one of the hottest paths when scanning directories. By eliminating
  - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
 */
 pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
-    #[cfg(not(any(target_os = "linux", target_os = "illumos", target_os = "solaris",target_os="android")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "android"
+    )))]
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
     return unsafe { access_dirent!(dirent, d_namlen) }; //trivial operation for macos/bsds 
     #[cfg(any(

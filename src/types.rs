@@ -17,6 +17,9 @@ const_from_env!(
 /// A buffer used to  hold the bytes sent from the OS for `getdents` calls
 pub type SyscallBuffer = crate::AlignedBuffer<u8, BUFFER_SIZE>;
 
+#[cfg(target_os = "macos")]
+pub type SyscallBuffer = crate::AlignedBuffer<u8, {8 * 4096}>; //default for readdir buffer  on macos
+
 #[cfg(target_os = "linux")] // We only care about the buffer on linux
 const_from_env!(
     /// Set a custom page, fairly useless but helpful for compile time assertions because we don't want the page size to be greater than the IOBLOCK

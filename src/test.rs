@@ -401,6 +401,50 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
+    fn test_getdirentries() {
+        let temp_dir = std::env::temp_dir();
+        let dir_path = temp_dir.as_path().join("testdir");
+        let _ = std::fs::create_dir(&dir_path);
+        //throwing the error incase it already exists the directory already exists
+
+        std::fs::write(dir_path.join("file1.txt"), "test1").unwrap();
+        std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
+        let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
+
+        let dir_entry = DirEntry::new(dir_path.as_os_str()).unwrap();
+        let entries = dir_entry.getdirentries().unwrap();
+        let entries_clone: Vec<_> = dir_entry.getdirentries().unwrap().collect();
+
+        let mut names: Vec<_> = entries.map(|e| e.file_name().to_vec()).collect();
+
+        assert_eq!(entries_clone.len(), 3);
+
+        names.sort();
+        assert_eq!(
+            names,
+            vec![
+                b"file1.txt".to_vec(),
+                b"file2.txt".to_vec(),
+                b"subdir".to_vec()
+            ]
+        );
+
+        let entries_clone2: Vec<_> = dir_entry.getdirentries().unwrap().collect();
+
+        let _ = std::fs::remove_dir_all(&dir_path);
+        for entry in entries_clone2 {
+            assert_eq!(entry.depth(), 1);
+            assert_eq!(
+                entry.file_name_index() as usize,
+                dir_path.as_os_str().len() + 1
+            );
+        }
+
+        //let _=std::fs::File::
+    }
+
+    #[test]
     #[cfg(target_os = "linux")]
     fn test_getdents() {
         let temp_dir = std::env::temp_dir();
@@ -934,12 +978,29 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
+    fn test_entries_macos() {
+        let dir = temp_dir().join("test_dir_macos");
+
+        let _ = fs::remove_dir(&dir);
+        let _ = fs::create_dir_all(&dir);
+        let dir_entry = DirEntry::new(&dir).unwrap();
+        let iter = dir_entry.getdirentries().unwrap();
+        let entries: Vec<_> = iter.collect();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(dir_entry.is_dir());
+        assert_eq!(entries.len(), 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn test_entries() {
         let dir = temp_dir().join("test_dir");
         let _ = fs::remove_dir(&dir);
         let _ = fs::create_dir_all(&dir);
         let dir_entry = DirEntry::new(&dir).unwrap();
-        let iter = ReadDir::new(&dir_entry).unwrap();
+        let iter = dir_entry.readdir().unwrap();
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
@@ -1129,6 +1190,39 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
+    fn test_file_types_macos() {
+        let dir_path = temp_dir().join("THROW_AWAY_THIS_MACOS");
+        let _ = fs::remove_dir(&dir_path);
+        let _ = fs::create_dir_all(&dir_path);
+
+        // Create different file types
+        let _ = File::create(dir_path.join("regular.txt"));
+        let _ = fs::create_dir(dir_path.join("directory"));
+
+        let _ = symlink("regular.txt", dir_path.join("symlink"));
+
+        let dir_entry = DirEntry::new(&dir_path)
+            .expect("if this errors then it's probably a permission issue related to sandboxing");
+        let entries: Vec<_> = dir_entry.getdirentries().unwrap().collect();
+
+        let mut type_counts = std::collections::HashMap::new();
+        for entry in entries {
+            *type_counts.entry(entry.file_type).or_insert(0) += 1;
+            println!(
+                "File: {}, Type: {:?}",
+                entry.as_os_str().to_string_lossy(),
+                entry.file_type
+            );
+        }
+
+        let _ = fs::remove_dir_all(dir_path);
+        assert_eq!(type_counts.get(&FileType::RegularFile).unwrap(), &1);
+        assert_eq!(type_counts.get(&FileType::Directory).unwrap(), &1);
+        assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
+    }
+
+    #[test]
     fn test_non_recursive_iteration() {
         let top_dir = std::env::temp_dir().join("test_nested");
         let _ = fs::remove_dir_all(&top_dir);
@@ -1140,6 +1234,34 @@ mod tests {
 
         let dir_entry = DirEntry::new(&top_dir).unwrap();
         let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|e| String::from_utf8(e.file_name().to_vec()).unwrap())
+            .collect();
+        names.sort();
+
+        let _ = std::fs::remove_dir_all(&top_dir);
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0], "subdir"); // Directory entry
+        assert_eq!(names[1], "top_file.txt"); // Top-level file
+        // Verify nested file wasn't included
+        assert!(!names.contains(&"nested_file.txt".to_string()));
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_non_recursive_iteration_macos() {
+        let top_dir = std::env::temp_dir().join("test_nested");
+        let _ = fs::remove_dir_all(&top_dir);
+        let sub_dir = top_dir.join("subdir");
+
+        let _ = std::fs::create_dir_all(&sub_dir);
+        let _ = std::fs::File::create(top_dir.join("top_file.txt"));
+        let _ = std::fs::File::create(sub_dir.join("nested_file.txt"));
+
+        let dir_entry = DirEntry::new(&top_dir).unwrap();
+        let entries: Vec<_> = dir_entry.getdirentries().unwrap().collect();
 
         let mut names: Vec<_> = entries
             .iter()
@@ -1304,7 +1426,7 @@ mod tests {
         let dir_entry = DirEntry::new(&dir).unwrap();
 
         let _ = File::create(dir.join("regular.txt"));
-        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = dir_entry.readdir().unwrap().collect();
         assert_eq!(entries.len(), 1);
 
         let v = entries[0]
@@ -1326,6 +1448,25 @@ mod tests {
 
         let _ = File::create(dir.join("regular.txt"));
         let entries = dir_entry.readdir().unwrap();
+        let file_des = entries.dirfd();
+        assert!(file_des.is_open());
+        let entries_collected: Vec<_> = entries.collect();
+
+        assert_eq!(entries_collected.len(), 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_filedes_getdirentries() {
+        let dir = temp_dir().join("test_filedes_getdirentries");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let dir_entry = DirEntry::new(&dir).unwrap();
+
+        let _ = File::create(dir.join("regular.txt"));
+        let entries = dir_entry.getdirentries().unwrap();
         let file_des = entries.dirfd();
         assert!(file_des.is_open());
         let entries_collected: Vec<_> = entries.collect();

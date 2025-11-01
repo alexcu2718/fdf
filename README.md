@@ -78,6 +78,10 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 
 (*TESTED ON LINUX, other OS's will (probably) be lower due to specific linux optimisations)
 
+(I cannot test accurately on qemu due to virtualisation overhead and I do not have a mac)
+
+Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but macos has less optimisations, perhaps testing in QEMU is not ideal for mac!
+
 | Test Case                              | Files Found | fdf Time (mean) | fd Time (mean) | Speedup (×) | Notes |
 |---------------------------------------|--------------|-----------------|----------------|--------------|--------|
 | Depth-limited (depth=2, LLVM)         | 396          | 9.6 ms          | 18.5 ms        | 1.93 ± 0.40  | No differences |
@@ -113,7 +117,9 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 ### Key Optimisations
 
--**Getdents: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#245)
+-**getdents64: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#245)
+
+-**getdirentries64: Optimised approach following a very similar approach to the above method**
 
 - **find_char_in_word**: Locates the first occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 
@@ -130,9 +136,9 @@ See source for bigendian/original version [found here](./src/utils.rs#L180)
 // Computational complexity: O(1) - truly constant time
 // This is the little-endian implementation;
 // PLEASE SEE source for big-endian version(with better explanations!) 
-// Used on Linux/Solaris/Illumos systems; OpenBSD/macOS store name length trivially
+// Used on Linux/Solaris/Illumos/Android systems; OpenBSD/macOS store name length trivially
 // SIMD within a register, so no architecture dependence
-#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris"))] 
+#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris",target_os="android"))] 
 pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
     // The only unsafe action is dereferencing the pointer
     // This MUST be validated beforehand
@@ -361,7 +367,7 @@ Options:
 #### 4. macOS/*BSD-Specific Optimisations  
 
 - Explore using `getattrlistbulk` on macOS (and possibly `getdirentries` on BSD).  
-- **Test repository:** [mac_os_getattrlistbulk_ls](https://github.com/alexcu2718/mac_os_getattrlistbulk_ls).  
+- **Test repository:** [mac_os_getattrlistbulk_ls](https://github.com/alexcu2718/fdf/blob/getattrlistbulk/src/iter.rs).  
 --EDIT--
 ** getattrlistbulk was less performant than readdir, I have left the branch open for posterity/research purposes in future but I have abandoned this approach
 in favour of readdir/getdirentries64, see [test repo here](https://github.com/alexcu2718/fdf/tree/macos_test_getdirentries)

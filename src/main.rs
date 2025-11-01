@@ -9,9 +9,9 @@ use std::ffi::OsString;
 use std::io::stdout;
 use std::str;
 
-#[cfg(target_os = "vita")]
+#[cfg(any(target_os = "vita",target_os="hurd"))]
 compile_error!(
-    "This application is not supported on PlayStation Vita, It may be if I'm ever bothered!"
+    "This application is not supported on PlayStation Vita/hurd, It may be if I'm ever bothered!"
 );
 
 #[cfg(target_os = "windows")]

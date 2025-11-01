@@ -1,6 +1,5 @@
 #![allow(clippy::multiple_unsafe_ops_per_block)] //annoying convention
-#[cfg(target_os = "linux")]
-use crate::FileDes;
+
 use core::marker::Copy;
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
@@ -170,9 +169,17 @@ where
     /// Executes the getdents64 system call using <unistd.h>/direct `libc` syscalls
     #[inline]
     #[cfg(target_os = "linux")]
-    pub fn getdents(&mut self, fd: &FileDes) -> i64 {
+    pub fn getdents(&mut self, fd: &crate::FileDes) -> i64 {
         // SAFETY: we're passing a valid buffer
         unsafe { crate::utils::getdents(fd.0, self.as_mut_ptr(), SIZE) }
+    }
+
+    #[inline]
+    #[cfg(target_os = "macos")]
+    #[allow(clippy::not_unsafe_ptr_arg_deref)] //shutup
+    pub fn getdirentries(&mut self, fd: &crate::FileDes, basep: *mut i64) -> i32 {
+        // SAFETY: we're passing a valid buffer
+        unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
     }
 
     /// Returns a reference to a subslice without doing bounds checking

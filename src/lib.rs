@@ -37,7 +37,8 @@
  ## Platform Support
 
  - **Linux**: Optimised with direct `getdents` system calls
- - **macOS/BSD**: Standard `readdir` with potential for future `getattrlistbulk` optimisation
+ - **MacOS** Optimised with direct `getdirentries64` system calls
+ - **BSD's**: Standard `readdir` with potential for future `getattrlistbulk` optimisation
  - **Other Unix-like**: Fallback to standard library functions
  - **Windows**: Not currently supported (PRs welcome!)
 
@@ -122,9 +123,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 */
 
-#[cfg(target_os = "vita")]
+#[cfg(any(target_os = "vita",target_os="hurd"))]
 compile_error!(
-    "This application is not supported on PlayStation Vita, It may be if I'm ever bothered!"
+    "This application is not supported on PlayStation Vita/hurd, It may be if I'm ever bothered!"
 );
 
 #[cfg(target_os = "windows")]
@@ -178,8 +179,7 @@ mod types;
 pub use types::BUFFER_SIZE;
 pub use types::FileDes;
 pub use types::Result;
-#[cfg(target_os = "linux")]
-pub(crate) use types::SyscallBuffer;
+
 pub(crate) use types::{DirEntryFilter, FilterType};
 
 mod utils;
@@ -459,10 +459,13 @@ impl Finder {
         handle_depth_limit!(self, dir, should_send_dir_or_symlink, sender); // a convenience macro to clear up code here
 
         #[cfg(target_os = "linux")]
-        // linux with getdents, I may implement this for android too.
+        // linux with getdents (only linux/android allow direct syscalls, add this for android too when I can be bothered!) TODO!!
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
-        #[cfg(not(target_os = "linux"))]
-        let direntries = dir.readdir(); // in theory I can use direct syscalls on illumos/solaris/android, just not on BSD systems
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let direntries = dir.readdir();
+        #[cfg(target_os = "macos")]
+        let direntries = dir.getdirentries();
+
 
         match direntries {
             Ok(entries) => {

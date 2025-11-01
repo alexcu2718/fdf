@@ -86,8 +86,8 @@ use core::cell::Cell;
 use core::fmt;
 use core::ptr::NonNull;
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, R_OK,
-    W_OK, X_OK, access, c_char, faccessat, fstatat, lstat, /*openat*/ opendir, realpath, stat,
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, R_OK, W_OK, X_OK, access, c_char, faccessat,
+    fstatat, lstat, /*openat*/ opendir, realpath, stat,
 };
 use std::{
     ffi::{CStr, OsStr},

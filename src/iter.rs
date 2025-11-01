@@ -148,7 +148,9 @@ pub struct GetDents {
     /// A marker for when the `FileDes` can give no more entries
     pub(crate) end_of_stream: bool,
 }
-#[cfg(target_os = "linux")]
+
+
+#[cfg(any(target_os = "linux",target_os="android"))]
 impl Drop for GetDents {
     /**
       Drops the iterator, closing the file descriptor.
@@ -166,7 +168,7 @@ impl Drop for GetDents {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 impl GetDents {
     #[inline]
     /**
@@ -267,6 +269,7 @@ impl GetDents {
     }
 
     #[inline]
+    #[cfg(target_os="linux")]// Not available on bionic libc
     #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
     /**
       Initiates read-ahead for the directory to improve sequential read performance.
@@ -659,7 +662,7 @@ macro_rules! impl_iterator_for_dirent {
 
 impl_iterator_for_dirent!(ReadDir);
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 impl_iterator_for_dirent!(GetDents);
 
 #[cfg(target_os = "macos")]
@@ -667,7 +670,7 @@ impl_iterator_for_dirent!(GetDirEntries);
 
 impl_dirent_constructor!(ReadDir);
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 impl_dirent_constructor!(GetDents);
 
 #[cfg(target_os = "macos")]
@@ -817,7 +820,7 @@ impl Drop for GetDirEntries {
 
 /// basic code to show that the NTFS/CIFS edge case approximation is reasonable
 #[test] // usually I chuck my tests in the test.rs file but this one is *highly* specific to this page
-#[cfg(target_os = "linux")] //only relevant for linux
+#[cfg(any(target_os = "linux",target_os="android"))] //only relevant for linux
 fn max_size_dirent() {
     #[repr(C)]
     struct DirentNTFS {

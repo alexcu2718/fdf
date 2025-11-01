@@ -7,7 +7,7 @@ use crate::memchr_derivations::memrchr;
 use core::ops::Deref;
 
 #[inline]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 /*
   Wrapper for direct getdents syscalls
 

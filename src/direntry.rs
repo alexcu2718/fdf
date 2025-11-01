@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 
 */
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 use crate::GetDents;
 use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::FileType};
 
@@ -1392,7 +1392,7 @@ impl DirEntry {
         ReadDir::new(self)
     }
     #[inline]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux",target_os="android"))]
     /**
      Low-level directory iterator using the `getdents64` system call.
 

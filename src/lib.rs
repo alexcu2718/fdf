@@ -153,8 +153,16 @@ mod cli_helpers;
 
 pub use cli_helpers::{FileTypeParser, SizeFilter, SizeFilterParser};
 
+
+mod types;
+
+#[cfg(any(target_os = "linux",target_os="android"))]
+pub use types::BUFFER_SIZE;
+pub use types::FileDes;
+pub use types::Result;
+
 mod iter;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux",target_os="android"))]
 pub use iter::GetDents;
 pub use iter::ReadDir;
 
@@ -173,12 +181,6 @@ pub use direntry::DirEntry;
 mod error;
 pub use error::{DirEntryError, SearchConfigError};
 
-mod types;
-
-#[cfg(target_os = "linux")]
-pub use types::BUFFER_SIZE;
-pub use types::FileDes;
-pub use types::Result;
 
 pub(crate) use types::{DirEntryFilter, FilterType};
 
@@ -207,7 +209,7 @@ pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(all(
-    any(target_os = "linux", target_os = "macos"),
+    any(target_os = "linux", target_os = "macos",target_os="android"),
     not(miri),
     not(debug_assertions)
 ))]
@@ -458,10 +460,10 @@ impl Finder {
 
         handle_depth_limit!(self, dir, should_send_dir_or_symlink, sender); // a convenience macro to clear up code here
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux",target_os="android"))]
         // linux with getdents (only linux/android allow direct syscalls, add this for android too when I can be bothered!) TODO!!
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos",target_os="android")))]
         let direntries = dir.readdir();
         #[cfg(target_os = "macos")]
         let direntries = dir.getdirentries();

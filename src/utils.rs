@@ -168,7 +168,7 @@ Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
 My Cat Diavolo is cute.
 
 */
-
+//cargo-asm --lib fdf::utils::dirent_const_time_strlen (put to inline(never) to display)
 #[inline]
 #[cfg(any(
     target_os = "linux",
@@ -287,6 +287,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         let zero_bit = unsafe {
             NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
         };
+
+       
 
         // Find the position then deduct deduct it from 7 (then add 1 to account for the null ) from the position of the null byte pos
         #[cfg(target_endian = "little")]

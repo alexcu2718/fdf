@@ -218,7 +218,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         target_os = "android"
     )))]
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
-    return unsafe { access_dirent!(dirent, d_namlen) }; //trivial operation for macos/bsds 
+    return unsafe { access_dirent!(drnt, d_namlen) }; //trivial operation for macos/bsds 
     #[cfg(any(
         target_os = "linux",
         target_os = "illumos",

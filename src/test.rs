@@ -1249,7 +1249,6 @@ mod tests {
         assert!(!names.contains(&"nested_file.txt".to_string()));
     }
 
-
     #[test]
     fn test_file_types_realpath() {
         let dir_path = temp_dir().join("THROW_AWAY");
@@ -1428,8 +1427,6 @@ mod tests {
         assert_eq!(entries_collected.len(), 1);
         let _ = std::fs::remove_dir_all(dir);
     }
-
-  
 
     #[test]
     #[cfg(target_os = "linux")]

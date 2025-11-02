@@ -210,7 +210,7 @@ This is one of the hottest paths when scanning directories. By eliminating
  - [Stanford Bit Twiddling Hacks](https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte)
  - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
 */
-pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
+pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     #[cfg(not(any(
         target_os = "linux",
         target_os = "illumos",
@@ -225,10 +225,14 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
         target_os = "solaris",
         target_os = "android"
     ))]
-    // Linux/Solaris/Illumos where we need a bit of 'black magic'
+    // On these systems where we need a bit of 'black magic'
     {
         // Offset from the start of the struct to the beginning of d_name.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
+        debug_assert!(
+            !drnt.is_null(),
+            "null pointer detected in const swar implementation"
+        );
         // Access the last field and then round up to find the minimum struct size
         const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
         const_assert!(
@@ -243,14 +247,14 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
 
         /*  Accessing `d_reclen` is safe because the struct is kernel-provided.
         / SAFETY: `dirent` is valid by precondition */
-        let reclen = unsafe { (*dirent).d_reclen } as usize;
+        let reclen = unsafe { (*drnt).d_reclen } as usize;
 
         /*
           Read the last 8 bytes of the struct as a u64.
         This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
 
         // SAFETY: We're indexing in bounds within the pointer.
-        let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+        let last_word: u64 = unsafe { *(drnt.cast::<u8>()).add(reclen - 8).cast::<u64>() };
 
         #[cfg(target_endian = "little")]
         const MASK: u64 = 0x00FF_FFFFu64;
@@ -307,7 +311,7 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
 
             assert!(
                 reclen - DIRENT_HEADER_START - byte_pos
-                    == const_strlen(unsafe { access_dirent!(dirent, d_name).cast() }),
+                    == const_strlen(unsafe { access_dirent!(drnt, d_name).cast() }),
                 "const dirent length calculation failed!"
             )
         }

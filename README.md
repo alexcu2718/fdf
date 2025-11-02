@@ -117,9 +117,9 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 ### Key Optimisations
 
--**getdents64: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#245)
+- **getdents64: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#245)**
 
--**getdirentries64: Optimised approach following a very similar approach to the above method**
+- **getdirentries64: Optimised approach following a very similar approach to the above method**
 
 - **find_char_in_word**: Locates the first occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 
@@ -199,7 +199,7 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 
 ### Feature Enhancements (Planned)
 
-** API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!
+**API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 
 **DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt  this, admittedly I've been focusing on tidying up the API a lot)
 
@@ -366,14 +366,14 @@ Options:
 
 #### 4. macOS/*BSD-Specific Optimisations  
 
-- Explore using `getattrlistbulk` on macOS (and possibly `getdirentries` on BSD).  
-- **Test repository:** [mac_os_getattrlistbulk_ls](https://github.com/alexcu2718/fdf/blob/getattrlistbulk/src/iter.rs).  
+- Explore using `getattrlistbulk` on macOS (and possibly `getdirentries` on BSD). Low priority due to fringe use case.
+- Test repository [mac_os_getattrlistbulk_ls](https://github.com/alexcu2718/fdf/blob/getattrlistbulk/src/iter.rs).  
 --EDIT--
-** getattrlistbulk was less performant than readdir, I have left the branch open for posterity/research purposes in future but I have abandoned this approach
-in favour of readdir/getdirentries64, see [test repo here](https://github.com/alexcu2718/fdf/tree/macos_test_getdirentries)
+**getattrlistbulk was less performant than readdir, I have left the branch open for posterity/research purposes in future but I have abandoned this approach
+in favour of readdir/getdirentries64, see [test repo here](https://github.com/alexcu2718/fdf/tree/macos_test_getdirentries)**
 
 #### 5. Solaris / Illumos / Android Optimisations  
 
-- Although `getdents` is Linux-specific, other systems (Android, Solaris,Illumos) expose  libc syscalls (I haven't extensively checked)
+- Although `getdents` is Linux-specific, other systems (Android does, Illumos does not however) may expose  libc syscalls (I haven't extensively checked)
 - These could be integrated with minimal effort using existing code infrastructure.  
 - Implementation would likely take only a few hours once prioritised.  Low priority naturally due to extremely fringe use case.

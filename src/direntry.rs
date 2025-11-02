@@ -86,8 +86,8 @@ use core::cell::Cell;
 use core::fmt;
 use core::ptr::NonNull;
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DIR, F_OK, R_OK, W_OK, X_OK, access, c_char, faccessat,
-    fstatat, lstat, /*openat*/ opendir, realpath, stat,
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, c_char, faccessat,
+    fstatat, lstat, /*openat*/ realpath, stat,
 };
 use std::{
     ffi::{CStr, OsStr},
@@ -427,10 +427,10 @@ impl DirEntry {
      - Permission is denied
      - System resources are exhausted
     */
-    pub fn opendir(&self) -> Result<NonNull<DIR>> {
+    pub(crate) fn opendir(&self) -> Result<NonNull<libc::DIR>> {
         // SAFETY: we are passing a null terminated directory to opendir
 
-        let dir = unsafe { opendir(self.as_ptr()) };
+        let dir = unsafe { libc::opendir(self.as_ptr()) };
         // This function reads the directory entries and populates the iterator.
         // It is called when the iterator is created or when it needs to be reset.
         if dir.is_null() {

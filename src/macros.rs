@@ -1,5 +1,3 @@
-#![allow(unused_macros)]
-
 #[macro_export]
 /**
  A helper macro to safely access dirent(64 on linux)'s

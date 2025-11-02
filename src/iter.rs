@@ -268,6 +268,7 @@ impl GetDents {
 
     #[inline]
     #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
+    #[cfg(target_os = "linux")] // Only available on linux to my knowledge
     /**
       Initiates read-ahead for the directory to improve sequential read performance.
 
@@ -352,6 +353,7 @@ impl GetDents {
                 // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
                 let d: *mut dirent64 =
                     unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+                debug_assert!(!d.is_null(), "dirent is null in get next entry!");
                 // SAFETY: dirent is not null so field access is safe
                 let reclen = unsafe { access_dirent!(d, d_reclen) };
 
@@ -474,6 +476,7 @@ pub trait DirentConstructor {
 
     */
     unsafe fn construct_path(&mut self, drnt: *const dirent64) -> &CStr {
+        debug_assert!(!drnt.is_null(), "drnt is null in construct path!");
         let base_len = self.file_index();
         // SAFETY: The `drnt` must not be null (checked before using)
         let d_name = unsafe { access_dirent!(drnt, d_name) };

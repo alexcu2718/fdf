@@ -128,6 +128,10 @@ compile_error!(
     "This application is not supported on PlayStation Vita/hurd, It may be if I'm ever bothered!"
 );
 
+
+#[cfg(target_pointer_width="32")]
+compile_error!("Not supported on 32bit, I may do if a PR is sent!");
+
 #[cfg(target_os = "windows")]
 compile_error!("This application is not supported on Windows (yet)");
 

@@ -128,6 +128,7 @@ a utility function for breaking down the config spaghetti that is platform speci
  because only strlen isn't constant here :(
  */
 pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
+    debug_assert!(!drnt.is_null(),"dirent is null in name length calculation");
     #[cfg(any(
         target_os = "linux",
         target_os = "illumos",
@@ -211,6 +212,9 @@ This is one of the hottest paths when scanning directories. By eliminating
  - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
 */
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
+    debug_assert!(!drnt.is_null(),"dirent is null in name length calculation");
+
+
     #[cfg(not(any(
         target_os = "linux",
         target_os = "illumos",
@@ -229,15 +233,11 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     {
         // Offset from the start of the struct to the beginning of d_name.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
-        debug_assert!(
-            !drnt.is_null(),
-            "null pointer detected in const swar implementation"
-        );
         // Access the last field and then round up to find the minimum struct size
         const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
         const_assert!(
             MINIMUM_DIRENT_SIZE == 24,
-            "Minimum struct size should be 24 on these platforms!"
+            "Minimum dirnt struct size should be 24 on these platforms!"
         );
         use crate::memchr_derivations::HI_U64;
         use crate::memchr_derivations::LO_U64;
@@ -253,7 +253,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
           Read the last 8 bytes of the struct as a u64.
         This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
 
-        // SAFETY: We're indexing in bounds within the pointer.
+        // SAFETY: We're indexing in bounds within the pointer. Since the reclen is size of the struct in bytes.
         let last_word: u64 = unsafe { *(drnt.cast::<u8>()).add(reclen - 8).cast::<u64>() };
 
         #[cfg(target_endian = "little")]
@@ -297,26 +297,13 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
 
         //check final calculation
-        #[expect(clippy::missing_panics_doc, reason = "debug only")]
-        #[expect(clippy::undocumented_unsafe_blocks, reason = "debug only")]
-        #[cfg(debug_assertions)]
-        {
-            //copied from stdlib out of laziness
-            const fn const_strlen(ptr: *const u8) -> usize {
-                let mut len = 0;
-                while unsafe { *ptr.add(len) } != 0 {
-                    len += 1;
-                }
-
-                len
-            }
-
-            assert!(
+        debug_assert!(
                 reclen - DIRENT_HEADER_START - byte_pos
-                    == const_strlen(unsafe { access_dirent!(drnt, d_name).cast() }),
-                "const dirent length calculation failed!"
-            )
-        }
+                //SAFETY: debug only.
+                    == unsafe{core::ffi::CStr::from_ptr(access_dirent!(drnt, d_name).cast()).count_bytes() },
+                "const swar dirent length calculation failed!"); //Luckily this  stdlib function has a const hack to allow this.(to keep the function const)
+
+      
 
         /*  Final length:
         total record length - header size - null byte position

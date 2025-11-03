@@ -117,7 +117,7 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 ### Key Optimisations
 
-- **getdents64: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#245)**
+- **getdents64: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#L195)**
 
 - **getdirentries64: Optimised approach following a very similar approach to the above method**
 

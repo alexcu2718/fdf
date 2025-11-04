@@ -167,11 +167,8 @@ pub use iter::GetDirEntries;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub(crate) use libc::{dirent as dirent64, readdir as readdir64};
 
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) use libc::{dirent64, readdir64};
-
-
 
 mod printer;
 pub(crate) use printer::write_paths_coloured;
@@ -445,6 +442,18 @@ impl Finder {
         }
     }
 
+    #[inline]
+    #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
+    fn send_files_if_not_empty(&self, files: Vec<DirEntry>, sender: &Sender<Vec<DirEntry>>) {
+        if !files.is_empty() {
+            if let Err(e) = sender.send(files) {
+                if self.search_config.show_errors {
+                    eprintln!("Error sending files: {e}");
+                }
+            }
+        }
+    }
+
     #[expect(
         clippy::redundant_clone,
         reason = "we have to clone when sending dirs because it's being used to keep the iterator going.
@@ -501,11 +510,11 @@ impl Finder {
 
                 // We do batch sending to minimise contention of sending
                 // as opposed to sending one at a time, which will cause tremendous locks
-                send_files_if_not_empty!(self, files, sender); // a convenience macro to simplify the code 
+                self.send_files_if_not_empty(files, sender)
             }
             Err(err) => {
                 if self.search_config.show_errors {
-                    eprintln!("Error accessing {}: {}", dir.to_string_lossy(), err);
+                    eprintln!("Error accessing {}: {err}", dir.to_string_lossy());
                     //TODO! replace with logging eventually
                 }
             }

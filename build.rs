@@ -44,8 +44,7 @@ fn test_macos_syscall() {
         // Negative values indicate errors
         if result < 0 {
             panic!(
-                "getdirentries64 syscall test failed with result: {}\n This indicates the syscall number has changed!",
-                result
+                "getdirentries64 syscall test failed with result: {result}\n This indicates the syscall number has changed!",
             );
         }
     }
@@ -60,10 +59,10 @@ fn main() {
     println!("cargo:rustc-env=THREAD_COUNT={num_threads}");
 
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-    println!("cargo:rustc-env=FDF_PAGE_SIZE={}", page_size);
+    println!("cargo:rustc-env=FDF_PAGE_SIZE={page_size}");
 
     let max_filename_len = unsafe { libc::pathconf(c"/".as_ptr(), libc::_PC_NAME_MAX) };
-    println!("cargo:rustc-env=NAME_MAX={}", max_filename_len);
+    println!("cargo:rustc-env=NAME_MAX={max_filename_len}");
     assert!(
         max_filename_len >= 255,
         "NAME_MAX is not appropriately set!"

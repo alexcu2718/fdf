@@ -416,18 +416,6 @@ macro_rules! handle_depth_limit {
     };
 }
 
-macro_rules! send_files_if_not_empty {
-    ($self:expr, $files:expr, $sender:expr) => {
-        if !$files.is_empty() {
-            if let Err(e) = $sender.send($files) {
-                if $self.search_config.show_errors {
-                    eprintln!("Error sending files: {e}");
-                }
-            }
-        }
-    };
-}
-
 /// Extremely simple macro for getting rid of boiler blates
 macro_rules! return_os_error {
     () => {{

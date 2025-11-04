@@ -64,6 +64,7 @@ where
 {
     const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
     //https://phrack.org/issues/66/16
+    // We verify this works via build script, we check if `getdirentries` returns >0 for tmp directory, if not, syscall is broken.
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
     unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
 }
@@ -270,6 +271,10 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         */
         let candidate_pos: u64 = last_word | mask;
 
+        debug_assert!(
+            candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64 != 0,
+            "Due to the final 8 bytes always containing a null terminator, this should never be 0"
+        );
         /*
          Locate the first null byte in constant time using SWAR.
          Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.

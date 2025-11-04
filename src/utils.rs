@@ -1,13 +1,9 @@
-#[cfg(not(target_os = "linux"))]
-use libc::dirent as dirent64;
-#[cfg(target_os = "linux")]
-use libc::dirent64;
-
+use crate::dirent64;
 use crate::memchr_derivations::memrchr;
 use core::ops::Deref;
 
 #[inline]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 /*
   Wrapper for direct getdents syscalls
 
@@ -128,7 +124,7 @@ a utility function for breaking down the config spaghetti that is platform speci
  because only strlen isn't constant here :(
  */
 pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
-    debug_assert!(!drnt.is_null(),"dirent is null in name length calculation");
+    debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
     #[cfg(any(
         target_os = "linux",
         target_os = "illumos",
@@ -212,8 +208,7 @@ This is one of the hottest paths when scanning directories. By eliminating
  - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
 */
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
-    debug_assert!(!drnt.is_null(),"dirent is null in name length calculation");
-
+    debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
 
     #[cfg(not(any(
         target_os = "linux",
@@ -288,8 +283,6 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
             NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
         };
 
-       
-
         // Find the position then deduct deduct it from 7 (then add 1 to account for the null ) from the position of the null byte pos
         #[cfg(target_endian = "little")]
         let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
@@ -298,12 +291,11 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         //check final calculation
         debug_assert!(
-                reclen - DIRENT_HEADER_START - byte_pos
+            reclen - DIRENT_HEADER_START - byte_pos
                 //SAFETY: debug only.
                     == unsafe{core::ffi::CStr::from_ptr(access_dirent!(drnt, d_name).cast()).count_bytes() },
-                "const swar dirent length calculation failed!"); //Luckily this  stdlib function has a const hack to allow this.(to keep the function const)
-
-      
+            "const swar dirent length calculation failed!"
+        ); //Luckily this  stdlib function has a const hack to allow this.(to keep the function const)
 
         /*  Final length:
         total record length - header size - null byte position

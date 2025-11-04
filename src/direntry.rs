@@ -77,8 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 
 */
-#[cfg(target_os = "linux")]
-use crate::GetDents;
+
 use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::FileType};
 
 use chrono::{DateTime, Utc};
@@ -274,7 +273,7 @@ impl DirEntry {
         self.is_regular_file() && unsafe { access(self.as_ptr(), X_OK) == 0 }
     }
 
-    /*
+    /**
      Returns a raw pointer to the underlying C string.
 
      This provides access to the null-terminated C string representation
@@ -311,7 +310,7 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
     /**
      Opens the directory and returns a file descriptor.
 
@@ -550,11 +549,11 @@ impl DirEntry {
         match self.file_type() {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", target_os = "android"))]
                 let result = self
-                    .getdents() //use getdents on linux to avoid  extra stat calls
+                    .getdents() //use getdents on linux/android to avoid  extra stat calls
                     .is_ok_and(|mut entries| entries.next().is_none());
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(any(target_os = "linux", target_os = "android")))]
                 let result = self
                     .readdir()
                     .is_ok_and(|mut entries| entries.next().is_none());
@@ -1089,6 +1088,11 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
+    #[allow(
+        unfulfilled_lint_expectations,
+        reason = "some OS'es differ on interepretation of i8/u8 for pointers"
+    )]
+    #[allow(clippy::unnecessary_cast, reason = "as above")]
     #[expect(clippy::multiple_unsafe_ops_per_block, reason = "stylistic")]
     #[expect(
         clippy::cast_sign_loss,
@@ -1392,7 +1396,7 @@ impl DirEntry {
         ReadDir::new(self)
     }
     #[inline]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     /**
      Low-level directory iterator using the `getdents64` system call.
 
@@ -1448,8 +1452,8 @@ impl DirEntry {
      fs::remove_dir_all(&temp_dir).unwrap();
     ```
     */
-    pub fn getdents(&self) -> Result<GetDents> {
-        GetDents::new(self)
+    pub fn getdents(&self) -> Result<crate::GetDents> {
+        crate::GetDents::new(self)
     }
 
     #[inline]

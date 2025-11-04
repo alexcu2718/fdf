@@ -301,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_dirent_const_time_strlen_optimal_abc() {
         let mut entry = Dirent64 {
             d_ino: 0,
@@ -327,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_dirent_const_time_strlen_single_char() {
         let mut entry = Dirent64 {
             d_ino: 0,
@@ -350,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_dirent_const_time_strlen_max_aligned() {
         let mut entry = Dirent64 {
             d_ino: 0,
@@ -376,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_dirent_const_time_strlen_exactly_buffer() {
         let mut entry = Dirent64 {
             d_ino: 0,
@@ -445,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_getdents() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
@@ -595,9 +595,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_hidden_files_linux() {
-        let dir_path = std::env::temp_dir().join("test_hidden_linux");
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_hidden_files_linux_android() {
+        let dir_path = std::env::temp_dir().join("test_hidden_linux_android");
         let _ = std::fs::remove_dir(&dir_path);
         let _ = std::fs::create_dir_all(&dir_path);
 
@@ -934,9 +934,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_basic_iteration_linux() {
-        let dir_path = temp_dir().join("THROWAWAYANYTHINGLINUX");
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_basic_iteration_linux_android() {
+        let dir_path = temp_dir().join("THROWAWAYANYTHINGLINUXANDROID");
         let _ = fs::remove_dir_all(&dir_path);
         let _ = fs::create_dir_all(&dir_path);
 
@@ -962,7 +962,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_entries_linux() {
         let dir = temp_dir().join("test_dirlinux");
         let _ = fs::remove_dir(&dir);
@@ -1429,7 +1429,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_filedes_getdents() {
         use crate::GetDents;
 

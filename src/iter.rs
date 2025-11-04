@@ -1,16 +1,13 @@
 #![allow(clippy::must_use_candidate)]
 use crate::FileType;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 use crate::types::SyscallBuffer;
 use crate::{DirEntry, FileDes, Result};
+use crate::{dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
 use libc::DIR;
-#[cfg(not(target_os = "linux"))]
-use libc::{dirent as dirent64, readdir};
-#[cfg(target_os = "linux")]
-use libc::{dirent64, readdir64 as readdir};
 
 /*
 
@@ -66,7 +63,7 @@ impl ReadDir {
     */
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
-        let dirent_ptr = unsafe { readdir(self.dir.as_ptr()) };
+        let dirent_ptr = unsafe { readdir64(self.dir.as_ptr()) };
 
         // readdir returns null at end of directory or on error
         NonNull::new(dirent_ptr)
@@ -113,7 +110,7 @@ impl Drop for ReadDir {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 /**
  Linux-specific directory iterator using the `getdents` system call.
 
@@ -148,7 +145,8 @@ pub struct GetDents {
     /// A marker for when the `FileDes` can give no more entries
     pub(crate) end_of_stream: bool,
 }
-#[cfg(target_os = "linux")]
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl Drop for GetDents {
     /**
       Drops the iterator, closing the file descriptor.
@@ -166,7 +164,7 @@ impl Drop for GetDents {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl GetDents {
     #[inline]
     /**
@@ -601,7 +599,7 @@ macro_rules! impl_iter {
             */
             pub fn construct_direntry(
                 &mut self,
-                drnt: core::ptr::NonNull<dirent64>,
+                drnt: core::ptr::NonNull<$crate::dirent64>,
             ) -> $crate::DirEntry {
                 // SAFETY:  Because the pointer is already checked to not be null before it can be used here safely
                 unsafe { self.construct_entry(drnt.as_ptr()) }
@@ -611,7 +609,7 @@ macro_rules! impl_iter {
 }
 
 impl_iter!(ReadDir);
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl_iter!(GetDents);
 #[cfg(target_os = "macos")]
 impl_iter!(GetDirEntries);
@@ -662,7 +660,7 @@ macro_rules! impl_iterator_for_dirent {
 
 impl_iterator_for_dirent!(ReadDir);
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl_iterator_for_dirent!(GetDents);
 
 #[cfg(target_os = "macos")]
@@ -670,7 +668,7 @@ impl_iterator_for_dirent!(GetDirEntries);
 
 impl_dirent_constructor!(ReadDir);
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl_dirent_constructor!(GetDents);
 
 #[cfg(target_os = "macos")]
@@ -820,7 +818,7 @@ impl Drop for GetDirEntries {
 
 /// basic code to show that the NTFS/CIFS edge case approximation is reasonable
 #[test] // usually I chuck my tests in the test.rs file but this one is *highly* specific to this page
-#[cfg(target_os = "linux")] //only relevant for linux
+#[cfg(any(target_os = "linux", target_os = "android"))] //only relevant for platforms exposing getdents
 fn max_size_dirent() {
     #[repr(C)]
     struct DirentNTFS {

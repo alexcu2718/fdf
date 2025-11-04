@@ -169,11 +169,8 @@ macro_rules! access_stat {
     ($stat_struct:expr, $field:ident) => {{ $stat_struct.$field as _ }};
 }
 
-#[cfg(any(target_os = "solaris", target_os = "illumos"))]
-use libc::dirent as dirent64;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use libc::dirent64;
-
+#[macro_export]
+/// A compile time assert, mirroring `static_assert` from C++
 macro_rules! const_assert {
     ($cond:expr $(,)?) => {
         const _: () = {
@@ -197,7 +194,8 @@ macro_rules! const_assert {
     target_os = "illumos",
     target_os = "android"
 ))]
-pub const MINIMUM_DIRENT_SIZE: usize = core::mem::offset_of!(dirent64, d_name).next_multiple_of(8); //==24 for the platforms we care about
+pub const MINIMUM_DIRENT_SIZE: usize =
+    core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8); //==24 for the platforms we care about
 // Finding the minimum struct size, which is basically all the fields minus the variable part
 
 #[cfg(any(

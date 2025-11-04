@@ -168,7 +168,7 @@ where
 
     /// Executes the getdents64 system call using <unistd.h>/direct `libc` syscalls
     #[inline]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn getdents(&mut self, fd: &crate::FileDes) -> i64 {
         // SAFETY: we're passing a valid buffer
         unsafe { crate::utils::getdents(fd.0, self.as_mut_ptr(), SIZE) }

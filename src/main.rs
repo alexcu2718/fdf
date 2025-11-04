@@ -9,14 +9,6 @@ use std::ffi::OsString;
 use std::io::stdout;
 use std::str;
 
-#[cfg(any(target_os = "vita", target_os = "hurd"))]
-compile_error!(
-    "This application is not supported on PlayStation Vita/hurd, It may be if I'm ever bothered!"
-);
-
-#[cfg(target_os = "windows")]
-compile_error!("This application is not supported on Windows (yet)");
-
 // Set threads at compile time, defaulting to 1 in worst case scenario
 const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
 

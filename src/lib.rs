@@ -11,7 +11,7 @@
 
  - **Parallel Processing**: Utilises Rayon's work-stealing scheduler for concurrent
    directory traversal
- - **Platform Optimisations**: Linux-specific `getdents` system calls for optimal
+ - **Platform Optimisations**: Linux/Android specific `getdents` system calls for optimal
    performance, with fallbacks for other platforms
  - **Flexible Filtering**: Support for multiple filtering criteria:
    - File name patterns (regex,glob)
@@ -32,11 +32,11 @@
  - Batched result delivery to minimise channel contention
  - Zero-copy path handling where possible
  - Avoids unnecessary `stat` calls through careful API design
- - Makes up to 50% less `getdents` syscalls on linux (Not rigorously tested, check getdents `fill_buffer` docs)
+ - Makes up to 50% less `getdents` syscalls on linux/android and macos (Not rigorously tested, check getdents `fill_buffer` docs)
 
  ## Platform Support
 
- - **Linux**: Optimised with direct `getdents` system calls
+ - **Linux/Android**: Optimised with direct `getdents` system calls
  - **Macos** Optimised with direct `getdirentries64` system calls
  - **BSD's**: Standard `readdir` with potential for future `getdirentries` optimisation.
  - **Other Unix-like**: Fallback to standard library functions
@@ -128,8 +128,7 @@ compile_error!(
     "This application is not supported on PlayStation Vita/hurd, It may be if I'm ever bothered!"
 );
 
-
-#[cfg(target_pointer_width="32")]
+#[cfg(target_pointer_width = "32")]
 compile_error!("Not supported on 32bit, I may do if a PR is sent!");
 
 #[cfg(target_os = "windows")]
@@ -158,9 +157,21 @@ mod cli_helpers;
 pub use cli_helpers::{FileTypeParser, SizeFilter, SizeFilterParser};
 
 mod iter;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub use iter::GetDents;
 pub use iter::ReadDir;
+
+#[cfg(target_os = "macos")]
+pub use iter::GetDirEntries;
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub(crate) use libc::{dirent as dirent64, readdir as readdir64};
+
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) use libc::{dirent64, readdir64};
+
+
 
 mod printer;
 pub(crate) use printer::write_paths_coloured;
@@ -179,8 +190,6 @@ pub use error::{DirEntryError, SearchConfigError};
 
 mod types;
 
-#[cfg(target_os = "linux")]
-pub use types::BUFFER_SIZE;
 pub use types::FileDes;
 pub use types::Result;
 
@@ -462,10 +471,10 @@ impl Finder {
 
         handle_depth_limit!(self, dir, should_send_dir_or_symlink, sender); // a convenience macro to clear up code here
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         // linux with getdents (only linux/android allow direct syscalls, add this for android too when I can be bothered!) TODO!!
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "android")))]
         let direntries = dir.readdir();
         #[cfg(target_os = "macos")]
         let direntries = dir.getdirentries();

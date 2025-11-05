@@ -132,9 +132,6 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 The following function provides an elegant solution to avoid branch mispredictions/SIMD instructions during directory entry parsing (a performance-critical loop):
 
-See source for bigendian/original version [found here](./src/utils.rs#L180)
-(This version is a bit wrong but shows the logic used in the true implementation, trying to save space on the readme!)
-
 ```rust
 // Computational complexity: O(1) - truly constant time
 // Used on Linux/Solaris/Illumos/Android systems; BSD systems/macOS store name length trivially

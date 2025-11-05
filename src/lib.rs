@@ -453,12 +453,32 @@ impl Finder {
             }
         }
     }
+    #[inline]
+    #[allow(clippy::cast_possible_truncation, reason = "depth wont exceed u32")]
+    #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
+    fn handle_depth_limit(
+        &self,
+        dir: &DirEntry,
+        should_send: bool,
+        sender: &Sender<Vec<DirEntry>>,
+    ) -> bool {
+        if self
+            .search_config
+            .depth
+            .is_some_and(|depth| dir.depth >= depth.get() as _)
+        {
+            if should_send {
+                if let Err(e) = sender.send(vec![dir.clone()]) {
+                    if self.search_config.show_errors {
+                        eprintln!("Error sending DirEntry: {e}");
+                    }
+                }
+            }
+            return false; // depth limit reached, stop processing
+        }
+        true // continue processing
+    }
 
-    #[expect(
-        clippy::redundant_clone,
-        reason = "we have to clone when sending dirs because it's being used to keep the iterator going.
-         We don't want to collect an unnecessary vector, then into_iter and partition it,rather clone 1 directory than make an another vec!"
-    )]
     #[inline]
     #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
     /**
@@ -478,10 +498,12 @@ impl Finder {
 
         let should_send_dir_or_symlink = self.should_send_dir(&dir); // If we've gotten here, the dir must be a directory!
 
-        handle_depth_limit!(self, dir, should_send_dir_or_symlink, sender); // a convenience macro to clear up code here
+        if !self.handle_depth_limit(&dir, should_send_dir_or_symlink, sender) {
+            return;
+        }
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        // linux with getdents (only linux/android allow direct syscalls, add this for android too when I can be bothered!) TODO!!
+        // linux with getdents (only linux/android allow direct syscalls)
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
         #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "android")))]
         let direntries = dir.readdir();
@@ -504,8 +526,7 @@ impl Finder {
 
                 // checking if we should send directories
                 if should_send_dir_or_symlink {
-                    files.push(dir.clone());
-                    // luckily we're only cloning 1 directory/symlink, not anything more than that.
+                    files.push(dir);
                 }
 
                 // We do batch sending to minimise contention of sending

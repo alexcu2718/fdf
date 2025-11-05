@@ -17,8 +17,8 @@ pub unsafe fn getdirentries64(
 }
 
 #[cfg(target_os = "macos")]
-// Because we're rawdogging an undocumented syscall, we need to check if it's it doesnt change
-// So this SHOULD always return >0 from the syscall
+// Because we're rawdogging an undocumented syscall, we need to check if it doesnt change
+// So this SHOULD always return >=0 from the syscall
 fn test_macos_syscall() {
     use std::env::temp_dir;
     use std::ffi::CString;

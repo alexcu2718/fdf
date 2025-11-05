@@ -23,17 +23,7 @@ pub type SyscallBuffer = crate::AlignedBuffer<u8, 4096>; // In debug mode, stack
 #[cfg(all(target_os = "macos", not(debug_assertions)))]
 pub type SyscallBuffer = crate::AlignedBuffer<u8, { 8 * 4096 }>; // Default for readdir buffer  on macos
 
-#[cfg(any(target_os = "linux", target_os = "android"))] // We only care about the buffer on linux/android
-const_from_env!(
-    /// Set a custom page, fairly useless but helpful for compile time assertions because we don't want the page size to be greater than the IOBLOCK
-    PAGE_SIZE:usize="FDF_PAGE_SIZE",4096
-);
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const_assert!(
-    BUFFER_SIZE >= PAGE_SIZE,
-    "We expect the buffer to always be greater in capacity than the page"
-);
 
 ///filter function type for directory entries,
 pub type FilterType = fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>) -> bool;

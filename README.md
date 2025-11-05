@@ -371,9 +371,3 @@ Options:
 --EDIT--
 **getattrlistbulk was less performant than readdir, I have left the branch open for posterity/research purposes in future but I have abandoned this approach
 in favour of readdir/getdirentries64, see [test repo here](https://github.com/alexcu2718/fdf/tree/macos_test_getdirentries)**
-
-#### 5. Solaris / Illumos / Android Optimisations  
-
-- Although `getdents` is Linux-specific, other systems (Android does, Illumos does not however) may expose  libc syscalls (I haven't extensively checked)
-- These could be integrated with minimal effort using existing code infrastructure.  
-- Implementation would likely take only a few hours once prioritised.  Low priority naturally due to extremely fringe use case.

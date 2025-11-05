@@ -395,27 +395,6 @@ macro_rules! const_from_env {
     };
 }
 
-/// An internal macro to handle depth limits, we do it in a macro to avoid cloning calls and to make the code a lot cleaner!
-macro_rules! handle_depth_limit {
-    ($self:expr, $dir:expr, $should_send:expr, $sender:expr) => {
-        #[allow(clippy::cast_possible_truncation, reason = "depth wont exceed u32")]
-        if $self
-            .search_config
-            .depth
-            .is_some_and(|depth| $dir.depth >= depth.get() as _)
-        {
-            if $should_send {
-                if let Err(e) = $sender.send(vec![$dir]) {
-                    if $self.search_config.show_errors {
-                        eprintln!("Error sending DirEntry: {e}");
-                    }
-                }
-            }
-            return; // stop processing this directory if depth limit is reached
-        }
-    };
-}
-
 /// Extremely simple macro for getting rid of boiler blates
 macro_rules! return_os_error {
     () => {{

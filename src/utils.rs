@@ -181,6 +181,7 @@ My Cat Diavolo is cute.
 ))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
+#[allow(clippy::host_endian_bytes)]
 #[expect(
     clippy::as_conversions,
     reason = "Casting u16 to usize is only possible const via as casts"
@@ -252,11 +253,9 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         // SAFETY: We're indexing in bounds within the pointer. Since the reclen is size of the struct in bytes.
         let last_word: u64 = unsafe { *(drnt.cast::<u8>()).add(reclen - 8).cast::<u64>() };
 
-        #[cfg(target_endian = "little")]
-        const MASK: u64 = 0x00FF_FFFFu64;
-        #[cfg(target_endian = "big")]
-        const MASK: u64 = 0xFFFF_FF00_0000_0000u64; // byte order is shifted unintuitively on big endian!
-
+        // Create a mask for the first 3 bytes in the case where reclen==24
+        const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        
         /* When the record length is 24/`MINIMUM_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 17/18 (or opposite, for big endian...sigh...)
         Mask them out to avoid false detection of a terminator.
@@ -275,6 +274,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
             candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64 != 0,
             "Due to the final 8 bytes always containing a null terminator, this should never be 0"
         );
+
         /*
          Locate the first null byte in constant time using SWAR.
          Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.

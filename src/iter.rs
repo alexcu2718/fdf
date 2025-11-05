@@ -9,12 +9,6 @@ use core::ffi::CStr;
 use core::ptr::NonNull;
 use libc::DIR;
 
-/*
-
-PLEASE NOTE, `FileDes` does not currently implement drop.
-
- */
-
 /**
  POSIX-compliant directory iterator using libc's readdir functions.
 

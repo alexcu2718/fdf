@@ -32,7 +32,7 @@
  - Batched result delivery to minimise channel contention
  - Zero-copy path handling where possible
  - Avoids unnecessary `stat` calls through careful API design
- - Makes up to 50% less `getdents` syscalls on linux/android and macos (Not rigorously tested, check getdents `fill_buffer` docs)
+ - Makes up to 50% less `getdents` syscalls on linux/android and macos (Not rigorously tested, check getdents/getdirentries `fill_buffer` docs)
 
  ## Platform Support
 
@@ -384,11 +384,6 @@ impl Finder {
         clippy::wildcard_enum_match_arm,
         reason = "Exhaustive on traversible types"
     )]
-    #[expect(
-        clippy::ref_patterns,
-        reason = "Borrowing doesn't work on this extreme lint"
-    )]
-    #[expect(clippy::option_if_let_else, reason = "Complicates it even more ")]
     /**
      Advanced filtering for directories and symlinks with filesystem constraints.
 
@@ -396,64 +391,53 @@ impl Finder {
      to prevent infinite loops and duplicate traversal.
     */
     fn directory_or_symlink_filter(&self, dir: &DirEntry) -> bool {
+        // This is a beast of a function to read, sorry!
         match dir.file_type {
-            // Normal directories
-            FileType::Directory => {
-                match self.inode_cache {
-                    None => {
-                        // Fast path: only calls stat IFF self.starting_filesystem is Some
-                        self.starting_filesystem.is_none_or(|start_dev| {
-                            dir.get_stat()
-                                .is_ok_and(|statted| start_dev == access_stat!(statted, st_dev))
-                        })
-                    }
-                    Some(ref cache) => {
-                        dir.get_stat().is_ok_and(|stat| {
-                // Check same filesystem if enabled
-                self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
-                // Check if we've already traversed this inode
-                cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
-            })
-                    }
-                }
-            }
+        // Normal directories
+        FileType::Directory => {
+            self.inode_cache.as_ref().map_or_else(
+                || {
+                    // Fast path: only calls stat IFF self.starting_filesystem is Some
+                    debug_assert!(!self.search_config.follow_symlinks,"we expect follow symlinks to be disabled when following this path");
+                    self.starting_filesystem.is_none_or(|start_dev| {
+                        dir.get_stat()
+                            .is_ok_and(|statted| start_dev == access_stat!(statted, st_dev))
+                    })
+                },
+                |cache| {
+                    dir.get_stat().is_ok_and(|stat| {
+                        // Check same filesystem if enabled
+                        self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
+                        // Check if we've already traversed this inode
+                        cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
+                    })
+                },
+            )
+        }
 
-            // Symlinks that may point to directories
-            // This could be optimised a bit, symlinks are a beast due to their complexity.
-            FileType::Symlink if self.search_config.follow_symlinks => {
+        // Symlinks that may point to directories
+        // This could be optimised a bit, symlinks are a beast due to their complexity.
+        // self.search_config.follow_symlinks <=> inode_cache is some
+        FileType::Symlink
+            if self.inode_cache.as_ref().is_some_and(|cache| {
+                debug_assert!(self.search_config.follow_symlinks,"we expect follow symlinks to be enabled when following this path");
                 dir.get_stat().is_ok_and(|stat| {
-                FileType::from_stat(&stat) == FileType::Directory &&
-                // if the path is also in the root of the search directory skip it.
-                /*dir.get_realpath(|path| {Ok(!path.to_bytes().starts_with(self.root_dir().as_bytes()))}).unwrap_or(false) &&*/
-                // Check filesystem boundary
-                self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
-                // Check if we've already traversed this inode
-                self.inode_cache.as_ref().is_none_or(|cache| {
-                cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
-                //TODO? investigate the semantics of hidden file and relative directories
-            })
-            })
-            }
-
-            // All other file types (files, non-followed symlinks, etc.)
-            _ => false,
+                    FileType::from_stat(&stat) == FileType::Directory &&
+                    // Check filesystem boundary
+                    self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
+                    // Check if we've already traversed this inode
+                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
+                })
+            }) =>
+        {
+            true
         }
+
+        // All other file types (files, non-followed symlinks, etc.)
+        _ => false,
     }
-
-    #[inline]
-    #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
-    fn send_files_if_not_empty(&self, files: Vec<DirEntry>, sender: &Sender<Vec<DirEntry>>) {
-        if !files.is_empty() {
-            if let Err(e) = sender.send(files) {
-                if self.search_config.show_errors {
-                    eprintln!("Error sending files: {e}");
-                }
-            }
-        }
     }
     #[inline]
-    #[allow(clippy::cast_possible_truncation, reason = "depth wont exceed u32")]
-    #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
     fn handle_depth_limit(
         &self,
         dir: &DirEntry,
@@ -463,15 +447,10 @@ impl Finder {
         if self
             .search_config
             .depth
-            .is_some_and(|depth| dir.depth >= depth.get() as _)
+            .is_some_and(|depth| dir.depth >= depth.get())
+            && should_send
         {
-            if should_send {
-                if let Err(e) = sender.send(vec![dir.clone()]) {
-                    if self.search_config.show_errors {
-                        eprintln!("Error sending DirEntry: {e}");
-                    }
-                }
-            }
+            let _ = sender.send(vec![dir.clone()]); // cloning costs very little here.
             return false; // depth limit reached, stop processing
         }
         true // continue processing
@@ -502,7 +481,7 @@ impl Finder {
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         // linux with getdents (only linux/android allow direct syscalls)
-        let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive and unnecessary from testing!
+        let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive.
         #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "android")))]
         let direntries = dir.readdir();
         #[cfg(target_os = "macos")]
@@ -529,11 +508,13 @@ impl Finder {
 
                 // We do batch sending to minimise contention of sending
                 // as opposed to sending one at a time, which will cause tremendous locks
-                self.send_files_if_not_empty(files, sender)
+                if !files.is_empty() {
+                    let _ = sender.send(files); //Skip the error, the only errors happen when the channel is closed.
+                }
             }
             Err(err) => {
                 if self.search_config.show_errors {
-                    eprintln!("Error accessing {}: {err}", dir.to_string_lossy());
+                    eprintln!("Error accessing {dir}: {err}");
                     //TODO! replace with logging eventually
                 }
             }

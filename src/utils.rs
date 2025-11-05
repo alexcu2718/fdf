@@ -167,7 +167,7 @@ My Cat Diavolo is cute.
 
 */
 //cargo-asm --lib fdf::utils::dirent_const_time_strlen (put to inline(never) to display)
-#[inline]
+#[inline(never)]
 #[cfg(any(
     target_os = "linux",
     target_os = "illumos",
@@ -233,11 +233,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         // Offset from the start of the struct to the beginning of d_name.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
         // Access the last field and then round up to find the minimum struct size
-        const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
-        const_assert!(
-            MINIMUM_DIRENT_SIZE == 24,
-            "Minimum dirnt struct size should be 24 on these platforms!"
-        ); // A custom macro similar to static_assert from C++
+        const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
+        const_assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!"); // A custom macro similar to static_assert from C++ (no runtime cost, crash at compile time!)
 
         const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
         const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
@@ -253,16 +250,16 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
 
         // SAFETY: We're indexing in bounds within the pointer. Since the reclen is size of the struct in bytes.
-        let last_word: u64 = unsafe { *(drnt.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+        let last_word: u64 = unsafe { *(drnt.byte_add(reclen - 8).cast::<u64>()) };
 
         // Create a mask for the first 3 bytes in the case where reclen==24, this handles the big endian case too.
         const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
-        /* When the record length is 24/`MINIMUM_DIRENT_SIZE`, the kernel may insert nulls before d_name.
+        /* When the record length is 24/`MIN_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 17/18 (or opposite, for big endian...sigh...)
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
-        let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
+        let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64);
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.
          Result:
@@ -272,14 +269,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         */
         let candidate_pos: u64 = last_word | mask;
 
-        debug_assert!(
-            candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64 != 0,
-            "Due to the final 8 bytes always containing a null terminator, this should never be 0"
-        );
-
         /*
-         Locate the first null byte in constant time using SWAR.
-         Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.
+        The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
 
          SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation
         https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
@@ -292,7 +283,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
             NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
         };
 
-        // Find the position then deduct deduct it from 7 (then add 1 to account for the null ) from the position of the null byte pos
+        // Find the position then deduct deduct it from 7 (then add 1 to account for going backwards ) from the position of the null byte pos
         #[cfg(target_endian = "little")]
         let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
         #[cfg(target_endian = "big")]
@@ -304,11 +295,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
                 //SAFETY: debug only.
                     == unsafe{core::ffi::CStr::from_ptr(access_dirent!(drnt, d_name).cast()).count_bytes() },
             "const swar dirent length calculation failed!"
-        ); //Luckily this  stdlib function has a const hack to allow this.(to keep the function const)
+        );
 
-        /*  Final length:
-        total record length - header size - null byte position
-        */
         reclen - DIRENT_HEADER_START - byte_pos
     }
 }

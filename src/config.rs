@@ -2,7 +2,7 @@ use crate::BytePath as _;
 use crate::cli_helpers::SizeFilter;
 use crate::glob_to_regex;
 use crate::{DirEntry, FileType, SearchConfigError};
-use core::num::NonZeroUsize;
+use core::num::NonZeroU32;
 use regex::bytes::{Regex, RegexBuilder};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// File type filter for directory traversal
@@ -152,7 +152,7 @@ pub struct SearchConfig {
     ///if this is Some, then we match against the extension of the file otherwise accept (if none)
     pub(crate) file_name_only: bool,
     ///if true, then we only match against the file name, otherwise we match against the full path when regexing
-    pub(crate) depth: Option<NonZeroUsize>,
+    pub(crate) depth: Option<NonZeroU32>,
     ///the maximum depth to search, if None then no limit
     pub(crate) follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
     /// a size filter
@@ -176,7 +176,7 @@ impl SearchConfig {
         keep_dirs: bool,
         filenameonly: bool,
         extension_match: Option<Box<[u8]>>,
-        depth: Option<NonZeroUsize>,
+        depth: Option<NonZeroU32>,
         follow_symlinks: bool,
         size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,

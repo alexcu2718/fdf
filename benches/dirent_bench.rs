@@ -1,15 +1,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
+use core::num::NonZeroU64;
 use std::hint::black_box;
-
-#[inline]
-pub(crate) const fn repeat_u64(byte: u8) -> u64 {
-    u64::from_ne_bytes([byte; size_of::<u64>()])
-}
-
-const LO_U64: u64 = repeat_u64(0x01);
-
-const HI_U64: u64 = repeat_u64(0x80);
 
 #[inline]
 //modified version to work for this test function(copy pasted really)
@@ -19,7 +11,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     // Access the last field and then round up to find the minimum struct size
     const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
 
-    use core::num::NonZeroU64;
+    const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
+    const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
 
     /*  Accessing `d_reclen` is safe because the struct is kernel-provided.
     / SAFETY: `dirent` is valid by precondition */
@@ -29,20 +22,13 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
       Read the last 8 bytes of the struct as a u64.
     This works because dirents are always 8-byte aligned. */
     // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
-    let last_word: u64 = unsafe { *(dirent.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+    let last_word: u64 = unsafe { *(dirent.byte_add(reclen - 8).cast::<u64>()) };
     /* Note, I don't index as a u64 with eg (reclen-8)/8 or (reclen-8)>>3 because that adds a division which is a costly operation, relatively speaking
     let last_word: u64 = unsafe { *(dirent.cast::<u64>()).add((reclen - 8)/8 (or >>3))}; //this will also work but it's less performant (MINUTELY)
     */
 
-    #[cfg(target_endian = "little")]
-    const MASK: u64 = 0x00FF_FFFFu64;
-    #[cfg(target_endian = "big")]
-    const MASK: u64 = 0xFFFF_FF00_0000_0000u64; // byte order is shifted unintuitively on big endian!
+    const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
-    /* When the record length is 24/`MINIMUM_DIRENT_SIZE`, the kernel may insert nulls before d_name.
-    Which will exist on index's 17/18 (or opposite, for big endian...sigh.,)
-    Mask them out to avoid false detection of a terminator.
-    Multiplying by 0 or 1 applies the mask conditionally without branching. */
     let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
     /*
      Apply the mask to ignore non-name bytes while preserving name bytes.
@@ -53,21 +39,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     */
     let candidate_pos: u64 = last_word | mask;
 
-    /*
-     Locate the first null byte in constant time using SWAR.
-     Subtract  the position of the index of the 0 then add 1 to compute its position relative to the start of d_name.
-
-     SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation
-     https://doc.rust-lang.org/std/num/struct.NonZero.html#tymethod.trailing_zeros
-     https://doc.rust-lang.org/std/num/struct.NonZero.html#tymethod.leading_zeros
-    (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
-    */
     let zero_bit = unsafe {
         NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
     };
     #[cfg(target_endian = "little")]
     let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
-    #[cfg(not(target_endian = "little"))]
+    #[cfg(target_endian = "big")]
     let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
 
     /*  Final length:

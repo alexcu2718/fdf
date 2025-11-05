@@ -1,4 +1,4 @@
-use core::num::NonZeroUsize;
+use core::num::NonZeroU32;
 
 use crate::{
     DirEntry, DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError,
@@ -10,8 +10,7 @@ use std::{
     ffi::{OsStr, OsString},
     fs::metadata,
     os::unix::fs::MetadataExt as _,
-    path::Path,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 //Set the threadcount at compile time (backing to a minimum of 1, **this should never happen**)
@@ -34,7 +33,7 @@ pub struct FinderBuilder {
     pub(crate) keep_dirs: bool,
     pub(crate) file_name_only: bool,
     pub(crate) extension_match: Option<Box<[u8]>>,
-    pub(crate) max_depth: Option<NonZeroUsize>,
+    pub(crate) max_depth: Option<NonZeroU32>,
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter>,
     pub(crate) size_filter: Option<SizeFilter>,
@@ -120,11 +119,11 @@ impl FinderBuilder {
     }
     #[must_use]
     /// Set maximum search depth
-    pub const fn max_depth(mut self, max_depth: Option<usize>) -> Self {
+    pub const fn max_depth(mut self, max_depth: Option<u32>) -> Self {
         match max_depth {
             None => self,
             Some(num) => {
-                self.max_depth = core::num::NonZeroUsize::new(num);
+                self.max_depth = core::num::NonZeroU32::new(num);
                 self
             }
         }
@@ -264,9 +263,7 @@ impl FinderBuilder {
             }
         };
 
-        let inode_cache: Option<DashSet<(u64, u64)>> =
-            (self.same_filesystem || self.follow_symlinks).then(DashSet::new);
-        //Enable the cache if same file system too, this helps de-duplicate for free (since it's 1 stat call regardless)
+        let inode_cache: Option<DashSet<(u64, u64)>> = self.follow_symlinks.then(DashSet::new);
 
         Ok(Finder {
             root: resolved_root,

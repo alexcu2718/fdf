@@ -109,7 +109,7 @@ struct Args {
         alias = "max-depth",
         help = "Retrieves only traverse to x depth"
     )]
-    depth: Option<usize>,
+    depth: Option<u32>,
     #[arg(
         long = "generate",
         action = ArgAction::Set,

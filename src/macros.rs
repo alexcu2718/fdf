@@ -42,7 +42,6 @@ macro_rules! access_dirent {
     }};
     ($entry_ptr:expr,d_name) => {{
         //see reference https://github.com/rust-lang/rust/blob/8712e4567551a2714efa66dac204ec7137bc5605/library/std/src/sys/fs/unix.rs#L740
-        //explanation also copypasted below.
          (&raw const (*$entry_ptr).d_name).cast::<u8>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
     }};
 
@@ -96,34 +95,6 @@ macro_rules! access_dirent {
 
 }
 
-/*
-
-   // The dirent64 struct is a weird imaginary thing that isn't ever supposed
-                // to be worked with by value. Its trailing d_name field is declared
-                // variously as [c_char; 256] or [c_char; 1] on different systems but
-                // either way that size is meaningless; only the offset of d_name is
-                // meaningful. The dirent64 pointers that libc returns from readdir64 are
-                // allowed to point to allocations smaller _or_ LARGER than implied by the
-                // definition of the struct.
-                //
-                // As such, we need to be even more careful with dirent64 than if its
-                // contents were "simply" partially initialized data.
-                //
-                // Like for uninitialized contents, converting entry_ptr to `&dirent64`
-                // would not be legal. However, we can use `&raw const (*entry_ptr).d_name`
-                // to refer the fields individually, because that operation is equivalent
-                // to `byte_offset` and thus does not require the full extent of `*entry_ptr`
-                // to be in bounds of the same allocation, only the offset of the field
-                // being referenced.
-
-                // d_name is guaranteed to be null-terminated.
-                let name = CStr::from_ptr((&raw const (*entry_ptr).d_name).cast());
-                let name_bytes = name.to_bytes();
-                if name_bytes == b"." || name_bytes == b".." {
-                    continue;
-                }
-*/
-
 ///A macro to safely access stat entries in a filesystem independent way
 // TODO! add other fields as appropriate (this could be pretty long)
 // will be public when kinks are worked out
@@ -170,7 +141,18 @@ macro_rules! access_stat {
 }
 
 #[macro_export]
-/// A compile time assert, mirroring `static_assert` from C++
+/**
+ A compile time assert, mirroring `static_assert` from C++
+
+ # Examples
+ ```
+ use fdf::const_assert;
+ const CONSTANT_VALUE:usize=69;
+ const_assert!(2 + 2 == 4);
+ const_assert!(size_of::<u32>() >= 4, "u32 must be 4 bytes!");
+ const_assert!(CONSTANT_VALUE > 0, "CONSTANT_VALUE must be positive");
+ ```
+*/
 macro_rules! const_assert {
     ($cond:expr $(,)?) => {
         const _: () = {
@@ -187,27 +169,6 @@ macro_rules! const_assert {
         };
     };
 }
-
-#[cfg(any(
-    target_os = "linux",
-    target_os = "solaris",
-    target_os = "illumos",
-    target_os = "android"
-))]
-pub const MINIMUM_DIRENT_SIZE: usize =
-    core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8); //==24 for the platforms we care about
-// Finding the minimum struct size, which is basically all the fields minus the variable part
-
-#[cfg(any(
-    target_os = "linux",
-    target_os = "solaris",
-    target_os = "illumos",
-    target_os = "android"
-))]
-const_assert!(
-    MINIMUM_DIRENT_SIZE == 24,
-    "the minimum struct size isn't 24! BIG ERROR"
-);
 
 /**
  An optimised macro for skipping "." and ".." directory entries
@@ -283,9 +244,12 @@ macro_rules! skip_dot_or_dot_dot_entries {
             ))]
             {
                 // Linux/Solaris/Illumos optimisation: check d_type first
+                const MINIMUM_DIRENT_SIZE: usize =
+                    core::mem::offset_of!($crate::dirent64, d_name).next_multiple_of(8); //==24
                 match access_dirent!($entry, d_type) {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
-                        if access_dirent!($entry, d_reclen) == $crate::macros::MINIMUM_DIRENT_SIZE {
+                        // The value for 24 is checked in util.
+                        if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
                             let name_ptr = access_dirent!($entry, d_name);
                             match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                                 (b'.', 0, _) | (b'.', b'.', 0) => $action, //similar to above
@@ -323,39 +287,26 @@ macro_rules! skip_dot_or_dot_dot_entries {
         }
     }};
 }
+/**
+ Macro to create a const from an env var with compile-time parsing (Please read the docs carefully)
 
-/// Macro to create a const from an env var with compile-time parsing (Please read the docs carefully)
-///
-///
-/// const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "X");, where X(usize) is the default value if the env var is not set
-///
-/// Example usage:
-/// ```
-/// use fdf::const_from_env;
-/// const_from_env!(MYVAR: usize = "NYVAR", 6969);
-/// assert_eq!(MYVAR, 6969); //6969 is the default value if the environment variable NYVAR is not set
-/// ```
-/// /// This macro allows you to define a constant that can be set via an environment variable at compile time.`
-/// I realise people could have massive filesystems, i should probably write a rebuild script on value change.TODO!
-/// Macro to create a const from an env var with compile-time parsing
-///
-/// # Usage
-/// ```
-/// use fdf::const_from_env;
-///
-/// const_from_env!(
-///     /// Maximum path length for local filesystem operations
-///     /// Default: 4096 (typical Linux PATH_MAX)
-///     LOCAL_PATH_MAX: usize = "`LOCAL_PATH_MAX`", 4096
-/// );
-///
-/// assert_eq!(LOCAL_PATH_MAX, 4096);
-/// ```
-///
-/// # Notes
-/// - The value is parsed at compile time
-/// - Environment variables must contain only numeric characters
-/// - Consider rebuilding if environment variable changes (TODO: add rebuild script)
+
+ const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "X");, where X(usize) is the default value if the env var is not set
+
+ Example usage:
+ ```
+ use fdf::const_from_env;
+ const_from_env!(MYVAR: usize = "NYVAR", 6969);
+ assert_eq!(MYVAR, 6969); //6969 is the default value if the environment variable NYVAR is not set
+ ```
+  This macro allows you to define a constant that can be set via an environment variable at compile time.`
+ I realise people could have massive filesystems, i should probably write a rebuild script on value change.TODO!
+ Macro to create a const from an env var with compile-time parsing
+
+ # Notes
+ - The value is parsed at compile time
+ - Environment variables must contain only numeric characters
+*/
 #[macro_export]
 #[allow(clippy::doc_markdown)]
 macro_rules! const_from_env {

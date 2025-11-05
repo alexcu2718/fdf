@@ -1,7 +1,5 @@
 #![allow(clippy::must_use_candidate)]
 use crate::FileType;
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
-use crate::types::SyscallBuffer;
 use crate::{DirEntry, FileDes, Result};
 use crate::{dirent64, readdir64};
 use core::cell::Cell;
@@ -120,7 +118,7 @@ pub struct GetDents {
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// Approximately 4.1KB in size, optimised for typical directory traversal
-    pub(crate) syscall_buffer: SyscallBuffer,
+    pub(crate) syscall_buffer: crate::types::SyscallBuffer,
     /// buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     pub(crate) path_buffer: Vec<u8>,
@@ -291,7 +289,7 @@ impl GetDents {
 
     #[inline]
     /// Provides read only access to the internal buffer that holds the bytes read from the syscall
-    pub const fn borrow_syscall_buffer(&self) -> &SyscallBuffer {
+    pub const fn borrow_syscall_buffer(&self) -> &crate::types::SyscallBuffer {
         &self.syscall_buffer
     }
 
@@ -301,7 +299,7 @@ impl GetDents {
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, path_len) = Self::init_from_direntry(dir);
-        let buffer = SyscallBuffer::new();
+        let buffer = crate::types::SyscallBuffer::new();
         Ok(Self {
             fd,
             syscall_buffer: buffer,
@@ -602,12 +600,6 @@ macro_rules! impl_iter {
     };
 }
 
-impl_iter!(ReadDir);
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl_iter!(GetDents);
-#[cfg(target_os = "macos")]
-impl_iter!(GetDirEntries);
-
 // simple repetition avoider
 macro_rules! impl_dirent_constructor {
     ($type:ty) => {
@@ -652,19 +644,24 @@ macro_rules! impl_iterator_for_dirent {
     };
 }
 
+// Common to all platforms
+impl_iter!(ReadDir);
 impl_iterator_for_dirent!(ReadDir);
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl_iterator_for_dirent!(GetDents);
-
-#[cfg(target_os = "macos")]
-impl_iterator_for_dirent!(GetDirEntries);
-
 impl_dirent_constructor!(ReadDir);
 
+// Linux/Android specific
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl_iter!(GetDents);
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl_iterator_for_dirent!(GetDents);
 #[cfg(any(target_os = "linux", target_os = "android"))]
 impl_dirent_constructor!(GetDents);
 
+// macOS specific
+#[cfg(target_os = "macos")]
+impl_iter!(GetDirEntries);
+#[cfg(target_os = "macos")]
+impl_iterator_for_dirent!(GetDirEntries);
 #[cfg(target_os = "macos")]
 impl_dirent_constructor!(GetDirEntries);
 
@@ -684,7 +681,7 @@ pub struct GetDirEntries {
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// ~32kb in size (8*4096, matching macos readdir semantics) in size, optimised for typical directory traversal
-    pub(crate) syscall_buffer: SyscallBuffer,
+    pub(crate) syscall_buffer: crate::types::SyscallBuffer,
     /// buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     pub(crate) path_buffer: Vec<u8>,
@@ -782,7 +779,7 @@ impl GetDirEntries {
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, path_len) = Self::init_from_direntry(dir);
-        let buffer = SyscallBuffer::new();
+        let buffer = crate::types::SyscallBuffer::new();
         Ok(Self {
             fd,
             syscall_buffer: buffer,

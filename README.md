@@ -132,6 +132,8 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 The following function provides an elegant solution to avoid branch mispredictions/SIMD instructions during directory entry parsing (a performance-critical loop):
 
+Check source code for further explanation [in src/utils.rs](./src/utils.rs#L195)**
+
 ```rust
 // Computational complexity: O(1) - truly constant time
 // Used on Linux/Solaris/Illumos/Android systems; BSD systems/macOS store name length trivially
@@ -149,12 +151,13 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name);
     let reclen = unsafe { (*drnt).d_reclen as usize }; 
     // Access the last 8 bytes of the word (this is an aligned read due to kernel providing 8 byte aligned dirent structs!)
-    let last_word: u64 = unsafe { *(drnt.cast::<u8>()).add(reclen - 8).cast::<u64>() };
+    let last_word: u64 = unsafe { *(drnt.byte_add(reclen - 8).cast::<u64>()) };
     // reclen is always multiple of 8 so alignment is guaranteed
     let mask = MASK * ((reclen == 24) as u64); // branchless mask
     let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short 
     //The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
-    let zero_bit = unsafe { // Use specialised instructions (ctl_nonzero) to avoid 0 check for bitscan forward so it compiles to tzcnt on most CPU's
+    let zero_bit = unsafe { // Use specialised instructions (ctl_nonzero) 
+        //to avoid 0 check for bitscan forward so it compiles to tzcnt on most CPU's
             NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
         };
 

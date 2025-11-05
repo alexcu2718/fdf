@@ -3,11 +3,11 @@ use clap_complete::aot::{Shell, generate};
 use fdf::const_from_env;
 use fdf::{
     FileTypeFilter, FileTypeParser, Finder, SearchConfigError, SizeFilter, SizeFilterParser,
+    TimeFilter, TimeFilterParser,
 };
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
-use std::str;
 
 // Set threads at compile time, defaulting to 1 in worst case scenario
 const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
@@ -185,6 +185,39 @@ struct Args {
     verbatim_doc_comment
 )]
     size: Option<SizeFilter>,
+    /// Filter by file modification time
+    ///
+    /// PREFIXES:
+    ///   -TIME    Find files modified within the last TIME (newer)
+    ///   +TIME    Find files modified more than TIME ago (older)
+    ///    TIME    Same as -TIME (default)
+    ///
+    /// TIME RANGE:
+    ///   TIME..TIME   Find files modified between two times
+    ///
+    /// UNITS:
+    ///   s, sec, second, seconds     - Seconds
+    ///   m, min, minute, minutes     - Minutes
+    ///   h, hour, hours              - Hours
+    ///   d, day, days                - Days
+    ///   w, week, weeks              - Weeks
+    ///   y, year, years              - Years
+    ///
+    /// EXAMPLES:
+    ///   --time -1h        Files modified within the last hour
+    ///   --time +2d        Files modified more than 2 days ago
+    ///   --time 1d..2h     Files modified between 1 day and 2 hours ago
+    ///   --time -30m       Files modified within the last 30 minutes
+    #[arg(
+    long = "time",
+    short = 'T',
+    allow_hyphen_values = true,
+    value_name = "TIME",
+    value_parser = TimeFilterParser,
+    help = "Filter by file modification time (supports relative times with +/- prefixes)",
+    verbatim_doc_comment
+)]
+    time: Option<TimeFilter>,
     /// Filter by file type, eg -d (directory) -f (regular file)
     ///
     /// Available options are:
@@ -237,6 +270,7 @@ fn main() -> Result<(), SearchConfigError> {
         .max_depth(args.depth)
         .follow_symlinks(args.follow_symlinks)
         .filter_by_size(args.size)
+        .filter_by_time(args.time)
         .type_filter(args.type_of)
         .show_errors(args.show_errors)
         .use_glob(args.glob)

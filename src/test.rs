@@ -826,7 +826,6 @@ mod tests {
 
         //verify results
 
-        //let _ = fs::remove_dir_all(dir_entry.as_path());
         assert_eq!(entries.len(), 3, "Should find two files and one subdir");
 
         assert!(
@@ -1458,5 +1457,233 @@ mod tests {
             let non_existent = DirEntry::new(std_path.as_os_str());
             assert!(non_existent.is_err(), "ok, stop being an ass")
         };
+    }
+
+    #[test]
+    fn test_time_filter_from_string_basic() {
+        // Test basic parsing with different units
+        assert!(TimeFilter::from_string("1s").is_ok());
+        assert!(TimeFilter::from_string("30m").is_ok());
+        assert!(TimeFilter::from_string("1h").is_ok());
+        assert!(TimeFilter::from_string("2d").is_ok());
+        assert!(TimeFilter::from_string("1w").is_ok());
+        assert!(TimeFilter::from_string("1y").is_ok());
+
+        // Test with prefixes
+        assert!(TimeFilter::from_string("-1h").is_ok()); // Within last hour
+        assert!(TimeFilter::from_string("+2d").is_ok()); // Older than 2 days
+
+        // Test between format
+        assert!(TimeFilter::from_string("2d..1d").is_ok());
+        assert!(TimeFilter::from_string("1w..2d").is_ok());
+
+        // Test invalid formats
+        assert!(TimeFilter::from_string("").is_err());
+        assert!(TimeFilter::from_string("abc").is_err());
+        assert!(TimeFilter::from_string("1x").is_err()); // Invalid unit
+    }
+
+    #[test]
+    fn test_time_filter_from_string_units() {
+        // Test all unit variants
+        assert!(TimeFilter::from_string("1sec").is_ok());
+        assert!(TimeFilter::from_string("1second").is_ok());
+        assert!(TimeFilter::from_string("1seconds").is_ok());
+
+        assert!(TimeFilter::from_string("1min").is_ok());
+        assert!(TimeFilter::from_string("1minute").is_ok());
+        assert!(TimeFilter::from_string("1minutes").is_ok());
+
+        assert!(TimeFilter::from_string("1hour").is_ok());
+        assert!(TimeFilter::from_string("1hours").is_ok());
+
+        assert!(TimeFilter::from_string("1day").is_ok());
+        assert!(TimeFilter::from_string("1days").is_ok());
+
+        assert!(TimeFilter::from_string("1week").is_ok());
+        assert!(TimeFilter::from_string("1weeks").is_ok());
+
+        assert!(TimeFilter::from_string("1year").is_ok());
+        assert!(TimeFilter::from_string("1years").is_ok());
+    }
+
+    #[test]
+    fn test_time_filter_matches_time() {
+        let now = SystemTime::now();
+        let one_hour_ago = now - Duration::from_secs(3600);
+        let two_hours_ago = now - Duration::from_secs(7200);
+        let one_day_ago = now - Duration::from_secs(86400);
+
+        // Test After (files newer than cutoff)
+        let filter = TimeFilter::from_string("-2h").unwrap(); // Within last 2 hours
+        assert!(
+            filter.matches_time(one_hour_ago),
+            "File from 1 hour ago should match filter for last 2 hours"
+        );
+        assert!(
+            !filter.matches_time(one_day_ago),
+            "File from 1 day ago should not match filter for last 2 hours"
+        );
+
+        // Test Before (files older than cutoff)
+        let filter = TimeFilter::from_string("+2h").unwrap(); // Older than 2 hours
+        assert!(
+            !filter.matches_time(one_hour_ago),
+            "File from 1 hour ago should not match filter for older than 2 hours"
+        );
+        assert!(
+            filter.matches_time(one_day_ago),
+            "File from 1 day ago should match filter for older than 2 hours"
+        );
+
+   
+        let filter = TimeFilter::from_string("1d..2h").unwrap(); // Between 1 day and 2 hours ago
+        assert!(
+            filter.matches_time(two_hours_ago),
+            "File from 2 hours ago should match between filter"
+        );
+        assert!(
+            !filter.matches_time(one_hour_ago),
+            "File from 1 hour ago should not match between filter"
+        );
+        assert!(
+            !filter.matches_time(one_day_ago),
+            "File from 1 day ago should not match between filter"
+        );
+    }
+
+    #[test]
+    fn test_time_filter_integration_with_finder() {
+        let temp_dir = temp_dir().join("time_filter_integration_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // 2 days ago
+        let old_file = temp_dir.join("old_file.txt");
+        fs::write(&old_file, "old content").unwrap();
+        let two_days_ago = SystemTime::now() - Duration::from_secs(2 * 86400);
+        let two_days_ago_secs = two_days_ago.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let old_time = FileTime::from_unix_time(two_days_ago_secs, 0);
+        set_file_times(&old_file, old_time, old_time).unwrap();
+
+        // 1 hour ago
+        let recent_file = temp_dir.join("recent_file.txt");
+        fs::write(&recent_file, "recent content").unwrap();
+        let one_hour_ago = SystemTime::now() - Duration::from_secs(3600);
+        let one_hour_ago_secs = one_hour_ago.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let recent_time = FileTime::from_unix_time(one_hour_ago_secs, 0);
+        set_file_times(&recent_file, recent_time, recent_time).unwrap();
+
+        // last 2 hours
+        let filter = TimeFilter::from_string("-2h").unwrap();
+        let finder = Finder::init(&temp_dir)
+            .filter_by_time(Some(filter))
+            .build()
+            .unwrap();
+
+        let results: Vec<_> = finder.traverse().unwrap().collect();
+        assert_eq!(
+            results.len(),
+            1,
+            "Should find exactly 1 file modified within last 2 hours"
+        );
+        assert!(
+            results[0].file_name() == b"recent_file.txt",
+            "Should find the recent file"
+        );
+
+        // older than 1 day
+        let filter = TimeFilter::from_string("+1d").unwrap();
+        let finder = Finder::init(&temp_dir)
+            .filter_by_time(Some(filter))
+            .build()
+            .unwrap();
+
+        let results: Vec<_> = finder.traverse().unwrap().collect();
+        assert_eq!(
+            results.len(),
+            1,
+            "Should find exactly 1 file older than 1 day"
+        );
+        assert!(
+            results[0].file_name() == b"old_file.txt",
+            "Should find the old file"
+        );
+
+      
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_time_filter_between_range() {
+        let temp_dir = temp_dir().join("time_filter_between_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // modified 12 hours ago (should be in range of 1d..6h)
+        let mid_file = temp_dir.join("mid_file.txt");
+        fs::write(&mid_file, "mid content").unwrap();
+        let twelve_hours_ago = SystemTime::now() - Duration::from_secs(12 * 3600);
+        let twelve_hours_ago_secs = twelve_hours_ago
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let mid_time = FileTime::from_unix_time(twelve_hours_ago_secs, 0);
+        set_file_times(&mid_file, mid_time, mid_time).unwrap();
+
+        //  (1 hour ago - should NOT be in range)
+        let recent_file = temp_dir.join("recent_file.txt");
+        fs::write(&recent_file, "recent content").unwrap();
+        let one_hour_ago = SystemTime::now() - Duration::from_secs(3600);
+        let one_hour_ago_secs = one_hour_ago.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let recent_time = FileTime::from_unix_time(one_hour_ago_secs, 0);
+        set_file_times(&recent_file, recent_time, recent_time).unwrap();
+
+        // (2 days ago - should NOT be in range)
+        let old_file = temp_dir.join("old_file.txt");
+        fs::write(&old_file, "old content").unwrap();
+        let two_days_ago = SystemTime::now() - Duration::from_secs(2 * 86400);
+        let two_days_ago_secs = two_days_ago.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let old_time = FileTime::from_unix_time(two_days_ago_secs, 0);
+        set_file_times(&old_file, old_time, old_time).unwrap();
+
+        // modified between 1 day and 6 hours ago
+        let filter = TimeFilter::from_string("1d..6h").unwrap();
+        let finder = Finder::init(&temp_dir)
+            .filter_by_time(Some(filter))
+            .build()
+            .unwrap();
+
+        let results: Vec<_> = finder.traverse().unwrap().collect();
+        assert_eq!(
+            results.len(),
+            1,
+            "Should find exactly 1 file in the time range"
+        );
+        assert!(
+            results[0].file_name() == b"mid_file.txt",
+            "Should find the file modified 12 hours ago"
+        );
+
+       
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_time_filter_edge_cases() {
+        let now = SystemTime::now();
+
+        // Test with very recent time (should match "within last X")
+        let filter = TimeFilter::from_string("-1s").unwrap();
+        // A file from now should match
+        assert!(filter.matches_time(now));
+
+        // Test with very old time
+        let very_old = UNIX_EPOCH + Duration::from_secs(946684800); // Year 2000
+        let filter = TimeFilter::from_string("+1y").unwrap();
+        assert!(
+            filter.matches_time(very_old),
+            "Very old file should match +1y filter"
+        );
     }
 }

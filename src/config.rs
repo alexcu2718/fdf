@@ -1,9 +1,11 @@
 use crate::BytePath as _;
-use crate::cli_helpers::SizeFilter;
+use crate::cli_helpers::{SizeFilter, TimeFilter};
 use crate::glob_to_regex;
 use crate::{DirEntry, FileType, SearchConfigError};
 use core::num::NonZeroU32;
+use core::time::Duration;
 use regex::bytes::{Regex, RegexBuilder};
+use std::time::UNIX_EPOCH;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// File type filter for directory traversal
 #[expect(clippy::exhaustive_enums, reason = "This list is exhaustive")]
@@ -159,6 +161,8 @@ pub struct SearchConfig {
     pub(crate) size_filter: Option<SizeFilter>,
     /// a type filter
     pub(crate) type_filter: Option<FileTypeFilter>,
+    /// a time filter for modification times
+    pub(crate) time_filter: Option<TimeFilter>,
     ///if true, then we show errors during traversal
     pub(crate) show_errors: bool,
 }
@@ -180,6 +184,7 @@ impl SearchConfig {
         follow_symlinks: bool,
         size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,
+        time_filter: Option<TimeFilter>,
         show_errors: bool,
         use_glob: bool,
     ) -> core::result::Result<Self, SearchConfigError> {
@@ -228,6 +233,7 @@ impl SearchConfig {
             follow_symlinks,
             size_filter,
             type_filter,
+            time_filter,
             show_errors,
         })
     }
@@ -311,6 +317,25 @@ impl SearchConfig {
             FileTypeFilter::Executable => entry.is_executable(),
             FileTypeFilter::Empty => entry.is_empty(),
         }
+    }
+
+    #[inline]
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)]
+    /// Applies time-based filtering to files based on modification time
+    /// Returns true if the file's modification time matches the filter criteria
+    pub fn matches_time(&self, entry: &DirEntry) -> bool {
+        let Some(time_filter) = self.time_filter else {
+            return true; // No filter means always match
+        };
+
+        // Get the modification time from the file and convert to SystemTime
+        entry
+            .modified_time()
+            .ok()
+            .and_then(|datetime| datetime.timestamp_nanos_opt())
+            .and_then(|nanos| UNIX_EPOCH.checked_add(Duration::from_nanos(nanos as _)))
+            .is_some_and(|systime| time_filter.matches_time(systime))
     }
 
     #[inline]

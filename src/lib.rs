@@ -32,7 +32,7 @@
  - Batched result delivery to minimise channel contention
  - Zero-copy path handling where possible
  - Avoids unnecessary `stat` calls through careful API design
- - Makes up to 50% less `getdents` syscalls on linux/android and macos (Not rigorously tested, check getdents/getdirentries `fill_buffer` docs)
+ - Makes up to 50% less `getdents` syscalls on linux/android and macos m check getdents/getdirentries `fill_buffer` docs)
 
  ## Platform Support
 
@@ -122,10 +122,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 ```
 */
-
-#[cfg(any(target_os = "vita", target_os = "hurd"))]
+#[cfg(any(target_os = "vita", target_os = "hurd", target_os = "nuttx"))]
 compile_error!(
-    "This application is not supported on PlayStation Vita/hurd, It may be if I'm ever bothered!"
+    "This application is not supported on PlayStation Vita/hurd/nuttx, It may be if I'm ever bothered!"
 );
 
 #[cfg(target_pointer_width = "32")]
@@ -154,7 +153,7 @@ pub(crate) mod macros;
 
 mod cli_helpers;
 
-pub use cli_helpers::{FileTypeParser, SizeFilter, SizeFilterParser};
+pub use cli_helpers::{FileTypeParser, SizeFilter, SizeFilterParser, TimeFilter, TimeFilterParser};
 
 mod iter;
 #[cfg(any(target_os = "linux", target_os = "android"))]

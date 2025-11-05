@@ -2,7 +2,7 @@ use core::num::NonZeroU32;
 
 use crate::{
     DirEntry, DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError,
-    SizeFilter, const_from_env,
+    SizeFilter, TimeFilter, const_from_env,
 };
 use dashmap::DashSet;
 
@@ -15,12 +15,13 @@ use std::{
 
 //Set the threadcount at compile time (backing to a minimum of 1, **this should never happen**)
 const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
+/**
+ A builder for creating a `Finder` instance with customisable options.
 
-/// A builder for creating a `Finder` instance with customisable options.
-///
-/// This builder allows you to set various options such as hiding hidden files, case sensitivity,
-/// keeping directories in results, matching file extensions, setting maximum search depth,
-/// following symlinks, and applying a custom filter function.
+ This builder allows you to set various options such as hiding hidden files, case sensitivity,
+ keeping directories in results, matching file extensions, setting maximum search depth,
+ following symlinks, and applying a custom filter function.
+*/
 #[expect(
     clippy::struct_excessive_bools,
     reason = "Naturally a builder will contain many bools"
@@ -37,6 +38,7 @@ pub struct FinderBuilder {
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter>,
     pub(crate) size_filter: Option<SizeFilter>,
+    pub(crate) time_filter: Option<TimeFilter>,
     pub(crate) file_type: Option<FileTypeFilter>,
     pub(crate) show_errors: bool,
     pub(crate) use_glob: bool,
@@ -50,7 +52,7 @@ impl FinderBuilder {
       Creates a new `FinderBuilder` with required fields.
 
       # Arguments
-      * `root` - The root directory to search
+      `root` - The root directory to search
     */
     pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
         Self {
@@ -65,6 +67,7 @@ impl FinderBuilder {
             follow_symlinks: false,
             filter: None,
             size_filter: None,
+            time_filter: None,
             file_type: None,
             show_errors: false,
             use_glob: false,
@@ -132,6 +135,13 @@ impl FinderBuilder {
     /// Sets size-based filtering criteria.
     pub const fn filter_by_size(mut self, size_of: Option<SizeFilter>) -> Self {
         self.size_filter = size_of;
+        self
+    }
+
+    #[must_use]
+    /// Sets time-based filtering criteria for file modification times.
+    pub const fn filter_by_time(mut self, time_of: Option<TimeFilter>) -> Self {
+        self.time_filter = time_of;
         self
     }
 
@@ -212,7 +222,7 @@ impl FinderBuilder {
      initialises the necessary components for file system traversal.
 
      # Returns
-     Returns `Ok(Finder<S>)` on successful configuration, or
+     Returns `Ok(Finder)` on successful configuration, or
      `Err(SearchConfigError)` if any validation fails.
 
      # Errors
@@ -249,6 +259,7 @@ impl FinderBuilder {
             self.follow_symlinks,
             self.size_filter,
             self.file_type,
+            self.time_filter,
             self.show_errors,
             self.use_glob,
         )?;
@@ -259,6 +270,7 @@ impl FinderBuilder {
                     && rconfig.matches_type(rdir)
                     && rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_size(rdir)
+                    && rconfig.matches_time(rdir)
                     && rconfig.matches_path(rdir, !rconfig.file_name_only)
             }
         };

@@ -18,7 +18,7 @@ This is primarily a learning and performance exploration project. Whilst already
 
 The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers broader functionality. This project focuses on exploring hardware-specific code optimisation rather than replicating fd's complete feature set.
 
-While the CLI is usable, the internal library is NOT suggested for use
+While the CLI is usable, the internal library is not stable yet. Alas!
 
 ## Platform Support (64-bit only)
 
@@ -42,9 +42,9 @@ While the CLI is usable, the internal library is NOT suggested for use
 
 ## Testing
 
-The project includes comprehensive testing with 70+ Rust tests and 15+ correctness benchmarks comparing against fd.
+The project includes comprehensive testing with 90+ Rust tests and 15+ correctness benchmarks comparing against fd.
 
-Note: Miri validation (Rust's undefined behaviour detector) cannot be used due to the extensive libc calls and assembly code. Intensive testing and valgrind validation are used instead.
+Note: Miri validation (Rust's undefined behaviour detector) cannot be used due to the extensive libc calls. Intensive testing and valgrind validation are used instead.
 
 - Rust tests: [Available here](https://github.com/alexcu2718/fdf/blob/main/src/test.rs)
 - Shell scripts clone the LLVM repository to provide an accurate testing environment
@@ -195,8 +195,6 @@ fundamentally this means that this cause a lot more IO. It will also tend to cal
 
 ** Open to contributions - Once the codebase stabilises, I welcome others to add features if they're extremely inclined anyway!
 
-** Pragmatic focus - Some areas, like datetime filtering, are especially complex and need a lot of investigation!
-
 In short, this project is a personal exploration into performance, low-level programming, and building practical tools - with the side benefit of making a useful tool and learning a crazy amount!
 
 ## Acknowledgements/Disclaimers
@@ -217,9 +215,10 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 
 **API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 
-**DateTime Filtering**: Fast, attribute-based file filtering by time (high priority despite personal infrequent use, I have a lot of test cases to attempt  this, admittedly I've been focusing on tidying up the API a lot)
+**POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris/Android (the other ones are embedded mostly, correct me if i'm wrong!), I have tentative work for other OS'es, but ultimately it is hard to even emulate these! Such as l4re,horizon etc.
+Some OS'es are plainly not supported, such as vita/nuttx (due to lacking inodes) and hurd (due to unbounded filenames)
 
-**POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris (the other ones are embedded mostly, correct me if i'm wrong!)
+Ultimately, these are an extremely fringe usecase and I think it is beyond pointless to focus on these.
 
 ### Platform Expansion
 
@@ -265,6 +264,9 @@ Options:
   -H, --hidden
           Shows hidden files eg .gitignore or .bashrc, defaults to off
 
+  -S, --sort
+          Sort the entries alphabetically (this has quite the performance cost)
+
   -s, --case-sensitive
           Enable case-sensitive matching, defaults to false
 
@@ -274,9 +276,8 @@ Options:
   -j, --threads <THREAD_NUM>
           Number of threads to use, defaults to available threads available on your computer
 
-
   -a, --absolute-path
-          Show absolute paths of results, defaults to false
+          Starts with the directory entered being resolved to full
 
   -I, --include-dirs
           Include directories, defaults to off
@@ -291,7 +292,7 @@ Options:
           Use a glob pattern,defaults to off
 
   -n, --max-results <TOP_N>
-          Retrieves the first eg 10 results, '.cache' / -n 10
+          Retrieves the first eg 10 results, 'fdf  -n 10 '.cache' /
 
   -d, --depth <DEPTH>
           Retrieves only traverse to x depth
@@ -313,7 +314,7 @@ Options:
       --same-file-system
           Only traverse the same filesystem as the starting directory
 
-  -S, --size <size>
+      --size <SIZE>
           Filter by file size
 
           PREFIXES:
@@ -339,19 +340,76 @@ Options:
             --size +1gi        Files larger than 1 gibibyte
             --size 500ki       Files exactly 500 kibibytes
 
+          Possible values:
+          - 100:   exactly 100 bytes
+          - 1k:    exactly 1 kilobyte (1000 bytes)
+          - 1ki:   exactly 1 kibibyte (1024 bytes)
+          - 10mb:  exactly 10 megabytes
+          - 1gb:   exactly 1 gigabyte
+          - +1m:   larger than 1MB
+          - +10mb: larger than 10MB
+          - +1gib: larger than 1GiB
+          - -500k: smaller than 500KB
+          - -10mb: smaller than 10MB
+          - -1gib: smaller than 1GiB
+
+  -T, --time <TIME>
+          Filter by file modification time
+
+          PREFIXES:
+            -TIME    Find files modified within the last TIME (newer)
+            +TIME    Find files modified more than TIME ago (older)
+             TIME    Same as -TIME (default)
+
+          TIME RANGE:
+            TIME..TIME   Find files modified between two times
+
+          UNITS:
+            s, sec, second, seconds     - Seconds
+            m, min, minute, minutes     - Minutes
+            h, hour, hours              - Hours
+            d, day, days                - Days
+            w, week, weeks              - Weeks
+            y, year, years              - Years
+
+          EXAMPLES:
+            --time -1h        Files modified within the last hour
+            --time +2d        Files modified more than 2 days ago
+            --time 1d..2h     Files modified between 1 day and 2 hours ago
+            --time -30m       Files modified within the last 30 minutes
+
+          Possible values:
+          - -1h:    modified within the last hour
+          - -30m:   modified within the last 30 minutes
+          - -1d:    modified within the last day
+          - +2d:    modified more than 2 days ago
+          - +1w:    modified more than 1 week ago
+          - 1d..2h: modified between 1 day and 2 hours ago
+
   -t, --type <TYPE_OF>
-          Select type of files.
-           Available options are:
-          d: Directory
-          u: Unknown
-          l: Symlink
-          f: Regular File
-          p: Pipe
-          c: Char Device
-          b: Block Device
-          s: Socket
-          e: Empty
-          x: Executable
+          Filter by file type:
+            d, dir, directory    - Directory
+            u, unknown           - Unknown type
+            l, symlink, link     - Symbolic link
+            f, file, regular     - Regular file
+            p, pipe, fifo        - Pipe/FIFO
+            c, char, chardev     - Character device
+            b, block, blockdev   - Block device
+            s, socket            - Socket
+            e, empty             - Empty file
+            x, exec, executable  - Executable file
+
+          Possible values:
+          - d: Directory
+          - u: Unknown type
+          - l: Symbolic link
+          - f: Regular file
+          - p: Pipe/FIFO
+          - c: Character device
+          - b: Block device
+          - s: Socket
+          - e: Empty file
+          - x: Executable file
 
   -h, --help
           Print help (see a summary with '-h')

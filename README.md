@@ -82,26 +82,29 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 
 Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but macos has less optimisations, perhaps testing in QEMU is not ideal for mac!
 
-| Test Case                              | Files Found | fdf Time (mean) | fd Time (mean) | Speedup (×) | Notes |
-|---------------------------------------|--------------|-----------------|----------------|--------------|--------|
-| Depth-limited (depth=2, LLVM)         | 396          | 9.6 ms          | 18.5 ms        | 1.93 ± 0.40  | No differences |
-| File extension (.c, LLVM)             | 12,801       | 21.1 ms         | 36.5 ms        | 1.73 ± 0.29  | No differences |
-| No pattern (LLVM)                     | 176,841      | 25.6 ms         | 37.9 ms        | 1.48 ± 0.14  | No differences |
-| Relative directory (..)               | 198,933      | 29.1 ms         | 41.4 ms        | 1.42 ± 0.31  | No differences |
-| Regex pattern (LLVM)                  | 4,439        | 22.5 ms         | 34.5 ms        | 1.53 ± 0.20  | No differences |
-| Size >1MB (LLVM)                      | 118          | 34.9 ms         | 75.9 ms        | 2.18 ± 0.15  | No differences |
-| Type filter (directory)               | 15,224       | 21.9 ms         | 35.6 ms        | 1.63 ± 0.35  | No differences |
-| Type filter (empty)                   | 2,843        | 39.8 ms         | 62.9 ms        | 1.58 ± 0.22  | No differences |
-| Type filter (executable)              | 929          | 32.3 ms         | 50.8 ms        | 1.57 ± 0.14  | No differences |
-| Cold cache regex (LLVM)               | —            | 25.5 ms         | 46.7 ms        | 1.83 ± 0.16  | No differences |
-| Depth-limited (depth=4, home dir)     | 54,544       | 18.2 ms         | 27.4 ms        | 1.51 ± 0.41  | No differences |
-| File extension (.c, home dir)         | 96,910       | 295.9 ms        | 606.7 ms       | 2.05 ± 0.05  | No differences |
-| No pattern (home dir)                 | 2,216,706    | 360.9 ms        | 653.8 ms       | 1.81 ± 0.04  | No differences |
-| Regex pattern (home dir)              | 69,964       | 331.2 ms        | 544.6 ms       | 1.64 ± 0.04  | No differences |
-| Size >1MB (home dir)                  | 12,097       | 893.5 ms        | 2.089 s        | 2.34 ± 0.54  | No differences |
-| Size <1MB (home dir)                  | 1,968,643    | 1.007 s         | 1.866 s        | 1.85 ± 0.13  | No differences |
+| Test Case                              | Files Found | fdf Time (mean) | fd Time (mean) | Speedup (×)       | Notes           |
+|---------------------------------------|-------------|-----------------|----------------|-------------------|-----------------|
+| Depth-limited (depth=2, LLVM)         | 396         | 9.9 ms          | 18.1 ms        | 1.82 ± 0.40       | No differences  |
+| File extension (.c, LLVM)             | 12,801      | 13.7 ms         | 27.4 ms        | 2.00 ± 0.21       | No differences  |
+| No pattern (LLVM)                     | 176,841     | 15.9 ms         | 31.2 ms        | 1.96 ± 0.22       | No differences  |
+| Relative directory (..)               | 178,794     | 17.3 ms         | 28.9 ms        | 1.67 ± 0.27       | No differences  |
+| Regex pattern (LLVM)                  | 4,439       | 14.6 ms         | 29.5 ms        | 2.02 ± 0.15       | No differences  |
+| Size >1MB (LLVM)                      | 118         | 32.4 ms         | 65.0 ms        | 2.01 ± 0.16       | No differences  |
+| Type filter (directory)               | 15,224      | 15.6 ms         | 29.7 ms        | 1.90 ± 0.39       | No differences  |
+| Type filter (empty)                   | 2,843       | 39.5 ms         | 62.5 ms        | 1.58 ± 0.09       | No differences  |
+| Type filter (executable)              | 929         | 25.5 ms         | 44.8 ms        | 1.76 ± 0.18       | No differences  |
+| Cold cache regex (LLVM)               | —           | 25.5 ms         | 52.9 ms        | 2.07 ± 0.21       | No differences  |
+| Depth-limited (depth=4, home dir)     | 62,513      | 11.1 ms         | 20.8 ms        | 1.88 ± 0.25       | No differences  |
+| File extension (.c, home dir)         | 99,393      | 257.4 ms        | 508.6 ms       | 1.98 ± 0.10       | No differences  |
+| No pattern (home dir)                 | 2,265,808   | 323.0 ms        | 547.1 ms       | 1.69 ± 0.09       | No differences  |
+| Regex pattern (home dir)              | 70,264      | 282.1 ms        | 460.5 ms       | 1.63 ± 0.06       | No differences  |
+| Size >1MB (home dir)                  | 13,201      | 755.3 ms        | 1.338 s        | 1.77 ± 0.07       | No differences  |
+| Size <1MB (home dir)                  | 2,009,097   | 817.4 ms        | 1.514 s        | 1.85 ± 0.06       | No differences  |
+| Type filter (directory, home)         | 237,603     | 307.7 ms        | 519.5 ms       | 1.69 ± 0.05       | No differences  |
+| Type filter (empty, home)             | 27,361      | 921.8 ms        | 1.258 s        | 1.36 ± 0.03       | No differences  |
+| Type filter (executable, home)        | 63,863      | 624.2 ms        | 887.8 ms       | 1.42 ± 0.05       | No differences  |
 
-**Average speedup:** **1.74× faster**
+**Average speedup:** **1.8× faster**
 
 ## Distinctions from fd/find
 
@@ -117,7 +120,7 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 ### Key Optimisations
 
-- **getdents64: Optimised the Linux-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#L195)**
+- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#L195)**
 
 - **getdirentries64: Optimised approach following a very similar approach to the above method**
 
@@ -134,21 +137,34 @@ See source for bigendian/original version [found here](./src/utils.rs#L180)
 
 ```rust
 // Computational complexity: O(1) - truly constant time
-// This is the little-endian implementation;
-// PLEASE SEE source for big-endian version(with better explanations!) 
-// Used on Linux/Solaris/Illumos/Android systems; OpenBSD/macOS store name length trivially
+// Used on Linux/Solaris/Illumos/Android systems; BSD systems/macOS store name length trivially
 // SIMD within a register, so no architecture dependence
+//http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris",target_os="android"))] 
-pub const unsafe fn dirent_const_time_strlen(dirent: *const dirent64) -> usize {
-    // The only unsafe action is dereferencing the pointer
-    // This MUST be validated beforehand
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name) ;
-    let reclen = unsafe { (*dirent).d_reclen as usize }; 
-    let last_word = unsafe { *((dirent as *const u8).add(reclen - 8) as *const u64) }; 
+pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
+    use core::num::NonZeroU64;
+    /*The only unsafe action is dereferencing the pointer
+     This MUST be validated beforehand */
+    const LO_U64:u64=u64::from_ne_bytes([0x01; size_of::<u64>()]); 
+    const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
+     // Create a mask for the first 3 bytes in the case where reclen==24
+    const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name);
+    let reclen = unsafe { (*drnt).d_reclen as usize }; 
+    // Access the last 8 bytes of the word (this is an aligned read due to kernel providing 8 byte aligned dirent structs!)
+    let last_word: u64 = unsafe { *(drnt.cast::<u8>()).add(reclen - 8).cast::<u64>() };
     // reclen is always multiple of 8 so alignment is guaranteed
-    let mask = 0x00FF_FFFFu64 * ((reclen == 24) as u64); // branchless mask
-    let candidate_pos = last_word | mask;
-    let byte_pos = 8 - find_zero_byte_u64_optimised(candidate_pos); // branchless SWAR
+    let mask = MASK * ((reclen == 24) as u64); // branchless mask
+    let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short 
+    //The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
+    let zero_bit = unsafe { // Use specialised instructions (ctl_nonzero) to avoid 0 check for bitscan forward so it compiles to tzcnt on most CPU's
+            NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
+        };
+
+    #[cfg(target_endian = "little")]
+    let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
+    #[cfg(target_endian = "big")]
+    let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
     reclen - DIRENT_HEADER_START - byte_pos
 }
 

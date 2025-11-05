@@ -23,8 +23,6 @@ pub type SyscallBuffer = crate::AlignedBuffer<u8, 4096>; // In debug mode, stack
 #[cfg(all(target_os = "macos", not(debug_assertions)))]
 pub type SyscallBuffer = crate::AlignedBuffer<u8, { 8 * 4096 }>; // Default for readdir buffer  on macos
 
-
-
 ///filter function type for directory entries,
 pub type FilterType = fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>) -> bool;
 ///generic filter function type for directory entries

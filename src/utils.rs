@@ -206,8 +206,9 @@ This is one of the hottest paths when scanning directories. By eliminating
 
 
  # References
- - [Stanford Bit Twiddling Hacks](https://graphics.stanford.edu/~seander/bithacks.html#HasZeroByte)
+ - [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
  - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
+
 */
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
@@ -228,6 +229,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     ))]
     // On these systems where we need a bit of 'black magic'
     {
+        use core::num::NonZeroU64;
         // Offset from the start of the struct to the beginning of d_name.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
         // Access the last field and then round up to find the minimum struct size
@@ -235,15 +237,15 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const_assert!(
             MINIMUM_DIRENT_SIZE == 24,
             "Minimum dirnt struct size should be 24 on these platforms!"
-        );
-        use crate::memchr_derivations::HI_U64;
-        use crate::memchr_derivations::LO_U64;
-        use core::num::NonZeroU64;
+        ); // A custom macro similar to static_assert from C++
+
+        const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
+        const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
 
         //ignore boiler plate above
+        //ignore boiler plate above
 
-        /*  Accessing `d_reclen` is safe because the struct is kernel-provided.
-        / SAFETY: `dirent` is valid by precondition */
+        /*  SAFETY: `dirent` is valid by precondition */
         let reclen = unsafe { (*drnt).d_reclen } as usize;
 
         /*
@@ -253,9 +255,9 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         // SAFETY: We're indexing in bounds within the pointer. Since the reclen is size of the struct in bytes.
         let last_word: u64 = unsafe { *(drnt.cast::<u8>()).add(reclen - 8).cast::<u64>() };
 
-        // Create a mask for the first 3 bytes in the case where reclen==24
+        // Create a mask for the first 3 bytes in the case where reclen==24, this handles the big endian case too.
         const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        
+
         /* When the record length is 24/`MINIMUM_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 17/18 (or opposite, for big endian...sigh...)
         Mask them out to avoid false detection of a terminator.
@@ -283,6 +285,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
         (`NonZeroU64` uses this under the hood)
         (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
+        This allows us to skip a 0 check which then allows us to use tznt on most cpu's
+        Check hackers delight reference above for better explanation.
         */
         let zero_bit = unsafe {
             NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)

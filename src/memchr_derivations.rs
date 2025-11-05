@@ -327,9 +327,9 @@ pub(crate) const fn repeat_u64(byte: u8) -> u64 {
 const LO_USIZE: usize = repeat_u8(0x01);
 
 const HI_USIZE: usize = repeat_u8(0x80);
-pub const LO_U64: u64 = repeat_u64(0x01);
+const LO_U64: u64 = repeat_u64(0x01);
 
-pub const HI_U64: u64 = repeat_u64(0x80);
+const HI_U64: u64 = repeat_u64(0x80);
 
 #[inline]
 /**

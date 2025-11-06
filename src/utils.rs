@@ -167,7 +167,7 @@ My Cat Diavolo is cute.
 
 */
 //cargo-asm --lib fdf::utils::dirent_const_time_strlen (put to inline(never) to display)
-#[inline(never)]
+#[inline]
 #[cfg(any(
     target_os = "linux",
     target_os = "illumos",

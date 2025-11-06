@@ -541,7 +541,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     }
 
     // Find the byte before the point the body loop stopped.
-    text[..offset].iter().rposition(|elt| *elt == x)
+    unsafe{text.get_unchecked(..offset).iter().rposition(|elt| *elt == x)}
 }
 
 /*

@@ -71,8 +71,6 @@ This executes a comprehensive suite of internal library tests, CLI tests, and be
 
 ## Performance Benchmarks
 
-**Complete benchmarks:** [Available here](https://github.com/alexcu2718/fdf/blob/main/speed_benchmarks.txt)
-
 The benchmarks are fully repeatable using the testing code above and cover file type filtering, extension matching, file sizes, and many other scenarios. The following results were obtained on a local system and the LLVM repo to provide realistic usage examples:
 (These are tests done via hyperfine and summarised to save space here.)
 

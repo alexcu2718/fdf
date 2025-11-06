@@ -14,8 +14,6 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
     const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
 
-    /*  Accessing `d_reclen` is safe because the struct is kernel-provided.
-    / SAFETY: `dirent` is valid by precondition */
     let reclen = unsafe { (*dirent).d_reclen } as usize;
 
     /*
@@ -23,20 +21,12 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     This works because dirents are always 8-byte aligned. */
     // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
     let last_word: u64 = unsafe { *(dirent.byte_add(reclen - 8).cast::<u64>()) };
-    /* Note, I don't index as a u64 with eg (reclen-8)/8 or (reclen-8)>>3 because that adds a division which is a costly operation, relatively speaking
-    let last_word: u64 = unsafe { *(dirent.cast::<u64>()).add((reclen - 8)/8 (or >>3))}; //this will also work but it's less performant (MINUTELY)
-    */
+ 
 
     const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
     let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
-    /*
-     Apply the mask to ignore non-name bytes while preserving name bytes.
-     Result:
-     - Name bytes remain unchanged
-     - Non-name bytes become 0xFF (guaranteed non-zero)
-     - Any null terminator in the name remains detectable
-    */
+   
     let candidate_pos: u64 = last_word | mask;
 
     let zero_bit = unsafe {

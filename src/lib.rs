@@ -177,7 +177,9 @@ mod test;
 pub use buffer::{AlignedBuffer, ValueType};
 
 mod memchr_derivations;
-pub use memchr_derivations::{contains_zero_byte, find_char_in_word, find_zero_byte_u64, memrchr};
+pub use memchr_derivations::{
+    contains_zero_byte, find_char_in_word, find_last_char_in_word, find_zero_byte_u64, memrchr,
+};
 mod direntry;
 pub use direntry::DirEntry;
 
@@ -398,6 +400,8 @@ impl Finder {
                 || {
                     // Fast path: only calls stat IFF self.starting_filesystem is Some
                     debug_assert!(!self.search_config.follow_symlinks,"we expect follow symlinks to be disabled when following this path");
+
+
                     self.starting_filesystem.is_none_or(|start_dev| {
                         dir.get_stat()
                             .is_ok_and(|statted| start_dev == access_stat!(statted, st_dev))
@@ -415,11 +419,12 @@ impl Finder {
         }
 
         // Symlinks that may point to directories
-        // This could be optimised a bit, symlinks are a beast due to their complexity.
         // self.search_config.follow_symlinks <=> inode_cache is some
         FileType::Symlink
             if self.inode_cache.as_ref().is_some_and(|cache| {
                 debug_assert!(self.search_config.follow_symlinks,"we expect follow symlinks to be enabled when following this path");
+
+
                 dir.get_stat().is_ok_and(|stat| {
                     FileType::from_stat(&stat) == FileType::Directory &&
                     // Check filesystem boundary

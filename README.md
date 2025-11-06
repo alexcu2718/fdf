@@ -122,7 +122,7 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 - **getdirentries64: Optimised approach following a very similar approach to the above method**
 
-- **find_char_in_word**: Locates the first occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
+- **find_char_in_word/find_last_char_in_word**: Locates the first/last occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 
 - **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)
 
@@ -141,29 +141,33 @@ Check source code for further explanation [in src/utils.rs](./src/utils.rs#L195)
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     use core::num::NonZeroU64;
     /*The only unsafe action is dereferencing the pointer
-     This MUST be validated beforehand */
-    const LO_U64:u64=u64::from_ne_bytes([0x01; size_of::<u64>()]); 
+    This MUST be validated beforehand */
+    const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
     const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
-     // Create a mask for the first 3 bytes in the case where reclen==24
+    // Create a mask for the first 3 bytes in the case where reclen==24
     const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    const DIRENT_HEADER_START: usize = std::mem::offset_of!(dirent64, d_name);
-    let reclen = unsafe { (*drnt).d_reclen as usize }; 
+    const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
+    let reclen = unsafe { (*drnt).d_reclen as usize };
     // Access the last 8 bytes of the word (this is an aligned read due to kernel providing 8 byte aligned dirent structs!)
     let last_word: u64 = unsafe { *(drnt.byte_add(reclen - 8).cast::<u64>()) };
     // reclen is always multiple of 8 so alignment is guaranteed
     let mask = MASK * ((reclen == 24) as u64); // branchless mask
     let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short 
     //The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
-    let zero_bit = unsafe { // Use specialised instructions (ctl_nonzero) 
+    let zero_bit = unsafe {
+        // Use specialised instructions (ctlz_nonzero)
         //to avoid 0 check for bitscan forward so it compiles to tzcnt on most CPU's
-            NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
-        };
+        NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
+    };
 
+    // Find the position of the null terminator
     #[cfg(target_endian = "little")]
-    let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
+    let byte_pos = (zero_bit.trailing_zeros() >> 3) as usize;
     #[cfg(target_endian = "big")]
-    let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
-    reclen - DIRENT_HEADER_START - byte_pos
+    let byte_pos = (zero_bit.leading_zeros() >> 3) as usize;
+    // reclen-DIRENT_HEADER start is the maximum size of the string
+    // we then use the position of the `true` null terminator and subtract the 8, it's junk.
+    reclen - DIRENT_HEADER_START + byte_pos - 8
 }
 
 

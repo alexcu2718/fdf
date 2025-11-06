@@ -1536,7 +1536,6 @@ mod tests {
             "File from 1 day ago should match filter for older than 2 hours"
         );
 
-   
         let filter = TimeFilter::from_string("1d..2h").unwrap(); // Between 1 day and 2 hours ago
         assert!(
             filter.matches_time(two_hours_ago),
@@ -1610,7 +1609,6 @@ mod tests {
             "Should find the old file"
         );
 
-      
         fs::remove_dir_all(&temp_dir).unwrap();
     }
 
@@ -1665,7 +1663,6 @@ mod tests {
             "Should find the file modified 12 hours ago"
         );
 
-       
         fs::remove_dir_all(&temp_dir).unwrap();
     }
 

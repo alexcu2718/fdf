@@ -781,6 +781,35 @@ impl DirEntry {
             })
         })
     }
+    #[inline]
+    /// Similar to above function but modified for internal use within size filtering.
+    /// TODO, make this public at some point.
+    /// This just avoids calling stat twice basically.
+    pub(crate) fn to_full_path_with_stat(&self) -> Result<(Self, stat)> {
+        debug_assert!(
+            self.is_symlink(),
+            "in this private function we expect the file type to always be symlinks!"
+        );
+        self.get_realpath(|full_path| {
+            let file_name_index = full_path.to_bytes().file_name_index();
+
+            let statted = self.get_stat()?;
+
+            let (file_type, ino) = (FileType::from_stat(&statted), access_stat!(statted, st_ino));
+
+            Ok((
+                Self {
+                    path: full_path.into(),
+                    file_type,
+                    inode: ino,
+                    depth: self.depth,
+                    file_name_index,
+                    is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)),
+                },
+                statted,
+            ))
+        })
+    }
 
     #[inline]
     /**

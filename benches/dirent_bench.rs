@@ -6,41 +6,33 @@ use std::hint::black_box;
 #[inline]
 //modified version to work for this test function(copy pasted really)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
-    // Offset from the start of the struct to the beginning of d_name.
     const DIRENT_HEADER_START: usize = core::mem::offset_of!(LibcDirent64, d_name);
-    // Access the last field and then round up to find the minimum struct size
     const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
-
     const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
     const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
-
     let reclen = unsafe { (*dirent).d_reclen } as usize;
-
     /*
       Read the last 8 bytes of the struct as a u64.
     This works because dirents are always 8-byte aligned. */
     // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
     let last_word: u64 = unsafe { *(dirent.byte_add(reclen - 8).cast::<u64>()) };
- 
 
     const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
     let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
-   
+
     let candidate_pos: u64 = last_word | mask;
 
     let zero_bit = unsafe {
         NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
     };
+    // Find the position of the null terminator
     #[cfg(target_endian = "little")]
-    let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
+    let byte_pos = (zero_bit.trailing_zeros() >> 3) as usize;
     #[cfg(target_endian = "big")]
-    let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
+    let byte_pos = (zero_bit.leading_zeros() >> 3) as usize;
 
-    /*  Final length:
-    total record length - header size - null byte position
-    */
-    reclen - DIRENT_HEADER_START - byte_pos
+    reclen - DIRENT_HEADER_START + byte_pos - 8
 }
 
 #[repr(C)]

@@ -3,6 +3,7 @@ use crate::cli_helpers::{SizeFilter, TimeFilter};
 use crate::glob_to_regex;
 use crate::{DirEntry, FileType, SearchConfigError};
 use core::num::NonZeroU32;
+use core::ops::Deref;
 use core::time::Duration;
 use regex::bytes::{Regex, RegexBuilder};
 use std::time::UNIX_EPOCH;
@@ -76,45 +77,47 @@ impl FileTypeFilter {
         }
     }
 
-    /// Parses a character into a `FileTypeFilter`
-    ///
-    /// This method converts a single character into the corresponding file type filter,
-    /// which is useful for parsing command-line arguments or configuration files.
-    ///
-    /// # Parameters
-    /// - `c`: The character to parse into a file type filter
-    ///
-    /// # Returns
-    /// - `Ok(FileTypeFilter)` if the character represents a valid file type
-    /// - `Err(String)` with an error message if the character is invalid
-    ///
-    /// # Supported Characters
-    /// - `'d'` - Directory
-    /// - `'u'` - Unknown file type  
-    /// - `'l'` - Symbolic link
-    /// - `'f'` - Regular file
-    /// - `'p'` - Named pipe (FIFO)
-    /// - `'c'` - Character device
-    /// - `'b'` - Block device
-    /// - `'s'` - Socket
-    /// - `'e'` - Empty file
-    /// - `'x'` - Executable file
-    ///
-    /// # Examples
-    /// ```
-    /// # use fdf::FileTypeFilter;
-    /// assert!(FileTypeFilter::from_char('d').is_ok());
-    /// assert!(FileTypeFilter::from_char('f').is_ok());
-    /// assert!(FileTypeFilter::from_char('z').is_err()); // Invalid character
-    ///
-    /// let filter = FileTypeFilter::from_char('l').unwrap();
-    /// assert!(matches!(filter, FileTypeFilter::Symlink));
-    /// ```
-    ///
-    /// # Errors
-    /// Returns an error if the character does not correspond to any known file type.
-    /// The error message includes the invalid character and suggests using `--help`
-    /// to see valid types.
+    /**
+     Parses a character into a `FileTypeFilter`
+
+     This method converts a single character into the corresponding file type filter,
+     which is useful for parsing command-line arguments or configuration files.
+
+     # Parameters
+     - `c`: The character to parse into a file type filter
+
+     # Returns
+     - `Ok(FileTypeFilter)` if the character represents a valid file type
+     - `Err(String)` with an error message if the character is invalid
+
+     # Supported Characters
+     - `'d'` - Directory
+     - `'u'` - Unknown file type
+     - `'l'` - Symbolic link
+     - `'f'` - Regular file
+     - `'p'` - Named pipe (FIFO)
+     - `'c'` - Character device
+     - `'b'` - Block device
+     - `'s'` - Socket
+     - `'e'` - Empty file
+     - `'x'` - Executable file
+
+     # Examples
+     ```
+     # use fdf::FileTypeFilter;
+     assert!(FileTypeFilter::from_char('d').is_ok());
+     assert!(FileTypeFilter::from_char('f').is_ok());
+     assert!(FileTypeFilter::from_char('z').is_err()); // Invalid character
+
+     let filter = FileTypeFilter::from_char('l').unwrap();
+     assert!(matches!(filter, FileTypeFilter::Symlink));
+     ```
+
+     # Errors
+     Returns an error if the character does not correspond to any known file type.
+     The error message includes the invalid character and suggests using `--help`
+     to see valid types.
+    */
     pub fn from_char(c: char) -> core::result::Result<Self, String> {
         match c {
             'd' => Ok(Self::Directory),
@@ -249,7 +252,7 @@ impl SearchConfig {
     /// Checks for extension match via memchr
     pub fn matches_extension<S>(&self, entry: &S) -> bool
     where
-        S: core::ops::Deref<Target = [u8]>,
+        S: Deref<Target = [u8]>,
     {
         debug_assert!(
             !entry.contains(&b'/'),
@@ -267,10 +270,12 @@ impl SearchConfig {
         reason = "Only checking regular files"
     )]
     #[allow(clippy::cast_sign_loss)] //signloss dont matter here
-    /// Applies the configured size filter to a directory entry, if any.
-    /// For regular files the size is checked directly.
-    /// For symlinks, the target is resolved first and then checked if it is a regular file.
-    /// Other file types are ignored.
+    /**
+     Applies the configured size filter to a directory entry, if any.
+     For regular files the size is checked directly.
+     For symlinks, the target is resolved first and then checked if it is a regular file.
+     Other file types are ignored.
+    */
     pub fn matches_size(&self, entry: &DirEntry) -> bool {
         let Some(filter_size) = self.size_filter else {
             return true; // No filter means always match
@@ -281,17 +286,10 @@ impl SearchConfig {
                 .file_size()
                 .ok()
                 .is_some_and(|sz| filter_size.is_within_size(sz as _)),
-
-            FileType::Symlink => {
-                if let Ok(path) = entry.to_full_path() {
-                    if path.is_regular_file() {
-                        if let Ok(sz) = entry.file_size() {
-                            return filter_size.is_within_size(sz as _);
-                        }
-                    }
-                }
-                false
-            }
+            // Resolve to full path first, this basically avoids broken symlinks
+            FileType::Symlink => entry.to_full_path_with_stat().is_ok_and(|(path, statted)| {
+                path.is_regular_file() && filter_size.is_within_size(statted.st_size as _)
+            }),
 
             _ => false,
         }
@@ -344,8 +342,6 @@ impl SearchConfig {
     #[expect(clippy::indexing_slicing, reason = "used for debug assert")]
     /// Checks if the path or file name matches the regex filter
     /// If `full_path` is false, only checks the filename
-    ///
-    /// Use a branchless trick to do indexing
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
         debug_assert!(
             !dir.file_name().contains(&b'/'),

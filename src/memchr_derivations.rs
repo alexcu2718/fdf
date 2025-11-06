@@ -371,7 +371,7 @@ pub const fn find_zero_byte_u64(x: u64) -> Option<usize> {
 /**
  Finds the first occurrence of a byte in a 64-bit word.
 
- This uses a branchless, bitwise technique to locate the first instance of
+ This uses a bitwise technique to locate the first instance of
  the target byte `c` in the 64-bit value `str`. The operation works by:
 
  1. XORing each byte with the target value (resulting in 0 for matches)
@@ -431,13 +431,97 @@ pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     let char_array = u64::from_ne_bytes(bytestr);
     let xor_result = char_array ^ repeat_u64(c);
     let matches = NonZeroU64::new(xor_result.wrapping_sub(LO_U64) & !xor_result & HI_U64);
+    /*
+    If you're asking why `NonZeroU64`, check `dirent_const_time_strlen` for more info.
+    https://doc.rust-lang.org/src/core/num/nonzero.rs.html#599
+    https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
+    https://doc.rust-lang.org/beta/std/intrinsics/fn.cttz_nonzero.html
+    */
 
     if let Some(nonzero_matches) = matches {
-        // Using the trick for ctlz_nonzero where it's perfectly defined here
         #[cfg(target_endian = "big")]
         return Some((nonzero_matches.leading_zeros() >> 3) as usize);
         #[cfg(target_endian = "little")]
         return Some((nonzero_matches.trailing_zeros() >> 3) as usize);
+    } else {
+        None
+    }
+}
+
+#[inline]
+/**
+ Finds the last occurrence of a byte in a 64-bit word.
+
+ This uses a bitwise technique to locate the last instance of
+ the target byte `c` in the 64-bit value `str`. The operation works by:
+
+ 1. XORing each byte with the target value (resulting in 0 for matches)
+ 2. Applying a zero-byte detection algorithm to find matches
+ 3. Converting the bit position to a byte index
+
+ # The Computation
+ - `str ^ repeat_u64(c)`: Creates a value where matching bytes become 0
+ - `.wrapping_sub(LO_U64)`: Subtracts 1 from each byte (wrapping)
+ - `& !xor_result`: Clears bits where the XOR result had 1s
+ - `& HI_U64`: Isolates the high bit of each byte
+
+ The resulting word will have high bits set only for bytes that matched `c`.
+
+
+ # Examples
+```
+use fdf::find_last_char_in_word;
+
+// Helper function to create byte arrays from strings
+fn create_byte_array(s: &str) -> [u8; 8] {
+let mut bytes = [0u8; 8];
+let s_bytes = s.as_bytes();
+let len = s_bytes.len().min(8);
+bytes[..len].copy_from_slice(&s_bytes[..len]);
+bytes
+}
+
+// Basic usage
+ let bytes = create_byte_array("hello");
+assert_eq!(find_last_char_in_word(b'h', bytes), Some(0),"hello is predicted wrong!");
+
+// Edge cases
+assert_eq!(find_last_char_in_word(b'A', create_byte_array("AAAAAAAA")), Some(7)); // last position
+assert_eq!(find_last_char_in_word(b'A', create_byte_array("")), None); // not found
+assert_eq!(find_last_char_in_word(0, create_byte_array("\x01\x02\x03\0\x05\x06\x07\x08")), Some(3)); // null byte
+
+// Multiple occurrences (returns last )
+let bytes = create_byte_array("hello");
+assert_eq!(find_last_char_in_word(b'l', bytes), Some(3)); // last 'l'
+
+let new_bytes = create_byte_array("he..eop");
+assert_eq!(find_last_char_in_word(b'e', new_bytes), Some(4)); // last 'e'
+```
+# Notes
+- Returns the last occurrence if the byte appears multiple times
+- Returns `None` if the byte is not found
+- Works for any byte value (0-255)
+
+# Parameters
+- `c`: The byte to search for (0-255)
+- `bytestr`: The word ( a [u8;8] ) to search in (64 bit specific)
+
+# Returns
+- `Some(usize)`: Index (0-7) of the last occurrence
+- `None`: If the byte is not found
+*/
+#[inline]
+pub const fn find_last_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
+    let char_array = u64::from_ne_bytes(bytestr);
+    let xor_result = char_array ^ repeat_u64(c);
+    let matches = NonZeroU64::new(xor_result.wrapping_sub(LO_U64) & !xor_result & HI_U64);
+
+    if let Some(nonzero_matches) = matches {
+        // For last occurrence, find the highest set bit instead of the lowest
+        #[cfg(target_endian = "big")]
+        return Some(7 - (nonzero_matches.trailing_zeros() >> 3) as usize);
+        #[cfg(target_endian = "little")]
+        return Some((7 - (nonzero_matches.leading_zeros() >> 3)) as usize);
     } else {
         None
     }
@@ -502,7 +586,13 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     let mut offset = max_aligned_offset;
 
-    if let Some(index) = text[offset..].iter().rposition(|elt| *elt == x) {
+    // compiler can't elide bounds checks on this.
+    //if let Some(index) = text[offset..].iter().rposition(|elt| *elt == x)
+    if let Some(index) = unsafe {
+        text.get_unchecked(offset..)
+            .iter()
+            .rposition(|elt| *elt == x)
+    } {
         return Some(offset + index);
     }
 
@@ -514,7 +604,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     let repeated_x = repeat_u8(x);
 
-    let chunk_bytes = size_of::<Chunk>();
+    const chunk_bytes: usize = size_of::<Chunk>();
 
     while offset > min_aligned_offset {
         // SAFETY: offset starts at len - suffix.len(), as long as it is greater than
@@ -522,9 +612,9 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
         // min_aligned_offset (prefix.len()) the remaining distance is at least 2 * chunk_bytes.
 
         unsafe {
-            let u = *(ptr.add(offset - 2 * chunk_bytes) as *const Chunk);
+            let u = *(ptr.add(offset - 2 * chunk_bytes).cast::<Chunk>());
 
-            let v = *(ptr.add(offset - chunk_bytes) as *const Chunk);
+            let v = *(ptr.add(offset - chunk_bytes).cast::<Chunk>());
 
             // Break if there is a matching byte.
 
@@ -541,134 +631,10 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     }
 
     // Find the byte before the point the body loop stopped.
-    unsafe{text.get_unchecked(..offset).iter().rposition(|elt| *elt == x)}
-}
-
-/*
-
-//these are now working in normal rust, but i havent used them in my crate, i think i will soon!
-
-const USIZE_BYTES: usize = size_of::<usize>();
-
-
-
-#[inline]
-const fn memchr_naive(x: u8, text: &[u8]) -> Option<usize> {
-
-    let mut i = 0;
-
-
-    while i < text.len() {
-
-        if text[i] == x {
-
-            return Some(i);
-
-        }
-
-
-        i += 1;
-
+    unsafe {
+        text.get_unchecked(..offset)
+            .iter()
+            .rposition(|elt| *elt == x)
     }
-
-
-    None
-
+    // text[..offset].iter().rposition(|elt| *elt == x), avoid a bounds check
 }
-
-
-
-
-
-
-
-fn memchr_aligned(x: u8, text: &[u8]) -> Option<usize> {
-
-
-
-            // Scan for a single byte value by reading two `usize` words at a time.
-
-            //
-
-            // Split `text` in three parts
-
-            // - unaligned initial part, before the first word aligned address in text
-
-            // - body, scan by 2 words at a time
-
-            // - the last remaining part, < 2 word size
-
-
-            // search up to an aligned boundary
-
-            let len = text.len();
-
-            let ptr = text.as_ptr();
-
-            let mut offset = ptr.align_offset(USIZE_BYTES);
-
-
-            if offset > 0 {
-
-                offset = offset.min(len);
-
-                let slice = &text[..offset];
-
-                if let Some(index) = memchr_naive(x, slice) {
-
-                    return Some(index);
-
-                }
-
-            }
-
-
-            // search the body of the text
-
-            let repeated_x = repeat_u8(x);
-
-            while offset <= len - 2 * USIZE_BYTES {
-
-                // SAFETY: the while's predicate guarantees a distance of at least 2 * usize_bytes
-
-                // between the offset and the end of the slice.
-
-                unsafe {
-
-                    let u = *(ptr.add(offset) as *const usize);
-
-                    let v = *(ptr.add(offset + USIZE_BYTES) as *const usize);
-
-
-                    // break if there is a matching byte
-
-                    let zu = contains_zero_byte(u ^ repeated_x);
-
-                    let zv = contains_zero_byte(v ^ repeated_x);
-
-                    if zu || zv {
-
-                        break;
-
-                    }
-
-                }
-
-                offset += USIZE_BYTES * 2;
-
-            }
-
-
-            // Find the byte after the point the body loop stopped.
-
-            let slice =
-
-            // SAFETY: offset is within bounds
-
-                unsafe { &*std::ptr::slice_from_raw_parts(text.as_ptr().add(offset), text.len() - offset) };
-
-            if let Some(i) = memchr_naive(x, slice) { Some(offset + i) } else { None }
-
-        }
-
-    */

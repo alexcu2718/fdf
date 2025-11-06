@@ -234,13 +234,11 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
         // Access the last field and then round up to find the minimum struct size
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
-        const_assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!"); // A custom macro similar to static_assert from C++ (no runtime cost, crash at compile time!)
+        // A custom macro similar to static_assert from C++ (no runtime cost, crash at compile time!)
+        const_assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!");
 
         const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
         const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
-
-        //ignore boiler plate above
-        //ignore boiler plate above
 
         /*  SAFETY: `dirent` is valid by precondition */
         let reclen = unsafe { (*drnt).d_reclen } as usize;
@@ -256,7 +254,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
         /* When the record length is 24/`MIN_DIRENT_SIZE`, the kernel may insert nulls before d_name.
-        Which will exist on index's 17/18 (or opposite, for big endian...sigh...)
+        Which will exist on index's 16/17/18 (or opposite, for big endian...sigh...), the d_name starts at 19, so anything before is invalid anyway.
+
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
         let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64);
@@ -270,34 +269,55 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         let candidate_pos: u64 = last_word | mask;
 
         /*
-        The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
+          SWAR null detection algorithm:
+         Convert each zero byte to 0x80 and non-zero bytes to 0x00 using bit tricks.
+         This allows us to identify the position of the first null terminator in parallel.
 
-         SAFETY: The u64 can never be all 0's post-SWAR, therefore we can make a niche optimisation
+         The formula: (candidate - 0x010101...) & ~candidate & 0x808080...
+          - candidate - 0x01...: Creates 0xFF in bytes where candidate was 0x00
+         - & ~candidate: Ensures we only mark bytes that were originally zero
+          - & 0x80...: Isolates the high bit of each byte for null detection
+
+           Check hackers delight reference above for better explanation.
+
+          Then use a niche optimisation, because the last word will ALWAYS contain a null terminator, we can use `NonZeroU64`,
+          This has the benefit of using a smarter intrinsic
+          https://doc.rust-lang.org/src/core/num/nonzero.rs.html#599
         https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
-        (`NonZeroU64` uses this under the hood)
-        (using ctlz_nonzero instruction which is superior to ctlz but can't handle all 0 numbers)
-        This allows us to skip a 0 check which then allows us to use tznt on most cpu's
-        Check hackers delight reference above for better explanation.
-        */
+        https://doc.rust-lang.org/beta/std/intrinsics/fn.cttz_nonzero.html
+
+        This allows us to skip a 0 check which then allows us to use tzcnt on most cpu's
+
+             Check hackers delight reference above for better explanation.
+         */
+
+        //SAFETY: The u64 can never be all 0's post-SWAR
         let zero_bit = unsafe {
             NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
         };
 
-        // Find the position then deduct deduct it from 7 (then add 1 to account for going backwards ) from the position of the null byte pos
+        // Find the position of the null terminator
         #[cfg(target_endian = "little")]
-        let byte_pos = 8 - (zero_bit.trailing_zeros() >> 3) as usize;
+        let byte_pos = (zero_bit.trailing_zeros() >> 3) as usize;
         #[cfg(target_endian = "big")]
-        let byte_pos = 8 - (zero_bit.leading_zeros() >> 3) as usize;
+        let byte_pos = (zero_bit.leading_zeros() >> 3) as usize;
 
         //check final calculation
         debug_assert!(
-            reclen - DIRENT_HEADER_START - byte_pos
+            reclen - DIRENT_HEADER_START +byte_pos -8
                 //SAFETY: debug only.
                     == unsafe{core::ffi::CStr::from_ptr(access_dirent!(drnt, d_name).cast()).count_bytes() },
             "const swar dirent length calculation failed!"
         );
-
-        reclen - DIRENT_HEADER_START - byte_pos
+        /*
+         Final calculation:
+         reclen - DIRENT_HEADER_START = total space available for name
+        + byte_pos = position of null within the final 8-byte word
+        - 8 = adjust because we started counting from the last 8-byte word
+        Example: If null is at position 2 in the last word, we only count those 2 bytes
+        from that word toward the total string length.
+        */
+        reclen - DIRENT_HEADER_START + byte_pos - 8
     }
 }
 

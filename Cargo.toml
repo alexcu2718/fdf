@@ -58,3 +58,6 @@ name = "dirent_bench"
 harness = false
 
 
+
+[package.metadata.cargo-allocation]
+exclusive = true

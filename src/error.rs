@@ -149,7 +149,6 @@ impl FilesystemIOError {
                 io::ErrorKind::IsADirectory => Self::IsDirectory(error),
                 io::ErrorKind::NotSeekable => Self::InvalidFileDescriptor(error),
                 io::ErrorKind::ResourceBusy => Self::ResourceBusy(error),
-                io::ErrorKind::InvalidFilename => Self::InvalidPath,
                 io::ErrorKind::Unsupported => Self::UnsupportedOperation(error),
                 io::ErrorKind::UnexpectedEof => Self::FilesystemIO(error),
                 io::ErrorKind::OutOfMemory => Self::OutOfMemory,

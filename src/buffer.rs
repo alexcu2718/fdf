@@ -68,7 +68,8 @@ impl ValueType for u8 {}
 
  // The buffer maintains proper alignment for syscalls
  //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
- assert!((buffer.as_ptr() as usize).is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
+ assert!((buffer.as_ptr() as usize) % 8 ==0,"We expect the buffer to be aligned to 8 bytes")
+ // assert!((buffer.as_ptr() as usize).is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
  ```
 */
 #[derive(Debug)]
@@ -174,13 +175,13 @@ where
         unsafe { crate::utils::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
-    #[inline]
-    #[cfg(target_os = "macos")]
-    #[allow(clippy::not_unsafe_ptr_arg_deref)] //shutup
-    pub fn getdirentries(&mut self, fd: &crate::FileDes, basep: *mut i64) -> i32 {
-        // SAFETY: we're passing a valid buffer
-        unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
-    }
+    // #[inline] Irrelevant because of macos semantics.
+    // #[cfg(target_os = "macos")]
+    // #[allow(clippy::not_unsafe_ptr_arg_deref)] //shutup
+    // pub fn getdirentries(&mut self, fd: &crate::FileDes, basep: *mut i64) -> i32 {
+    //     // SAFETY: we're passing a valid buffer
+    //     unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
+    // }
 
     /// Returns a reference to a subslice without doing bounds checking
     ///

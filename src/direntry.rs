@@ -82,17 +82,16 @@ use crate::{BytePath as _, DirEntryError, FileDes, ReadDir, Result, filetype::Fi
 
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
+use core::ffi::CStr;
+use core::ffi::c_char;
 use core::fmt;
 use core::ptr::NonNull;
+
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, c_char, faccessat,
-    fstatat, lstat, /*openat*/ realpath, stat,
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, faccessat, fstatat,
+    lstat, realpath, stat,
 };
-use std::{
-    ffi::{CStr, OsStr},
-    os::unix::ffi::OsStrExt as _,
-    path::Path,
-};
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
 /**
   A struct representing a directory entry with minimal memory overhead.
 
@@ -310,7 +309,7 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     /**
      Opens the directory and returns a file descriptor.
 
@@ -1348,6 +1347,7 @@ impl DirEntry {
     }
 
     #[inline]
+    #[allow(clippy::cast_sign_loss)]
     /**
     Gets the file size in bytes.
 
@@ -1366,10 +1366,11 @@ impl DirEntry {
 
     # Returns
 
-    The size of the file in bytes as an `i64`. For symbolic links, this returns
+    The size of the file in bytes as an `u64`. For symbolic links, this returns
     the length of the symlink path itself, not the target file size.
     */
-    pub fn file_size(&self) -> Result<i64> {
+    pub fn file_size(&self) -> Result<u64> {
+        //https://github.com/rust-lang/rust/blob/bbb6f68e2888eea989337d558b47372ecf110e08/library/std/src/sys/fs/unix.rs#L442
         self.get_lstat().map(|s| s.st_size as _)
     }
 
@@ -1483,65 +1484,5 @@ impl DirEntry {
     */
     pub fn getdents(&self) -> Result<crate::GetDents> {
         crate::GetDents::new(self)
-    }
-
-    #[inline]
-    #[cfg(target_os = "macos")]
-    /**
-    Low-level directory iterator using the `getdirentries64` system call.
-
-    This method provides high-performance directory scanning on macOS by using
-    the BSD-style `getdirentries64` system call with a large buffer (typically ~4.1KB)
-    to minimise system calls. It's macOS-specific and generally faster than `readdir`
-    for bulk directory operations.
-
-    # Errors
-
-    Returns `Err` if:
-    - The entry is not a directory
-    - Permission restrictions prevent reading the directory
-    - The directory file descriptor cannot be opened
-    - Buffer allocation fails
-    - Any other system error occurs during the `getdirentries` operation
-
-    # Platform Specificity
-
-    This method is only available on macOS targets due to its dependence on
-    the `getdirentries64` system call.
-
-    # Examples
-    ```
-    use fdf::DirEntry;
-    use std::fs::{self, File};
-    use std::io::Write;
-
-    // Create a temporary directory with test files
-    let temp_dir = std::env::temp_dir().join("test_getdirentries");
-    fs::create_dir(&temp_dir).unwrap();
-
-    // Create test files
-    File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
-    File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
-    fs::create_dir(temp_dir.join("subdir")).unwrap();
-
-    // Create DirEntry for the temporary directory
-    let entry = DirEntry::new(&temp_dir).unwrap();
-
-    // Use getdirentries to iterate through directory contents
-    let mut entries: Vec<_> = entry.getdirentries().unwrap().collect();
-    entries.sort_by_key(|e| e.file_name().to_vec());
-
-    // Should contain 3 entries: 2 files and 1 directory
-    assert_eq!(entries.len(), 3);
-    assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
-    assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
-    assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
-
-    // Clean up
-    fs::remove_dir_all(&temp_dir).unwrap();
-    ```
-    */
-    pub fn getdirentries(&self) -> Result<crate::iter::GetDirEntries> {
-        crate::iter::GetDirEntries::new(self)
     }
 }

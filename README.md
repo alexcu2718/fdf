@@ -120,7 +120,6 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 - **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#L195)**
 
-- **getdirentries64: Optimised approach following a very similar approach to the above method**
 
 - **find_char_in_word/find_last_char_in_word**: Locates the first/last occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 
@@ -440,10 +439,4 @@ Options:
 - Implement a filtering mechanism that avoids unnecessary directory allocations.  
 - Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.  
 
-#### 4. macOS/*BSD-Specific Optimisations  
 
-- Explore using `getattrlistbulk` on macOS (and possibly `getdirentries` on BSD). Low priority due to fringe use case.
-- Test repository [mac_os_getattrlistbulk_ls](https://github.com/alexcu2718/fdf/blob/getattrlistbulk/src/iter.rs).  
---EDIT--
-**getattrlistbulk was less performant than readdir, I have left the branch open for posterity/research purposes in future but I have abandoned this approach
-in favour of readdir/getdirentries64, see [test repo here](https://github.com/alexcu2718/fdf/tree/macos_test_getdirentries)**

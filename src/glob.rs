@@ -1,4 +1,5 @@
 #![doc(hidden)]
+#![allow(clippy::derivable_impls)]
 #![allow(clippy::min_ident_chars)]
 //#! BIG EXPLANATION
 //#! I WANTED TO USE THIS CRATE FOR GLOB MATCHING, BUT I DIDNT WANT TO USE THE FULL DEPENDENCY. SO I REMOVED EVERY DEPENDENCY :)

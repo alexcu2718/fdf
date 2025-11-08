@@ -17,12 +17,6 @@ const_from_env!(
 /// A buffer used to  hold the bytes sent from the OS for `getdents` calls
 pub type SyscallBuffer = crate::AlignedBuffer<u8, BUFFER_SIZE>;
 
-#[cfg(all(target_os = "macos", debug_assertions))]
-pub type SyscallBuffer = crate::AlignedBuffer<u8, 4096>; // In debug mode, stack size is VERY small.
-
-#[cfg(all(target_os = "macos", not(debug_assertions)))]
-pub type SyscallBuffer = crate::AlignedBuffer<u8, { 8 * 4096 }>; // Default for readdir buffer  on macos
-
 ///filter function type for directory entries,
 pub type FilterType = fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>) -> bool;
 ///generic filter function type for directory entries

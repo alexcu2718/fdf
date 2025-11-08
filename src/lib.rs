@@ -32,13 +32,12 @@
  - Batched result delivery to minimise channel contention
  - Zero-copy path handling where possible
  - Avoids unnecessary `stat` calls through careful API design
- - Makes up to 50% less `getdents` syscalls on linux/android and macos m check getdents/getdirentries `fill_buffer` docs)
+ - Makes up to 50% less `getdents` syscalls on linux/android, check the  `fill_buffer` docs)
 
  ## Platform Support
 
  - **Linux/Android**: Optimised with direct `getdents` system calls
- - **Macos** Optimised with direct `getdirentries64` system calls
- - **BSD's**: Standard `readdir` with potential for future `getdirentries` optimisation.
+ - **BSD's/macOS**: Standard `readdir` with potential for future changes like `fts_open` (unlikely probably)
  - **Other Unix-like**: Fallback to standard library functions
  - **Windows**: Not currently supported (PRs welcome!)
 
@@ -160,9 +159,6 @@ mod iter;
 pub use iter::GetDents;
 pub use iter::ReadDir;
 
-#[cfg(target_os = "macos")]
-pub use iter::GetDirEntries;
-
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub(crate) use libc::{dirent as dirent64, readdir as readdir64};
 
@@ -217,8 +213,11 @@ use dashmap::DashSet;
 pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
+//miri doesnt support custom allocators
+//not sure which platforms support this, BSD doesnt from testing, will test others as appropriate(GREAT DOCS!!!)
+//this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 #[cfg(all(
-    any(target_os = "linux", target_os = "macos", target_os = "android"),
+    any(target_os = "linux", target_os = "android", target_os = "macos"),
     not(miri),
     not(debug_assertions)
 ))]
@@ -227,7 +226,6 @@ pub use filetype::FileType;
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-//use std::num::
 /**
 The `Finder` struct is the main entry point for the file search.
 Its methods are exposed for building the search configuration
@@ -385,6 +383,11 @@ impl Finder {
         clippy::wildcard_enum_match_arm,
         reason = "Exhaustive on traversible types"
     )]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "Follows std treatment of dev devices"
+    )] //https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.dev
+    #[allow(unfulfilled_lint_expectations)] //as above
     /**
      Advanced filtering for directories and symlinks with filesystem constraints.
 
@@ -486,10 +489,8 @@ impl Finder {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         // linux with getdents (only linux/android allow direct syscalls)
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive.
-        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "android")))]
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
         let direntries = dir.readdir();
-        #[cfg(target_os = "macos")]
-        let direntries = dir.getdirentries();
 
         match direntries {
             Ok(entries) => {

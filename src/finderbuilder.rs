@@ -191,13 +191,10 @@ impl FinderBuilder {
     }
 
     #[must_use]
-    #[allow(clippy::ref_patterns)]
     /// Set whether to escape any regexs in the string, defaults to false
     pub fn fixed_string(mut self, fixed_string: bool) -> Self {
-        if let Some(ref patt) = self.pattern
-            && fixed_string
-        {
-            self.pattern = Some(regex::escape(patt));
+        if fixed_string {
+            self.pattern = self.pattern.as_ref().map(|patt| regex::escape(patt));
         }
         self
     }
@@ -311,12 +308,9 @@ impl FinderBuilder {
         }
 
         // Apply canonicalisation if requested
-        if self.canonicalise
-            && let Ok(good_path) = path_check.canonicalize()
-        {
-            Ok(good_path.as_os_str().into())
-        } else {
-            Ok(dir_to_use.into_boxed_os_str())
+        match (self.canonicalise, path_check.canonicalize()) {
+            (true, Ok(good_path)) => Ok(good_path.as_os_str().into()),
+            _ => Ok(dir_to_use.into_boxed_os_str()),
         }
     }
 }

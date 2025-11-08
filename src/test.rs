@@ -4,9 +4,10 @@ mod tests {
     use crate::BytePath;
     use crate::Finder;
     use crate::cli_helpers::*;
-    use crate::{DirEntry, FileType, ReadDir};
+    use crate::{DirEntry, FileType};
     use crate::{find_char_in_word, find_zero_byte_u64};
     use chrono::{Duration as ChronoDuration, Utc};
+    use env_home::env_home_dir;
     use filetime::{FileTime, set_file_times};
     use std::env::temp_dir;
     use std::ffi::OsStr;
@@ -69,7 +70,7 @@ mod tests {
         fs::set_permissions(&no_read_dir, perms).unwrap();
 
         let entry = DirEntry::new(&temp_dir).unwrap();
-        let iter = ReadDir::new(&entry).unwrap();
+        let iter = entry.readdir().unwrap();
 
         let entries: Vec<_> = iter.collect();
 
@@ -83,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_directory_traversal_permissions_linux() {
         let temp_dir = temp_dir().join("traversal_test_again_linux");
         let _ = fs::remove_dir_all(&temp_dir);
@@ -206,7 +207,7 @@ mod tests {
         fs::write(subdir.join("file.txt"), "data").unwrap();
 
         let dir_entry = DirEntry::new(&dir).unwrap();
-        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = dir_entry.readdir().unwrap().collect();
 
         assert_eq!(entries.len(), 1, "Top-level should contain only subdir");
 
@@ -401,50 +402,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
-    fn test_getdirentries() {
-        let temp_dir = std::env::temp_dir();
-        let dir_path = temp_dir.as_path().join("testdir");
-        let _ = std::fs::create_dir(&dir_path);
-        //throwing the error incase it already exists the directory already exists
-
-        std::fs::write(dir_path.join("file1.txt"), "test1").unwrap();
-        std::fs::write(dir_path.join("file2.txt"), "test2").unwrap();
-        let _ = std::fs::create_dir(dir_path.join("subdir")); //.unwrap();
-
-        let dir_entry = DirEntry::new(dir_path.as_os_str()).unwrap();
-        let entries = dir_entry.getdirentries().unwrap();
-        let entries_clone: Vec<_> = dir_entry.getdirentries().unwrap().collect();
-
-        let mut names: Vec<_> = entries.map(|e| e.file_name().to_vec()).collect();
-
-        assert_eq!(entries_clone.len(), 3);
-
-        names.sort();
-        assert_eq!(
-            names,
-            vec![
-                b"file1.txt".to_vec(),
-                b"file2.txt".to_vec(),
-                b"subdir".to_vec()
-            ]
-        );
-
-        let entries_clone2: Vec<_> = dir_entry.getdirentries().unwrap().collect();
-
-        let _ = std::fs::remove_dir_all(&dir_path);
-        for entry in entries_clone2 {
-            assert_eq!(entry.depth(), 1);
-            assert_eq!(
-                entry.file_name_index() as usize,
-                dir_path.as_os_str().len() + 1
-            );
-        }
-
-        //let _=std::fs::File::
-    }
-
-    #[test]
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_getdents() {
         let temp_dir = std::env::temp_dir();
@@ -581,7 +538,7 @@ mod tests {
         let _ = std::fs::File::create(dir_path.join(".hidden"));
 
         let dir_entry = DirEntry::new(&dir_path).unwrap();
-        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = dir_entry.readdir().unwrap().collect();
         let mut names: Vec<_> = entries
             .iter()
             .map(|e| String::from_utf8_lossy(e.file_name()))
@@ -916,7 +873,7 @@ mod tests {
         let _ = fs::create_dir(dir_path.join("subdir"));
 
         let dir_entry = DirEntry::new(&dir_path).unwrap();
-        let iter = ReadDir::new(&dir_entry).unwrap();
+        let iter = dir_entry.readdir().unwrap();
         let entries: Vec<_> = iter.collect();
 
         assert_eq!(entries.len(), 2);
@@ -977,23 +934,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
-    fn test_entries_macos() {
-        let dir = temp_dir().join("test_dir_macos");
-
-        let _ = fs::remove_dir(&dir);
-        let _ = fs::create_dir_all(&dir);
-        let dir_entry = DirEntry::new(&dir).unwrap();
-        let iter = dir_entry.getdirentries().unwrap();
-        let entries: Vec<_> = iter.collect();
-        let _ = fs::remove_dir_all(&dir);
-
-        assert!(dir_entry.is_dir());
-        assert_eq!(entries.len(), 0);
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn test_entries() {
         let dir = temp_dir().join("test_dir");
         let _ = fs::remove_dir(&dir);
@@ -1013,7 +953,7 @@ mod tests {
         let dir = temp_dir().join("test_dir");
         let _ = fs::create_dir_all(&dir);
         let dir_entry = DirEntry::new(&dir).unwrap().to_full_path().unwrap();
-        let iter = ReadDir::new(&dir_entry).unwrap();
+        let iter = dir_entry.readdir().unwrap();
         let entries: Vec<_> = iter.collect();
         let _ = fs::remove_dir_all(&dir);
 
@@ -1170,40 +1110,7 @@ mod tests {
 
         let dir_entry = DirEntry::new(&dir_path)
             .expect("if this errors then it's probably a permission issue related to sandboxing");
-        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
-
-        let mut type_counts = std::collections::HashMap::new();
-        for entry in entries {
-            *type_counts.entry(entry.file_type).or_insert(0) += 1;
-            println!(
-                "File: {}, Type: {:?}",
-                entry.as_os_str().to_string_lossy(),
-                entry.file_type
-            );
-        }
-
-        let _ = fs::remove_dir_all(dir_path);
-        assert_eq!(type_counts.get(&FileType::RegularFile).unwrap(), &1);
-        assert_eq!(type_counts.get(&FileType::Directory).unwrap(), &1);
-        assert_eq!(type_counts.get(&FileType::Symlink).unwrap(), &1);
-    }
-
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_file_types_macos() {
-        let dir_path = temp_dir().join("THROW_AWAY_THIS_MACOS");
-        let _ = fs::remove_dir(&dir_path);
-        let _ = fs::create_dir_all(&dir_path);
-
-        // Create different file types
-        let _ = File::create(dir_path.join("regular.txt"));
-        let _ = fs::create_dir(dir_path.join("directory"));
-
-        let _ = symlink("regular.txt", dir_path.join("symlink"));
-
-        let dir_entry = DirEntry::new(&dir_path)
-            .expect("if this errors then it's probably a permission issue related to sandboxing");
-        let entries: Vec<_> = dir_entry.getdirentries().unwrap().collect();
+        let entries: Vec<_> = dir_entry.readdir().unwrap().collect();
 
         let mut type_counts = std::collections::HashMap::new();
         for entry in entries {
@@ -1232,7 +1139,7 @@ mod tests {
         let _ = std::fs::File::create(sub_dir.join("nested_file.txt"));
 
         let dir_entry = DirEntry::new(&top_dir).unwrap();
-        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = dir_entry.readdir().unwrap().collect();
 
         let mut names: Vec<_> = entries
             .iter()
@@ -1261,7 +1168,7 @@ mod tests {
         let _ = symlink("regular.txt", dir_path.join("symlink"));
 
         let dir_entry = DirEntry::new(&dir_path).unwrap();
-        let entries: Vec<_> = ReadDir::new(&dir_entry).unwrap().collect();
+        let entries: Vec<_> = dir_entry.readdir().unwrap().collect();
 
         let mut type_counts = std::collections::HashMap::new();
         for entry in entries {
@@ -1332,8 +1239,8 @@ mod tests {
     #[allow(unused)]
     fn test_home() {
         let pattern: &str = ".";
-        let home_dir = std::env::home_dir();
-
+        //let home_dir = std::env::home_dir();
+        let home_dir = env_home_dir();
         if home_dir.is_some() {
             let finder = Finder::init(home_dir.unwrap().as_os_str())
                 .pattern(&pattern)
@@ -1352,8 +1259,8 @@ mod tests {
     #[allow(unused)]
     fn test_home_symlink() {
         let pattern: &str = ".";
-        let home_dir = std::env::home_dir();
-
+        //let home_dir = std::env::home_dir();
+        let home_dir = env_home_dir();
         if home_dir.is_some() {
             let finder = Finder::init(home_dir.unwrap().as_os_str())
                 .pattern(&pattern)
@@ -1373,7 +1280,8 @@ mod tests {
     #[allow(unused)]
     fn test_home_nonhidden() {
         let pattern: &str = ".";
-        let home_dir = std::env::home_dir();
+        //let home_dir = std::env::home_dir(); //deprecation shit.
+        let home_dir = env_home_dir();
 
         if home_dir.is_some() {
             let finder = Finder::init(home_dir.unwrap().as_os_str())
@@ -1430,8 +1338,6 @@ mod tests {
     #[test]
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_filedes_getdents() {
-        use crate::GetDents;
-
         let dir = temp_dir().join("test_filedes_getdents");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = fs::create_dir_all(&dir);
@@ -1453,7 +1359,7 @@ mod tests {
         let use_path: &str = "/non/existent/pathjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
 
         let std_path = Path::new(use_path);
-        if std_path.exists() {
+        if !std_path.exists() {
             let non_existent = DirEntry::new(std_path.as_os_str());
             assert!(non_existent.is_err(), "ok, stop being an ass")
         };

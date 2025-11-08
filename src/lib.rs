@@ -455,9 +455,11 @@ impl Finder {
             .search_config
             .depth
             .is_some_and(|depth| dir.depth >= depth.get())
-            && should_send
+            
         {
-            let _ = sender.send(vec![dir.clone()]); // cloning costs very little here.
+            if should_send{
+                let _ = sender.send(vec![dir.clone()]);
+            } // cloning costs very little here.
             return false; // depth limit reached, stop processing
         }
         true // continue processing

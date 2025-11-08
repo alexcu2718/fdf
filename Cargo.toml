@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.7.7"
+version = "0.7.8"
 rust-version = "1.85.0"
 edition = "2024"
 license = "MIT"
@@ -23,11 +23,11 @@ libc = "0.2.175"
 rayon = "1.10.0"
 regex = { version = "1.12.2", features = ["perf"] }
 [target.'cfg(any(target_os = "linux",target_os="macos",target_os="android"))'.dependencies]
-mimalloc = {version ="0.1.48", features=["v3","extended"]}
+mimalloc = {version ="0.1.48",features=["extended"]} #dont enable v3, it causes weird shit with extra syscalls.
 
 
 [dev-dependencies]
-env_home = "0.1.0"
+env_home = "0.1.0" #due to deprecated homedir in stdlib
 criterion = { version = "0.7.0", features = [
   "cargo_bench_support",
   "real_blackbox",
@@ -53,6 +53,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 overflow-checks = false
+
 
 [[bench]]
 name = "dirent_bench"

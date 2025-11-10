@@ -120,7 +120,6 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 - **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#L195)**
 
-
 - **find_char_in_word/find_last_char_in_word**: Locates the first/last occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 
 - **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)
@@ -139,8 +138,7 @@ Check source code for further explanation [in src/utils.rs](./src/utils.rs#L195)
 #[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris",target_os="android"))] 
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     use core::num::NonZeroU64;
-    /*The only unsafe action is dereferencing the pointer
-    This MUST be validated beforehand */
+    /*The only unsafe action is dereferencing the pointer; This MUST be validated beforehand */
     const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
     const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
     // Create a mask for the first 3 bytes in the case where reclen==24
@@ -438,5 +436,3 @@ Options:
 
 - Implement a filtering mechanism that avoids unnecessary directory allocations.  
 - Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.  
-
-

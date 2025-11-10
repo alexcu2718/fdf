@@ -156,7 +156,7 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     {
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { libc::strlen(access_dirent!(drnt, d_name).cast::<_>()) }
-        // Fallback for other OSes
+        // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cast (it's essentially just reinterpreting)
     }
 }
 
@@ -220,7 +220,9 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         target_os = "android"
     )))]
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
-    return unsafe { access_dirent!(drnt, d_namlen) }; //trivial operation for macos/bsds 
+    return unsafe {
+        (*drnt).d_namlen as usize;
+    }; //trivial operation for macos/bsds 
     #[cfg(any(
         target_os = "linux",
         target_os = "illumos",

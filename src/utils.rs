@@ -238,7 +238,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     ))]
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
     return unsafe {
-        (*drnt).d_namlen as usize;
+        (*drnt).d_namlen as usize
     }; //trivial operation for macos/bsds 
     #[cfg(any(
         target_os = "linux",

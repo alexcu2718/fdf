@@ -128,14 +128,19 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
     #[cfg(any(
         target_os = "linux",
+        target_os = "android",
+        target_os = "emscripten",
         target_os = "illumos",
         target_os = "solaris",
+        target_os = "redox",
+        target_os = "hermit",
+        target_os = "fuchsia",
         target_os = "macos",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "openbsd",
         target_os = "netbsd",
-        target_os = "android"
+        target_os = "aix"
     ))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -144,14 +149,19 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
 
     #[cfg(not(any(
         target_os = "linux",
+        target_os = "android",
+        target_os = "emscripten",
         target_os = "illumos",
         target_os = "solaris",
+        target_os = "redox",
+        target_os = "hermit",
+        target_os = "fuchsia",
+        target_os = "macos",
         target_os = "freebsd",
+        target_os = "dragonfly",
         target_os = "openbsd",
         target_os = "netbsd",
-        target_os = "dragonfly",
-        target_os = "macos",
-        target_os = "android"
+        target_os = "aix"
     )))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -170,14 +180,19 @@ My Cat Diavolo is cute.
 #[inline]
 #[cfg(any(
     target_os = "linux",
+    target_os = "android",
+    target_os = "emscripten",
     target_os = "illumos",
     target_os = "solaris",
+    target_os = "redox",
+    target_os = "hermit",
+    target_os = "fuchsia",
     target_os = "macos",
     target_os = "freebsd",
     target_os = "dragonfly",
     target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "android"
+    target_os = "aix"
 ))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
@@ -213,21 +228,27 @@ This is one of the hottest paths when scanning directories. By eliminating
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
 
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "illumos",
-        target_os = "solaris",
-        target_os = "android"
-    )))]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "dragonfly", 
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "aix" // best effort, no guarantees
+    ))]
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
     return unsafe {
         (*drnt).d_namlen as usize;
     }; //trivial operation for macos/bsds 
     #[cfg(any(
         target_os = "linux",
+        target_os = "android",
+        target_os = "emscripten", // best effort, no guarantees
         target_os = "illumos",
         target_os = "solaris",
-        target_os = "android"
+        target_os = "redox", // best effort, no guarantees
+        target_os = "hermit", // best effort, no guarantees
+        target_os = "fuchsia" // best effort, no guarantees
     ))]
     // On these systems where we need a bit of 'black magic'
     {

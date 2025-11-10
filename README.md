@@ -135,7 +135,8 @@ Check source code for further explanation [in src/utils.rs](./src/utils.rs#L195)
 // Used on Linux/Solaris/Illumos/Android systems; BSD systems/macOS store name length trivially
 // SIMD within a register, so no architecture dependence
 //http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm
-#[cfg(any(target_os = "linux", target_os = "illumos", target_os = "solaris",target_os="android"))] 
+ #[cfg(any(target_os = "linux",target_os = "android",target_os = "emscripten", target_os = "illumos",target_os = "solaris",
+        target_os = "redox", target_os = "hermit", target_os = "fuchsia"))]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     use core::num::NonZeroU64;
     /*The only unsafe action is dereferencing the pointer; This MUST be validated beforehand */
@@ -148,8 +149,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     // Access the last 8 bytes of the word (this is an aligned read due to kernel providing 8 byte aligned dirent structs!)
     let last_word: u64 = unsafe { *(drnt.byte_add(reclen - 8).cast::<u64>()) };
     // reclen is always multiple of 8 so alignment is guaranteed
-    let mask = MASK * ((reclen == 24) as u64); // branchless mask
-    let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short 
+    let mask = MASK * ((reclen == 24) as u64); // branchless mask (multiply by 0 or 1)
+    let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short (when reclen==24)
     //The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
     let zero_bit = unsafe {
         // Use specialised instructions (ctlz_nonzero)

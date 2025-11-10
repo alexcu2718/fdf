@@ -12,9 +12,8 @@ const_from_env!(
 );
 //basically this is the should allow getdents to grab a lot of entries in one go
 
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
-const_assert!(BUFFER_SIZE>=4096,"Buffer size too small!");
+const_assert!(BUFFER_SIZE >= 4096, "Buffer size too small!");
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 //we only use a buffer for syscalls on linux because of stable ABI(because we don't need to use a buffer for `ReadDir`)

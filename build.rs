@@ -21,5 +21,4 @@ fn main() {
         max_filename_len >= 255,
         "NAME_MAX is not appropriately set!"
     );
-
 }

@@ -477,16 +477,13 @@ pub trait DirentConstructor {
         let path_buffer = self.path_buffer();
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
         let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) };
-        // SAFETY:
-        // - `d_name` and `buffer` don't overlap (different memory regions)
-        // - Both pointers are properly aligned for byte copying
-        // - `name_len` is within `buffer` bounds (checked by debug assertion)
-        unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) };
 
-        /*
-         SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
-        */
+        // SAFETY: `d_name` and `buffer` don't overlap (different memory regions)
+        // - Both pointers are properly aligned for byte copying
+        // - `name_len` is within `buffer` bounds
+        unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) };
         #[allow(clippy::multiple_unsafe_ops_per_block)]
+        // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         unsafe {
             CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..base_len + name_len))
         }

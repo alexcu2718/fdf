@@ -102,15 +102,16 @@ impl FinderBuilder {
         self
     }
     #[must_use]
-    /// Set whether to use short paths in regex matching, defaults to true
+    /// Set whether to use short paths in regex/glob matching, defaults to true
+    /// This is over-ridden if the search term contains a '/'
     pub const fn file_name_only(mut self, short_path: bool) -> Self {
         self.file_name_only = short_path;
         self
     }
     #[must_use]
     /// Set extension to match, defaults to no extension
-    pub fn extension_match<C: AsRef<str>>(mut self, extension_match: C) -> Self {
-        let ext = extension_match.as_ref().as_bytes();
+    pub fn extension<C: AsRef<str>>(mut self, extension: C) -> Self {
+        let ext = extension.as_ref().as_bytes();
 
         if ext.is_empty() {
             self.extension_match = None;
@@ -147,8 +148,7 @@ impl FinderBuilder {
 
     /// Sets whether to follow symlinks (default: false).
     ///
-    /// # Warning
-    /// Enabling this may cause infinite recursion, although there are protections in place against it!
+    /// This will not recurse infinitely but can provide more results than expected
     #[must_use]
     pub const fn follow_symlinks(mut self, follow_symlinks: bool) -> Self {
         self.follow_symlinks = follow_symlinks;

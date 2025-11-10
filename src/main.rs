@@ -266,7 +266,7 @@ fn main() -> Result<(), SearchConfigError> {
         .fixed_string(args.fixed_string)
         .canonicalise_root(args.absolute_path)
         .file_name_only(!args.full_path)
-        .extension_match(args.extension.unwrap_or_else(String::new))
+        .extension(args.extension.unwrap_or_else(String::new))
         .max_depth(args.depth)
         .follow_symlinks(args.follow_symlinks)
         .filter_by_size(args.size)

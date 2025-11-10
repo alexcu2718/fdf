@@ -1,4 +1,5 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use fdf::access_dirent;
 
 use core::num::NonZeroU64;
 use std::hint::black_box;
@@ -103,7 +104,11 @@ fn bench_strlen(c: &mut Criterion) {
             group.bench_with_input(
                 BenchmarkId::new("const_time_swar", size_name),
                 &entry,
-                |b, e| b.iter(|| unsafe { black_box(dirent_const_time_strlen(black_box(e))) }),
+                |b, e| {
+                    b.iter(|| unsafe {
+                        black_box(dirent_const_time_strlen(black_box(e as *const _)))
+                    })
+                },
             );
 
             group.bench_with_input(
@@ -111,7 +116,7 @@ fn bench_strlen(c: &mut Criterion) {
                 &entry,
                 |b, e| {
                     b.iter(|| unsafe {
-                        black_box(libc::strlen(black_box(e.d_name.as_ptr() as *const _)))
+                        black_box(libc::strlen(black_box(access_dirent!(e, d_name).cast())))
                     })
                 },
             );
@@ -141,7 +146,9 @@ fn bench_strlen(c: &mut Criterion) {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(libc::strlen(black_box(entry.d_name.as_ptr() as *const _)))
+                        black_box(libc::strlen(black_box(
+                            access_dirent!(entry, d_name).cast(),
+                        )))
                     };
                 }
                 black_box(total) //make sure compiler does not optimise this away

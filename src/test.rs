@@ -5,7 +5,7 @@ mod tests {
     use crate::Finder;
     use crate::cli_helpers::*;
     use crate::{DirEntry, FileType};
-    use crate::{find_char_in_word, find_zero_byte_u64};
+    use crate::{find_char_in_word, find_last_char_in_word, find_zero_byte_u64};
     use chrono::{Duration as ChronoDuration, Utc};
     use env_home::env_home_dir;
     use filetime::{FileTime, set_file_times};
@@ -462,6 +462,12 @@ mod tests {
     fn test_find_char_at_end() {
         let bytes = create_byte_array("hello");
         assert_eq!(find_char_in_word(b'o', bytes), Some(4));
+    }
+
+    #[test]
+    fn test_last_char_at_end() {
+        let bytes = create_byte_array("hello");
+        assert_eq!(find_last_char_in_word(b'l', bytes), Some(3));
     }
 
     #[test]
@@ -1244,6 +1250,49 @@ mod tests {
         if home_dir.is_some() {
             let finder = Finder::init(home_dir.unwrap().as_os_str())
                 .pattern(&pattern)
+                .keep_hidden(true)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
+
+            let result = finder.traverse().unwrap().into_iter();
+
+            let collected: Vec<_> = std::hint::black_box(result.collect());
+        }
+    }
+
+    #[test]
+    #[allow(unused)]
+    fn test_home_extension() {
+        let pattern: &str = ".";
+
+        let home_dir = env_home_dir();
+        if home_dir.is_some() {
+            let finder = Finder::init(home_dir.unwrap().as_os_str())
+                .pattern(&pattern)
+                .extension("c")
+                .keep_hidden(true)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
+
+            let result = finder.traverse().unwrap().into_iter();
+
+            let collected: Vec<_> = std::hint::black_box(result.collect());
+        }
+    }
+
+    #[test]
+    #[allow(unused)]
+    fn test_home_extension_symlink() {
+        let pattern: &str = ".";
+
+        let home_dir = env_home_dir();
+        if home_dir.is_some() {
+            let finder = Finder::init(home_dir.unwrap().as_os_str())
+                .pattern(&pattern)
+                .follow_symlinks(true)
+                .extension("c")
                 .keep_hidden(true)
                 .keep_dirs(true)
                 .build()

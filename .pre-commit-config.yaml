@@ -13,6 +13,9 @@ repos:
       - id: fmt
         name: cargo fmt
         description: Format Rust code with rustfmt
+      - id: test
+        name: cargo test
+        description: Run Rust tests
 
   - repo: local
     hooks:
@@ -20,6 +23,13 @@ repos:
         name: Clippy Test
         description: Run comprehensive clippy linting
         entry: ./clippy_test.sh
+        language: system
+        files: \.rs$
+        pass_filenames: false
+      - id: cargo-test
+        name: Cargo Test
+        description: Run Rust tests
+        entry: cargo test
         language: system
         files: \.rs$
         pass_filenames: false

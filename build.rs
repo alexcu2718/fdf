@@ -59,7 +59,6 @@ fn main() {
             if has_zfs {
                 println!("cargo:rustc-env=HAS_ZFS_FS=TRUE");
             }
-           
         }
         Err(e) => {
             println!("cargo:warning=Failed to read /proc/filesystems: {e}");

@@ -234,9 +234,10 @@ impl GetDents {
 
         // Note, we don't support reiser due to it's massive file name length
         // This should support Openzfs, ZFS is the only FS on linux which has a size greater than 512 bytes
-        const MAX_SIZED_DIRENT: usize = match option_env!("HAS_ZFS_FS") { //Generate this env var at compile time
-        Some(_) => 1023 + 1 + MINIMUM_DIRENT_SIZE, // max size of ZFS+NUL + non variable fields
-        None => 2 * (255 + 1) + MINIMUM_DIRENT_SIZE, // max size (255 characters in UTF16 +NUL) + non variable fields
+        const MAX_SIZED_DIRENT: usize = match option_env!("HAS_ZFS_FS") {
+            //Generate this env var at compile time
+            Some(_) => 1023 + 1 + MINIMUM_DIRENT_SIZE, // max size of ZFS+NUL + non variable fields
+            None => 2 * (255 + 1) + MINIMUM_DIRENT_SIZE, // max size (255 characters in UTF16 +NUL) + non variable fields
         };
 
         // See proof at bottom of page.
@@ -468,10 +469,26 @@ pub trait DirentConstructor {
 
         //  Allocate exact size and copy in one operation
         let total_capacity = base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH;
-        let mut path_buffer = Vec::with_capacity(total_capacity);
+        let mut path_buffer: Vec<u8> = Vec::with_capacity(total_capacity);
 
-        // Copy directory path and set length without zero-filling unused space
-        path_buffer.extend_from_slice(dir_path_in_bytes);
+        /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
+         SAFETY:
+         - `dir_path_in_bytes.as_ptr()` is valid for reads of `base_len` bytes (source slice length)
+         - `path_buffer.as_mut_ptr()` is valid for writes of `base_len` bytes (we allocated `total_capacity >= base_len`)
+         - The memory regions are guaranteed non-overlapping: `dir_path_in_bytes` points to existing data
+           while `path_buffer` points to freshly allocated memory
+         - Both pointers are properly aligned for u8 access
+         - `base_len` equals `dir_path_in_bytes.len()`, ensuring we don't read beyond source bounds
+        */
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                dir_path_in_bytes.as_ptr(),
+                path_buffer.as_mut_ptr(),
+                base_len,
+            )
+        };
+        //https://en.cppreference.com/w/c/string/byte/memcpy
+        // from above "memcpy is the fastest library routine for memory-to-memory copy"
 
         // SAFETY: We've allocated enough capacity and only need to set the length
         // The filename portion will be overwritten during iteration

@@ -8,14 +8,17 @@ repos:
       - id: check-toml
 
   - repo: https://github.com/FeryET/pre-commit-rust
-    rev: master
+    rev: v1.2.1
     hooks:
       - id: fmt
         name: cargo fmt
         description: Format Rust code with rustfmt
+        always_run: true
       - id: test
         name: cargo test
         description: Run Rust tests
+        always_run: true
+        pass_filenames: false
 
   - repo: local
     hooks:
@@ -26,6 +29,7 @@ repos:
         language: system
         files: \.rs$
         pass_filenames: false
+        always_run: true
       - id: cargo-test
         name: Cargo Test
         description: Run Rust tests
@@ -33,3 +37,4 @@ repos:
         language: system
         files: \.rs$
         pass_filenames: false
+        always_run: true

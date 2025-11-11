@@ -1,10 +1,41 @@
 #![allow(clippy::all)]
 #![allow(warnings)]
 
-use std::io::Write;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Write};
 use std::thread;
 
+#[cfg(target_os = "linux")]
+/// Checking filesystem support for reiserfs
+fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
+    let file = File::open("/proc/filesystems")?;
+    let reader = BufReader::new(file);
+    let mut filesystems = Vec::new();
+    
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if let Some(fs_name) = parts.last() {
+                let fs_name = fs_name.to_lowercase();
+                filesystems.push(fs_name);
+            }
+        }
+    }
+    
+    Ok(filesystems)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
+    // On non-Linux systems, there isn't any Reiser support
+    Ok(Vec::new())
+}
+
 fn main() {
+    // Re-run build script if filesystem list changes
+    println!("cargo:rerun-if-changed=/proc/filesystems");
+   
+    
     //set threadcounts for rayon.
     const MIN_THREADS: usize = 1;
     let num_threads =
@@ -15,10 +46,24 @@ fn main() {
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     println!("cargo:rustc-env=FDF_PAGE_SIZE={page_size}");
 
-    let max_filename_len = unsafe { libc::pathconf(c"/".as_ptr(), libc::_PC_NAME_MAX) };
-    println!("cargo:rustc-env=NAME_MAX={max_filename_len}");
-    assert!(
-        max_filename_len >= 255,
-        "NAME_MAX is not appropriately set!"
-    );
+
+    // Check for reiser filesystem support and set env var appropriately
+    match get_supported_filesystems() {
+        Ok(filesystems) => {
+            let has_reiser = filesystems.iter().any(|fs| fs.starts_with("reiser"));
+
+            if has_reiser {
+    
+                println!("cargo:rustc-env=HAS_REISER_FS=TRUE");  
+            }
+         
+           
+        }
+        Err(e) => {
+            // If we can't read /proc/filesystems, assume reiserfs is false
+            println!("cargo:warning=Failed to read /proc/filesystems: {}", e);
+            //Don't set env var, it's irrelevant, it only has to exist for reiser fs to be detected
+           
+        }
+    }
 }

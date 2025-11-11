@@ -419,39 +419,70 @@ pub trait DirentConstructor {
         let is_root = dir_path_in_bytes == b"/";
 
         let needs_slash: usize = usize::from(!is_root);
-        const_from_env!(NAME_MAX:usize="NAME_MAX",255); // Get `NAME_MAX` from build script, because `libc` doesn't expose it in Rust, weirdly...
-        const_assert!(
-            NAME_MAX >= 255,
-            "Expected NAME_MAX to be greater or equal to 255"
-        );
-        const MAX_SIZED_DIRENT_LENGTH: usize = 2 * (NAME_MAX + 1); // 2* (`NAME_MAX`+1) (account for null terminator) (due to cifs/ntfs issue seen below)
-
-        //set a conservative estimate incase it returns something useless
-        // Initialise buffer with zeros to avoid uninitialised memory then add the max length of a filename on
-        // we deduct the size of the fixed fields (ie `d_reclen` etc..), so to get the max size of the dynamic array, see proof at bottom
-        let mut path_buffer = vec![0u8; base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH];
 
         /*
-        Essentially because of CIFS/NTFS supporting 255 as a max length, you would think you're safe, NO
-        Unfortunately this characters are encoded as utf16 so they can be TWICE the usual `NAME_MAX`, ordinarily it'd be 255
-        https://longpathtool.com/blog/maximum-filename-length-in-ntfs/, see proof at bottom of page.
-        (Negligible performance cost but I choose these numbers for a reason, see man page copy paste below and the test at the bottom of the page!)
-        Please note future readers, `PATH_MAX` is not the max length of a path, it's simply the maximum length of a path that POSIX functions will take
-        I made this mistake then suffered a segfault to the knee. BEWARB
-         */
-        let buffer_ptr = path_buffer.as_mut_ptr(); // get the mutable pointer to the buffer
-        // SAFETY: the memory regions do not overlap , src and dst are both valid, trivial
-        unsafe { core::ptr::copy_nonoverlapping(dir_path_in_bytes.as_ptr(), buffer_ptr, base_len) }; // copy path
+        https://en.wikipedia.org/wiki/Comparison_of_file_systems#Limits
+
+        File System	Maximum Filename Length
+        AdvFS	255 characters
+        APFS	255 UTF-8 characters
+        bcachefs	255 bytes
+        BeeGFS	255 bytes
+        Btrfs	255 bytes
+        EROFS	255 bytes
+        ext2	255 bytes
+        ext3	255 bytes
+        ext4	255 bytes
+        F2FS	255 bytes
+        FFS	255 bytes
+        GFS	255 bytes
+        GFS2	255 bytes
+        GPFS	255 UTF-8 codepoints
+        HFS	31 bytes
+        HFS Plus	255 UTF-16 code units /510  bytes
+        JFS	255 bytes
+        JFS1	255 bytes
+        Lustre	255 bytes
+        NILFS	255 bytes
+        NOVA	255 bytes
+        OCFS	255 bytes
+        OCFS2	255 bytes
+        QFS	255 bytes
+        ReiserFS	255 characters / 4032 bytes
+        Reiser4	3976 bytes
+        UFS1	255 bytes
+        UFS2	255 bytes
+        VxFS	255 bytes
+        XFS	255 bytes
+        ZFS	1023 bytes
+        NTFS 255 UTF-16 / 510 bytes
+        
+        */
+
+        // Max dirent length determined at build time based on supported filesystems
+         // Reiser4 max (3976) + NUL otherwise to set to ZFS max (1023) +NUL
+        const MAX_SIZED_DIRENT_LENGTH: usize = if option_env!("HAS_REISER_FS").is_some() { 3976 + 1 } else { 1023 + 1 };
+        
+        //  Allocate exact size and copy in one operation
+        let total_capacity = base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH;
+        let mut path_buffer = Vec::with_capacity(total_capacity);
+
+        // Copy directory path and set length without zero-filling unused space
+        path_buffer.extend_from_slice(dir_path_in_bytes);
+
+        // SAFETY: We've allocated enough capacity and only need to set the length
+        // The filename portion will be overwritten during iteration
+        unsafe { path_buffer.set_len(total_capacity) };
 
         /*
         Essentially  what we're doing here is creating 1 vector per  directory, with enough space allocated to hold any filename
-        This allows no dynamic resizing during iteration, which could be costly!
+        This allows no dynamic resizing during iteration, which is costly!
          */
 
         #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
         // SAFETY: write is within buffer bounds
         unsafe {
-            *buffer_ptr.add(base_len) = b'/' * (!is_root as u8) // add slash if needed  (this avoids a branch ), either add 0 or  add a slash (multiplication)
+            *path_buffer.as_mut_ptr().add(base_len) = b'/' * (!is_root as u8) // add slash if needed  (this avoids a branch )
         };
 
         base_len += needs_slash; // update length if slash added

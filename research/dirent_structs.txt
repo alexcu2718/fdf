@@ -283,4 +283,3 @@ pub struct dirent {
     /// declare it as a zero-length array instead.
     pub d_name: [c_char; 0],
 }
-

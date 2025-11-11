@@ -33,5 +33,4 @@ cargo clippy --all -- \
   -A clippy::let_underscore_must_use \
   -A clippy::let_underscore_untyped \
   -A clippy::missing_docs_in_private_items \
-  -A clippy::inline_asm_x86_intel_syntax \
-  -A clippy::items_after_statements 
+  -A clippy::items_after_statements

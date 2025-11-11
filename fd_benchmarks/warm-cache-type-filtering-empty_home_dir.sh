@@ -36,7 +36,7 @@ echo "Total files differing: $differences"
 if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fd:"
   comm -23 "$OUTPUT_DIR/fd_type_e_home_dir.lst" "$OUTPUT_DIR/fdf_type_e_home_dir.lst"
-  
+
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd_type_e_home_dir.lst" "$OUTPUT_DIR/fdf_type_e_home_dir.lst"
 else
@@ -45,4 +45,3 @@ fi
 
 echo -e "\nBenchmark results saved to $OUTPUT_DIR/results-warm-cache-type-filtering-empty_home_dir.md"
 echo "Diff results saved to $OUTPUT_DIR/fd_diff_type_e_home_dir.md"
-

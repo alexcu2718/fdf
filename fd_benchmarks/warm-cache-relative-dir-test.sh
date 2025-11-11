@@ -28,7 +28,7 @@ hyperfine \
   --prepare 'sync; sleep 0.2' \
   "$COMMAND_FIND" \
   "$COMMAND_FD" \
-  --export-markdown "$OUTPUT_DIR/results-warm-cache-relative-dir-test.md" 
+  --export-markdown "$OUTPUT_DIR/results-warm-cache-relative-dir-test.md"
 
 
 eval "$COMMAND_FD" | grep -v 'systemd-private' | sort > "$OUTPUT_DIR/fd_relative.lst"
@@ -49,11 +49,10 @@ echo "Files differing: $differences"
 if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fd:"
   comm -23 "$OUTPUT_DIR/fd_relative.lst" "$OUTPUT_DIR/fdf_relative.lst"
-  
+
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd_relative.lst" "$OUTPUT_DIR/fdf_relative.lst"
 
 else
   echo "No differences found in direct execution"
 fi
-

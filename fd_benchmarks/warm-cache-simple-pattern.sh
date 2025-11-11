@@ -38,10 +38,10 @@ echo "Total lines differing: $differences"
 if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fd:"
   comm -23 "$OUTPUT_DIR/fd_pattern.lst" "$OUTPUT_DIR/fdf_pattern.lst"
-  
+
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd_pattern.lst" "$OUTPUT_DIR/fdf_pattern.lst"
-  
+
 
 else
   echo "No differences found in direct execution"

@@ -66,7 +66,7 @@ impl core::error::Error for ParseSizeError {}
 pub enum SizeFilter {
     /// Maximum size (inclusive): files must be <= this size
     Max(u64),
-    /// Minimum size (inclusive): files must be >= this size  
+    /// Minimum size (inclusive): files must be >= this size
     Min(u64),
     /// Exact size: files must be exactly this size
     Equals(u64),

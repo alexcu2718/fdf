@@ -35,11 +35,11 @@ if [ ! -e "$fdf_location" ]; then
 	git clone "$fdf_repo" "$fdf_location" >/dev/null
 	echo "Building fdf..."
 	cd "$fdf_location" || exit 1
-	cargo b -r 
+	cargo b -r
 else
 	cd "$fdf_location" || exit 1
 	cargo b -r -q #check if it's built just incase
- 
+
 fi
 
 export PATH="$fdf_location/target/release:$PATH"

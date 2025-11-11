@@ -257,7 +257,7 @@ echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc
 # For Bash
 echo 'eval "$(fdf --generate bash)"' >> ~/.bashrc
 
-## Options 
+## Options
 Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
 Arguments:
@@ -427,20 +427,20 @@ Options:
 
 ### Potential Future Enhancements
 
-#### 1. io_uring System Call Batching  
+#### 1. io_uring System Call Batching
 
-- Investigate batching of `stat` and similar operations.  
-- **Key challenges:**  
-  - No native `getdents` support in `io_uring`.  
-  - Would require async runtime integration (e.g. Tokio).  
-  - Conflicts with the project’s minimal-dependency design.  
+- Investigate batching of `stat` and similar operations.
+- **Key challenges:**
+  - No native `getdents` support in `io_uring`.
+  - Would require async runtime integration (e.g. Tokio).
+  - Conflicts with the project’s minimal-dependency design.
   - Linux-only feature, making it a low-priority and high-effort addition.  **I will likely NOT do this**
 
-#### 2. Native Threading Implementation  
+#### 2. Native Threading Implementation
 
-- Replace the Rayon dependency with a custom threading model. Honestly probably impossible for me to outperform it.  
+- Replace the Rayon dependency with a custom threading model. Honestly probably impossible for me to outperform it.
 
-#### 3. Allocation-Optimised Iterator Adaptor  
+#### 3. Allocation-Optimised Iterator Adaptor
 
-- Implement a filtering mechanism that avoids unnecessary directory allocations.  
-- Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.  
+- Implement a filtering mechanism that avoids unnecessary directory allocations.
+- Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.

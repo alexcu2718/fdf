@@ -41,10 +41,10 @@ echo "Total files differing: $differences"
 if [[ $differences -gt 0 ]]; then
   echo -e "\nFiles only in fd:"
   comm -23 "$OUTPUT_DIR/fd_depth_home_dir.lst" "$OUTPUT_DIR/fdf_depth_home_dir.lst"
-  
+
   echo -e "\nFiles only in fdf:"
   comm -13 "$OUTPUT_DIR/fd_depth_home_dir.lst" "$OUTPUT_DIR/fdf_depth_home_dir.lst"
-  
+
 
 else
   echo "No differences found in direct execution"

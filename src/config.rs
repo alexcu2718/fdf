@@ -42,7 +42,7 @@ impl FileTypeFilter {
     /// # Returns
     /// A `u8` value representing the file type:
     /// - `b'f'` for regular files
-    /// - `b'd'` for directories  
+    /// - `b'd'` for directories
     /// - `b'l'` for symbolic links
     /// - `b'p'` for named pipes (FIFOs)
     /// - `b'c'` for character devices
@@ -354,7 +354,7 @@ impl SearchConfig {
         );
 
         self.regex_match.as_ref().is_none_or(|reg|
-                // use arithmetic to avoid branching costs 
+                // use arithmetic to avoid branching costs
              { let index_amount=!full_path as usize * dir.file_name_index();
                      // SAFETY: are always indexing within bounds.
             unsafe{reg.is_match(dir.get_unchecked(index_amount..))}

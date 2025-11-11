@@ -40,7 +40,7 @@ else
 fi
 
 
-##quick hack to delete it in case people complain 
+##quick hack to delete it in case people complain
 if [[ -d "$LLVM_DIR" ]]; then
     read -rp "$LLVM_DIR exists. Delete it? [y/n]: " delete_confirm
     if [[ "$delete_confirm" =~ ^[Yy]$ ]]; then

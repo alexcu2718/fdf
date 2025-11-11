@@ -138,7 +138,7 @@ mod tests {
         }
 
         // Jan 1, 2000 UTC
-        let custom_secs = 946684800; // seconds since epoch 
+        let custom_secs = 946684800; // seconds since epoch
         let custom_ft = FileTime::from_unix_time(custom_secs, 0);
 
         // Apply custom time

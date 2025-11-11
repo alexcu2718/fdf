@@ -231,13 +231,13 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     #[cfg(any(
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "dragonfly", 
+        target_os = "dragonfly",
         target_os = "openbsd",
         target_os = "netbsd",
         target_os = "aix" // best effort, no guarantees
     ))]
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
-    return unsafe { (*drnt).d_namlen as usize }; //trivial operation for macos/bsds 
+    return unsafe { (*drnt).d_namlen as usize }; //trivial operation for macos/bsds
     #[cfg(any(
         target_os = "linux",
         target_os = "android",

@@ -222,7 +222,7 @@ impl GetDents {
 
          Example:
          - Buffer capacity: 4600 bytes (It is arbitrary)
-         - Largest dirent64 size: 280 bytes
+         - Largest dirent64 size: 280 bytes (Well, see below...)
          - If getdents returns ≤ 4320 bytes (4600 - 280), then even if we made another
            system call, it would definitively call 0 bytes on next call, so we skip it!
            Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
@@ -232,15 +232,18 @@ impl GetDents {
         const MINIMUM_DIRENT_SIZE: usize =
             core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
 
-        const MAX_SIZED_DIRENT: usize = 2 * size_of::<dirent64>() - MINIMUM_DIRENT_SIZE; //this is `true` maximum dirent size for NTFS/CIFS, (deducting the 24 for fields)
+        // Note, we don't support reiser due to it's massive file name length
+        // This should support Openzfs, ZFS is the only FS on linux which has a size greater than 512 bytes
+        const MAX_SIZED_DIRENT: usize = match option_env!("HAS_ZFS_FS") { //Generate this env var at compile time
+        Some(_) => 1023 + 1 + MINIMUM_DIRENT_SIZE, // max size of ZFS+NUL + non variable fields
+        None => 2 * (255 + 1) + MINIMUM_DIRENT_SIZE, // max size (255 characters in UTF16 +NUL) + non variable fields
+        };
 
         // See proof at bottom of page.
         self.end_of_stream = !has_bytes_remaining
             || self.syscall_buffer.max_capacity() - MAX_SIZED_DIRENT >= self.remaining_bytes; //a boolean
 
         /*
-        I have to make an edgecase for CIFS/NTFS file systems here, otherwise it would skip entries on these systems
-        Luckily rerunning benchmarks showed negligible, if any, perf cost, it probably only calls getdents a handful of times for the edgecases
         you can't have perfection in systems programming, so many variables!
         Ultimately this is a heuristic way, it's not fool proof,
         it won't however miss any entries but it CAN sometimes call `getdents64` to get a 0
@@ -448,8 +451,8 @@ pub trait DirentConstructor {
         OCFS	255 bytes
         OCFS2	255 bytes
         QFS	255 bytes
-        ReiserFS	255 characters / 4032 bytes
-        Reiser4	3976 bytes
+        ReiserFS	255 characters // 4032 bytes //not supporting this!
+        Reiser4	3976 bytes  //not supporting this!
         UFS1	255 bytes
         UFS2	255 bytes
         VxFS	255 bytes
@@ -460,12 +463,8 @@ pub trait DirentConstructor {
         */
 
         // Max dirent length determined at build time based on supported filesystems
-        // Reiser4 max (3976) + NUL otherwise to set to ZFS max (1023) +NUL
-        const MAX_SIZED_DIRENT_LENGTH: usize = if option_env!("HAS_REISER_FS").is_some() {
-            3976 + 1
-        } else {
-            1023 + 1
-        };
+        //Set to to ZFS max (1023) +NUL (this will also support HAMMER/HAMMER2 on dragonflyBSD)
+        const MAX_SIZED_DIRENT_LENGTH: usize = 1023 + 1;
 
         //  Allocate exact size and copy in one operation
         let total_capacity = base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH;

@@ -11,7 +11,7 @@ fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
     let file = File::open("/proc/filesystems")?;
     let reader = BufReader::new(file);
     let mut filesystems = Vec::new();
-    
+
     for line in reader.lines() {
         if let Ok(line) = line {
             let parts: Vec<&str> = line.split_whitespace().collect();
@@ -21,7 +21,7 @@ fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
             }
         }
     }
-    
+
     Ok(filesystems)
 }
 
@@ -34,8 +34,7 @@ fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
 fn main() {
     // Re-run build script if filesystem list changes
     println!("cargo:rerun-if-changed=/proc/filesystems");
-   
-    
+
     //set threadcounts for rayon.
     const MIN_THREADS: usize = 1;
     let num_threads =
@@ -46,24 +45,19 @@ fn main() {
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     println!("cargo:rustc-env=FDF_PAGE_SIZE={page_size}");
 
-
     // Check for reiser filesystem support and set env var appropriately
     match get_supported_filesystems() {
         Ok(filesystems) => {
             let has_reiser = filesystems.iter().any(|fs| fs.starts_with("reiser"));
 
             if has_reiser {
-    
-                println!("cargo:rustc-env=HAS_REISER_FS=TRUE");  
+                println!("cargo:rustc-env=HAS_REISER_FS=TRUE");
             }
-         
-           
         }
         Err(e) => {
             // If we can't read /proc/filesystems, assume reiserfs is false
             println!("cargo:warning=Failed to read /proc/filesystems: {}", e);
             //Don't set env var, it's irrelevant, it only has to exist for reiser fs to be detected
-           
         }
     }
 }

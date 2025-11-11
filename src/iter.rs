@@ -456,13 +456,17 @@ pub trait DirentConstructor {
         XFS	255 bytes
         ZFS	1023 bytes
         NTFS 255 UTF-16 / 510 bytes
-        
+
         */
 
         // Max dirent length determined at build time based on supported filesystems
-         // Reiser4 max (3976) + NUL otherwise to set to ZFS max (1023) +NUL
-        const MAX_SIZED_DIRENT_LENGTH: usize = if option_env!("HAS_REISER_FS").is_some() { 3976 + 1 } else { 1023 + 1 };
-        
+        // Reiser4 max (3976) + NUL otherwise to set to ZFS max (1023) +NUL
+        const MAX_SIZED_DIRENT_LENGTH: usize = if option_env!("HAS_REISER_FS").is_some() {
+            3976 + 1
+        } else {
+            1023 + 1
+        };
+
         //  Allocate exact size and copy in one operation
         let total_capacity = base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH;
         let mut path_buffer = Vec::with_capacity(total_capacity);

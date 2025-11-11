@@ -278,6 +278,6 @@ fn main() -> Result<(), SearchConfigError> {
         .thread_count(args.thread_num.unwrap_or(THREAD_COUNT))
         .build()?;
 
-    finder.print_results(args.no_colour, args.top_n, args.sort)?;
+    let _ = finder.print_results(args.no_colour, args.top_n, args.sort);
     Ok(())
 }

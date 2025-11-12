@@ -62,7 +62,7 @@ Note: Miri validation (Rust's undefined behaviour detector) cannot be used due t
 ```bash
 
 TMP_DIR="${TMP:-/tmp}"
-git clone https://github.com/alexcu2718/fdf "$TMP_DIR/fdf_test"
+git clone --depth 1 https://github.com/alexcu2718/fdf "$TMP_DIR/fdf_test"
 cd "$TMP_DIR/fdf_test/fd_benchmarks"
 
 

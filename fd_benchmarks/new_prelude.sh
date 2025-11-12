@@ -24,7 +24,7 @@ if [ ! -e "$LLVM" ] && [ -e "$HOME/llvm-project" ]; then
     cp -r "$HOME/llvm-project" "$TMP_DIR/"
 elif [ ! -e "$LLVM" ]; then
     echo "cloning llvm repo $llvm_link, this may take a while sorry!"
-    git clone "$llvm_link" "$LLVM" >/dev/null 2>&1
+    git clone --depth 1 "$llvm_link" "$LLVM" >/dev/null 2>&1
 else
     :
 fi

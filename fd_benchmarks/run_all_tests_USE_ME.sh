@@ -7,6 +7,13 @@ TMP_DIR="${TMP:-/tmp}"
 
 LLVM_DIR="$TMP_DIR/llvm-project"
 
+
+if ! which hyperfine > /dev/null 2>&1; then
+    echo "'hyperfine' does not seem to be installed."
+    echo "You can get it here: https://github.com/sharkdp/hyperfine?tab=readme-ov-file#installation"
+    exit 1
+fi
+
 # Check if llvm-project already exists
 if [[ -d "$LLVM_DIR" ]]; then
     run_benchmarks="y"
@@ -14,6 +21,11 @@ else
     echo "This script will clone llvm-project into $LLVM_DIR for testing/validation purposes."
     read -rp "Do you want to run speed/correctness benchmarks for the llvm project? [y/n] " run_benchmarks
 fi
+
+
+
+
+
 
 if [[ "$run_benchmarks" =~ ^[Yy]$ ]]; then
     for script in ./warm*.sh; do
@@ -40,16 +52,7 @@ else
 fi
 
 
-##quick hack to delete it in case people complain
-if [[ -d "$LLVM_DIR" ]]; then
-    read -rp "$LLVM_DIR exists. Delete it? [y/n]: " delete_confirm
-    if [[ "$delete_confirm" =~ ^[Yy]$ ]]; then
-        rm -rf "$LLVM_DIR"
-        echo "Deleted $LLVM_DIR."
-    else
-        echo "Keeping $LLVM_DIR."
-    fi
-fi
+
 
 echo -e "\n\nTHERE WILL BE A SMALL DISPARITY IN THESE TESTS DUE TO fd being located in /usr/bin (USUALLY) ((different permissions!))\n, differences are expected to be very small";
 echo -e "there will also be predictable temporary files created!\n\n"
@@ -82,6 +85,17 @@ if [[ "$(uname -s)" == "Linux" ]]; then
     fi
 else
     echo "Skipping syscall test because it is only supported on Linux."
+fi
+
+##quick hack to delete it in case people complain
+if [[ -d "$LLVM_DIR" ]]; then
+    read -rp "$LLVM_DIR exists. Delete it? [y/n]: " delete_confirm
+    if [[ "$delete_confirm" =~ ^[Yy]$ ]]; then
+        rm -rf "$LLVM_DIR"
+        echo "Deleted $LLVM_DIR."
+    else
+        echo "Keeping $LLVM_DIR."
+    fi
 fi
 
 

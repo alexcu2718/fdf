@@ -283,3 +283,109 @@ pub struct dirent {
     /// declare it as a zero-length array instead.
     pub d_name: [c_char; 0],
 }
+
+### /home/alexc/libc/src/fuchsia/mod.rs
+pub type ino64_t = u64;
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/solid/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/aix/mod.rs
+pub type ino_t = c_ulong;
+
+### /home/alexc/libc/src/unix/bsd/apple/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/bsd/freebsdlike/dragonfly/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/bsd/freebsdlike/freebsd/freebsd11/mod.rs
+pub type ino_t = u32;
+
+### /home/alexc/libc/src/unix/bsd/freebsdlike/freebsd/freebsd12/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/bsd/freebsdlike/freebsd/freebsd13/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/bsd/freebsdlike/freebsd/freebsd14/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/bsd/freebsdlike/freebsd/freebsd15/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/bsd/netbsdlike/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/cygwin/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/haiku/mod.rs
+pub type ino_t = i64;
+
+### /home/alexc/libc/src/unix/hurd/mod.rs
+pub type ino_t = __ino_t;
+pub type ino64_t = __ino64_t;
+
+### /home/alexc/libc/src/unix/linux_like/android/mod.rs
+pub type ino_t = c_ulong;
+pub type ino64_t = u64;
+
+### /home/alexc/libc/src/unix/linux_like/emscripten/mod.rs
+pub type ino_t = u64;
+pub type ino64_t = crate::ino_t;
+
+### /home/alexc/libc/src/unix/linux_like/linux/gnu/b32/mod.rs
+        pub type ino_t = __ino64_t;
+        pub type ino_t = __ino64_t;
+        pub type ino_t = __ino64_t;
+        pub type ino_t = __ino_t;
+
+### /home/alexc/libc/src/unix/linux_like/linux/gnu/b64/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/linux_like/linux/mod.rs
+pub type ino64_t = u64;
+
+### /home/alexc/libc/src/unix/linux_like/linux/musl/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/linux_like/linux/uclibc/arm/mod.rs
+pub type ino_t = c_ulong;
+
+### /home/alexc/libc/src/unix/linux_like/linux/uclibc/mips/mips32/mod.rs
+pub type ino_t = u32;
+
+### /home/alexc/libc/src/unix/linux_like/linux/uclibc/mips/mips64/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/linux_like/linux/uclibc/x86_64/mod.rs
+pub type ino_t = c_ulong;
+
+### /home/alexc/libc/src/unix/newlib/mod.rs
+        pub type ino_t = c_ushort;
+        pub type ino_t = c_ushort;
+        pub type ino_t = u32;
+
+### /home/alexc/libc/src/unix/nto/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/unix/nuttx/mod.rs
+pub type ino_t = u16;
+
+### /home/alexc/libc/src/unix/redox/mod.rs
+pub type ino_t = c_ulonglong;
+
+### /home/alexc/libc/src/unix/solarish/mod.rs
+pub type ino_t = c_ulong;
+
+### /home/alexc/libc/src/vxworks/mod.rs
+pub type ino_t = c_ulong;
+
+### /home/alexc/libc/src/wasi/mod.rs
+pub type ino_t = u64;
+
+### /home/alexc/libc/src/windows/mod.rs
+pub type ino_t = u16;
+

@@ -5,6 +5,12 @@
 
 cd "$(dirname $0)"
 
+SETCD="$PWD"
+
+cd ~/libc && git pull  > /dev/null
+
+cd $SETCD
+
 [ -d ~/libc ] || { echo "~/libc not found"; exit 1; }
 
 
@@ -14,5 +20,12 @@ rg 'pub struct dirent' -n ~/libc | cut -d: -f1 | sort -u | while read -r file; d
   awk '/pub struct dirent/ {found=1} found {print} /\}/ && found {found=0}' "$file"
   echo
 done > dirent_structs.txt
+
+rg 'type ino' -n ~/libc | cut -d: -f1 | sort -u | while read -r file; do
+  echo "### $file"
+  awk '/type ino/ {found=1} found {print} /;/ && found {found=0}' "$file"
+  echo
+done >> dirent_structs.txt
+
 
 cat dirent_structs.txt

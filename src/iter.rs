@@ -238,7 +238,7 @@ impl GetDents {
             //Generate this env var at compile time
             Some(_) => 1023 + 1 + MINIMUM_DIRENT_SIZE, // max size of ZFS+NUL + non variable fields
             None => 2 * (255 + 1) + MINIMUM_DIRENT_SIZE, // max size (255 characters in UTF16 +NUL) + non variable fields
-        };
+        }; //TODO, make a static function that does stuff instead of relying on compile time!
 
         // See proof at bottom of page.
         self.end_of_stream = !has_bytes_remaining

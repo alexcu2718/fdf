@@ -1,35 +1,23 @@
-#![allow(clippy::all)]
-#![allow(warnings)]
 
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
-use std::thread;
+#![allow(clippy::undocumented_unsafe_blocks)]
 
 #[cfg(target_os = "linux")]
-/// Checking filesystem support for reiserfs
 fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
-    let file = File::open("/proc/filesystems")?;
-    let reader = BufReader::new(file);
-    let mut filesystems = Vec::new();
+    use std::io::BufRead as _;
+    let file = std::fs::File::open("/proc/filesystems")?;
+    let reader = std::io::BufReader::new(file);
+    let mut filesystems: Vec<String> = Vec::new();
 
-    for line in reader.lines() {
-        if let Ok(line) = line {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if let Some(fs_name) = parts.last() {
-                let fs_name = fs_name.to_lowercase();
-                filesystems.push(fs_name);
-            }
+    for line in reader.lines().map_while(Result::ok) {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if let Some(fs_name) = parts.last() {
+            filesystems.push(fs_name.to_string());
         }
     }
 
     Ok(filesystems)
 }
 
-#[cfg(not(target_os = "linux"))]
-fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
-    // On non-Linux systems, there isn't any Reiser support
-    Ok(Vec::new())
-}
 
 fn main() {
     // Re-run build script if filesystem list changes
@@ -39,7 +27,7 @@ fn main() {
     //set threadcounts for rayon.
     const MIN_THREADS: usize = 1;
     let num_threads =
-        thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
+        std::thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
 
     println!("cargo:rustc-env=THREAD_COUNT={num_threads}");
 
@@ -51,7 +39,7 @@ fn main() {
     match get_supported_filesystems() {
         Ok(filesystems) => {
             let has_reiser = filesystems.iter().any(|fs| fs.starts_with("reiser"));
-            /// Crash on reiser support
+            // Crash on reiser support
             assert!(!has_reiser, "reiser file systems not supported");
 
             let has_zfs = filesystems.iter().any(|fs| fs.starts_with("zfs"));

@@ -1,10 +1,9 @@
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
+    AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
     DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, fstatat,
     mode_t,
 };
 
-use crate::FileDes;
 use core::ffi::CStr;
 
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
@@ -109,36 +108,11 @@ impl FileType {
         */
     #[inline]
     #[must_use]
-    pub fn from_fd_no_follow(fd: &FileDes, filename: &CStr) -> Self {
+    pub(crate) fn from_fd_no_follow(fd: i32, filename: &CStr) -> Self {
         stat_syscall!(fstatat, fd, filename, AT_SYMLINK_NOFOLLOW, DTYPE)
     }
 
-    #[inline]
-    #[must_use]
-    /**
-    Determines the file type from a file descriptor and filename, following symlinks
-
-    This method uses `fstatat` with the `AT_SYMLINK_FOLLOW` flag to get file
-    information from a file descriptor. Unlike `from_fd_no_follow`, this function
-    will follow symbolic links and return information about the target file rather
-    than the link itself.
-
-    This is equivalent to the standard `stat` system call behavior and is useful
-    when you want to know the type of the actual file being accessed, regardless
-    of whether it's reached through a symbolic link.
-
-    # Parameters
-    - `fd`: The directory file descriptor (or `AT_FDCWD` for current directory)
-    - `filename`: The filename to stat relative to the directory fd
-
-    # Returns
-    - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist
-      or an error occurred
-
-    */
-    pub fn from_fd_follow(fd: &FileDes, filename: &CStr) -> Self {
-        stat_syscall!(fstatat, fd, filename, AT_SYMLINK_FOLLOW, DTYPE)
-    }
+  
     /// Returns true if this represents a directory  (cost free check)
     #[inline]
     #[must_use]

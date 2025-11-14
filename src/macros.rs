@@ -383,7 +383,7 @@ macro_rules! stat_syscall {
         // - The path is guaranteed to be null-terminated (CStr)
         let res = unsafe {
             $syscall(
-                $fd.0,
+                $fd,
                 $path.as_ptr(),
                 stat_buf.as_mut_ptr(),
                 $flags,

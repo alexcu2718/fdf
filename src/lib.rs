@@ -150,6 +150,8 @@ pub use finderbuilder::FinderBuilder;
 #[macro_use]
 pub(crate) mod macros;
 
+mod tempdirentry;
+
 mod cli_helpers;
 
 pub use cli_helpers::{FileTypeParser, SizeFilter, SizeFilterParser, TimeFilter, TimeFilterParser};

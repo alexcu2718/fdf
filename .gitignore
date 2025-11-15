@@ -4,3 +4,4 @@ perf*
 **/*.lst
 bench_results/*
 *.out
+libc

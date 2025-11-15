@@ -101,10 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .type_filter(Some(FileTypeFilter::File))
         //set the custom filter
         .filter(Some(|entry| {
-            let path = entry.as_path();
-            path.extension()
-                .and_then(|ext| ext.to_str()) //I don't recommend doing this, since it can be converted to bytes!
-                .map_or(false, |ext| ext.eq_ignore_ascii_case("log"))
+            entry.as_path().extension().is_some_and( |ext| ext.eq_ignore_ascii_case("log"))
         }))
         .build()?;
 
@@ -180,7 +177,7 @@ mod direntry;
 pub use direntry::DirEntry;
 
 mod error;
-pub use error::{DirEntryError, SearchConfigError};
+pub use error::{DirEntryError, FilesystemIOError, SearchConfigError};
 
 mod types;
 
@@ -205,7 +202,8 @@ pub(crate) use utils::BytePath;
     target_os = "dragonfly",
     target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "aix"
+    target_os = "aix",
+    target_os = "hurd"
 ))]
 pub use utils::dirent_const_time_strlen;
 
@@ -325,13 +323,12 @@ impl Finder {
      and formatted output in a single call.
 
      # Arguments
-      -`use_colours` - Enable ANSI colour output for better readability
-                       (automatically disabled if output does not support colours)
-      -`result_count` - Optional limit on the number of results to display
-      =`sort` - Enable sorting of the final results (has significant computational cost)
+     * `use_colours` - Enable ANSI colour output for better readability(if supported/going to a TTY)
+     * `result_count` - Optional limit on the number of results to display
+     * `sort` - Enable sorting of the final results (has significant computational cost)
 
      # Errors
-     -Returns [`SearchConfigError::IOError`] if the search operation fails
+     Returns [`SearchConfigError::IOError`] if the search operation fails
     */
     pub fn print_results(
         self,
@@ -346,7 +343,8 @@ impl Finder {
     #[inline]
     /// Determines if a directory should be sent through the channel
     fn should_send_dir(&self, dir: &DirEntry) -> bool {
-        self.search_config.keep_dirs && self.file_filter(dir) && dir.depth() != 0
+        self.search_config.keep_dirs && dir.depth() != 0 && self.file_filter(dir)
+        // Don't send root
     }
 
     #[inline]
@@ -416,6 +414,9 @@ impl Finder {
                     })
                 },
                 |cache| {
+                    debug_assert!(self.search_config.follow_symlinks,"we expect follow symlinks to be enabled when following this path");
+
+
                     dir.get_stat().is_ok_and(|stat| {
                         // Check same filesystem if enabled
                         self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
@@ -450,6 +451,10 @@ impl Finder {
     }
     }
     #[inline]
+    #[allow(
+        clippy::let_underscore_must_use,
+        reason = "errors only when channel is closed, not useful"
+    )]
     fn handle_depth_limit(
         &self,
         dir: &DirEntry,
@@ -470,6 +475,10 @@ impl Finder {
     }
 
     #[inline]
+    #[allow(
+        clippy::let_underscore_must_use,
+        reason = "errors only when channel is closed, not useful"
+    )]
     #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
     /**
      Recursively processes a directory, sending found files to a channel.

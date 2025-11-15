@@ -243,8 +243,10 @@ struct Args {
 )]
     type_of: Option<FileTypeFilter>,
 }
-
-#[allow(clippy::exit)] //exiting for cli use
+#[allow(
+    clippy::let_underscore_must_use,
+    reason = "errors only when channel is closed, not useful"
+)]
 fn main() -> Result<(), SearchConfigError> {
     let args = Args::parse();
 

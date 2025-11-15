@@ -164,6 +164,9 @@ impl SizeFilter {
         }
     }
     #[must_use]
+    /**
+    Checks if the given file size satisfies this size filter
+    */
     pub const fn is_within_size(&self, size: u64) -> bool {
         match *self {
             Self::Max(limit) => size <= limit,
@@ -324,7 +327,7 @@ impl TimeFilter {
     }
 }
 
-/// A Custom parser that provides helpful error messages and suggestions
+/// A Custom parser that provides helpful error messages and suggestions for filtering by time modified
 #[derive(Clone, Debug)]
 #[allow(clippy::exhaustive_structs)]
 pub struct TimeFilterParser;
@@ -410,7 +413,7 @@ impl TypedValueParser for TimeFilterParser {
     }
 }
 
-/// A Custom parser that provides helpful error messages and suggestions
+/// A Custom parser that provides helpful error messages and suggestions for file sizes
 #[derive(Clone, Debug)]
 #[allow(clippy::exhaustive_structs)]
 pub struct SizeFilterParser;

@@ -8,8 +8,9 @@ use std::io;
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]
 /**
-This enum encapsulates all possible I/O errors that can occur during filesystem
-operations, with precise mapping from libc error codes to semantic error variants.
+This enum encapsulates all possible I/O errors that can occur during filesystem operations,
+
+
 Comprehensive filesystem I/O error type mapping libc error codes to meaningful variants.
 */
 pub enum FilesystemIOError {
@@ -98,6 +99,7 @@ where
 }
 
 impl FilesystemIOError {
+    #[must_use]
     #[allow(clippy::wildcard_enum_match_arm)] //not doing them all...
     /// Create a new `FilesystemIOError` from a `std::io::Error`
     pub fn from_io_error(error: io::Error) -> Self {
@@ -160,19 +162,42 @@ impl FilesystemIOError {
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]
-/// A simple error enum (needs more documentation )
-//TODO!
+/**
+Errors that can occur when reading or processing directory entries
+
+This enum encapsulates various failure modes when working with filesystem
+directory listings, including timestamp conversion, path encoding, and I/O issues.
+*/
 pub enum DirEntryError {
-    /// Time conversion or timestamp processing failed
+    /**
+    Time conversion or timestamp processing failed
+
+    Occurs when file timestamps cannot be converted to valid datetime values,
+    such as with out-of-range values or unsupported timestamp formats.
+    */
     TimeError,
-    /// Path contains invalid UTF-8 sequences
+    /**
+    Path contains invalid UTF-8 sequences
+
+    The directory entry's filename cannot be converted to a UTF-8 string.
+    Contains the underlying [`Utf8Error`](core::str::Utf8Error) for details.
+    */
     Utf8Error(core::str::Utf8Error),
-    /// Invalid nulls detected in filename
+    /**
+    Invalid null bytes detected in filename
+
+    The filename contains interior null bytes, making it invalid for C string conversion.
+    Contains the underlying [`NulError`](std::ffi::NulError) with byte position information.
+    */
     NulError(std::ffi::NulError),
-    /// Filesystem I/O error
+    /**
+    Filesystem I/O error during directory operations
+
+    Represents low-level filesystem errors like permission denied, device errors,
+    or directory structure corruption. Contains detailed error context.
+    */
     IOError(FilesystemIOError),
 }
-
 impl From<io::Error> for DirEntryError {
     fn from(error: io::Error) -> Self {
         Self::IOError(FilesystemIOError::from_io_error(error))

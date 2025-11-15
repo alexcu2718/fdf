@@ -10,7 +10,7 @@ const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
 const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
 const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
-// Creating two look up arrays to do branchless formatting for paths
+// Creating two look  arrays(look up tables) to do branchless formatting for paths
 const NEWLINES_RESET: [&[u8]; 2] = [NEWLINE_RESET, NEWLINE_CRLF_RESET];
 const NEWLINES_PLAIN: [&[u8]; 2] = [NEWLINE, NEWLINE_CRLF];
 

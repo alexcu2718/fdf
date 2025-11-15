@@ -88,8 +88,8 @@ use core::fmt;
 use core::ptr::NonNull;
 
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, faccessat, fstatat,
-    lstat, realpath, stat,
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, fstatat, lstat,
+    realpath, stat,
 };
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
 /**
@@ -277,9 +277,6 @@ impl DirEntry {
 
      This provides access to the null-terminated C string representation
      of the file path for use with FFI functions.
-
-     # Returns
-     A raw pointer to the null-terminated C string.
 
     */
     #[inline]
@@ -510,7 +507,7 @@ impl DirEntry {
         Checks if the entry is empty.
 
         For files, it checks if the size is zero. For directories, it checks if there are no entries.
-        This is a **costly** operation as it requires system calls (`stat` or `getdents`/`readdir`/`getdirentries64`).
+        This is a **costly** operation as it requires system calls (`stat` or `getdents`/`readdir`).
 
         # Examples
 
@@ -643,6 +640,8 @@ impl DirEntry {
     let tmp = std::env::temp_dir().join("some name.txt");
     File::create(&tmp).unwrap();
 
+
+
     let entry = DirEntry::new(&tmp).unwrap();
     let name = entry.file_name_cstr();
 
@@ -653,10 +652,11 @@ impl DirEntry {
     */
     pub fn file_name_cstr(&self) -> &CStr {
         let bytes = self.path.to_bytes_with_nul();
-        // SAFETY:
-        // - `file_name_index()` points to the start of the file name within `bytes`.
-        // - The slice from this index to the end includes the null terminator.
-        // - The slice is guaranteed to represent a valid C string.
+
+        //SAFETY:
+        // `file_name_index()` returns a valid index within `bytes` bounds
+        // The slice from this index includes the terminating null byte
+        //`bytes` contains no interior null bytes before the terminator
         #[allow(clippy::multiple_unsafe_ops_per_block)]
         unsafe {
             CStr::from_bytes_with_nul_unchecked(bytes.get_unchecked(self.file_name_index()..))
@@ -665,7 +665,8 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    // Returns the name of the file (as bytes, no null terminator)
+    /// Returns the name of the file (as bytes, no null terminator)
+    /// Returns empty slice for root directory `/`
     pub fn file_name(&self) -> &[u8] {
         debug_assert!(
             self.len() >= self.file_name_index(),
@@ -846,52 +847,6 @@ impl DirEntry {
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
         // SAFETY: The path is guaranteed to be a null terminated
         unsafe { access(self.as_ptr(), W_OK) == 0 }
-    }
-
-    #[inline]
-    /**
-     Checks if the file or directory is writable relative to a directory file descriptor.
-
-     This uses the `faccessat` system call with `W_OK` to check write permissions
-     without actually opening the file. It follows symlinks unless `AT_SYMLINK_NOFOLLOW`
-     is specified in the future.
-
-     # Arguments
-
-     * `fd` - A directory file descriptor to use as the base for relative path resolution
-
-     # Returns
-
-     `true` if the current process has write permission, `false` otherwise.
-     `false` if the file doesn't exist or on permission errors.
-
-    */
-    pub fn is_writable_at(&self, fd: &FileDes) -> bool {
-        // SAFETY: The path is guaranteed to be null-terminated and the file descriptor is valid
-        unsafe { faccessat(fd.0, self.file_name_cstr().as_ptr(), W_OK, 0) == 0 }
-    }
-
-    #[inline]
-    /**
-     Checks if the file or directory is writable relative to a directory file descriptor.
-
-     This uses the `faccessat` system call with `W_OK` to check write permissions
-     without actually opening the file. It follows symlinks unless `AT_SYMLINK_NOFOLLOW`
-     is specified in the future.
-
-     # Arguments
-
-     * `fd` - A directory file descriptor to use as the base for relative path resolution
-
-     # Returns
-
-     `true` if the current process has write permission, `false` otherwise.
-     `false` if the file doesn't exist or on permission errors.
-
-    */
-    pub fn exists_at(&self, fd: &FileDes) -> bool {
-        // SAFETY: The path is guaranteed to be null-terminated and the file descriptor is valid
-        unsafe { faccessat(fd.0, self.file_name_cstr().as_ptr(), F_OK, 0) == 0 }
     }
 
     #[inline]
@@ -1219,18 +1174,6 @@ impl DirEntry {
     }
 
     #[inline]
-    #[must_use]
-    /// Returns the parent directory of the file (as bytes)
-    pub fn parent(&self) -> &[u8] {
-        debug_assert!(
-            self.file_name_index() <= self.len(),
-            "Indexing should always be within bounds"
-        );
-        // SAFETY: the index is below the length of the path trivially
-        unsafe { self.get_unchecked(..core::cmp::max(self.file_name_index() - 1, 1)) }
-    }
-
-    #[inline]
     /**
      Creates a new [`DirEntry`] from the given path.
 
@@ -1339,6 +1282,7 @@ impl DirEntry {
     #[allow(clippy::missing_errors_doc)] //fixing errors later
     pub fn modified_time(&self) -> Result<DateTime<Utc>> {
         let statted = self.get_lstat()?;
+
         DateTime::from_timestamp(
             access_stat!(statted, st_mtime),
             access_stat!(statted, st_mtimensec),

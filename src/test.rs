@@ -284,24 +284,6 @@ mod tests {
     }
 
     #[test]
-    fn test_path_methods() {
-        let temp_dir = std::env::temp_dir();
-        let test_file_path = temp_dir.join("parent/child.txt");
-        let test_dir = test_file_path
-            .parent()
-            .expect("File path should have parent");
-
-        let _ = std::fs::remove_dir_all(test_dir);
-        std::fs::create_dir_all(test_dir).expect("Failed to create test directory");
-        std::fs::write(&test_file_path, "test").expect("Failed to write test file");
-        let entry = DirEntry::new(test_file_path.as_os_str()).expect("Failed to create DirEntry");
-        assert_eq!(entry.file_name(), b"child.txt");
-        assert_eq!(entry.extension().unwrap(), b"txt");
-        assert_eq!(entry.parent(), test_dir.as_os_str().as_bytes());
-        let _ = std::fs::remove_dir_all(test_dir);
-    }
-
-    #[test]
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_dirent_const_time_strlen_optimal_abc() {
         let mut entry = Dirent64 {
@@ -818,10 +800,7 @@ mod tests {
         let dir_entry = DirEntry::new(&tdir).unwrap();
 
         //PAY ATTENTION TO THE ! MARKS, HARD TO ******** SEE
-        assert_eq!(
-            dir_entry.parent(),
-            tdir.parent().unwrap().as_os_str().as_bytes()
-        );
+
         assert_eq!(dir_entry.as_bytes(), tdir.as_os_str().as_bytes());
         assert_eq!(dir_entry.as_path(), &tdir);
         assert!(dir_entry.is_dir(), "Should be a directory");

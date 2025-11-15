@@ -20,7 +20,7 @@ pub trait ValueType: sealed::Sealed + Copy {}
 impl ValueType for i8 {}
 impl ValueType for u8 {}
 /**
- A highly optimised, aligned buffer for system call operations
+ A ptimised, aligned buffer for system call operations
 
  This buffer provides memory-aligned storage with several key features:
  - Guaranteed 8-byte alignment required by various system calls

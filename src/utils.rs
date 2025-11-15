@@ -89,16 +89,17 @@ where
 {
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        debug_assert!(self.as_ref() != b"/", "root should never go here");
         debug_assert!(!self.is_empty(), "should never be empty");
         // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
-        memrchr(b'.', unsafe { self.get_unchecked(..self.len() - 1) }) //exclude cases where the . is the final character
-            // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
-            // The slice `..self.len() - 1` is a subslice of `self`.
-            // Therefore, `pos` is a valid index into `self`.
-            // `pos + 1` is also guaranteed to be a valid index.
-            // We do this to avoid any runtime checks
-            .map(|pos| unsafe { self.get_unchecked(pos + 1..) })
+        memrchr(b'.', unsafe {
+            self.get_unchecked(..self.len().saturating_sub(1))
+        }) //exclude cases where the . is the final character
+        // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
+        // The slice `..self.len() - 1` is a subslice of `self`.
+        // Therefore, `pos` is a valid index into `self`.
+        // `pos + 1` is also guaranteed to be a valid index.
+        // We do this to avoid any runtime checks
+        .map(|pos| unsafe { self.get_unchecked(pos + 1..) })
     }
 
     #[inline]
@@ -140,7 +141,8 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "dragonfly",
         target_os = "openbsd",
         target_os = "netbsd",
-        target_os = "aix"
+        target_os = "aix",
+        target_os = "hurd"
     ))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -161,7 +163,8 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "dragonfly",
         target_os = "openbsd",
         target_os = "netbsd",
-        target_os = "aix"
+        target_os = "aix",
+        target_os = "hurd"
     )))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
@@ -192,7 +195,8 @@ My Cat Diavolo is cute.
     target_os = "dragonfly",
     target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "aix"
+    target_os = "aix",
+    target_os = "hurd"
 ))]
 #[allow(clippy::multiple_unsafe_ops_per_block)]
 #[must_use]
@@ -234,10 +238,11 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         target_os = "dragonfly",
         target_os = "openbsd",
         target_os = "netbsd",
-        target_os = "aix" // best effort, no guarantees
+        target_os = "aix",
+        target_os = "hurd"
     ))]
     // SAFETY: `dirent` must be validated ( it was required to not give an invalid pointer)
-    return unsafe { (*drnt).d_namlen as usize }; //trivial operation for macos/bsds
+    return unsafe { (*drnt).d_namlen as usize }; //trivial operation for systems with d_namlen field
     #[cfg(any(
         target_os = "linux",
         target_os = "android",
@@ -248,7 +253,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         target_os = "hermit", // best effort, no guarantees
         target_os = "fuchsia" // best effort, no guarantees
     ))]
-    // On these systems where we need a bit of 'black magic'
+    // On these systems where we need a bit of 'black magic' (no d_namlen field)
     {
         use core::num::NonZeroU64;
         // Offset from the start of the struct to the beginning of d_name.

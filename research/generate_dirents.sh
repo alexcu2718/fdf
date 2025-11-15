@@ -3,7 +3,7 @@
 
 cd "$(dirname $0)"
 
-
+output_file="dirent_structs.txt"
 WORD_SIZE=$(getconf LONG_BIT)
 
 SETCD="$PWD"
@@ -22,10 +22,25 @@ cd $LIBC_LOCATION && git pull  > /dev/null 2>&1
 cd $SETCD
 
 
-rg 'pub struct dirent' -n $LIBC_LOCATION | cut -d: -f1 | sort -u | while read -r file; do
-  echo "### $file" && awk '/pub struct dirent/ {found=1} found {print} /\}/ && found {found=0}' "$file" && echo
-  ino_file=$(grep -l "type ino" "$file" 2>/dev/null || find $(dirname "$file") -name "*.rs" -exec grep -l "type ino" {} \; | head -1)
-  [ -n "$ino_file" ] && echo "### $ino_file" && awk '/type ino/ {found=1} found {print} /;/ && found {found=0}' "$ino_file" && echo
-done  > /dev/null 2>&1 > dirent_structs.txt
 
-cat dirent_structs.txt
+rg -l --pcre2 -U '(?s)(pub struct dirent(64)?\s*\{.*?\}|pub type ino.*;)' $LIBC_LOCATION | while read -r file; do
+    echo "## $file"
+
+    ino_defs=$(rg -o 'pub type ino.*;' "$file" --no-heading 2>/dev/null)
+    if [ -n "$ino_defs" ]; then
+        echo "## ino types:"
+        echo "$ino_defs" | sed 's/^/  /'
+    fi
+
+    dirent_defs=$(rg -o --pcre2 -U '(?s)pub struct dirent(64)?\s*\{.*?\}' "$file" --no-heading 2>/dev/null)
+    if [ -n "$dirent_defs" ]; then
+        echo "## dirent structs:"
+        echo "$dirent_defs" | sed 's/^/  /'
+    fi
+
+    echo
+done > $output_file
+
+cat $output_file
+
+

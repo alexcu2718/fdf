@@ -1,4 +1,3 @@
-
 #![allow(clippy::undocumented_unsafe_blocks)]
 
 #[cfg(target_os = "linux")]
@@ -17,7 +16,6 @@ fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
 
     Ok(filesystems)
 }
-
 
 fn main() {
     // Re-run build script if filesystem list changes

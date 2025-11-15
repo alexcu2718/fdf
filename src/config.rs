@@ -138,44 +138,112 @@ impl FileTypeFilter {
 }
 #[derive(Clone, Debug)]
 #[expect(clippy::struct_excessive_bools, reason = "It's a CLI tool.")]
-/// This struct holds the configuration for searching directories.
-///
-///
-/// It includes options for regex matching, hiding hidden files, keeping directories,
-/// matching file extensions, whether to search file names only, depth of search,
-/// and whether to follow symlinks.
+/**
+ This struct holds the configuration for searching a Fileystem via traversal
+
+
+ It includes options for regex matching, hiding hidden files, keeping directories,
+ matching file extensions, whether to search file names only, depth of search,
+ and whether to follow symlinks.
+*/
 pub struct SearchConfig {
+    /**
+    Regular expression pattern for matching file names or paths
+
+    If `None`, matches all files (equivalent to an empty pattern).
+    When `file_name_only` is true, only matches against the base filename.
+    */
     pub(crate) regex_match: Option<Regex>,
-    ///a regex to match against the file names
-    ///if this is None, then the pattern is empty or just a dot, so we
-    ///match everything, otherwise we match against the regex
+
+    /**
+    Whether to exclude hidden files and directories
+
+    Hidden files are those whose names start with a dot (`.`).
+    When true, these files are filtered out from results.
+    */
     pub(crate) hide_hidden: bool,
-    ///if true, then we hide hidden files (those starting with a dot)
+
+    /**
+    Whether to include directories in search results
+
+    If true, directories are included in the output.
+    If false, only regular files and other non-directory entries are returned.
+    */
     pub(crate) keep_dirs: bool,
-    ///if true, then we keep directories in the results, otherwise we only return non-directory files
+
+    /**
+    File extension to filter by (case-insensitive)
+
+    If `Some`, only files with this extension are matched.
+    The extension should not include the leading dot (e.g., `"txt"` not `".txt"`).
+    */
     pub(crate) extension_match: Option<Box<[u8]>>,
-    ///if this is Some, then we match against the extension of the file otherwise accept (if none)
+
+    /**
+    Whether regex matching applies only to filename vs full path
+
+    If true, regular expressions match only against the file's base name.
+    If false, regular expressions match against the full path.
+    */
     pub(crate) file_name_only: bool,
-    ///if true, then we only match against the file name, otherwise we match against the full path when regexing
+
+    /**
+    Maximum directory depth to search
+
+    If `Some(n)`, limits traversal to `n` levels deep.
+    If `None`, searches directories to unlimited depth.
+    */
     pub(crate) depth: Option<NonZeroU32>,
-    ///the maximum depth to search, if None then no limit
-    pub(crate) follow_symlinks: bool, //if true, then we follow symlinks, otherwise we do not follow them
-    /// a size filter
+
+    /**
+    Whether to follow symbolic links during traversal
+
+    If true, symbolic links are followed and their targets are processed.
+    If false, symbolic links are treated as regular files.
+    */
+    pub(crate) follow_symlinks: bool,
+
+    /**
+    Filter based on file size constraints
+
+    If `Some`, only files matching the size criteria are included.
+    Supports minimum, maximum, and exact size matching.
+    */
     pub(crate) size_filter: Option<SizeFilter>,
-    /// a type filter
+
+    /**
+    Filter based on file type
+
+    If `Some`, only files of the specified type are included.
+    Can filter by file, directory, symlink, etc.
+    */
     pub(crate) type_filter: Option<FileTypeFilter>,
-    /// a time filter for modification times
+
+    /**
+    Filter based on file modification time
+
+    If `Some`, only files matching the time criteria are included.
+    Supports relative time ranges (e.g., "last 7 days").
+    */
     pub(crate) time_filter: Option<TimeFilter>,
-    ///if true, then we show errors during traversal
+
+    /**
+    Whether to display errors encountered during traversal
+
+    If true, errors like permission denials are shown to the user.
+    If false, errors are silently skipped.
+    */
     pub(crate) show_errors: bool,
 }
-
 impl SearchConfig {
     // Constructor for SearchConfig
     // Builds a regex matcher if a valid pattern is provided, otherwise stores None
     // Returns an error if the regex compilation fails
-    #[expect(clippy::fn_params_excessive_bools, reason = "Internal convenience")]
-    #[expect(clippy::too_many_arguments, reason = "Internal convenience")]
+    #[expect(
+        clippy::fn_params_excessive_bools,
+        clippy::too_many_arguments,
+        reason = "Internal convenience"
+    )]
     pub(crate) fn new<A: AsRef<str>>(
         pattern: Option<&A>,
         hide_hidden: bool,

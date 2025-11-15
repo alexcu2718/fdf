@@ -213,25 +213,28 @@ impl FinderBuilder {
         self
     }
     /**
-     Builds a [`Finder`] instance with the configured options.
+    Builds a [`Finder`] instance with the configured options.
 
-     This method performs validation of all configuration parameters and
-     initialises the necessary components for file system traversal.
+    This method performs validation of all configuration parameters and
+    initialises the necessary components for file system traversal.
+
 
      # Returns
      Returns `Ok(Finder)` on successful configuration, or
      `Err(SearchConfigError)` if any validation fails.
 
-     # Errors
-     Returns an error if:
-     - The root path is not a directory or cannot be accessed
-     - The root path cannot be canonicalised (when enabled)
-     - The search pattern cannot be compiled to a valid regular expression
-     - File system metadata cannot be retrieved (for same-filesystem tracking
+    # Errors
+    Returns an error if:
+    - The root path is not a directory or cannot be accessed
+    - The root path cannot be canonicalised (when enabled)
+    - The search pattern cannot be compiled to a valid regular expression
+    - File system metadata cannot be retrieved (for same-filesystem tracking)
     */
+    #[allow(clippy::let_underscore_must_use)]
     pub fn build(self) -> core::result::Result<Finder, SearchConfigError> {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
+
         let _ = rayon::ThreadPoolBuilder::new()
             .num_threads(self.thread_count)
             .build_global(); //Skip the error, it only errors if it's already been initialised
@@ -239,7 +242,7 @@ impl FinderBuilder {
 
         let starting_filesystem = if self.same_filesystem {
             // Get the filesystem ID of the root directory directly
-            let metadata = metadata(&*resolved_root)?;
+            let metadata = metadata(resolved_root.as_ref())?;
             Some(metadata.dev()) // dev() returns the filesystem ID on Unix
         } else {
             None

@@ -8,7 +8,7 @@ use core::ptr::NonNull;
 use libc::DIR;
 
 /**
- POSIX-compliant directory iterator using libc's readdir functions.
+ POSIX-compliant directory iterator using libc's readdir
 
  This iterator traverses directory entries using the standard POSIX directory
  reading API. It automatically skips "." and ".." entries and provides
@@ -289,12 +289,6 @@ impl GetDents {
         */
         unsafe { libc::readahead(self.fd.0, self.offset as _, count) }
         // Note, not used yet but will be.
-    }
-
-    #[inline]
-    /// Provides read only access to the internal buffer that holds the bytes read from the syscall
-    pub const fn borrow_syscall_buffer(&self) -> &crate::types::SyscallBuffer {
-        &self.syscall_buffer
     }
 
     #[inline]
@@ -599,18 +593,6 @@ macro_rules! impl_iter {
             #[inline]
             pub fn get_filetype(&self, d_type: u8, filename: &core::ffi::CStr) -> $crate::FileType {
                 self.get_filetype_private(d_type, filename)
-            }
-
-            #[inline]
-            /// Provides read only access to the internal buffer that holds the path used to iterate with
-            pub fn borrow_path_buffer(&self) -> &[u8] {
-                self.path_buffer.as_slice()
-            }
-
-            #[inline]
-            /// Index into `path_buffer` where filenames start (avoids recalculating)
-            pub const fn file_name_index(&self) -> usize {
-                self.file_name_index
             }
 
             /**

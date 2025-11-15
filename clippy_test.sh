@@ -30,7 +30,6 @@ cargo clippy --all -- \
   -A clippy::allow_attributes_without_reason \
   -A clippy::single_call_fn \
   -A clippy::absolute_paths \
-  -A clippy::let_underscore_must_use \
   -A clippy::let_underscore_untyped \
   -A clippy::missing_docs_in_private_items \
   -A clippy::items_after_statements

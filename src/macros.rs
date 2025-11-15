@@ -27,12 +27,34 @@ macro_rules! access_dirent {
         // SAFETY: Caller must ensure pointer is valid
         (*$entry_ptr).d_reclen as usize // /return usize
     }};
-     // Special case for `d_namlen`
-
-
+     // Special case for `d_namlen` - only available on systems that have this field
     ($entry_ptr:expr, d_namlen) => {{
-        // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_namlen as usize
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "aix",
+            target_os = "hurd"
+        ))]
+        {
+            // SAFETY: Caller must ensure pointer is valid
+            (*$entry_ptr).d_namlen as usize
+        }
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "aix",
+            target_os = "hurd"
+        )))]
+        {
+            compile_error!("d_namlen field is not available on this platform - use d_reclen or strlen instead")
+        }
     }};
 
 
@@ -51,7 +73,9 @@ macro_rules! access_dirent {
         target_os = "illumos",
         target_os = "aix",
         target_os = "nto",
+        target_os = "haiku",
         target_os = "vita",
+
     ))]
         {
             libc::DT_UNKNOWN //return D_TYPE unknown on these OS'es, because the struct does not hold the type!
@@ -62,7 +86,9 @@ macro_rules! access_dirent {
         target_os = "illumos",
         target_os = "aix",
         target_os = "nto",
-        target_os = "vita", // via is still broken because it does not possess ino, i will consider an ino fix maybe but it's....extremely niche.
+        target_os = "haiku",
+        target_os = "vita",
+
     )))]
         {
             (*$entry_ptr).d_type
@@ -213,7 +239,8 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 target_os = "macos",
                 target_os = "freebsd",
                 target_os = "openbsd",
-                target_os = "netbsd"
+                target_os = "netbsd",
+                target_os = "dragonfly"
             ))]
             {
                 // BSD/macOS optimisation: check d_namlen first as primary filter
@@ -266,6 +293,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 target_os = "macos",
                 target_os = "freebsd",
                 target_os = "openbsd",
+                target_os = "dragonfly",
                 target_os = "netbsd",
                 target_os = "solaris",
                 target_os = "illumos",
@@ -287,11 +315,18 @@ macro_rules! skip_dot_or_dot_dot_entries {
         }
     }};
 }
+
+//TODO! I realise people could have massive filesystems, i should probably write a rebuild script on value change.
 /**
- Macro to create a const from an env var with compile-time parsing (Please read the docs carefully)
+ Macro to create a const from an env var with compile-time parsing,
+
+ Uses `option_env` under the hood, so it can catch rustc build environment variables.
 
 
- const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", "X");, where X(usize) is the default value if the env var is not set
+ (Please read the docs carefully)
+
+
+ const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", X);, where X( is the default value if the env var is not set
 
  Example usage:
  ```
@@ -299,9 +334,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
  const_from_env!(MYVAR: usize = "NYVAR", 6969);
  assert_eq!(MYVAR, 6969); //6969 is the default value if the environment variable NYVAR is not set
  ```
-  This macro allows you to define a constant that can be set via an environment variable at compile time.`
- I realise people could have massive filesystems, i should probably write a rebuild script on value change.TODO!
- Macro to create a const from an env var with compile-time parsing
+  This macro allows you to define a constant that can be set via an environment variable at compile time.
 
  # Notes
  - The value is parsed at compile time

@@ -2,7 +2,7 @@
     clippy::cast_lossless,
     reason = "casting a bool to a usize is trivially fine here."
 )]
-use crate::{BytePath as _, DirEntry, FileType, SearchConfigError};
+use crate::{BytePath, DirEntry, FileType, SearchConfigError};
 use compile_time_ls_colours::file_type_colour;
 use rayon::prelude::*;
 use std::io::{BufWriter, IsTerminal as _, Write as _, stdout};
@@ -18,18 +18,15 @@ const RESET: &[u8] = b"\x1b[0m";
 #[inline]
 fn extension_colour(entry: &DirEntry) -> &[u8] {
     match entry.file_type {
-        FileType::RegularFile | FileType::Unknown => entry
-            .extension()
-            .map_or(RESET, |pos| file_type_colour!(pos)),
-        FileType::Directory => file_type_colour!(directory),
-        FileType::Symlink => {
-            // if it returns true, it's definitely a directory
-            if entry.is_traversible_cache.get().is_some_and(|x| x) {
-                file_type_colour!(directory)
-            } else {
-                file_type_colour!(symlink)
-            }
+        FileType::RegularFile | FileType::Unknown => {
+            BytePath::extension(entry) // Use the trait to do this, since root will never be sent down the iterator
+                .map_or(RESET, |pos| file_type_colour!(pos))
         }
+        FileType::Directory => file_type_colour!(directory),
+        FileType::Symlink => match entry.is_traversible_cache.get() {
+            Some(true) => file_type_colour!(directory),
+            _ => file_type_colour!(symlink),
+        },
         FileType::BlockDevice => file_type_colour!(block_device),
         FileType::CharDevice => file_type_colour!(character_device),
         FileType::Socket => file_type_colour!(socket),

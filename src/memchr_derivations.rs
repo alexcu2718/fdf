@@ -1,8 +1,12 @@
+#![allow(clippy::host_endian_bytes)]
+#![allow(clippy::multiple_unsafe_ops_per_block)]
+#![allow(clippy::undocumented_unsafe_blocks)]
+#![allow(clippy::empty_line_after_doc_comments)]
 // I was reading through the std library for random silly things and I found this , https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161
 // this essentially provides a more rigorous foundation to my SWAR technique.
 //the original definition is below the copy pasted code above.
-#![allow(clippy::all)]
-#![allow(warnings)] //the warnings are from memchr and thats a std lib func, too strict lints!
+//#![allow(clippy::all)]
+//#![allow(warnings)] //the warnings are from memchr and thats a std lib func, too strict lints!
 //I really prefer having some strong foundation to rely on, so I'll use it and say stuff it to pride. Make it easy for people to verify.
 
 ///copy pasting code here, will probably add something in the readme about it.
@@ -315,12 +319,12 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 */
 use core::num::NonZeroU64;
 #[inline]
-pub(crate) const fn repeat_u8(x: u8) -> usize {
+const fn repeat_u8(x: u8) -> usize {
     usize::from_ne_bytes([x; size_of::<usize>()])
 }
 
 #[inline]
-pub(crate) const fn repeat_u64(byte: u8) -> u64 {
+const fn repeat_u64(byte: u8) -> u64 {
     u64::from_ne_bytes([byte; size_of::<u64>()])
 }
 
@@ -332,6 +336,7 @@ const LO_U64: u64 = repeat_u64(0x01);
 const HI_U64: u64 = repeat_u64(0x80);
 
 #[inline]
+#[must_use]
 /**
  Returns the index (0–7) of the first zero byte in a `u64` word.
 
@@ -348,7 +353,8 @@ const HI_U64: u64 = repeat_u64(0x80);
  We then use either:
  - `trailing_zeros() >> 3` on little-endian systems, or
  - `leading_zeros() >> 3` on big-endian systems
- to convert the bit index of the first match into a byte index (dividing by 8).
+
+  To convert the bit index of the first match into a byte index (dividing by 8).
 
  **Returns:**
  - `Some(index)` where `index` is the byte position (0–7) of the first zero byte
@@ -362,19 +368,17 @@ pub const fn find_zero_byte_u64(x: u64) -> Option<usize> {
         return Some((nonzero_matches.leading_zeros() >> 3) as usize);
         #[cfg(target_endian = "little")]
         return Some((nonzero_matches.trailing_zeros() >> 3) as usize);
-    } else {
-        None
     }
+    None
 }
 
-#[inline]
 /**
  Finds the first occurrence of a byte in a 64-bit word.
 
  This uses a bitwise technique to locate the first instance of
  the target byte `c` in the 64-bit value `str`. The operation works by:
 
- 1. XORing each byte with the target value (resulting in 0 for matches)
+ 1. `XORing` each byte with the target value (resulting in 0 for matches)
  2. Applying a zero-byte detection algorithm to find matches
  3. Converting the bit position to a byte index
 
@@ -427,6 +431,7 @@ assert_eq!(find_char_in_word(b'l', bytes), Some(2)); // first 'l'
 - `None`: If the byte is not found
 */
 #[inline]
+#[must_use]
 pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     let char_array = u64::from_ne_bytes(bytestr);
     let xor_result = char_array ^ repeat_u64(c);
@@ -443,19 +448,17 @@ pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
         return Some((nonzero_matches.leading_zeros() >> 3) as usize);
         #[cfg(target_endian = "little")]
         return Some((nonzero_matches.trailing_zeros() >> 3) as usize);
-    } else {
-        None
     }
+    None
 }
 
-#[inline]
 /**
  Finds the last occurrence of a byte in a 64-bit word.
 
  This uses a bitwise technique to locate the last instance of
  the target byte `c` in the 64-bit value `str`. The operation works by:
 
- 1. XORing each byte with the target value (resulting in 0 for matches)
+ 1.  `XORing`  each byte with the target value (resulting in 0 for matches)
  2. Applying a zero-byte detection algorithm to find matches
  3. Converting the bit position to a byte index
 
@@ -511,6 +514,7 @@ assert_eq!(find_last_char_in_word(b'e', new_bytes), Some(4)); // last 'e'
 - `None`: If the byte is not found
 */
 #[inline]
+#[must_use]
 pub const fn find_last_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     let char_array = u64::from_ne_bytes(bytestr);
     let xor_result = char_array ^ repeat_u64(c);
@@ -522,9 +526,8 @@ pub const fn find_last_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
         return Some(7 - (nonzero_matches.trailing_zeros() >> 3) as usize);
         #[cfg(target_endian = "little")]
         return Some((7 - (nonzero_matches.leading_zeros() >> 3)) as usize);
-    } else {
-        None
     }
+    None
 }
 
 /** Returns `true` if `x` contains any zero byte.
@@ -540,6 +543,7 @@ pub const fn find_last_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
  COPY PASTED FROM STDLIB INTERNALS.
 */
 #[inline]
+#[must_use]
 pub const fn contains_zero_byte(x: usize) -> bool {
     x.wrapping_sub(LO_USIZE) & !x & HI_USIZE != 0
 }
@@ -551,6 +555,7 @@ pub const fn contains_zero_byte(x: usize) -> bool {
 ///
 #[must_use]
 #[inline]
+#[allow(clippy::cast_ptr_alignment)] //burntsushi wrote this so...
 pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // Scan for a single byte value by reading two `usize` words at a time.
 
@@ -604,17 +609,15 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     let repeated_x = repeat_u8(x);
 
-    const chunk_bytes: usize = size_of::<Chunk>();
+    const CHUNK_BYTES: usize = size_of::<Chunk>();
 
     while offset > min_aligned_offset {
         // SAFETY: offset starts at len - suffix.len(), as long as it is greater than
-
         // min_aligned_offset (prefix.len()) the remaining distance is at least 2 * chunk_bytes.
-
         unsafe {
-            let u = *(ptr.add(offset - 2 * chunk_bytes).cast::<Chunk>());
+            let u = *(ptr.add(offset - 2 * CHUNK_BYTES).cast::<Chunk>());
 
-            let v = *(ptr.add(offset - chunk_bytes).cast::<Chunk>());
+            let v = *(ptr.add(offset - CHUNK_BYTES).cast::<Chunk>());
 
             // Break if there is a matching byte.
 
@@ -627,7 +630,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
             }
         }
 
-        offset -= 2 * chunk_bytes;
+        offset -= 2 * CHUNK_BYTES;
     }
 
     // Find the byte before the point the body loop stopped.
@@ -637,4 +640,5 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
             .rposition(|elt| *elt == x)
     }
     // text[..offset].iter().rposition(|elt| *elt == x), avoid a bounds check
+    // I checked the assembly and it inserted panic branches, didn't like it (since this is panic free)
 }

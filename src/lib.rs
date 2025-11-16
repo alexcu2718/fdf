@@ -130,10 +130,8 @@ compile_error!("Not supported on 32bit, I may do if a PR is sent!");
 compile_error!("This application is not supported on Windows (yet)");
 
 use rayon::prelude::*;
-
 use std::{
     ffi::OsStr,
-    //os::unix::ffi::OsStrExt as _,
     sync::mpsc::{Receiver, Sender, channel as unbounded},
 };
 
@@ -225,9 +223,8 @@ pub use filetype::FileType;
     not(debug_assertions)
 ))]
 //miri doesnt support custom allocators
-//not sure which platforms support this, BSD doesnt from testing, will test others as appropriate(GREAT DOCS!!!)
 #[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc; //Please note, don't  use v3 it has weird bugs. I might try snmalloc in future.
 
 /**
 The `Finder` struct is the main entry point for the file search.

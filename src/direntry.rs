@@ -969,8 +969,6 @@ impl DirEntry {
     /// Cost free conversion to bytes (because it is already is bytes)
     pub const fn as_bytes(&self) -> &[u8] {
         self.path.to_bytes()
-         
-        
     }
 
     #[inline]
@@ -1163,20 +1161,100 @@ impl DirEntry {
     }
     #[inline]
     #[must_use]
-    /// Returns the directory name of the file (as bytes)
+    /**
+    Returns the directory name of the file (as bytes)
+    ```
+    use fdf::DirEntry;
+    use std::fs::File;
+    use std::io::Write;
+
+    // Test 1: Regular file path with directory structure
+    let tmp = std::env::temp_dir().join("test_dir/file.txt");
+    if let Some(parent) = tmp.parent() {
+    std::fs::create_dir_all(parent).unwrap();
+    }
+    File::create(&tmp).unwrap();
+
+    let entry = DirEntry::new(&tmp).unwrap();
+    assert_eq!(entry.dirname(), b"test_dir");
+
+    std::fs::remove_file(&tmp).unwrap();
+    std::fs::remove_dir_all(tmp.parent().unwrap()).unwrap();
+
+
+    #[cfg(target_os="linux")]
+    let root_dir=DirEntry::new("/").unwrap(); //only test for linux (where root is available)
+    #[cfg(target_os="linux")]
+    assert_eq!(root_dir.dirname(),b"/");
+
+    ```
+    */
     pub fn dirname(&self) -> &[u8] {
         debug_assert!(
             self.file_name_index() <= self.len(),
             "Indexing should always be within bounds"
         );
+
+        if self.as_bytes() == b"/" {
+            return b"/";
+        }
+
         // SAFETY: the index is below the length of the path trivially
         unsafe {
             self //this is why we store the baseline, to check this and is hidden as above, its very useful and cheap
-                .get_unchecked(..self.file_name_index() - 1)
+                .get_unchecked(..self.file_name_index().saturating_sub(1))
                 .rsplit(|&b| b == b'/')
                 .next()
                 .unwrap_or(self.as_bytes())
         }
+    }
+    /**
+      Extracts the extension of the file name, if any.
+
+     The extension is defined as the substring after the last dot (`.`) character
+     in the file name, excluding cases where the dot is the final character.
+
+     # Examples
+
+     ```
+     use fdf::DirEntry;
+     use std::env::temp_dir;
+
+     let tmp=std::env::temp_dir();
+     let file_test=tmp.join("file.txt");
+      std::fs::File::create(&file_test).unwrap();
+
+     let path = DirEntry::new(&file_test).unwrap();
+     assert_eq!(path.extension(), Some(b"txt".as_ref()));
+      std::fs::remove_file(&file_test).unwrap();
+
+     #[cfg(target_os="linux")]
+     let root=DirEntry::new("/").unwrap(); //not all UNIX's allow root access, like  android. etc
+     #[cfg(target_os="linux")]
+     assert!(root.extension().is_none());
+     ```
+    */
+    #[inline]
+    pub fn extension(&self) -> Option<&[u8]> {
+        let filename = self.file_name();
+        let len = filename.len();
+
+        if len <= 1 {
+            return None;
+        }
+
+        // Search for the last dot in the filename, excluding the last character ('.''s dont count if they're the final character)
+        // SAFETY: len is guaranteed within bounds
+        let search_range = unsafe { &filename.get_unchecked(..len.saturating_sub(1)) };
+
+        crate::memrchr(b'.', search_range).map(|pos| {
+            // SAFETY:
+            // - `pos` comes from `memrchr` which searches within `search_range`
+            // - `search_range` is a subslice of `filename` (specifically `filename[..len-1]`)
+            // - Therefore `pos` is a valid index in `filename`
+            // - `pos + 1` is guaranteed to be ≤ len-1, so `pos + 1..` is a valid range
+            unsafe { filename.get_unchecked(pos + 1..) }
+        })
     }
 
     #[inline]
@@ -1285,7 +1363,6 @@ impl DirEntry {
      println!("Last modified at: {}", modified.with_timezone(&Utc));
      ```
     */
-    #[allow(clippy::missing_errors_doc)] //fixing errors later
     pub fn modified_time(&self) -> Result<DateTime<Utc>> {
         let statted = self.get_lstat()?;
 

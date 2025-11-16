@@ -781,6 +781,14 @@ impl DirEntry {
             })
         })
     }
+
+    /// Returns the parent path as byte slice, or None if at root.
+    #[inline]
+    pub fn parent(&self) -> Option<&[u8]> {
+        self.as_path()
+            .parent()
+            .map(|path| path.as_os_str().as_bytes())
+    }
     #[inline]
     /// Similar to above function but modified for internal use within size filtering.
     /// TODO, make this public at some point.
@@ -960,11 +968,9 @@ impl DirEntry {
     #[must_use]
     /// Cost free conversion to bytes (because it is already is bytes)
     pub const fn as_bytes(&self) -> &[u8] {
-        // SAFETY: Avoid UB check, it's guaranteed to be in range due to having 1 less than the 'true' len
-        unsafe {
-            core::slice::from_raw_parts(self.path.to_bytes_with_nul().as_ptr(), self.len())
-            // len is the length of the internal `CStr` -1
-        }
+        self.path.to_bytes()
+         
+        
     }
 
     #[inline]

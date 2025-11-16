@@ -1,9 +1,45 @@
+use crate::DirEntry;
 use core::fmt;
 use libc::{
     EACCES, EAGAIN, EBADF, EBUSY, EEXIST, EFAULT, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP, EMFILE,
     ENAMETOOLONG, ENFILE, ENOENT, ENOMEM, ENOTDIR, EOVERFLOW, EPERM, ETXTBSY,
 };
 use std::io;
+
+/// Represents a traversal error encountered during directory processing
+#[derive(Debug)]
+pub struct TraversalError {
+    /// The directory entry that caused the error
+    pub(crate) dir: DirEntry,
+    /// The error that occurred
+    pub(crate) error: DirEntryError,
+}
+
+impl TraversalError {
+    /// Create a new traversal error
+    #[must_use]
+    pub(crate) const fn new(dir: DirEntry, error: DirEntryError) -> Self {
+        Self { dir, error }
+    }
+
+    /// Get the directory path that caused the error
+    #[must_use]
+    pub const fn path(&self) -> &DirEntry {
+        &self.dir
+    }
+
+    /// Get the underlying error
+    #[must_use]
+    pub const fn error(&self) -> &DirEntryError {
+        &self.error
+    }
+}
+
+impl fmt::Display for TraversalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Error accessing {}: {}", self.dir, self.error)
+    }
+}
 
 #[derive(Debug)]
 #[allow(clippy::exhaustive_enums)]

@@ -34,33 +34,35 @@ pub enum FileTypeFilter {
 }
 
 impl FileTypeFilter {
-    /// Converts the file type filter to its corresponding byte representation
-    ///
-    /// This provides backward compatibility with legacy systems and protocols
-    /// that use single-byte codes to represent file types.
-    ///
-    /// # Returns
-    /// A `u8` value representing the file type:
-    /// - `b'f'` for regular files
-    /// - `b'd'` for directories
-    /// - `b'l'` for symbolic links
-    /// - `b'p'` for named pipes (FIFOs)
-    /// - `b'c'` for character devices
-    /// - `b'b'` for block devices
-    /// - `b's'` for sockets
-    /// - `b'u'` for unknown file types
-    /// - `b'x'` for executable files
-    /// - `b'e'` for empty files
-    ///
-    /// # Examples
-    /// ```
-    /// # use fdf::FileTypeFilter;
-    /// let filter = FileTypeFilter::File;
-    /// assert_eq!(filter.as_byte(), b'f');
-    ///
-    /// let filter = FileTypeFilter::Directory;
-    /// assert_eq!(filter.as_byte(), b'd');
-    /// ```
+    /**
+     Converts the file type filter to its corresponding byte representation
+
+     This provides backward compatibility with legacy systems and protocols
+     that use single-byte codes to represent file types.
+
+     # Returns
+     A `u8` value representing the file type:
+     - `b'f'` for regular files
+     - `b'd'` for directories
+     - `b'l'` for symbolic links
+     - `b'p'` for named pipes (FIFOs)
+     - `b'c'` for character devices
+     - `b'b'` for block devices
+     - `b's'` for sockets
+     - `b'u'` for unknown file types
+     - `b'x'` for executable files
+     - `b'e'` for empty files
+
+     # Examples
+     ```
+     # use fdf::FileTypeFilter;
+     let filter = FileTypeFilter::File;
+     assert_eq!(filter.as_byte(), b'f');
+
+     let filter = FileTypeFilter::Directory;
+     assert_eq!(filter.as_byte(), b'd');
+     ```
+    */
     #[must_use]
     pub const fn as_byte(self) -> u8 {
         match self {

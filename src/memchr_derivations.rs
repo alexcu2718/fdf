@@ -424,7 +424,7 @@ assert_eq!(find_char_in_word(b'l', bytes), Some(2)); // first 'l'
 
 # Parameters
 - `c`: The byte to search for (0-255)
-- `bytestr`: The word ( a [u8;8] ) to search in (64 bit specific)
+- `bytestr`: The word ( a `[u8; 8]` ) to search in (64 bit specific)
 
 # Returns
 - `Some(usize)`: Index (0-7) of the first occurrence
@@ -507,7 +507,7 @@ assert_eq!(find_last_char_in_word(b'e', new_bytes), Some(4)); // last 'e'
 
 # Parameters
 - `c`: The byte to search for (0-255)
-- `bytestr`: The word ( a [u8;8] ) to search in (64 bit specific)
+- `bytestr`: The word ( a `[u8; 8]` ) to search in (64 bit specific)
 
 # Returns
 - `Some(usize)`: Index (0-7) of the last occurrence

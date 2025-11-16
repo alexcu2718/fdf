@@ -2,10 +2,13 @@
     clippy::cast_lossless,
     reason = "casting a bool to a usize is trivially fine here."
 )]
-use crate::{BytePath, DirEntry, FileType, SearchConfigError};
+use crate::{BytePath, DirEntry, FileType, SearchConfigError, TraversalError};
 use compile_time_ls_colours::file_type_colour;
 use rayon::prelude::*;
-use std::io::{BufWriter, IsTerminal as _, Write as _, stdout};
+use std::{
+    io::{BufWriter, IsTerminal as _, Write, stdout},
+    sync::{Arc, Mutex},
+};
 const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
 const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
@@ -38,7 +41,7 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 /// A convennient function to print results
 fn write_nocolour<W, I>(writer: &mut W, iter_paths: I) -> std::io::Result<()>
 where
-    W: std::io::Write,
+    W: Write,
     I: IntoIterator<Item = DirEntry>,
 {
     for path in iter_paths {
@@ -53,7 +56,7 @@ where
 #[inline]
 fn write_coloured<W, I>(writer: &mut W, iter_paths: I) -> std::io::Result<()>
 where
-    W: std::io::Write,
+    W: Write,
     I: IntoIterator<Item = DirEntry>,
 {
     for path in iter_paths {
@@ -66,11 +69,14 @@ where
 }
 
 #[inline]
+#[allow(clippy::print_stderr, reason = "only enabled if requested")]
 pub fn write_paths_coloured<I>(
-    paths: I,
+    path_iter: I,
     limit: Option<usize>,
     nocolour: bool,
     sort: bool,
+    print_errors: bool,
+    errors: Option<&Arc<Mutex<Vec<TraversalError>>>>,
 ) -> Result<(), SearchConfigError>
 where
     I: Iterator<Item = DirEntry>,
@@ -88,7 +94,7 @@ where
      */
 
     if sort {
-        let mut collected: Vec<_> = paths.collect();
+        let mut collected: Vec<_> = path_iter.collect();
         collected.par_sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
 
         let iter_paths = collected.into_iter().take(true_limit);
@@ -101,7 +107,7 @@ where
             write_nocolour(&mut writer, iter_paths)?;
         }
     } else {
-        let iter_paths = paths.take(true_limit);
+        let iter_paths = path_iter.take(true_limit);
 
         if use_colour {
             write_coloured(&mut writer, iter_paths)?
@@ -111,5 +117,17 @@ where
     }
 
     writer.flush()?;
+
+    //If errors were sent, show them.
+    if let Some(errors_arc) = errors
+        && print_errors
+    {
+        if let Ok(error_vec) = errors_arc.lock() {
+            for error in error_vec.iter() {
+                eprintln!("{error}");
+            }
+        }
+    }
+
     Ok(())
 }

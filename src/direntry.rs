@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .follow_symlinks(false)
         .filter_by_size(Some(SizeFilter::Min(1024)))
         .type_filter(Some(FileTypeFilter::File))
-        .show_errors(true)
+        .collect_errors(true) // Gather the errors from iteration, this has some performance cost.
         .build()
         .map_err(|e| format!("Failed to build finder: {}", e))?;
 

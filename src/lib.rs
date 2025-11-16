@@ -32,7 +32,7 @@
  - Batched result delivery to minimise channel contention
  - Zero-copy path handling where possible
  - Avoids unnecessary `stat` calls through careful API design
- - Makes up to 50% less `getdents` syscalls on linux/android, check the  `fill_buffer` docs)
+ - Makes up to 50% less `getdents` syscalls on linux/android, check the source code)
 
  ## Platform Support
 
@@ -58,35 +58,7 @@
 
     finder.traverse()
 }
-
- ```
-
- ## Safety Considerations
-
- - **Symlink Following**: Enabled by `follow_symlinks(true)`, but use with caution
-   to avoid infinite recursion (though we have guards against this!)
- - **Depth Limits**: Always consider setting `max_depth` for large directory trees
- - **Error Handling**: Use `show_errors(true)` to get diagnostic information about
-   permission errors and other issues
-
- ## Examples
-
- ### Basic Usage
- ```rust
- # use fdf::{Finder};
- let receiver = Finder::init(".")
-     .pattern(".*txt")
-     .build()
-     .unwrap()
-     .traverse()
-     .unwrap();
-
- for entry in receiver {
-       println!("Found: {}", entry.to_string_lossy());
- }
- ```
-
-
+```
 
 Setting custom filters example
 ```no_run
@@ -101,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .type_filter(Some(FileTypeFilter::File))
         //set the custom filter
         .filter(Some(|entry| {
-            entry.as_path().extension().is_some_and( |ext| ext.eq_ignore_ascii_case("log"))
+            entry.extension().is_some_and( |ext| ext.eq_ignore_ascii_case(b"log"))
         }))
         .build()?;
 
@@ -132,7 +104,10 @@ compile_error!("This application is not supported on Windows (yet)");
 use rayon::prelude::*;
 use std::{
     ffi::OsStr,
-    sync::mpsc::{Receiver, Sender, channel as unbounded},
+    sync::{
+        Arc, Mutex,
+        mpsc::{Receiver, Sender, channel as unbounded},
+    },
 };
 
 // Re-exports
@@ -175,7 +150,7 @@ mod direntry;
 pub use direntry::DirEntry;
 
 mod error;
-pub use error::{DirEntryError, FilesystemIOError, SearchConfigError};
+pub use error::{DirEntryError, FilesystemIOError, SearchConfigError, TraversalError};
 
 mod types;
 
@@ -215,8 +190,7 @@ pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 //miri doesnt support custom allocators
-//not sure which platforms support this, BSD doesnt from testing, will test others as appropriate(GREAT DOCS!!!)
-//this allocator is more efficient than jemalloc through my testing(still better than system allocator)
+//not sure which platforms support this, BSD doesnt from testing
 #[cfg(all(
     any(target_os = "linux", target_os = "android", target_os = "macos"),
     not(miri),
@@ -252,6 +226,8 @@ pub struct Finder {
     /// Cache for (device, inode) pairs to prevent duplicate traversal with symlinks
     /// Uses `DashSet` for lock-free concurrent access
     pub(crate) inode_cache: Option<DashSet<(u64, u64)>>,
+    /// Optionally Collected errors encountered during traversal
+    pub(crate) errors: Option<Arc<Mutex<Vec<TraversalError>>>>,
 }
 ///The Finder struct is used to find files in your filesystem
 impl Finder {
@@ -267,6 +243,31 @@ impl Finder {
     /// Returns a reference to the underlying root
     pub const fn root_dir(&self) -> &OsStr {
         &self.root
+    }
+
+    #[inline]
+    #[must_use]
+    /**
+     Returns the collected errors from the traversal
+
+     Returns `Some(Vec<TraversalError>)` if error collection is enabled and errors occurred,
+     or `None` if error collection is disabled or the lock failed
+    */
+    pub fn errors(&self) -> Option<Vec<TraversalError>> {
+        self.errors
+            .as_ref()
+            .and_then(|arc| arc.lock().ok())
+            .map(|guard| {
+                guard
+                    .iter()
+                    .map(|te| TraversalError {
+                        dir: te.dir.clone(),
+                        error: DirEntryError::IOError(FilesystemIOError::from_io_error(
+                            std::io::Error::other(te.error.to_string()),
+                        )),
+                    })
+                    .collect()
+            })
     }
 
     #[inline]
@@ -333,8 +334,17 @@ impl Finder {
         result_count: Option<usize>,
         sort: bool,
     ) -> core::result::Result<(), SearchConfigError> {
-        //TODO clean this up
-        write_paths_coloured(self.traverse()?, result_count, use_colours, sort)
+        let errors = self.errors.clone();
+        let print_errors = self.search_config.show_errors;
+        let iter = self.traverse()?;
+        write_paths_coloured(
+            iter,
+            result_count,
+            use_colours,
+            sort,
+            print_errors,
+            errors.as_ref(),
+        )
     }
 
     #[inline]
@@ -476,7 +486,6 @@ impl Finder {
         clippy::let_underscore_must_use,
         reason = "errors only when channel is closed, not useful"
     )]
-    #[expect(clippy::print_stderr, reason = "only enabled if explicitly requested")]
     /**
      Recursively processes a directory, sending found files to a channel.
 
@@ -530,9 +539,14 @@ impl Finder {
                 }
             }
             Err(err) => {
-                if self.search_config.show_errors {
-                    eprintln!("Error accessing {dir}: {err}");
-                    //TODO! replace with logging eventually
+                if let Some(errors_arc) = self.errors.as_ref() {
+                    debug_assert!(
+                        self.search_config.show_errors,
+                        "Should only send errors if this is enabled"
+                    );
+                    if let Ok(mut errors) = errors_arc.lock() {
+                        errors.push(TraversalError::new(dir, err));
+                    }
                 }
             }
         }

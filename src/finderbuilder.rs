@@ -11,6 +11,7 @@ use std::{
     fs::metadata,
     os::unix::fs::MetadataExt as _,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 //Set the threadcount at compile time (backing to a minimum of 1, **this should never happen**)
@@ -40,11 +41,12 @@ pub struct FinderBuilder {
     pub(crate) size_filter: Option<SizeFilter>,
     pub(crate) time_filter: Option<TimeFilter>,
     pub(crate) file_type: Option<FileTypeFilter>,
-    pub(crate) show_errors: bool,
+    pub(crate) collect_errors: bool,
     pub(crate) use_glob: bool,
     pub(crate) canonicalise: bool,
     pub(crate) same_filesystem: bool,
     pub(crate) thread_count: usize,
+    pub(crate) print_errors: bool,
 }
 
 impl FinderBuilder {
@@ -69,7 +71,8 @@ impl FinderBuilder {
             size_filter: None,
             time_filter: None,
             file_type: None,
-            show_errors: false,
+            collect_errors: false,
+            print_errors: false,
             use_glob: false,
             canonicalise: false,
             same_filesystem: false,
@@ -177,9 +180,16 @@ impl FinderBuilder {
     }
 
     #[must_use]
-    /// Set whether to show errors during traversal, defaults to false
-    pub const fn show_errors(mut self, show_errors: bool) -> Self {
-        self.show_errors = show_errors;
+    /// Set whether to collect errors during traversal, defaults to false
+    pub const fn collect_errors(mut self, yesorno: bool) -> Self {
+        self.collect_errors = yesorno;
+        self
+    }
+
+    #[must_use]
+    /// Set whether to print errors during traversal, defaults to false
+    pub const fn print_errors(mut self, yesorno: bool) -> Self {
+        self.print_errors = yesorno;
         self
     }
 
@@ -260,7 +270,7 @@ impl FinderBuilder {
             self.size_filter,
             self.file_type,
             self.time_filter,
-            self.show_errors,
+            self.print_errors,
             self.use_glob,
         )?;
 
@@ -284,6 +294,9 @@ impl FinderBuilder {
             custom_filter: lambda,
             starting_filesystem,
             inode_cache,
+            errors: self
+                .collect_errors
+                .then(|| Arc::new(Mutex::new(Vec::new()))),
         })
     }
 

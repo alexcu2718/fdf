@@ -281,7 +281,7 @@ fn main() -> Result<(), SearchConfigError> {
         .thread_count(args.thread_num.unwrap_or(THREAD_COUNT))
         .build()?;
 
-    let _ = finder.print_results(args.no_colour, args.top_n, args.sort,args.show_errors);
+    let _ = finder.print_results(args.no_colour, args.top_n, args.sort, args.show_errors);
 
     Ok(())
 }

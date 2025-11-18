@@ -11,6 +11,7 @@ mod tests {
     use filetime::{FileTime, set_file_times};
     use std::env::temp_dir;
     use std::ffi::OsStr;
+    use std::ffi::OsString;
     use std::fs;
     use std::fs::File;
     use std::io::Write;
@@ -19,7 +20,6 @@ mod tests {
     use std::os::unix::fs::symlink;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
-    use std::{ffi::OsString};
 
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

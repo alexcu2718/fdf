@@ -334,7 +334,7 @@ impl Finder {
         use_colours: bool,
         result_count: Option<usize>,
         sort: bool,
-        print_errors:bool
+        print_errors: bool,
     ) -> core::result::Result<(), SearchConfigError> {
         let errors = self.errors.clone();
         let iter = self.traverse()?;

@@ -146,9 +146,7 @@ fn bench_strlen(c: &mut Criterion) {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(libc::strlen(black_box(
-                            access_dirent!(entry, d_name),
-                        )))
+                        black_box(libc::strlen(black_box(access_dirent!(entry, d_name))))
                     };
                 }
                 black_box(total) //make sure compiler does not optimise this away

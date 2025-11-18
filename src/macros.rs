@@ -249,7 +249,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                     // Only check d_type for potential "." or ".." entries
                     match access_dirent!($entry, d_type) {
                         libc::DT_DIR | libc::DT_UNKNOWN => {
-                            let name_ptr:*const u8 = access_dirent!($entry, d_name);
+                            let name_ptr: *const u8 = access_dirent!($entry, d_name);
                             // Combined check using pattern
                             match (namelen, *name_ptr.add(0), *name_ptr.add(1)) {
                                 (1, b'.', _) => $action,    // "." - length 1, first char '.'
@@ -277,7 +277,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
                         // The value for 24 is checked in util.
                         if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
-                            let name_ptr:*const u8 = access_dirent!($entry, d_name);
+                            let name_ptr: *const u8 = access_dirent!($entry, d_name);
                             match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                                 (b'.', 0, _) | (b'.', b'.', 0) => $action, //similar to above
                                 _ => (),
@@ -303,7 +303,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 // Fallback for other systems: check d_type first
                 match access_dirent!($entry, d_type) {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
-                        let name_ptr:*const u8 = access_dirent!($entry, d_name);
+                        let name_ptr: *const u8 = access_dirent!($entry, d_name);
                         match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                             (b'.', 0, _) | (b'.', b'.', 0) => $action,
                             _ => (),

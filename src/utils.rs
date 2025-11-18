@@ -332,7 +332,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         debug_assert!(
             reclen - DIRENT_HEADER_START +byte_pos -8
                 //SAFETY: debug only.
-                    == unsafe{core::ffi::CStr::from_ptr(access_dirent!(drnt, d_name).cast()).count_bytes() },
+                    == unsafe{core::ffi::CStr::from_ptr(access_dirent!(drnt, d_name)).count_bytes() },
             "const swar dirent length calculation failed!"
         );
         /*

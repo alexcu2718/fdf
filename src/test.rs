@@ -19,7 +19,7 @@ mod tests {
     use std::os::unix::fs::symlink;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
-    use std::{ffi::OsString, str::FromStr};
+    use std::{ffi::OsString};
 
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -1179,7 +1179,7 @@ mod tests {
         let start_path = "/";
         let pattern: &str = ".";
 
-        let finder = Finder::init(OsString::from_str(&start_path).unwrap())
+        let finder = Finder::init(OsString::from(&start_path))
             .pattern(&pattern)
             .keep_hidden(true)
             .keep_dirs(true)
@@ -1203,7 +1203,7 @@ mod tests {
         let start_path: &str = "/";
         let pattern: &str = ".";
 
-        let finder = Finder::init(OsString::from_str(&start_path).unwrap())
+        let finder = Finder::init(OsString::from(&start_path))
             .pattern(&pattern)
             .keep_hidden(true)
             .keep_dirs(true)

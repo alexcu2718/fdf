@@ -324,6 +324,7 @@ impl Finder {
      * `use_colours` - Enable ANSI colour output for better readability(if supported/going to a TTY)
      * `result_count` - Optional limit on the number of results to display
      * `sort` - Enable sorting of the final results (has significant computational cost)
+     * `print_errors` - Print any errors collected (if errors were collected during traversal via the builder)
 
      # Errors
      Returns [`SearchConfigError::IOError`] if the search operation fails
@@ -333,9 +334,9 @@ impl Finder {
         use_colours: bool,
         result_count: Option<usize>,
         sort: bool,
+        print_errors:bool
     ) -> core::result::Result<(), SearchConfigError> {
         let errors = self.errors.clone();
-        let print_errors = self.search_config.show_errors;
         let iter = self.traverse()?;
         write_paths_coloured(
             iter,
@@ -391,12 +392,10 @@ impl Finder {
     #[inline]
     #[expect(
         clippy::wildcard_enum_match_arm,
-        reason = "Exhaustive on traversible types"
-    )]
-    #[expect(
         clippy::cast_sign_loss,
-        reason = "Follows std treatment of dev devices"
-    )] //https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.dev
+        reason = "Exhaustive on traversible types, Follows std treatment of dev devices"
+    )]
+    //https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.dev
     #[allow(unfulfilled_lint_expectations)] //as above
     /**
      Advanced filtering for directories and symlinks with filesystem constraints.
@@ -538,14 +537,17 @@ impl Finder {
                     let _ = sender.send(files); //Skip the error, the only errors happen when the channel is closed.
                 }
             }
-            Err(err) => {
+            Err(error) => {
                 if let Some(errors_arc) = self.errors.as_ref() {
                     debug_assert!(
-                        self.search_config.show_errors,
-                        "Should only send errors if this is enabled"
+                        self.search_config.collect_errors,
+                        "Sanity check, only collect errors when enabled"
                     );
+                    // This will only show errors if collect errors is enabled
+                    // Generally I don't like this approach due to the locking it can cause
+                    // However, errors are VERY small typically hence this create negligible issues.
                     if let Ok(mut errors) = errors_arc.lock() {
-                        errors.push(TraversalError::new(dir, err));
+                        errors.push(TraversalError { dir, error });
                     }
                 }
             }

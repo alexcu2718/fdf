@@ -230,12 +230,12 @@ pub struct SearchConfig {
     pub(crate) time_filter: Option<TimeFilter>,
 
     /**
-    Whether to display errors encountered during traversal
+    Whether to collect
 
-    If true, errors like permission denials are shown to the user.
+    If true, errors like permission denials are shown to the user via `Finder`'s .errors method
     If false, errors are silently skipped.
     */
-    pub(crate) show_errors: bool,
+    pub(crate) collect_errors: bool,
 }
 impl SearchConfig {
     // Constructor for SearchConfig
@@ -246,8 +246,8 @@ impl SearchConfig {
         clippy::too_many_arguments,
         reason = "Internal convenience"
     )]
-    pub(crate) fn new<A: AsRef<str>>(
-        pattern: Option<&A>,
+    pub(crate) fn new<ToStr: AsRef<str>>(
+        pattern: Option<&ToStr>, // ultimately this is CLI internal only
         hide_hidden: bool,
         case_insensitive: bool,
         keep_dirs: bool,
@@ -258,7 +258,7 @@ impl SearchConfig {
         size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,
         time_filter: Option<TimeFilter>,
-        show_errors: bool,
+        collect_errors: bool,
         use_glob: bool,
     ) -> core::result::Result<Self, SearchConfigError> {
         let (file_name_only, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
@@ -307,7 +307,7 @@ impl SearchConfig {
             size_filter,
             type_filter,
             time_filter,
-            show_errors,
+            collect_errors,
         })
     }
 
@@ -415,7 +415,7 @@ impl SearchConfig {
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
         debug_assert!(
             !dir.file_name().contains(&b'/'),
-            "file_name contains a directory separator"
+            "file_name contains a directory separator some arithmetic has gone wrong!"
         );
 
         debug_assert!(

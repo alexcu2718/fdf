@@ -16,12 +16,6 @@ pub struct TraversalError {
 }
 
 impl TraversalError {
-    /// Create a new traversal error
-    #[must_use]
-    pub(crate) const fn new(dir: DirEntry, error: DirEntryError) -> Self {
-        Self { dir, error }
-    }
-
     /// Get the directory path that caused the error
     #[must_use]
     pub const fn path(&self) -> &DirEntry {

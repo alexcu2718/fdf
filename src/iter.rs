@@ -5,8 +5,7 @@ use crate::{dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
-use libc::DIR;
-
+ use libc::{fstatat,AT_SYMLINK_NOFOLLOW,DIR};
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -382,10 +381,15 @@ pub trait DirentConstructor {
     /// Returns the file descriptor for the current directory being read
     fn file_descriptor(&self) -> &FileDes;
 
+  
+
     #[inline]
+    #[allow(clippy::wildcard_enum_match_arm,reason="exhaustive")]
+    #[allow(clippy::multiple_unsafe_ops_per_block)]
     /// Constructs a `DirEntry` from a raw directory entry pointer
     #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {
+       
         let base_len = self.file_index();
         debug_assert!(!drnt.is_null(), "drnt should never be null!");
         // SAFETY: The `drnt` must not be null (checked before using)
@@ -394,9 +398,13 @@ pub trait DirentConstructor {
         let inode = unsafe { access_dirent!(drnt, d_ino) };
 
         // SAFETY: The `drnt` must not be null(by precondition)
-        let full_path = unsafe { self.construct_path(drnt) };
+        let full_path:&CStr = unsafe { self.construct_path(drnt) };
         let path: Box<CStr> = full_path.into();
-        let file_type = self.get_filetype_private(dtype, &path);
+
+        let file_type:FileType = match FileType::from_dtype(dtype){
+            FileType::Unknown=>stat_syscall!(fstatat,self.file_descriptor().0,access_dirent!(drnt,d_name),AT_SYMLINK_NOFOLLOW,DTYPE),
+            not_unknown=>not_unknown //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
+        };
 
         DirEntry {
             path,

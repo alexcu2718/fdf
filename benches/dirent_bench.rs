@@ -116,7 +116,7 @@ fn bench_strlen(c: &mut Criterion) {
                 &entry,
                 |b, e| {
                     b.iter(|| unsafe {
-                        black_box(libc::strlen(black_box(access_dirent!(e, d_name).cast())))
+                        black_box(libc::strlen(black_box(access_dirent!(e, d_name))))
                     })
                 },
             );
@@ -147,7 +147,7 @@ fn bench_strlen(c: &mut Criterion) {
                 for entry in &all_entries {
                     total += unsafe {
                         black_box(libc::strlen(black_box(
-                            access_dirent!(entry, d_name).cast(),
+                            access_dirent!(entry, d_name),
                         )))
                     };
                 }

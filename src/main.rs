@@ -50,7 +50,8 @@ struct Args {
     #[arg(
         short = 'e',
         long = "extension",
-        help = "filters based on extension, eg --extension .txt or -E txt"
+        help = "filters based on extension, eg --extension .txt or -E txt",
+        long_help = "An example command would be `fdf -HI -e  c '^str' / "
     )]
     extension: Option<String>,
     #[arg(
@@ -275,12 +276,12 @@ fn main() -> Result<(), SearchConfigError> {
         .filter_by_time(args.time)
         .type_filter(args.type_of)
         .collect_errors(args.show_errors)
-        .print_errors(args.show_errors)
         .use_glob(args.glob)
         .same_filesystem(args.same_file_system)
         .thread_count(args.thread_num.unwrap_or(THREAD_COUNT))
         .build()?;
 
-    let _ = finder.print_results(args.no_colour, args.top_n, args.sort);
+    let _ = finder.print_results(args.no_colour, args.top_n, args.sort,args.show_errors);
+
     Ok(())
 }

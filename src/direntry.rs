@@ -885,7 +885,7 @@ impl DirEntry {
      Returns `DirEntryError::IOError` if the stat operation fails
     */
     pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(fstatat, fd, self.file_name_cstr(), AT_SYMLINK_NOFOLLOW)
+        stat_syscall!(fstatat, fd.0, self.file_name_cstr().as_ptr(), AT_SYMLINK_NOFOLLOW)
     }
 
     #[inline]
@@ -961,7 +961,7 @@ impl DirEntry {
     *
     */
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(fstatat, fd, self.file_name_cstr(), AT_SYMLINK_FOLLOW)
+        stat_syscall!(fstatat, fd.0, self.file_name_cstr().as_ptr(), AT_SYMLINK_FOLLOW)
     }
 
     #[inline]
@@ -1228,10 +1228,8 @@ impl DirEntry {
      assert_eq!(path.extension(), Some(b"txt".as_ref()));
       std::fs::remove_file(&file_test).unwrap();
 
-     #[cfg(target_os="linux")]
-     let root=DirEntry::new("/").unwrap(); //not all UNIX's allow root access, like  android. etc
-     #[cfg(target_os="linux")]
-     assert!(root.extension().is_none());
+     let root_dir=DirEntry::new("/");
+     assert!(root_dir.is_err() || root_dir.is_ok_and(|path| path.extension().is_none()));
      ```
     */
     #[inline]

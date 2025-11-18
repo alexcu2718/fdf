@@ -64,7 +64,7 @@ macro_rules! access_dirent {
     }};
     ($entry_ptr:expr,d_name) => {{
         //see reference https://github.com/rust-lang/rust/blob/8712e4567551a2714efa66dac204ec7137bc5605/library/std/src/sys/fs/unix.rs#L740
-         (&raw const (*$entry_ptr).d_name).cast::<u8>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
+         (&raw const (*$entry_ptr).d_name).cast::<_>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
     }};
 
          ($entry_ptr:expr, d_type) => {{
@@ -249,7 +249,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                     // Only check d_type for potential "." or ".." entries
                     match access_dirent!($entry, d_type) {
                         libc::DT_DIR | libc::DT_UNKNOWN => {
-                            let name_ptr = access_dirent!($entry, d_name);
+                            let name_ptr:*const u8 = access_dirent!($entry, d_name);
                             // Combined check using pattern
                             match (namelen, *name_ptr.add(0), *name_ptr.add(1)) {
                                 (1, b'.', _) => $action,    // "." - length 1, first char '.'
@@ -277,7 +277,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
                         // The value for 24 is checked in util.
                         if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
-                            let name_ptr = access_dirent!($entry, d_name);
+                            let name_ptr:*const u8 = access_dirent!($entry, d_name);
                             match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                                 (b'.', 0, _) | (b'.', b'.', 0) => $action, //similar to above
                                 _ => (),
@@ -303,7 +303,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 // Fallback for other systems: check d_type first
                 match access_dirent!($entry, d_type) {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
-                        let name_ptr = access_dirent!($entry, d_name);
+                        let name_ptr:*const u8 = access_dirent!($entry, d_name);
                         match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
                             (b'.', 0, _) | (b'.', b'.', 0) => $action,
                             _ => (),
@@ -395,8 +395,8 @@ macro_rules! stat_syscall {
         // - The path is guaranteed to be null-terminated (CStr)
         let res = unsafe {
             $syscall(
-                $fd.0,
-                $path.as_ptr(),
+                $fd,
+                $path,
                 stat_buf.as_mut_ptr(),
                 $flags,
             )
@@ -416,8 +416,8 @@ macro_rules! stat_syscall {
         // - The path is guaranteed to be null-terminated (CStr)
         let res = unsafe {
             $syscall(
-                $fd.0,
-                $path.as_ptr(),
+                $fd,
+                $path,
                 stat_buf.as_mut_ptr(),
                 $flags,
             )

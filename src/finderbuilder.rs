@@ -46,7 +46,6 @@ pub struct FinderBuilder {
     pub(crate) canonicalise: bool,
     pub(crate) same_filesystem: bool,
     pub(crate) thread_count: usize,
-    pub(crate) print_errors: bool,
 }
 
 impl FinderBuilder {
@@ -72,7 +71,6 @@ impl FinderBuilder {
             time_filter: None,
             file_type: None,
             collect_errors: false,
-            print_errors: false,
             use_glob: false,
             canonicalise: false,
             same_filesystem: false,
@@ -187,13 +185,6 @@ impl FinderBuilder {
     }
 
     #[must_use]
-    /// Set whether to print errors during traversal, defaults to false
-    pub const fn print_errors(mut self, yesorno: bool) -> Self {
-        self.print_errors = yesorno;
-        self
-    }
-
-    #[must_use]
     /// Set whether to canonicalise (resolve absolute path) the root directory, defaults to false
     pub const fn canonicalise_root(mut self, canonicalise: bool) -> Self {
         self.canonicalise = canonicalise;
@@ -258,6 +249,24 @@ impl FinderBuilder {
             None
         };
 
+        /*
+
+        pub(crate) fn new<A: AsRef<str>>(
+        pattern: Option<&A>,
+        hide_hidden: bool,
+        case_insensitive: bool,
+        keep_dirs: bool,
+        filenameonly: bool,
+        extension_match: Option<Box<[u8]>>,
+        depth: Option<NonZeroU32>,
+        follow_symlinks: bool,
+        size_filter: Option<SizeFilter>,
+        type_filter: Option<FileTypeFilter>,
+        time_filter: Option<TimeFilter>,
+        collect_errors: bool,
+        use_glob: bool,
+         */
+
         let search_config = SearchConfig::new(
             self.pattern.as_ref(),
             self.hide_hidden,
@@ -270,7 +279,7 @@ impl FinderBuilder {
             self.size_filter,
             self.file_type,
             self.time_filter,
-            self.print_errors,
+            self.collect_errors,
             self.use_glob,
         )?;
 

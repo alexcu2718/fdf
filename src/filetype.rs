@@ -110,7 +110,7 @@ impl FileType {
     #[inline]
     #[must_use]
     pub fn from_fd_no_follow(fd: &FileDes, filename: &CStr) -> Self {
-        stat_syscall!(fstatat, fd, filename, AT_SYMLINK_NOFOLLOW, DTYPE)
+        stat_syscall!(fstatat, fd.0, filename.as_ptr(), AT_SYMLINK_NOFOLLOW, DTYPE)
     }
 
     #[inline]
@@ -137,7 +137,7 @@ impl FileType {
 
     */
     pub fn from_fd_follow(fd: &FileDes, filename: &CStr) -> Self {
-        stat_syscall!(fstatat, fd, filename, AT_SYMLINK_FOLLOW, DTYPE)
+        stat_syscall!(fstatat, fd.0, filename.as_ptr(), AT_SYMLINK_FOLLOW, DTYPE)
     }
     /// Returns true if this represents a directory  (cost free check)
     #[inline]

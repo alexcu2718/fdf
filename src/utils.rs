@@ -168,7 +168,7 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     )))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { libc::strlen(access_dirent!(drnt, d_name).cast::<_>()) }
+        unsafe { libc::strlen(access_dirent!(drnt, d_name)) }
         // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cast (it's essentially just reinterpreting)
     }
 }

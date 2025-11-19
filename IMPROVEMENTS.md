@@ -21,6 +21,8 @@ However, this presents a rather unpleasant API that is difficult to parallelise.
 
 For investigation purposes, the last commit before removing `getdirentries64` can be found at:
 
+Also, look at this link for [`fts open`](https://github.com/dalance/fts-rs)
+
 ```bash
 git checkout 27728cdadcd254a95bda48a3f10b6c8d892bea0d
 ```

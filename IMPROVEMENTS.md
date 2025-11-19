@@ -19,6 +19,12 @@ A potential alternative is [`fts_open`](https://blog.tempel.org/2019/04/dir-read
 
 However, this presents a rather unpleasant API that is difficult to parallelise.
 
+For investigation purposes, the last commit before removing `getdirentries64` can be found at:
+
+```bash
+git checkout 27728cdadcd254a95bda48a3f10b6c8d892bea0d
+```
+
 ## 2. ZFS Handling
 
 This addresses issues with large filename length edge cases. The relevant implementation is in `build.rs` and `src/iter.rs` (approximately line 250).
@@ -40,7 +46,7 @@ An alternative iterator implementation: when `stat` calls are known to be requir
 
 This presents challenges as `stat` is a large structure. It could be stored as `Option<Cell<stat>>`, keeping the `direntry` structure under 64 bytes to fit within a single cache line.
 
-Note: This must use `stat`, not `lstat`.
+Note: This must use `stat`, not `lstat`. Consider using `fstatat` with `AT_SYMLINK_NOFOLLOW` as an alternative approach.
 
 ## 5. Additional Features
 
@@ -71,6 +77,12 @@ impl TLSRegex {
 
 Additional improvements to be determined based on ongoing development needs.
 
-## 8. An eight thing
+## 8. CIFS Filesystem Issue
 
-## 10 . Because 7 8 9.
+The `getdents` skip code (in `src/iter.rs` around line 243) encounters issues on certain exotic CIFS filesystems. This was observed on a friend's server setup but hasn't been reproducible since, and access to the original server is no longer available.
+
+Reverting to the standard `getdents` "call until 0" paradigm resolved the issue and returned the expected results.
+
+## 9. Performance Profiling
+
+Comprehensive performance profiling across different filesystem types and usage patterns to identify bottlenecks and optimisation opportunities.

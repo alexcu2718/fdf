@@ -1,6 +1,8 @@
 
 # Improvement Notes and Todo Items
 
+This is a list of things I intend to do as a brief roadmap
+
 (Note: Windows support is out of scope for pre-1.0 releases)
 
 ## 0. Project Naming
@@ -8,6 +10,8 @@
 The current name needs reconsideration. It was originally created as a joke that went a bit too far, and now we're rather stuck with it.
 
 ## 1. macOS Performance Investigations
+
+NOTE: Optimisations for other platforms such as BSD are out of scope due to obscure use case.
 
 Despite attempting several approaches for macOS optimisation via `getattrlistbulk` and `getdirentries64` through raw syscalls (commented code can be found in `src/utils.rs` - search for GETDIRENTRIES).
 
@@ -19,9 +23,9 @@ A potential alternative is [`fts_open`](https://blog.tempel.org/2019/04/dir-read
 
 However, this presents a rather unpleasant API that is difficult to parallelise.
 
-For investigation purposes, the last commit before removing `getdirentries64` can be found at:
-
 Also, look at this link for [`fts open`](https://github.com/dalance/fts-rs)
+
+For investigation purposes, the last commit before removing `getdirentries64` can be found at:
 
 ```bash
 git checkout 27728cdadcd254a95bda48a3f10b6c8d892bea0d
@@ -31,7 +35,7 @@ git checkout 27728cdadcd254a95bda48a3f10b6c8d892bea0d
 
 This addresses issues with large filename length edge cases. The relevant implementation is in `build.rs` and `src/iter.rs` (approximately line 250).
 
-An elegant solution is needed that doesn't require rebuilding - perhaps using `LazyLock` without paying initialisation costs. This could be achieved with `OnceCell` or `std::cell::LazyCell`. Thread safety isn't a concern as this is effectively constant.
+An elegant solution is needed that doesn't require rebuilding - perhaps using `LazyLock` without paying initialisation costs. This could be achieved with `std::cell::OnceCell` or `std::cell::LazyCell`. Thread safety isn't a concern(?) as this is effectively constant.
 
 There's currently a fundamental flaw: building without ZFS support and subsequently installing ZFS (or ReiserFS) works fine. The challenge is implementing a very low-cost runtime check.
 
@@ -48,7 +52,7 @@ An alternative iterator implementation: when `stat` calls are known to be requir
 
 This presents challenges as `stat` is a large structure. It could be stored as `Option<Cell<stat>>`, keeping the `direntry` structure under 64 bytes to fit within a single cache line.
 
-Note: This must use `stat`, not `lstat`. Consider using `fstatat` with `AT_SYMLINK_NOFOLLOW` as an alternative approach.
+Note: This must use `stat` type calls, not `lstat` type ones. Consider using `fstatat` with `AT_SYMLINK_NOFOLLOW` as an alternative approach.
 
 ## 5. Additional Features
 
@@ -75,16 +79,12 @@ impl TLSRegex {
 }
 ```
 
-## 7. Future Considerations
-
-Additional improvements to be determined based on ongoing development needs.
-
 ## 8. CIFS Filesystem Issue
 
 The `getdents` skip code (in `src/iter.rs` around line 243) encounters issues on certain exotic CIFS filesystems. This was observed on a friend's server setup but hasn't been reproducible since, and access to the original server is no longer available.
 
 Reverting to the standard `getdents` "call until 0" paradigm resolved the issue and returned the expected results.
 
-## 9. Performance Profiling
+## 10. Performance Profiling (because 7 8 9 )
 
 Comprehensive performance profiling across different filesystem types and usage patterns to identify bottlenecks and optimisation opportunities.

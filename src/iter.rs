@@ -103,7 +103,7 @@ impl Drop for ReadDir {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 /**
- Linux-specific directory iterator using the `getdents` system call.
+ Linux/Android-specific directory iterator using the `getdents` system call.
 
  Provides more efficient directory traversal than `readdir` for large directories
  by performing batched reads into a kernel buffer. This reduces system call overhead

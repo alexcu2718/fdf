@@ -50,7 +50,7 @@ There's currently a fundamental flaw: building without ZFS support and subsequen
 
 An alternative iterator implementation: when `stat` calls are known to be required in advance, execute them within the iterator itself.
 
-This presents challenges as `stat` is a large structure. It could be stored as `Option<Cell<stat>>`, keeping the `direntry` structure under 64 bytes to fit within a single cache line.
+This presents challenges as `stat` is a large structure. It could be stored as `Option<Cell<Box<stat>>>`, keeping the `direntry` structure under 64 bytes to fit within a single cache line.
 
 Note: This must use `stat` type calls, not `lstat` type ones. Consider using `fstatat` with `AT_SYMLINK_NOFOLLOW` as an alternative approach.
 
@@ -65,6 +65,8 @@ Implement extra functionality such as custom `.fdfignore` files. This shouldn't 
 Restructure the parallelisation approach in `src/lib.rs`. Whilst regex patterns can be shared between threads (they maintain an internal thread pool), this is likely inefficient.
 
 A workaround exists, interestingly documented in [this GitHub issue](https://github.com/rust-lang/regex/issues/934):
+
+This might be fixed due to this change however [see link](https://github.com/rust-lang/regex/issues/934#issuecomment-1703860708)
 
 ```rust
 struct TLSRegex {
@@ -85,6 +87,17 @@ The `getdents` skip code (in `src/iter.rs` around line 243) encounters issues on
 
 Reverting to the standard `getdents` "call until 0" paradigm resolved the issue and returned the expected results.
 
+However, I want to keep the syscall skip, I suspect it may be something to do with the block size.
+
 ## 10. Performance Profiling (because 7 8 9 )
 
 Comprehensive performance profiling across different filesystem types and usage patterns to identify bottlenecks and optimisation opportunities.
+
+Experiments such as playing with buffer sizes(linux/android), found in [script here](./scripts/test_buffer_sizes.sh)
+
+Others exist, this will be added as time goes on.
+
+## 11. Modularisation
+
+I wish to follow up with splitting the crate into a cli and internals, with the internals being UNIX/macOS/Linux/Windows
+Generally just for macOS/Linux specialisations, no need to specialise for all OS'es. WAY too much work and no guarantee of result!

@@ -51,9 +51,9 @@ It's deliberately got a build script to stop building on reiser.
 
 The project includes comprehensive testing with 90+ Rust tests and 15+ correctness benchmarks comparing against fd.
 
-Note: Miri validation (Rust's undefined behaviour detector) cannot be used due to the extensive libc calls. Intensive testing and valgrind validation are used instead.
+Note: Miri validation (Rust's undefined behaviour detector) cannot be used due to the extensive libc calls. Intensive testing and valgrind validation are used instead. See the [valgrind script here](./scripts/valgrind-test.sh)
 
-- Rust tests: [Available here](https://github.com/alexcu2718/fdf/blob/main/src/test.rs)
+- Rust tests: [Available here](./src/test.rs)
 - Shell scripts clone the LLVM repository to provide an accurate testing environment
 - Tests run via GitHub Actions on all supported platforms
 
@@ -116,7 +116,7 @@ Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but mac
 Symlink resolution in my method differs from fd and find. Although I generally advise against following symlinks, the option exists for completeness.
 
 When following symlinks, behaviour will vary slightly. For example, fd can enter infinite loops with recursive symlinks
- (see recursive_symlink_fs_test.sh) [Available here](https://github.com/alexcu2718/fdf/blob/main/recursive_symlink_fs_test.sh)
+ (see recursive_symlink_fs_test.sh) [Available here](./scripts/recursive_symlink_fs_test.sh)
 whereas my implementation prevents hangs. It may, however, return more results than expected.
 
 To avoid issues, use --same-file-system when traversing symlinks. Both fd and find also handle them poorly without such flags. My approach ensures the program always terminates safely, even in complex directories like ~/.steam, ~/.wine, /sys, and /proc.
@@ -192,9 +192,11 @@ When I began I had barely used Linux/Rust for a few months, I didn't even know C
 Even though fdf is already faster than fd in all cases, I'm planning to experiment with filtering before allocation(I don't stop at good enough!)
 Rust's std::fs has some inefficiencies, too much heap allocation, file descriptor manipulation, constant strlen calculations, usage of readdir (not optimal because it implicitly stat calls every file it sees!). Rewriting all of it  using libc was the ideal way to bypass that and learn in the process.
 
-Notably the standard library will keep file descriptors open(UNIX specific) until the last reference to the inner `ReadDir` disappears,
-fundamentally this means that this cause a lot more IO. It will also tend to call 'stat' style calls heavily which seemed inefficient
-(I do have a shell script documenting syscall differences here(it's crude but it works well)) [Available here](https://github.com/alexcu2718/fdf/blob/main/fd_benchmarks/syscalltest.sh)
+Notably the standard library will keep file descriptors open(UNIX specific) until the last reference to the inner `ReadDir` disappears, because UNIX has a limit on open file descriptors, this can cause a form of 'rate limiting', not ideal.
+
+It will also tend to call 'stat' style calls heavily which is very! inefficient
+
+(I do have a shell script documenting syscall differences here(it's crude but it works well)) [Available here](./fd_benchmarks/syscalltest.sh)
 
 ### Development Philosophy
 
@@ -219,6 +221,8 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 ## Future Plans
 
 ### Feature Enhancements (Planned)
+
+More elaborate improvements discussed [at this link]( ./IMPROVEMENTS.md   )
 
 **API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 
@@ -444,3 +448,5 @@ Options:
 
 - Implement a filtering mechanism that avoids unnecessary directory allocations.
 - Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.
+- Although the cost of allocations doesn't seem too bad, I will look at this again at some point.
+- Maybe achieved via a lending iterator type approach? See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)

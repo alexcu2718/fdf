@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-
+cd "$(dirname "$0" )"
+cd ..
 echo -e "Benchmark results for $(uname -a )\n\n"
 printf "| %-50s | %-15s | %-15s | %-8s | %-16s |\n" "Test Case" "fdf Mean" "fd Mean" "Speedup" "Relative"
 printf "| %-50s | %-15s | %-15s | %-8s | %-15s |\n" ":----------" ":--------:" ":-------:" ":-------:" ":--------:"
@@ -59,6 +60,6 @@ function format_cmd(cmd) {
         }
     }
 }
-' >> results_table.md
+' > results_table.md
 
 cat results_table.md

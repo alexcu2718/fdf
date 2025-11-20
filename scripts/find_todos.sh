@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+cd "$(dirname "$0" )"
+cd ..
+
 if command -v rg &> /dev/null; then
     rg '(todo|fixme)' ./src --ignore-case #god modern tools are nice.
 else

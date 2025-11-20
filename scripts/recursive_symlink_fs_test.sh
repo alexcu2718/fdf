@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 echo -e "IMPORTANT: PLEASE DELETE THE FILE THE FILE \n  OTHERWISE YOU'LL HAVE SOME FUNKY effects trying to do anything in this directory!\n"
-
+cd "$(dirname "$0" )"
+cd ..
 
 TEST_DIR="looptest"
 LOOP_DIR="test_loops"

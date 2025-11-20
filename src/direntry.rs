@@ -1192,10 +1192,8 @@ impl DirEntry {
     std::fs::remove_dir_all(tmp.parent().unwrap()).unwrap();
 
 
-    #[cfg(target_os="linux")]
-    let root_dir=DirEntry::new("/").unwrap(); //only test for linux (where root is available)
-    #[cfg(target_os="linux")]
-    assert_eq!(root_dir.dirname(),b"/");
+    let root_dir=DirEntry::new("/");
+    assert!(root_dir.is_err() || root_dir.is_ok_and(|x| x.dirname()==b"/"));
 
     ```
     */

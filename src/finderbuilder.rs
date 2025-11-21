@@ -2,7 +2,7 @@ use core::num::NonZeroU32;
 
 use crate::{
     DirEntry, DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError,
-    SizeFilter, TimeFilter, const_from_env,
+    SizeFilter, TimeFilter, 
 };
 use dashmap::DashSet;
 
@@ -15,7 +15,7 @@ use std::{
 };
 
 //Set the threadcount at compile time (backing to a minimum of 1, **this should never happen**)
-const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
+
 /**
  A builder for creating a `Finder` instance with customisable options.
 
@@ -56,6 +56,11 @@ impl FinderBuilder {
       `root` - The root directory to search
     */
     pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
+
+
+        const MIN_THREADS: usize = 1;
+        let num_threads =
+        std::thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
         Self {
             root: root.as_ref().to_owned(),
             pattern: None,
@@ -74,7 +79,7 @@ impl FinderBuilder {
             use_glob: false,
             canonicalise: false,
             same_filesystem: false,
-            thread_count: THREAD_COUNT,
+            thread_count: num_threads,
         }
     }
     #[must_use]
@@ -201,8 +206,12 @@ impl FinderBuilder {
     }
     #[must_use]
     /// Set how many threads rayon is to use, defaults to max
-    pub const fn thread_count(mut self, threads: usize) -> Self {
-        self.thread_count = threads;
+    pub const fn thread_count(mut self, threads: Option<usize>) -> Self {
+        match threads{
+            Some(num)=>self.thread_count=num,
+            None=>return self
+        }
+
 
         self
     }

@@ -1,6 +1,5 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
-use fdf::const_from_env;
 use fdf::{
     FileTypeFilter, FileTypeParser, Finder, SearchConfigError, SizeFilter, SizeFilterParser,
     TimeFilter, TimeFilterParser,
@@ -9,8 +8,6 @@ use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 
-// Set threads at compile time, defaulting to 1 in worst case scenario
-const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
 
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -278,7 +275,7 @@ fn main() -> Result<(), SearchConfigError> {
         .collect_errors(args.show_errors)
         .use_glob(args.glob)
         .same_filesystem(args.same_file_system)
-        .thread_count(args.thread_num.unwrap_or(THREAD_COUNT))
+        .thread_count(args.thread_num)
         .build()?;
 
     let _ = finder.print_results(args.no_colour, args.top_n, args.sort, args.show_errors);

@@ -109,11 +109,20 @@ where
     }
 
     /// Get the length of the basename of a path (up to and including the last '/')
+    /// Returns 0 for length 1 byte paths
     #[inline]
     fn file_name_index(&self) -> usize {
+        if __is_length_one(self) {
+            return 0;
+        }
         debug_assert!(!self.is_empty(), "should never be empty");
         memrchr(b'/', self).map_or(1, |pos| pos + 1)
     }
+}
+
+#[cold]
+const fn __is_length_one(bytes: &[u8]) -> bool {
+    bytes.len() == 1
 }
 
 #[inline]

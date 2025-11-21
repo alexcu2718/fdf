@@ -229,15 +229,13 @@ impl GetDents {
 
         // Access the last field and then round up to find the minimum struct size
         const MINIMUM_DIRENT_SIZE: usize =
-            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
+            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8); //==24 on these systems
 
         // Note, we don't support reiser due to it's massive file name length
         // This should support Openzfs, ZFS is the only FS on linux which has a size greater than 512 bytes
-        const MAX_SIZED_DIRENT: usize = match option_env!("HAS_ZFS_FS") {
-            //Generate this env var at compile time
-            Some(_) => 1023 + 1 + MINIMUM_DIRENT_SIZE, // max size of ZFS+NUL + non variable fields
-            None => 2 * (255 + 1) + MINIMUM_DIRENT_SIZE, // max size (255 characters in UTF16 +NUL) + non variable fields
-        }; //TODO, make a static function that does stuff instead of relying on compile time!
+        const MAX_SIZED_DIRENT: usize = 1023 + 1 + MINIMUM_DIRENT_SIZE; // max size of ZFS+NUL + non variable fields
+        // Normally the max should be 255 but there's 510 for CIFS or any UTF16 encoded Filesystem
+        // Then there's the exception for ZFS with 1023.
 
         // See proof at bottom of page.
         self.end_of_stream = !has_bytes_remaining

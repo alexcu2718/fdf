@@ -39,12 +39,6 @@ fn main() {
             let has_reiser = filesystems.iter().any(|fs| fs.starts_with("reiser"));
             // Crash on reiser support
             assert!(!has_reiser, "reiser file systems not supported");
-
-            let has_zfs = filesystems.iter().any(|fs| fs.starts_with("zfs"));
-
-            if has_zfs {
-                println!("cargo:rustc-env=HAS_ZFS_FS=TRUE");
-            }
         }
         Err(e) => {
             println!("cargo:warning=Failed to read /proc/filesystems: {e}");

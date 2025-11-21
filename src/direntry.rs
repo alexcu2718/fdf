@@ -542,7 +542,11 @@ impl DirEntry {
         ```
     */
     pub fn is_empty(&self) -> bool {
-        match self.file_type() {
+        // TODO this can be optimised for linux/android, by calling getdents directly, no need to heap allocate here
+        // because calling getdents on an empty dir should only return 48 on these platforms, meaning we dont have
+        // to allocate the vector in getdents, finding empty files is a good use case so even though it's niche
+        // it would have appeal to people. Not too hard to implement.
+        match self.file_type {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -648,6 +652,14 @@ impl DirEntry {
     assert_eq!(name.to_str().unwrap(), "some name.txt");
 
     std::fs::remove_file(tmp).unwrap();
+
+
+
+
+    let root_dir=DirEntry::new("/");
+
+    assert!(root_dir.is_err() || root_dir.is_ok_and(|x| x.file_name_cstr()==c"/"));
+
     ```
     */
     pub fn file_name_cstr(&self) -> &CStr {
@@ -665,8 +677,41 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    /// Returns the name of the file (as bytes, no null terminator)
-    /// Returns empty slice for root directory `/`
+    /**
+    Returns the name of the file (as bytes, no null terminator)
+    ( Returns `/` or `.` when they are the entry)
+
+
+    ```
+    use fdf::DirEntry;
+    use std::fs::File;
+
+     // File name with spaces
+    let tmp = std::env::temp_dir().join("some name.txt");
+    File::create(&tmp).unwrap();
+
+
+
+    let entry = DirEntry::new(&tmp).unwrap();
+    let name = entry.file_name();
+
+    assert_eq!(name, b"some name.txt");
+
+    std::fs::remove_file(tmp).unwrap();
+
+
+
+
+    let root_dir=DirEntry::new("/");
+
+    assert!(root_dir.is_err() || root_dir.is_ok_and(|x| x.file_name()==b"/"));
+    // if on certain systems, root dir requires permissions, so we have to be careful (esp android)
+
+    let dot_dir=DirEntry::new(".");
+    assert!(dot_dir.is_ok_and(|x| x.file_name()==b"."));
+
+    ```
+    */
     pub fn file_name(&self) -> &[u8] {
         debug_assert!(
             self.len() >= self.file_name_index(),
@@ -1042,7 +1087,7 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    /// Returns the length of the base path (eg /home/user/ is 6 '/home/')
+    /// Returns the length of the base path (eg /home/user/ is 6 '/home/') and '/' is 0
     pub const fn file_name_index(&self) -> usize {
         self.file_name_index
     }

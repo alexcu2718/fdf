@@ -31,22 +31,14 @@ For investigation purposes, the last commit before removing `getdirentries64` ca
 git checkout 27728cdadcd254a95bda48a3f10b6c8d892bea0d
 ```
 
-## 2. ZFS Handling
-
-This addresses issues with large filename length edge cases. The relevant implementation is in `build.rs` and `src/iter.rs` (approximately line 250).
-
-An elegant solution is needed that doesn't require rebuilding - perhaps using `LazyLock` without paying initialisation costs. This could be achieved with `std::cell::OnceCell` or `std::cell::LazyCell`. Thread safety isn't a concern(?) as this is effectively constant.
-
-There's currently a fundamental flaw: building without ZFS support and subsequently installing ZFS (or ReiserFS) works fine. The challenge is implementing a very low-cost runtime check.
-
-## 3. Filesystem Optimisations
+## 2. Filesystem Optimisations
 
 - Implement a more efficient method to exclude ReiserFS - essentially a one-time assertion that isn't repeatedly called
 - Consider improved sorting algorithms in `src/printer.rs`
 
 - Consider using `statx` on Linux, though this presents some challenges due to `statx` only recently becoming available on MUSL. However, `statx` only requests the attributes explicitly asked for, potentially offering speed benefits as well as additional metadata. This requires careful consideration. See the [Rust implementation](https://github.com/rust-lang/rust/blob/07bdbaedc63094281483c40a88a1a8f2f8ffadc5/library/std/src/sys/fs/unix.rs#L105) for reference.
 
-## 4. Iterator Enhancements
+## 3. Iterator Enhancements
 
 An alternative iterator implementation: when `stat` calls are known to be required in advance, execute them within the iterator itself.
 
@@ -54,13 +46,13 @@ This presents challenges as `stat` is a large structure. It could be stored as `
 
 Note: This must use `stat` type calls, not `lstat` type ones. Consider using `fstatat` with `AT_SYMLINK_NOFOLLOW` as an alternative approach.
 
-## 5. Additional Features
+## 4. Additional Features
 
 Implement extra functionality such as custom `.fdfignore` files. This shouldn't be particularly difficult to implement. Additional features to be added as requirements arise.
 
 **Note**: Ideally implemented after the parallelisation restructure below is resolved.
 
-## 6. Parallelisation Restructure
+## 5. Parallelisation Restructure
 
 Restructure the parallelisation approach in `src/lib.rs`. Whilst regex patterns can be shared between threads (they maintain an internal thread pool), this is likely inefficient.
 
@@ -81,7 +73,7 @@ impl TLSRegex {
 }
 ```
 
-## 8. CIFS Filesystem Issue
+## 7. CIFS Filesystem Issue
 
 The `getdents` skip code (in `src/iter.rs` around line 243) encounters issues on certain exotic CIFS filesystems. This was observed on a friend's server setup but hasn't been reproducible since, and access to the original server is no longer available.
 
@@ -89,7 +81,7 @@ Reverting to the standard `getdents` "call until 0" paradigm resolved the issue 
 
 However, I want to keep the syscall skip, I suspect it may be something to do with the block size.
 
-## 10. Performance Profiling (because 7 8 9 )
+## 8. Performance Profiling
 
 Comprehensive performance profiling across different filesystem types and usage patterns to identify bottlenecks and optimisation opportunities.
 
@@ -97,7 +89,7 @@ Experiments such as playing with buffer sizes(linux/android), found in [script h
 
 Others exist, this will be added as time goes on.
 
-## 11. Modularisation
+## 10. Modularisation (because 7 8 9 )
 
 I wish to follow up with splitting the crate into a cli and internals, with the internals being UNIX/macOS/Linux/Windows
 Generally just for macOS/Linux specialisations, no need to specialise for all OS'es. WAY too much work and no guarantee of result!

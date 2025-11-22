@@ -1,0 +1,25 @@
+mod buffer;
+mod dir_entry;
+mod file_type;
+mod iter;
+mod types;
+
+pub use buffer::{AlignedBuffer, ValueType};
+pub use dir_entry::DirEntry;
+pub use file_type::FileType;
+// TODO: fix this
+// pub use iter::GetDents;
+pub use iter::ReadDir;
+pub use types::{FileDes, Result};
+
+//4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const_from_env!(
+    /// The size of the buffer used for directory entries, set to 4120 by default, but can be customised via environment variable.
+    /// Meant to be above the size of a page basically
+    BUFFER_SIZE:usize="BUFFER_SIZE",(std::mem::offset_of!(crate::dirent64, d_name) + libc::PATH_MAX as usize).next_multiple_of(8)
+); //TODO investigate this more! 
+//basically this is the should allow getdents to grab a lot of entries in one go
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const_assert!(BUFFER_SIZE >= 4096, "Buffer size too small!");

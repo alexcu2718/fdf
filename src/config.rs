@@ -1,153 +1,24 @@
-use crate::BytePath as _;
-use crate::cli_helpers::{SizeFilter, TimeFilter};
-use crate::glob_to_regex;
-use crate::{DirEntry, FileType, SearchConfigError};
+use crate::SearchConfigError;
+use crate::filters::FileTypeFilter;
+use crate::fs::{DirEntry, FileType};
+use crate::util::glob_to_regex;
+use crate::{filters, util::BytePath as _};
 use core::num::NonZeroU32;
 use core::ops::Deref;
 use core::time::Duration;
 use regex::bytes::{Regex, RegexBuilder};
 use std::time::UNIX_EPOCH;
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// File type filter for directory traversal
-#[expect(clippy::exhaustive_enums, reason = "This list is exhaustive")]
-pub enum FileTypeFilter {
-    /// Regular file
-    File,
-    /// Directory
-    Directory,
-    /// Symbolic link
-    Symlink,
-    /// Named pipe (FIFO)
-    Pipe,
-    /// Character device
-    CharDevice,
-    /// Block device
-    BlockDevice,
-    /// Socket
-    Socket,
-    /// Unknown file type
-    Unknown,
-    /// Executable file
-    Executable,
-    /// Empty file
-    Empty,
-}
 
-impl FileTypeFilter {
-    /**
-     Converts the file type filter to its corresponding byte representation
+/**
+This struct holds the configuration for searching a Fileystem via traversal
 
-     This provides backward compatibility with legacy systems and protocols
-     that use single-byte codes to represent file types.
 
-     # Returns
-     A `u8` value representing the file type:
-     - `b'f'` for regular files
-     - `b'd'` for directories
-     - `b'l'` for symbolic links
-     - `b'p'` for named pipes (FIFOs)
-     - `b'c'` for character devices
-     - `b'b'` for block devices
-     - `b's'` for sockets
-     - `b'u'` for unknown file types
-     - `b'x'` for executable files
-     - `b'e'` for empty files
-
-     # Examples
-     ```
-     # use fdf::FileTypeFilter;
-     let filter = FileTypeFilter::File;
-     assert_eq!(filter.as_byte(), b'f');
-
-     let filter = FileTypeFilter::Directory;
-     assert_eq!(filter.as_byte(), b'd');
-     ```
-    */
-    #[must_use]
-    pub const fn as_byte(self) -> u8 {
-        match self {
-            Self::File => b'f',
-            Self::Directory => b'd',
-            Self::Symlink => b'l',
-            Self::Pipe => b'p',
-            Self::CharDevice => b'c',
-            Self::BlockDevice => b'b',
-            Self::Socket => b's',
-            Self::Unknown => b'u',
-            Self::Executable => b'x',
-            Self::Empty => b'e',
-        }
-    }
-
-    /**
-     Parses a character into a `FileTypeFilter`
-
-     This method converts a single character into the corresponding file type filter,
-     which is useful for parsing command-line arguments or configuration files.
-
-     # Parameters
-     - `c`: The character to parse into a file type filter
-
-     # Returns
-     - `Ok(FileTypeFilter)` if the character represents a valid file type
-     - `Err(String)` with an error message if the character is invalid
-
-     # Supported Characters
-     - `'d'` - Directory
-     - `'u'` - Unknown file type
-     - `'l'` - Symbolic link
-     - `'f'` - Regular file
-     - `'p'` - Named pipe (FIFO)
-     - `'c'` - Character device
-     - `'b'` - Block device
-     - `'s'` - Socket
-     - `'e'` - Empty file
-     - `'x'` - Executable file
-
-     # Examples
-     ```
-     # use fdf::FileTypeFilter;
-     assert!(FileTypeFilter::from_char('d').is_ok());
-     assert!(FileTypeFilter::from_char('f').is_ok());
-     assert!(FileTypeFilter::from_char('z').is_err()); // Invalid character
-
-     let filter = FileTypeFilter::from_char('l').unwrap();
-     assert!(matches!(filter, FileTypeFilter::Symlink));
-     ```
-
-     # Errors
-     Returns an error if the character does not correspond to any known file type.
-     The error message includes the invalid character and suggests using `--help`
-     to see valid types.
-    */
-    pub fn from_char(c: char) -> core::result::Result<Self, String> {
-        match c {
-            'd' => Ok(Self::Directory),
-            'u' => Ok(Self::Unknown),
-            'l' => Ok(Self::Symlink),
-            'f' => Ok(Self::File),
-            'p' => Ok(Self::Pipe),
-            'c' => Ok(Self::CharDevice),
-            'b' => Ok(Self::BlockDevice),
-            's' => Ok(Self::Socket),
-            'e' => Ok(Self::Empty),
-            'x' => Ok(Self::Executable),
-            _ => Err(format!(
-                "Invalid file type: '{c}'. See --help for valid types."
-            )),
-        }
-    }
-}
+It includes options for regex matching, hiding hidden files, keeping directories,
+matching file extensions, whether to search file names only, depth of search,
+and whether to follow symlinks.
+*/
 #[derive(Clone, Debug)]
 #[expect(clippy::struct_excessive_bools, reason = "It's a CLI tool.")]
-/**
- This struct holds the configuration for searching a Fileystem via traversal
-
-
- It includes options for regex matching, hiding hidden files, keeping directories,
- matching file extensions, whether to search file names only, depth of search,
- and whether to follow symlinks.
-*/
 pub struct SearchConfig {
     /**
     Regular expression pattern for matching file names or paths
@@ -211,7 +82,7 @@ pub struct SearchConfig {
     If `Some`, only files matching the size criteria are included.
     Supports minimum, maximum, and exact size matching.
     */
-    pub(crate) size_filter: Option<SizeFilter>,
+    pub(crate) size_filter: Option<filters::SizeFilter>,
 
     /**
     Filter based on file type
@@ -227,7 +98,7 @@ pub struct SearchConfig {
     If `Some`, only files matching the time criteria are included.
     Supports relative time ranges (e.g., "last 7 days").
     */
-    pub(crate) time_filter: Option<TimeFilter>,
+    pub(crate) time_filter: Option<filters::TimeFilter>,
 
     /**
     Whether to collect
@@ -255,9 +126,9 @@ impl SearchConfig {
         extension_match: Option<Box<[u8]>>,
         depth: Option<NonZeroU32>,
         follow_symlinks: bool,
-        size_filter: Option<SizeFilter>,
+        size_filter: Option<filters::SizeFilter>,
         type_filter: Option<FileTypeFilter>,
-        time_filter: Option<TimeFilter>,
+        time_filter: Option<filters::TimeFilter>,
         collect_errors: bool,
         use_glob: bool,
     ) -> core::result::Result<Self, SearchConfigError> {
@@ -311,15 +182,15 @@ impl SearchConfig {
         })
     }
 
+    /// Evaluates a custom predicate function against a path
     #[inline]
     #[must_use]
-    /// Evaluates a custom predicate function against a path
     pub fn matches_with<F: Fn(&[u8]) -> bool>(&self, path: &[u8], predicate: F) -> bool {
         predicate(path)
     }
 
-    #[inline]
     /// Checks for extension match via memchr
+    #[inline]
     pub fn matches_extension<S>(&self, entry: &S) -> bool
     where
         S: Deref<Target = [u8]>,
@@ -333,19 +204,19 @@ impl SearchConfig {
             .is_none_or(|ext| entry.matches_extension(ext))
     }
 
+    /**
+    Applies the configured size filter to a directory entry, if any.
+    For regular files the size is checked directly.
+    For symlinks, the target is resolved first and then checked if it is a regular file.
+    Other file types are ignored.
+    */
     #[inline]
     #[must_use]
     #[expect(
         clippy::wildcard_enum_match_arm,
         reason = "Only checking regular files"
     )]
-    #[allow(clippy::cast_sign_loss)] //signloss dont matter here
-    /**
-     Applies the configured size filter to a directory entry, if any.
-     For regular files the size is checked directly.
-     For symlinks, the target is resolved first and then checked if it is a regular file.
-     Other file types are ignored.
-    */
+    #[allow(clippy::cast_sign_loss)] // Sign loss does not matter here
     pub fn matches_size(&self, entry: &DirEntry) -> bool {
         let Some(filter_size) = self.size_filter else {
             return true; // No filter means always match
@@ -364,10 +235,11 @@ impl SearchConfig {
             _ => false,
         }
     }
-    #[inline]
-    #[must_use]
+
     /// Applies a type filter using `FileTypeFilter` enum
     /// Supports common file types: file, dir, symlink, device, pipe, etc
+    #[inline]
+    #[must_use]
     pub fn matches_type(&self, entry: &DirEntry) -> bool {
         let Some(type_filter) = self.type_filter else {
             return true;
@@ -387,11 +259,11 @@ impl SearchConfig {
         }
     }
 
+    /// Applies time-based filtering to files based on modification time
+    /// Returns true if the file's modification time matches the filter criteria
     #[inline]
     #[must_use]
     #[allow(clippy::cast_sign_loss)]
-    /// Applies time-based filtering to files based on modification time
-    /// Returns true if the file's modification time matches the filter criteria
     pub fn matches_time(&self, entry: &DirEntry) -> bool {
         let Some(time_filter) = self.time_filter else {
             return true; // No filter means always match
@@ -406,12 +278,12 @@ impl SearchConfig {
             .is_some_and(|systime| time_filter.matches_time(systime))
     }
 
+    /// Checks if the path or file name matches the regex filter
+    /// If `full_path` is false, only checks the filename
     #[inline]
     #[must_use]
     #[expect(clippy::cast_lossless, reason = "overcomplicates it")]
     #[expect(clippy::indexing_slicing, reason = "used for debug assert")]
-    /// Checks if the path or file name matches the regex filter
-    /// If `full_path` is false, only checks the filename
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
         debug_assert!(
             !dir.file_name().contains(&b'/'),

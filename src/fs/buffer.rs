@@ -19,6 +19,7 @@ pub trait ValueType: sealed::Sealed + Copy {}
 
 impl ValueType for i8 {}
 impl ValueType for u8 {}
+
 /**
  A optimised, aligned buffer for system call operations
 
@@ -76,9 +77,9 @@ impl ValueType for u8 {}
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T, const SIZE: usize>
 where
-    T: ValueType, //only generic over i8 and u8!
+    T: ValueType, // Only generic over i8 and u8!
 {
-    //generic over size.
+    // Generic over size.
     pub(crate) data: MaybeUninit<[T; SIZE]>,
 }
 
@@ -112,37 +113,37 @@ impl<T, const SIZE: usize> AlignedBuffer<T, SIZE>
 where
     T: ValueType,
 {
+    /**
+    Creates a new uninitialised aligned buffer
+
+    The buffer will have 8-byte alignment but its contents will be uninitialised.
+    You must initialised the buffer before accessing its contents.
+    */
     #[must_use]
     #[inline]
-    /**
-     Creates a new uninitialised aligned buffer
-
-     The buffer will have 8-byte alignment but its contents will be uninitialised.
-     You must initialised the buffer before accessing its contents.
-    */
     pub const fn new() -> Self {
         Self {
             data: MaybeUninit::uninit(),
         }
     }
 
+    /// Returns a mutable pointer to the buffer's data
     #[inline]
     #[must_use]
-    /// Returns a mutable pointer to the buffer's data
     pub const fn as_mut_ptr(&mut self) -> *mut T {
         self.data.as_mut_ptr().cast()
     }
 
+    /// Returns the max capacity of this buffer
     #[inline]
     #[must_use]
-    /// Returns the max capacity of this buffer
     pub const fn max_capacity(&self) -> usize {
         SIZE
     }
 
+    /// Returns a const pointer to the buffer's data
     #[inline]
     #[must_use]
-    /// Returns a const pointer to the buffer's data
     pub const fn as_ptr(&self) -> *const T {
         self.data.as_ptr().cast()
     }
@@ -180,9 +181,10 @@ where
         unsafe { crate::utils::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
+    // TODO: Maybe delete this?
     // #[inline] Irrelevant because of macos semantics.
     // #[cfg(target_os = "macos")]
-    // #[allow(clippy::not_unsafe_ptr_arg_deref)] //shutup
+    // #[allow(clippy::not_unsafe_ptr_arg_deref)] // Shut up
     // pub fn getdirentries(&mut self, fd: &crate::FileDes, basep: *mut i64) -> i32 {
     //     // SAFETY: we're passing a valid buffer
     //     unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
@@ -207,13 +209,13 @@ where
         unsafe { self.as_slice().get_unchecked(range) }
     }
 
-    #[inline]
     /**
-      Returns a mutable reference to a subslice without doing bounds checking
+    Returns a mutable reference to a subslice without doing bounds checking
 
-     # Safety
-     The range must be within initialised portion of the buffer
+    # Safety
+    The range must be within initialised portion of the buffer
     */
+    #[inline]
     pub unsafe fn get_unchecked_mut<R>(&mut self, range: R) -> &mut R::Output
     where
         R: SliceIndex<[T]>,
@@ -221,6 +223,7 @@ where
         // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { self.as_mut_slice().get_unchecked_mut(range) }
     }
+
     /**
      Assumes the buffer is initialised and returns a reference to the contents
 
@@ -233,6 +236,7 @@ where
         // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { &*self.data.as_ptr() }
     }
+
     /**
      Assumes the buffer is initialised and returns a mutable reference to the contents
 

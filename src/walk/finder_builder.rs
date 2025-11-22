@@ -1,11 +1,10 @@
-use core::num::NonZeroU32;
-
 use crate::{
-    DirEntry, DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError,
-    SizeFilter, TimeFilter,
+    SearchConfigError, config, const_from_env, filters,
+    fs::DirEntry,
+    walk::{DirEntryFilter, FilterType, finder::Finder},
 };
+use core::num::NonZeroU32;
 use dashmap::DashSet;
-
 use std::{
     ffi::{OsStr, OsString},
     fs::metadata,
@@ -15,6 +14,7 @@ use std::{
 };
 
 //Set the threadcount at compile time (backing to a minimum of 1, **this should never happen**)
+const_from_env!(THREAD_COUNT:usize="THREAD_COUNT",1);
 
 /**
  A builder for creating a `Finder` instance with customisable options.
@@ -38,9 +38,9 @@ pub struct FinderBuilder {
     pub(crate) max_depth: Option<NonZeroU32>,
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter>,
-    pub(crate) size_filter: Option<SizeFilter>,
-    pub(crate) time_filter: Option<TimeFilter>,
-    pub(crate) file_type: Option<FileTypeFilter>,
+    pub(crate) size_filter: Option<filters::SizeFilter>,
+    pub(crate) time_filter: Option<filters::TimeFilter>,
+    pub(crate) file_type: Option<filters::FileTypeFilter>,
     pub(crate) collect_errors: bool,
     pub(crate) use_glob: bool,
     pub(crate) canonicalise: bool,
@@ -80,40 +80,44 @@ impl FinderBuilder {
             thread_count: num_threads,
         }
     }
-    #[must_use]
+
     /// Set the search pattern (regex or glob)
+    #[must_use]
     pub fn pattern<P: AsRef<str>>(mut self, pattern: P) -> Self {
         self.pattern = Some(pattern.as_ref().into());
         self
     }
 
-    #[must_use]
     /// Set whether to hide hidden files, defaults to true
+    #[must_use]
     pub const fn keep_hidden(mut self, hide_hidden: bool) -> Self {
         self.hide_hidden = hide_hidden;
         self
     }
-    #[must_use]
     /// Set case insensitive matching,defaults to true
+    #[must_use]
     pub const fn case_insensitive(mut self, case_insensitive: bool) -> Self {
         self.case_insensitive = case_insensitive;
         self
     }
-    #[must_use]
+
     /// Set whether to keep directories in results,defaults to false
+    #[must_use]
     pub const fn keep_dirs(mut self, keep_dirs: bool) -> Self {
         self.keep_dirs = keep_dirs;
         self
     }
-    #[must_use]
+
     /// Set whether to use short paths in regex/glob matching, defaults to true
     /// This is over-ridden if the search term contains a '/'
+    #[must_use]
     pub const fn file_name_only(mut self, short_path: bool) -> Self {
         self.file_name_only = short_path;
         self
     }
-    #[must_use]
+
     /// Set extension to match, defaults to no extension
+    #[must_use]
     pub fn extension<C: AsRef<str>>(mut self, extension: C) -> Self {
         let ext = extension.as_ref().as_bytes();
 
@@ -125,8 +129,9 @@ impl FinderBuilder {
 
         self
     }
-    #[must_use]
+
     /// Set maximum search depth
+    #[must_use]
     pub const fn max_depth(mut self, max_depth: Option<u32>) -> Self {
         match max_depth {
             None => self,
@@ -136,16 +141,17 @@ impl FinderBuilder {
             }
         }
     }
-    #[must_use]
+
     /// Sets size-based filtering criteria.
-    pub const fn filter_by_size(mut self, size_of: Option<SizeFilter>) -> Self {
+    #[must_use]
+    pub const fn filter_by_size(mut self, size_of: Option<filters::SizeFilter>) -> Self {
         self.size_filter = size_of;
         self
     }
 
-    #[must_use]
     /// Sets time-based filtering criteria for file modification times.
-    pub const fn filter_by_time(mut self, time_of: Option<TimeFilter>) -> Self {
+    #[must_use]
+    pub const fn filter_by_time(mut self, time_of: Option<filters::TimeFilter>) -> Self {
         self.time_filter = time_of;
         self
     }
@@ -166,43 +172,43 @@ impl FinderBuilder {
         self
     }
 
-    #[must_use]
     /// Sets file type filtering.
-    pub const fn type_filter(mut self, filter: Option<FileTypeFilter>) -> Self {
+    #[must_use]
+    pub const fn type_filter(mut self, filter: Option<filters::FileTypeFilter>) -> Self {
         self.file_type = filter;
         self
     }
 
-    #[must_use]
     /// Sets a glob pattern for regex matching, not a regex.
+    #[must_use]
     pub const fn use_glob(mut self, use_glob: bool) -> Self {
         self.use_glob = use_glob;
         self
     }
 
-    #[must_use]
     /// Set whether to collect errors during traversal, defaults to false
+    #[must_use]
     pub const fn collect_errors(mut self, yesorno: bool) -> Self {
         self.collect_errors = yesorno;
         self
     }
 
-    #[must_use]
     /// Set whether to canonicalise (resolve absolute path) the root directory, defaults to false
+    #[must_use]
     pub const fn canonicalise_root(mut self, canonicalise: bool) -> Self {
         self.canonicalise = canonicalise;
         self
     }
 
-    #[must_use]
     /// Set whether to escape any regexs in the string, defaults to false
+    #[must_use]
     pub fn fixed_string(mut self, fixed_string: bool) -> Self {
         if fixed_string {
             self.pattern = self.pattern.as_ref().map(|patt| regex::escape(patt));
         }
         self
     }
-    #[must_use]
+
     /// Set how many threads rayon is to use, defaults to max
     pub const fn thread_count(mut self, threads: Option<usize>) -> Self {
         match threads {
@@ -213,12 +219,13 @@ impl FinderBuilder {
         self
     }
 
-    #[must_use]
     /// Set whether to follow the same filesystem as root
+    #[must_use]
     pub const fn same_filesystem(mut self, yesorno: bool) -> Self {
         self.same_filesystem = yesorno;
         self
     }
+
     /**
     Builds a [`Finder`] instance with the configured options.
 
@@ -273,7 +280,7 @@ impl FinderBuilder {
         use_glob: bool,
          */
 
-        let search_config = SearchConfig::new(
+        let search_config = config::SearchConfig::new(
             self.pattern.as_ref(),
             self.hide_hidden,
             self.case_insensitive,

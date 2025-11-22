@@ -1,11 +1,10 @@
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
-    use crate::BytePath;
-    use crate::Finder;
-    use crate::cli_helpers::*;
-    use crate::{DirEntry, FileType};
-    use crate::{find_char_in_word, find_last_char_in_word, find_zero_byte_u64};
+    use crate::filters::{SizeFilter, TimeFilter};
+    use crate::fs::{DirEntry, FileType};
+    use crate::util::{BytePath, find_char_in_word, find_last_char_in_word, find_zero_byte_u64};
+    use crate::walk::Finder;
     use chrono::{Duration as ChronoDuration, Utc};
     use env_home::env_home_dir;
     use filetime::{FileTime, set_file_times};
@@ -626,6 +625,7 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
+
     #[test]
     #[cfg(not(target_os = "macos"))] //enable this test on macos and see why ive disabled it. **** stupid
     fn test_from_bytes() {
@@ -820,6 +820,7 @@ mod tests {
         assert!(!dir_entry.is_symlink(), "Directory should be not symlink");
         let _ = fs::remove_dir_all(&tdir);
     }
+
     #[test]
     fn test_dirname() {
         let temp_dir = std::env::temp_dir();
@@ -846,6 +847,7 @@ mod tests {
 
         assert!(!test_dir.exists(), "Test directory was not removed");
     }
+
     //test iteration in a throw away env
     #[test]
     fn test_basic_iteration() {

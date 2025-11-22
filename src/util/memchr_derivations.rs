@@ -2,6 +2,7 @@
 #![allow(clippy::multiple_unsafe_ops_per_block)]
 #![allow(clippy::undocumented_unsafe_blocks)]
 #![allow(clippy::empty_line_after_doc_comments)]
+
 // I was reading through the std library for random silly things and I found this , https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161
 // this essentially provides a more rigorous foundation to my SWAR technique.
 //the original definition is below the copy pasted code above.
@@ -318,6 +319,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
 */
 use core::num::NonZeroU64;
+
 #[inline]
 const fn repeat_u8(x: u8) -> usize {
     usize::from_ne_bytes([x; size_of::<usize>()])
@@ -335,8 +337,6 @@ const LO_U64: u64 = repeat_u64(0x01);
 
 const HI_U64: u64 = repeat_u64(0x80);
 
-#[inline]
-#[must_use]
 /**
  Returns the index (0–7) of the first zero byte in a `u64` word.
 
@@ -360,6 +360,8 @@ const HI_U64: u64 = repeat_u64(0x80);
  - `Some(index)` where `index` is the byte position (0–7) of the first zero byte
  - `None` if no zero byte is present
 */
+#[inline]
+#[must_use]
 pub const fn find_zero_byte_u64(x: u64) -> Option<usize> {
     let matches = NonZeroU64::new(x.wrapping_sub(LO_U64) & !x & HI_U64);
 

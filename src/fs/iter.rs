@@ -1,11 +1,13 @@
 #![allow(clippy::must_use_candidate)]
-use crate::FileType;
-use crate::{DirEntry, FileDes, Result};
+
+use crate::fs::{DirEntry, FileType};
+use crate::fs::{FileDes, Result};
 use crate::{dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, fstatat};
+
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -29,7 +31,6 @@ pub struct ReadDir {
 }
 
 impl ReadDir {
-    #[inline]
     /**
     Reads the next directory entry using the libc `readdir` function.
 
@@ -52,6 +53,7 @@ impl ReadDir {
     - The function returns `None` both at end-of-directory and on errors, following
       the traditional `readdir` semantics
     */
+    #[inline]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
         let dirent_ptr = unsafe { readdir64(self.dir.as_ptr()) };
@@ -64,10 +66,10 @@ impl ReadDir {
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
         let dir_stream = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
         let (path_buffer, path_len) = Self::init_from_direntry(dir_path);
-        //mutate the buffer to contain the full path, then add a null terminator and record the new length
-        //we use this length to index to get the filename (store full path -> index to get filename)
+        // Mutate the buffer to contain the full path, then add a null terminator and record the new length
+        // We use this length to index to get the filename (store full path -> index to get filename)
 
-        // SAFETY:   dir is a non null pointer,the pointer is guaranteed to be valid
+        // SAFETY: dir is a non null pointer,the pointer is guaranteed to be valid
         let dirfd = unsafe { FileDes(libc::dirfd(dir_stream.as_ptr())) };
         debug_assert!(dirfd.is_open(), "We expect it to be open");
 
@@ -82,13 +84,13 @@ impl ReadDir {
 }
 
 impl Drop for ReadDir {
-    #[inline]
     /**
-     Closes the directory file descriptor to prevent resource leaks.
+    Closes the directory file descriptor to prevent resource leaks.
 
-     File descriptors are limited system resources, so proper cleanup
-     is essential.
+    File descriptors are limited system resources, so proper cleanup
+    is essential.
     */
+    #[inline]
     fn drop(&mut self) {
         debug_assert!(
             self.fd.is_open(),
@@ -97,28 +99,28 @@ impl Drop for ReadDir {
         // SAFETY:  not required
         unsafe { libc::closedir(self.dir.as_ptr()) };
         // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
-        //unsafe { crate::syscalls::close_asm(self.fd.0) }; //asm implementation, for when i feel like testing if it does anything useful.
+        // unsafe { crate::syscalls::close_asm(self.fd.0) }; // TODO: asm implementation, for when i feel like testing if it does anything useful.
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
 /**
- Linux/Android-specific directory iterator using the `getdents` system call.
+Linux/Android-specific directory iterator using the `getdents` system call.
 
- Provides more efficient directory traversal than `readdir` for large directories
- by performing batched reads into a kernel buffer. This reduces system call overhead
- and improves performance when scanning directories with many entries.
+Provides more efficient directory traversal than `readdir` for large directories
+by performing batched reads into a kernel buffer. This reduces system call overhead
+and improves performance when scanning directories with many entries.
 
- Unlike some directory iteration methods, this does not implicitly call `stat`
- on each entry unless required by unusual filesystem behaviour.
+Unlike some directory iteration methods, this does not implicitly call `stat`
+on each entry unless required by unusual filesystem behaviour.
 */
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub struct GetDents {
     /// File descriptor of the open directory, wrapped for automatic resource management
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// Approximately 4.1KB in size, optimised for typical directory traversal
-    pub(crate) syscall_buffer: crate::types::SyscallBuffer,
-    /// buffer for constructing full entry paths
+    pub(crate) syscall_buffer: crate::fs::types::SyscallBuffer,
+    /// Buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     pub(crate) path_buffer: Vec<u8>,
     /// Length of the base directory path including the trailing slash
@@ -142,7 +144,6 @@ impl Drop for GetDents {
     /**
       Drops the iterator, closing the file descriptor.
       we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
-
     */
     #[inline]
     fn drop(&mut self) {
@@ -157,26 +158,26 @@ impl Drop for GetDents {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 impl GetDents {
-    #[inline]
     /**
-     Returns the number of unprocessed bytes remaining in the current kernel buffer.
+    Returns the number of unprocessed bytes remaining in the current kernel buffer.
 
-     This indicates how much data is still available to be processed before needing
-     to perform another `getdents64` system call. When this returns 0, the buffer
-     has been exhausted.
+    This indicates how much data is still available to be processed before needing
+    to perform another `getdents64` system call. When this returns 0, the buffer
+    has been exhausted.
 
-     # Examples
+    # Examples
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     let start_path=std::env::temp_dir();
     let getdents=DirEntry::new(start_path).unwrap().getdents().unwrap();
     while getdents.remaining_bytes() > 0 {
-         // Process entries from current buffer
-     }
-     // Buffer exhausted, need to read more
-    ```
+       // Process entries from current buffer
+       }
+       // Buffer exhausted, need to read more
+       ```
 
-    */
+       */
+    #[inline]
     pub const fn remaining_bytes(&self) -> usize {
         self.remaining_bytes
     }
@@ -209,7 +210,6 @@ impl GetDents {
             (remaining_bytes & !(remaining_bytes >> NUM_OF_BITS_MINUS_1)) as usize;
 
         /*
-
          Smart end-of-stream detection: Avoid unnecessary system calls by detecting when
          we've likely exhausted the directory based on the returned byte count.
 
@@ -257,9 +257,6 @@ impl GetDents {
         has_bytes_remaining
     }
 
-    #[inline]
-    #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
-    #[cfg(target_os = "linux")] // Only available on linux to my knowledge
     /**
       Initiates read-ahead for the directory to improve sequential read performance.
 
@@ -277,6 +274,9 @@ impl GetDents {
       This is an optimisation hint and may be ignored by the kernel.
      Errors are typically silent as read-ahead failures don't affect correctness.
     */
+    #[inline]
+    #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
+    #[cfg(target_os = "linux")] // Only available on linux to my knowledge
     pub fn readahead(&self, count: usize) -> isize {
         /*  SAFETY:
          - The file descriptor is valid and owned by this struct
@@ -294,7 +294,7 @@ impl GetDents {
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, path_len) = Self::init_from_direntry(dir);
-        let buffer = crate::types::SyscallBuffer::new();
+        let buffer = crate::fs::types::SyscallBuffer::new();
         Ok(Self {
             fd,
             syscall_buffer: buffer,
@@ -306,8 +306,7 @@ impl GetDents {
             end_of_stream: false,
         })
     }
-    #[inline]
-    #[allow(clippy::cast_ptr_alignment)]
+
     /**
         Advances the iterator to the next directory entry in the buffer and returns a pointer to it.
 
@@ -330,6 +329,8 @@ impl GetDents {
         3. Extracts the entry's record length to advance the internal offset
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
     */
+    #[inline]
+    #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         loop {
             //we have to use a loop essentially because of the iterative buffer filling semantics, I dislike the complexity!
@@ -502,8 +503,8 @@ pub trait DirentConstructor {
         This allows no dynamic resizing during iteration, which is costly!
          */
 
-        #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
         // SAFETY: write is within buffer bounds
+        #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
         unsafe {
             *path_buffer.as_mut_ptr().add(base_len) = b'/' * (!is_root as u8) // add slash if needed  (this avoids a branch )
         };
@@ -513,12 +514,10 @@ pub trait DirentConstructor {
         (path_buffer, base_len)
     }
 
-    #[inline]
     /**
-      Constructs a full path by appending the directory entry name to the base path
-
-
+    Constructs a full path by appending the directory entry name to the base path
     */
+    #[inline]
     unsafe fn construct_path(&mut self, drnt: *const dirent64) -> &CStr {
         debug_assert!(!drnt.is_null(), "drnt is null in construct path!");
         let base_len = self.file_index();
@@ -526,7 +525,7 @@ pub trait DirentConstructor {
         let d_name = unsafe { access_dirent!(drnt, d_name) };
         // SAFETY: as above
         // Add 1 to include the null terminator
-        let name_len = unsafe { crate::utils::dirent_name_length(drnt) + 1 };
+        let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 };
 
         let path_buffer = self.path_buffer();
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
@@ -566,7 +565,7 @@ pub trait DirentConstructor {
     }
 }
 
-//cheap macro to avoid duplicate code maintenance.
+// Cheap macro to avoid duplicate code maintenance.
 macro_rules! impl_iter {
     ($struct:ty) => {
         impl $struct {
@@ -600,7 +599,11 @@ macro_rules! impl_iter {
              - Some filesystems (e.g., older XFS, NTFS) may return `DT_UNKNOWN`
             */
             #[inline]
-            pub fn get_filetype(&self, d_type: u8, filename: &core::ffi::CStr) -> $crate::FileType {
+            pub fn get_filetype(
+                &self,
+                d_type: u8,
+                filename: &core::ffi::CStr,
+            ) -> $crate::fs::FileType {
                 self.get_filetype_private(d_type, filename)
             }
 
@@ -612,7 +615,7 @@ macro_rules! impl_iter {
             ISSUE: this file descriptor is only closed by the iterator due to current limitations
             */
             #[inline]
-            pub const fn dirfd(&self) -> &$crate::FileDes {
+            pub const fn dirfd(&self) -> &$crate::fs::FileDes {
                 &self.fd
             }
 
@@ -631,7 +634,7 @@ macro_rules! impl_iter {
             pub fn construct_direntry(
                 &mut self,
                 drnt: core::ptr::NonNull<$crate::dirent64>,
-            ) -> $crate::DirEntry {
+            ) -> $crate::fs::DirEntry {
                 // SAFETY:  Because the pointer is already checked to not be null before it can be used here safely
                 unsafe { self.construct_entry(drnt.as_ptr()) }
             }
@@ -639,7 +642,7 @@ macro_rules! impl_iter {
     };
 }
 
-// simple repetition avoider
+// Simple repetition avoider
 macro_rules! impl_dirent_constructor {
     ($type:ty) => {
         impl DirentConstructor for $type {
@@ -659,7 +662,7 @@ macro_rules! impl_dirent_constructor {
             }
 
             #[inline]
-            fn file_descriptor(&self) -> &$crate::FileDes {
+            fn file_descriptor(&self) -> &$crate::fs::FileDes {
                 &self.fd
             }
         }
@@ -669,7 +672,7 @@ macro_rules! impl_dirent_constructor {
 macro_rules! impl_iterator_for_dirent {
     ($type:ty) => {
         impl Iterator for $type {
-            type Item = $crate::DirEntry;
+            type Item = $crate::fs::DirEntry;
 
             #[inline]
             fn next(&mut self) -> Option<Self::Item> {

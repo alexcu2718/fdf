@@ -1,4 +1,4 @@
-use crate::DirEntry;
+use crate::fs::DirEntry;
 use core::fmt;
 use libc::{
     EACCES, EAGAIN, EBADF, EBUSY, EEXIST, EFAULT, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP, EMFILE,
@@ -35,14 +35,13 @@ impl fmt::Display for TraversalError {
     }
 }
 
-#[derive(Debug)]
-#[allow(clippy::exhaustive_enums)]
 /**
 This enum encapsulates all possible I/O errors that can occur during filesystem operations,
 
-
 Comprehensive filesystem I/O error type mapping libc error codes to meaningful variants.
 */
+#[derive(Debug)]
+#[allow(clippy::exhaustive_enums)]
 pub enum FilesystemIOError {
     /// Permission denied for file system access (EACCES, EPERM)
     AccessDenied(io::Error),
@@ -129,9 +128,9 @@ where
 }
 
 impl FilesystemIOError {
-    #[must_use]
-    #[allow(clippy::wildcard_enum_match_arm)] //not doing them all...
     /// Create a new `FilesystemIOError` from a `std::io::Error`
+    #[must_use]
+    #[allow(clippy::wildcard_enum_match_arm)] // Not doing them all...
     pub fn from_io_error(error: io::Error) -> Self {
         // Map OS error codes to variants based on libc documentation
         if let Some(code) = error.raw_os_error() {
@@ -190,14 +189,14 @@ impl FilesystemIOError {
     }
 }
 
-#[derive(Debug)]
-#[allow(clippy::exhaustive_enums)]
 /**
 Errors that can occur when reading or processing directory entries
 
 This enum encapsulates various failure modes when working with filesystem
 directory listings, including timestamp conversion, path encoding, and I/O issues.
 */
+#[derive(Debug)]
+#[allow(clippy::exhaustive_enums)]
 pub enum DirEntryError {
     /**
     Time conversion or timestamp processing failed
@@ -228,6 +227,7 @@ pub enum DirEntryError {
     */
     IOError(FilesystemIOError),
 }
+
 impl From<io::Error> for DirEntryError {
     fn from(error: io::Error) -> Self {
         Self::IOError(FilesystemIOError::from_io_error(error))
@@ -267,7 +267,7 @@ impl fmt::Display for DirEntryError {
 #[allow(clippy::exhaustive_enums)]
 pub enum SearchConfigError {
     /// Failed to convert glob pattern to regular expression
-    GlobToRegexError(crate::glob::Error),
+    GlobToRegexError(crate::util::Error),
     /// Invalid regular expression syntax
     RegexError(regex::Error),
     /// I/O error during search configuration or execution
@@ -277,11 +277,13 @@ pub enum SearchConfigError {
     /// Specified root path is not a directory
     NotADirectory,
 }
+
 impl From<io::Error> for SearchConfigError {
     fn from(error: io::Error) -> Self {
         Self::IOError(error)
     }
 }
+
 #[allow(clippy::pattern_type_mismatch)]
 impl fmt::Display for SearchConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

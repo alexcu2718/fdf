@@ -4,8 +4,15 @@ use fdf::access_dirent;
 use core::num::NonZeroU64;
 use std::hint::black_box;
 
+/// Modified version to work for this test function(copy pasted really)
+///
+/// # Safety
+/// - `dirent` must be non-null and properly aligned for `LibcDirent64`
+/// - `dirent` must point to a valid `LibcDirent64` structure as provided by the OS,
+///   and the memory must be readable for at least `(*dirent).d_reclen` bytes.
+/// - `(*dirent).d_reclen` must be at least `MINIMUM_DIRENT_SIZE` and a multiple of 8, as guaranteed by the kernel for valid `dirent64` records.
+/// - The buffer must not be mutated while this function is executing.
 #[inline]
-//modified version to work for this test function(copy pasted really)
 pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
     const DIRENT_HEADER_START: usize = core::mem::offset_of!(LibcDirent64, d_name);
     const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
@@ -14,7 +21,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     let reclen = unsafe { (*dirent).d_reclen } as usize;
     /*
       Read the last 8 bytes of the struct as a u64.
-    This works because dirents are always 8-byte aligned. */
+      This works because dirents are always 8-byte aligned.
+    */
     // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
     let last_word: u64 = unsafe { *(dirent.byte_add(reclen - 8).cast::<u64>()) };
 

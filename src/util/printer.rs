@@ -2,7 +2,11 @@
     clippy::cast_lossless,
     reason = "casting a bool to a usize is trivially fine here."
 )]
-use crate::{BytePath, DirEntry, FileType, SearchConfigError, TraversalError};
+use crate::{
+    SearchConfigError, TraversalError,
+    fs::{DirEntry, FileType},
+    util::BytePath,
+};
 use compile_time_ls_colours::file_type_colour;
 use rayon::prelude::*;
 use std::{
@@ -37,8 +41,8 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
     }
 }
 
+/// A convenient function to print results
 #[inline]
-/// A convennient function to print results
 fn write_nocolour<W, I>(writer: &mut W, iter_paths: I) -> std::io::Result<()>
 where
     W: Write,
@@ -53,6 +57,7 @@ where
     }
     Ok(())
 }
+
 #[inline]
 fn write_coloured<W, I>(writer: &mut W, iter_paths: I) -> std::io::Result<()>
 where

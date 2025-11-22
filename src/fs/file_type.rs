@@ -1,18 +1,12 @@
+use crate::fs::FileDes;
+use core::ffi::CStr;
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
     DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, fstatat,
     mode_t,
 };
-
-use crate::FileDes;
-use core::ffi::CStr;
-
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[expect(
-    clippy::exhaustive_enums,
-    reason = "This is exhaustive (there aren't anymore filetypes than this)"
-)]
+
 /**
 Represents the type of a file in the filesystem
 
@@ -23,8 +17,8 @@ and path-based lookups.
 
 # Examples
 
- ```
-use fdf::FileType;
+```
+use fdf::fs::FileType;
 use libc::DT_DIR;
 
 // Create from dirent d_type
@@ -33,6 +27,11 @@ assert!(dir_type.is_dir());
 
 ```
 */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "This is exhaustive (there aren't anymore filetypes than this)"
+)]
 pub enum FileType {
     /// Block special device file (e.g., /dev/sda)
     BlockDevice,
@@ -53,8 +52,6 @@ pub enum FileType {
 }
 
 impl FileType {
-    #[must_use]
-    #[inline]
     /**
     Converts a libc `dirent` `d_type` value to a `FileType`
 
@@ -68,13 +65,15 @@ impl FileType {
     # Examples
 
     ```
-    use fdf::FileType;
+    use fdf::fs::FileType;
     use libc::{DT_DIR, DT_REG};
 
     assert!(FileType::from_dtype(DT_DIR).is_dir());
     assert!(FileType::from_dtype(DT_REG).is_regular_file());
     ```
-        */
+    */
+    #[must_use]
+    #[inline]
     pub const fn from_dtype(d_type: u8) -> Self {
         match d_type {
             DT_REG => Self::RegularFile,
@@ -113,8 +112,6 @@ impl FileType {
         stat_syscall!(fstatat, fd.0, filename.as_ptr(), AT_SYMLINK_NOFOLLOW, DTYPE)
     }
 
-    #[inline]
-    #[must_use]
     /**
     Determines the file type from a file descriptor and filename, following symlinks
 
@@ -132,13 +129,15 @@ impl FileType {
     - `filename`: The filename to stat relative to the directory fd
 
     # Returns
-    - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist
-      or an error occurred
+    - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist or an error occurred
 
     */
+    #[inline]
+    #[must_use]
     pub fn from_fd_follow(fd: &FileDes, filename: &CStr) -> Self {
         stat_syscall!(fstatat, fd.0, filename.as_ptr(), AT_SYMLINK_FOLLOW, DTYPE)
     }
+
     /// Returns true if this represents a directory  (cost free check)
     #[inline]
     #[must_use]
@@ -195,25 +194,25 @@ impl FileType {
         matches!(*self, Self::Unknown)
     }
 
-    #[must_use]
-    #[inline]
     /**
     Converts a Unix `mode_t` (from `stat.st_mode`) to a `FileType`
 
-     This is used internally by `from_fd` and can also be used directly
-     when you already have a stat structure.
+    This is used internally by `from_fd` and can also be used directly
+    when you already have a stat structure.
 
-     # Parameters
-     - `mode`: The `st_mode` field from a stat structure
+    # Parameters
+    - `mode`: The `st_mode` field from a stat structure
 
-     # Examples
-     ```
-     use fdf::FileType;
-     use libc::S_IFDIR;
+    # Examples
+    ```
+    use fdf::fs::FileType;
+    use libc::S_IFDIR;
 
-     assert!(FileType::from_mode(S_IFDIR).is_dir());
-     ```
+    assert!(FileType::from_mode(S_IFDIR).is_dir());
+    ```
     */
+    #[must_use]
+    #[inline]
     pub const fn from_mode(mode: mode_t) -> Self {
         match mode & S_IFMT {
             S_IFREG => Self::RegularFile,
@@ -226,6 +225,7 @@ impl FileType {
             _ => Self::Unknown,
         }
     }
+
     /**
     Determines file type using the standard library's metadata lookup
 
@@ -252,8 +252,7 @@ impl FileType {
                 _ => Self::Unknown,
             })
     }
-    #[must_use]
-    #[inline]
+
     /**
     Converts a `libc::stat` structure to a `FileType`
 
@@ -263,6 +262,8 @@ impl FileType {
     # Parameters
     - `stat`: The stat structure to extract the file type from
     */
+    #[must_use]
+    #[inline]
     pub const fn from_stat(stat: &libc::stat) -> Self {
         Self::from_mode(stat.st_mode)
     }

@@ -2,7 +2,7 @@ use core::num::NonZeroU32;
 
 use crate::{
     DirEntry, DirEntryFilter, FileTypeFilter, FilterType, Finder, SearchConfig, SearchConfigError,
-    SizeFilter, TimeFilter, 
+    SizeFilter, TimeFilter,
 };
 use dashmap::DashSet;
 
@@ -56,11 +56,9 @@ impl FinderBuilder {
       `root` - The root directory to search
     */
     pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
-
-
         const MIN_THREADS: usize = 1;
         let num_threads =
-        std::thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
+            std::thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
         Self {
             root: root.as_ref().to_owned(),
             pattern: None,
@@ -207,11 +205,10 @@ impl FinderBuilder {
     #[must_use]
     /// Set how many threads rayon is to use, defaults to max
     pub const fn thread_count(mut self, threads: Option<usize>) -> Self {
-        match threads{
-            Some(num)=>self.thread_count=num,
-            None=>return self
+        match threads {
+            Some(num) => self.thread_count = num,
+            None => return self,
         }
-
 
         self
     }

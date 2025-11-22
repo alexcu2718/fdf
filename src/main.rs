@@ -8,7 +8,6 @@ use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 
-
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[allow(clippy::struct_excessive_bools)]

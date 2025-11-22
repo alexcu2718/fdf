@@ -207,17 +207,16 @@ My Cat Diavolo is cute.
     target_os = "aix",
     target_os = "hurd"
 ))]
-#[allow(clippy::multiple_unsafe_ops_per_block)]
-#[must_use]
-#[allow(clippy::host_endian_bytes)]
-#[expect(
+#[allow(
     clippy::as_conversions,
-    reason = "Casting u16 to usize is only possible const via as casts"
-)]
-#[allow(clippy::cast_ptr_alignment)] //we're aligned (compiler can't see it though and we're doing fancy operations)
+    clippy::multiple_unsafe_ops_per_block,
+    clippy::host_endian_bytes,
+    clippy::cast_ptr_alignment
+)] //we're aligned (compiler can't see it though and we're doing fancy operations)
+#[must_use]
 /**
  Returns the length of a `dirent64's d_name` string in constant time using
- SWAR (SIMD within a register) bit tricks.
+ SWAR (SIMD within a register) bit tricks (equivalent to `libc::strlen`, does NOT include the null terminator)
 
  This function avoids branching and SIMD instructions, achieving O(1) time
 by reading the final 8 bytes of the structure and applying bit-masking
@@ -232,6 +231,51 @@ This is one of the hottest paths when scanning directories. By eliminating
  branches and unnecessary memory reads, it improves efficiency compared with
  conventional approaches.
 
+# Example
+```
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use libc::dirent64;
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use libc::dirent as dirent64;
+
+
+use std::env::temp_dir;
+use std::fs;
+use std::os::unix::ffi::OsStrExt;
+use fdf::dirent_const_time_strlen;
+
+let tmp = temp_dir();
+let target_path = tmp.join("dirent_const_time_test");
+fs::create_dir_all(&target_path).ok();
+
+// Create a test file
+let test_file = target_path.join("test_file.txt");
+fs::File::create(&test_file).ok();
+
+// Open directory and read entries
+let path_cstr = std::ffi::CString::new(target_path.as_os_str().as_bytes()).unwrap();
+let dir_fd = unsafe { libc::opendir(path_cstr.as_ptr()) };
+if !dir_fd.is_null() {
+    let mut entry = unsafe { libc::readdir(dir_fd) };
+    while !entry.is_null() {
+        let name_len = unsafe {
+            dirent_const_time_strlen(entry as *const dirent64)
+        };
+
+        let actual_len = unsafe {
+            libc::strlen((&raw const (*entry).d_name).cast())
+        };
+        assert_eq!(name_len, actual_len, "Const-time strlen matches libc strlen");
+        entry = unsafe { libc::readdir(dir_fd) };
+    }
+    unsafe { libc::closedir(dir_fd) };
+}
+
+// Cleanup
+fs::remove_dir_all(&target_path).ok();
+```
 
  # References
  - [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)

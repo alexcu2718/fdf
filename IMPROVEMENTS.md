@@ -46,6 +46,35 @@ This presents challenges as `stat` is a large structure. It could be stored as `
 
 Note: This must use `stat` type calls, not `lstat` type ones. Consider using `fstatat` with `AT_SYMLINK_NOFOLLOW` as an alternative approach.
 
+EDIT:
+
+After doing some research
+
+(quick benchmarks, roughly done)
+
+It seems fstat calls are IMMENSELY faster than stat.
+
+This is my next priority to address! Surprisingly, statx doesn't seem to have any benefits speedwise, even seems to be slower!
+
+Personally, I don't want to chase down statx anyway, because it means linux/musl/other Posix systems will have another separate code layer that will add even MORE complexity. Not advised!
+
+---
+
+fstat                   time:   [126.25 ns 126.40 ns 126.57 ns]
+                        change: [−23.349% −22.681% −22.082%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 14 outliers among 100 measurements (14.00%)
+  3 (3.00%) high mild
+  11 (11.00%) high severe
+
+stat                    time:   [274.11 ns 274.87 ns 275.72 ns]
+                        change: [−24.565% −23.430% −22.442%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+
+---
+
 ## 4. Additional Features
 
 Implement extra functionality such as custom `.fdfignore` files. This shouldn't be particularly difficult to implement. Additional features to be added as requirements arise.

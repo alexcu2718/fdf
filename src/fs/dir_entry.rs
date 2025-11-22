@@ -505,51 +505,50 @@ impl DirEntry {
         self.file_type.is_symlink()
     }
 
+    /**
+    Checks if the entry is empty.
+
+    For files, it checks if the size is zero. For directories, it checks if there are no entries.
+    This is a **costly** operation as it requires system calls (`stat` or `getdents`/`readdir`).
+
+    # Examples
+
+    ```
+    use fdf::DirEntry;
+    use std::fs::{self, File};
+    use std::io::Write;
+    use std::sync::Arc;
+    let temp_dir = std::env::temp_dir();
+
+    // Check an empty file.
+    let empty_file_path = temp_dir.join("empty.txt");
+    File::create(&empty_file_path).unwrap();
+    let empty_entry = DirEntry::new(&empty_file_path).unwrap();
+    assert!(empty_entry.is_empty());
+
+    // Check a non-empty file.
+    let non_empty_file_path = temp_dir.join("not_empty.txt");
+    File::create(&non_empty_file_path).unwrap().write_all(b"Hello").unwrap();
+    let non_empty_entry = DirEntry::new(&non_empty_file_path).unwrap();
+    assert!(!non_empty_entry.is_empty());
+
+    // Check an empty directory.
+    let empty_dir_path = temp_dir.join("empty_dir");
+    fs::create_dir(&empty_dir_path).unwrap();
+    let empty_dir_entry = DirEntry::new(&empty_dir_path).unwrap();
+    assert!(empty_dir_entry.is_empty());
+
+    fs::remove_file(empty_file_path).unwrap();
+    fs::remove_file(non_empty_file_path).unwrap();
+    fs::remove_dir(empty_dir_path).unwrap();
+    ```
+    */
     #[inline]
     #[must_use]
     #[expect(
         clippy::wildcard_enum_match_arm,
         reason = "We're only matching on relevant types"
     )]
-
-    /**
-        Checks if the entry is empty.
-
-        For files, it checks if the size is zero. For directories, it checks if there are no entries.
-        This is a **costly** operation as it requires system calls (`stat` or `getdents`/`readdir`).
-
-        # Examples
-
-        ```
-        use fdf::DirEntry;
-        use std::fs::{self, File};
-        use std::io::Write;
-        use std::sync::Arc;
-        let temp_dir = std::env::temp_dir();
-
-        // Check an empty file.
-        let empty_file_path = temp_dir.join("empty.txt");
-        File::create(&empty_file_path).unwrap();
-        let empty_entry = DirEntry::new(&empty_file_path).unwrap();
-        assert!(empty_entry.is_empty());
-
-        // Check a non-empty file.
-        let non_empty_file_path = temp_dir.join("not_empty.txt");
-        File::create(&non_empty_file_path).unwrap().write_all(b"Hello").unwrap();
-        let non_empty_entry = DirEntry::new(&non_empty_file_path).unwrap();
-        assert!(!non_empty_entry.is_empty());
-
-        // Check an empty directory.
-        let empty_dir_path = temp_dir.join("empty_dir");
-        fs::create_dir(&empty_dir_path).unwrap();
-        let empty_dir_entry = DirEntry::new(&empty_dir_path).unwrap();
-        assert!(empty_dir_entry.is_empty());
-
-        fs::remove_file(empty_file_path).unwrap();
-        fs::remove_file(non_empty_file_path).unwrap();
-        fs::remove_dir(empty_dir_path).unwrap();
-        ```
-    */
     pub fn is_empty(&self) -> bool {
         // TODO this can be optimised for linux/android, by calling getdents directly, no need to heap allocate here
         // because calling getdents on an empty dir should only return 48 on these platforms, meaning we dont have

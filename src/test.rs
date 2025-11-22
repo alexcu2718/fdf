@@ -143,7 +143,7 @@ mod tests {
         // Apply custom time
         set_file_times(&file_path, custom_ft, custom_ft).expect("failed to set file time");
 
-        let dt = DirEntry::new(&file_path.as_os_str())
+        let dt = DirEntry::new(file_path.as_os_str())
             .unwrap()
             .modified_time()
             .expect("should return custom datetime");
@@ -507,10 +507,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir_path);
         for entry in entries_clone2 {
             assert_eq!(entry.depth(), 1);
-            assert_eq!(
-                entry.file_name_index() as usize,
-                dir_path.as_os_str().len() + 1
-            );
+            assert_eq!(entry.file_name_index(), dir_path.as_os_str().len() + 1);
         }
 
         //let _=std::fs::File::
@@ -1227,16 +1224,17 @@ mod tests {
     fn test_home() {
         let pattern: &str = ".";
         //let home_dir = std::env::home_dir();
+
         let home_dir = env_home_dir();
-        if home_dir.is_some() {
-            let finder = Finder::init(home_dir.unwrap().as_os_str())
-                .pattern(&pattern)
+        if let Some(ref hd) = home_dir {
+            let finder = Finder::init(hd.as_os_str())
+                .pattern(pattern)
                 .keep_hidden(true)
                 .keep_dirs(true)
                 .build()
                 .unwrap();
 
-            let result = finder.traverse().unwrap().into_iter();
+            let result = finder.traverse().unwrap();
 
             let collected: Vec<_> = std::hint::black_box(result.collect());
         }
@@ -1248,16 +1246,16 @@ mod tests {
         let pattern: &str = ".";
 
         let home_dir = env_home_dir();
-        if home_dir.is_some() {
-            let finder = Finder::init(home_dir.unwrap().as_os_str())
-                .pattern(&pattern)
+        if let Some(ref hd) = home_dir {
+            let finder = Finder::init(hd.as_os_str())
+                .pattern(pattern)
                 .extension("c")
                 .keep_hidden(true)
                 .keep_dirs(true)
                 .build()
                 .unwrap();
 
-            let result = finder.traverse().unwrap().into_iter();
+            let result = finder.traverse().unwrap();
 
             let collected: Vec<_> = std::hint::black_box(result.collect());
         }
@@ -1269,9 +1267,9 @@ mod tests {
         let pattern: &str = ".";
 
         let home_dir = env_home_dir();
-        if home_dir.is_some() {
-            let finder = Finder::init(home_dir.unwrap().as_os_str())
-                .pattern(&pattern)
+        if let Some(ref hd) = home_dir {
+            let finder = Finder::init(hd.as_os_str())
+                .pattern(pattern)
                 .follow_symlinks(true)
                 .extension("c")
                 .keep_hidden(true)
@@ -1279,7 +1277,7 @@ mod tests {
                 .build()
                 .unwrap();
 
-            let result = finder.traverse().unwrap().into_iter();
+            let result = finder.traverse().unwrap();
 
             let collected: Vec<_> = std::hint::black_box(result.collect());
         }
@@ -1291,16 +1289,16 @@ mod tests {
         let pattern: &str = ".";
         //let home_dir = std::env::home_dir();
         let home_dir = env_home_dir();
-        if home_dir.is_some() {
-            let finder = Finder::init(home_dir.unwrap().as_os_str())
-                .pattern(&pattern)
+        if let Some(ref hd) = home_dir {
+            let finder = Finder::init(hd.as_os_str())
+                .pattern(pattern)
                 .keep_hidden(true)
                 .follow_symlinks(true)
                 .keep_dirs(true)
                 .build()
                 .unwrap();
 
-            let result = finder.traverse().unwrap().into_iter();
+            let result = finder.traverse().unwrap();
 
             let collected: Vec<_> = std::hint::black_box(result.collect());
         }
@@ -1311,17 +1309,17 @@ mod tests {
     fn test_home_nonhidden() {
         let pattern: &str = ".";
         //let home_dir = std::env::home_dir(); //deprecation shit.
-        let home_dir = env_home_dir();
 
-        if home_dir.is_some() {
-            let finder = Finder::init(home_dir.unwrap().as_os_str())
-                .pattern(&pattern)
+        let home_dir = env_home_dir();
+        if let Some(ref hd) = home_dir {
+            let finder = Finder::init(hd.as_os_str())
+                .pattern(pattern)
                 .keep_hidden(false)
                 .keep_dirs(true)
                 .build()
                 .unwrap();
 
-            let result = finder.traverse().unwrap().into_iter();
+            let result = finder.traverse().unwrap();
 
             let collected: Vec<_> = std::hint::black_box(result.collect());
         }

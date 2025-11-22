@@ -2,7 +2,7 @@ use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
 use fdf::filters::{FileTypeFilterParser, SizeFilterParser, TimeFilterParser};
 use fdf::walk::Finder;
-use fdf::{SearchConfigError, const_from_env, filters};
+use fdf::{SearchConfigError, filters};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;

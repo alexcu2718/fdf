@@ -129,8 +129,7 @@ impl FileType {
     - `filename`: The filename to stat relative to the directory fd
 
     # Returns
-    - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist
-    or an error occurred
+    - `FileType`: The detected file type, or `FileType::Unknown` if the file doesn't exist or an error occurred
 
     */
     #[inline]

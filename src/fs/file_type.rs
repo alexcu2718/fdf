@@ -18,7 +18,7 @@ and path-based lookups.
 # Examples
 
 ```
-use fdf::FileType;
+use fdf::fs::FileType;
 use libc::DT_DIR;
 
 // Create from dirent d_type
@@ -65,7 +65,7 @@ impl FileType {
     # Examples
 
     ```
-    use fdf::FileType;
+    use fdf::fs::FileType;
     use libc::{DT_DIR, DT_REG};
 
     assert!(FileType::from_dtype(DT_DIR).is_dir());
@@ -205,7 +205,7 @@ impl FileType {
 
     # Examples
     ```
-    use fdf::FileType;
+    use fdf::fs::FileType;
     use libc::S_IFDIR;
 
     assert!(FileType::from_mode(S_IFDIR).is_dir());

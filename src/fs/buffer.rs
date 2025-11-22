@@ -41,7 +41,7 @@ impl ValueType for u8 {}
 
  # Examples
  ```
- use fdf::AlignedBuffer;
+ use fdf::fs::AlignedBuffer;
 
  // Create a new aligned buffer
  // Purposely set a non-aligned amount to show alignment is forced.
@@ -176,9 +176,10 @@ where
     /// Executes the getdents64 system call using <unistd.h>/direct `libc` syscalls
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn getdents(&mut self, fd: &crate::FileDes) -> i64 {
+    pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> i64 {
         // SAFETY: we're passing a valid buffer
-        unsafe { crate::utils::getdents(fd.0, self.as_mut_ptr(), SIZE) }
+        unsafe {
+            crate::util::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
     // TODO: Maybe delete this?

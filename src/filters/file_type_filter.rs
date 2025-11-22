@@ -53,7 +53,7 @@ impl FileTypeFilter {
 
      # Examples
      ```
-     # use fdf::FileTypeFilter;
+     # use fdf::filters::FileTypeFilter;
      let filter = FileTypeFilter::File;
      assert_eq!(filter.as_byte(), b'f');
 
@@ -104,7 +104,7 @@ impl FileTypeFilter {
 
      # Examples
      ```
-     # use fdf::FileTypeFilter;
+     # use fdf::filters::FileTypeFilter;
      assert!(FileTypeFilter::from_char('d').is_ok());
      assert!(FileTypeFilter::from_char('f').is_ok());
      assert!(FileTypeFilter::from_char('z').is_err()); // Invalid character

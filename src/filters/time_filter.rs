@@ -39,7 +39,7 @@ impl core::error::Error for ParseTimeError {}
  # Examples
 
  ```
- use fdf::TimeFilter;
+ use fdf::filters::TimeFilter;
 
  // Files modified within the last hour
  let filter = TimeFilter::from_string("-1h").unwrap();

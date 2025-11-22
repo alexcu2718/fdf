@@ -119,7 +119,7 @@ pub struct GetDents {
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// Approximately 4.1KB in size, optimised for typical directory traversal
-    pub(crate) syscall_buffer: crate::types::SyscallBuffer,
+    pub(crate) syscall_buffer: crate::fs::types::SyscallBuffer,
     /// Buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     pub(crate) path_buffer: Vec<u8>,
@@ -167,7 +167,7 @@ impl GetDents {
 
     # Examples
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     let start_path=std::env::temp_dir();
     let getdents=DirEntry::new(start_path).unwrap().getdents().unwrap();
     while getdents.remaining_bytes() > 0 {
@@ -294,7 +294,7 @@ impl GetDents {
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, path_len) = Self::init_from_direntry(dir);
-        let buffer = crate::types::SyscallBuffer::new();
+        let buffer = crate::fs::types::SyscallBuffer::new();
         Ok(Self {
             fd,
             syscall_buffer: buffer,

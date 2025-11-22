@@ -1,4 +1,6 @@
 use crate::DirEntryError;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::fs::BUFFER_SIZE;
 
 ///Generic result type for directory entry operations
 pub type Result<T> = core::result::Result<T, DirEntryError>;
@@ -6,7 +8,7 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
 /// A buffer used to  hold the bytes sent from the OS for `getdents` calls
 /// We only use a buffer for syscalls on linux because of stable ABI(because we don't need to use a buffer for `ReadDir`)
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub type SyscallBuffer = crate::AlignedBuffer<u8, BUFFER_SIZE>;
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
 
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]

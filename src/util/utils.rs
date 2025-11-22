@@ -1,5 +1,5 @@
 use crate::dirent64;
-use crate::util::memchr_derivations::memrchr;
+use crate::{util::memchr_derivations::memrchr};
 use core::ops::Deref;
 
 /*
@@ -25,7 +25,7 @@ use core::ops::Deref;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> libc::c_long
 where
-    T: crate::ValueType, //i8/u8
+    T: crate::fs::ValueType, //i8/u8
 {
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
     unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
@@ -220,7 +220,7 @@ My Cat Diavolo is cute.
  use std::env::temp_dir;
  use std::fs;
  use std::os::unix::ffi::OsStrExt;
- use fdf::dirent_const_time_strlen;
+ use fdf::util::dirent_const_time_strlen;
 
  let tmp = temp_dir();
  let target_path = tmp.join("dirent_const_time_test");

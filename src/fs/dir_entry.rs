@@ -12,7 +12,7 @@
  # Examples
  Simple file search example
  ```no_run
- use fdf::{Finder, SearchConfig};
+ use fdf::{walk::Finder, SearchConfig};
  use std::error::Error;
  use std::sync::Arc;
 
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
  Advanced file search example
  ```no_run
-use fdf::{Finder, SizeFilter, FileTypeFilter};
+use fdf::{walk::Finder, filters::{SizeFilter, FileTypeFilter}};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -112,7 +112,7 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
   # Examples
 
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::path::Path;
     use std::fs::File;
     use std::io::Write;
@@ -250,7 +250,7 @@ impl DirEntry {
     # Examples
 
     ```
-      use fdf::DirEntry;
+      use fdf::fs::DirEntry;
       use std::fs::{self, File};
       use std::os::unix::fs::PermissionsExt;
       use std::sync::Arc;
@@ -514,7 +514,7 @@ impl DirEntry {
     # Examples
 
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::{self, File};
     use std::io::Write;
     use std::sync::Arc;
@@ -582,7 +582,7 @@ impl DirEntry {
     # Examples
 
      ```
-     use fdf::DirEntry;
+     use fdf::fs::DirEntry;
      use std::fs::File;
      use std::io::Write;
      use std::os::unix::ffi::OsStrExt;
@@ -621,7 +621,7 @@ impl DirEntry {
      # Examples
 
      ```
-     use fdf::DirEntry;
+     use fdf::fs::DirEntry;
      use std::fs::File;
      use std::io::Write;
 
@@ -645,7 +645,7 @@ impl DirEntry {
     ```
 
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::File;
 
      // File name with spaces
@@ -689,7 +689,7 @@ impl DirEntry {
 
 
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::File;
 
     // File name with spaces
@@ -1042,7 +1042,7 @@ impl DirEntry {
 
     # Examples
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::File;
 
     let tmp = std::env::temp_dir().join("test_file.txt");
@@ -1146,7 +1146,7 @@ impl DirEntry {
     # Examples
 
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::File;
     use std::io::Write;
 
@@ -1164,7 +1164,7 @@ impl DirEntry {
     ```
 
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::File;
 
     // Regular non-hidden file
@@ -1178,7 +1178,7 @@ impl DirEntry {
     ```
 
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::File;
 
     // File with multiple dots but not hidden
@@ -1192,7 +1192,7 @@ impl DirEntry {
     ```
 
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::File;
 
     // Edge case: just a dot
@@ -1226,7 +1226,7 @@ impl DirEntry {
     /**
     Returns the directory name of the file (as bytes)
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::fs::File;
     use std::io::Write;
 
@@ -1280,7 +1280,7 @@ impl DirEntry {
      # Examples
 
      ```
-     use fdf::DirEntry;
+     use fdf::fs::DirEntry;
      use std::env::temp_dir;
 
      let tmp=std::env::temp_dir();
@@ -1329,7 +1329,7 @@ impl DirEntry {
 
     # Examples
     ```
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::env;
 
     # fn main() -> Result<(), fdf::DirEntryError> {
@@ -1351,7 +1351,7 @@ impl DirEntry {
        The following returns an `DirEntryError::IOError` error when the file doesn't exist:
 
        ```
-       use fdf::{DirEntry, DirEntryError};
+       use fdf::{fs::DirEntry, DirEntryError};
        use std::fs;
 
        // Verify the path doesn't exist first
@@ -1409,7 +1409,7 @@ impl DirEntry {
      # Examples
 
      ```no_run
-     use fdf::DirEntry;
+     use fdf::fs::DirEntry;
      use chrono::Utc;
 
      let entry = DirEntry::new("/tmp/example.txt").unwrap();
@@ -1480,7 +1480,7 @@ impl DirEntry {
      # Examples
 
      ```
-     use fdf::DirEntry;
+     use fdf::fs::DirEntry;
      use std::fs::{self, File};
      use std::io::Write;
      use std::sync::Arc;
@@ -1538,7 +1538,7 @@ impl DirEntry {
      # Examples
 
      ```
-     use fdf::DirEntry;
+     use fdf::fs::DirEntry;
      use std::fs::{self, File};
      use std::io::Write;
      use std::sync::Arc;
@@ -1571,7 +1571,7 @@ impl DirEntry {
     */
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn getdents(&self) -> Result<crate::GetDents> {
-        crate::GetDents::new(self)
+    pub fn getdents(&self) -> Result<crate::fs::GetDents> {
+        crate::fs::GetDents::new(self)
     }
 }

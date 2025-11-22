@@ -26,4 +26,6 @@ pub(crate) use printer::write_paths_coloured;
     target_os = "hurd"
 ))]
 pub use utils::dirent_const_time_strlen;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub use utils::getdents;
 pub(crate) use utils::{BytePath, dirent_name_length};

@@ -395,7 +395,7 @@ pub const fn find_zero_byte_u64(x: u64) -> Option<usize> {
 
  # Examples
 ```
-use fdf::find_char_in_word;
+use fdf::util::find_char_in_word;
 
 // Helper function to create byte arrays from strings
 fn create_byte_array(s: &str) -> [u8; 8] {
@@ -475,7 +475,7 @@ pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
 
  # Examples
 ```
-use fdf::find_last_char_in_word;
+use fdf::util::find_last_char_in_word;
 
 // Helper function to create byte arrays from strings
 fn create_byte_array(s: &str) -> [u8; 8] {

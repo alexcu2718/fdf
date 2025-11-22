@@ -44,7 +44,7 @@
  ## Quick Start
 
  ```rust
- use fdf::{Finder,DirEntry,SearchConfigError};
+ use fdf::{walk::Finder, fs::DirEntry, SearchConfigError};
  use std::sync::mpsc::Receiver;
 
  fn find_files() -> Result<impl Iterator<Item = DirEntry>, SearchConfigError> {
@@ -63,7 +63,7 @@
 Setting custom filters example
 ```no_run
 
-use fdf::{Finder, FileTypeFilter};
+use fdf::{walk::Finder, filters::FileTypeFilter};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

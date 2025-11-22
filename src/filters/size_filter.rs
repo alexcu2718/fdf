@@ -45,7 +45,7 @@ impl core::error::Error for ParseSizeError {}
  # Examples
 
  ```
- use fdf::SizeFilter;
+ use fdf::filters::SizeFilter;
 
  // Files larger than 1MB
  let filter = SizeFilter::from_string("+1MB").unwrap();

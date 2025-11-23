@@ -1240,6 +1240,28 @@ mod tests {
         }
     }
 
+      #[test]
+    #[allow(unused)]
+    fn test_home_absolute() {
+        let pattern: &str = ".";
+        //let home_dir = std::env::home_dir();
+
+        let home_dir = env_home_dir();
+        if let Some(ref hd) = home_dir {
+            let finder = Finder::init(hd.as_os_str())
+                .pattern(pattern)
+                .keep_hidden(true)
+                .canonicalise_root(true)
+                .keep_dirs(true)
+                .build()
+                .unwrap();
+
+            let result = finder.traverse().unwrap();
+
+            let collected: Vec<_> = std::hint::black_box(result.collect());
+        }
+    }
+
     #[test]
     #[allow(unused)]
     fn test_home_extension() {

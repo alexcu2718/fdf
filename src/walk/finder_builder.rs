@@ -207,6 +207,7 @@ impl FinderBuilder {
     }
 
     /// Set how many threads rayon is to use, defaults to max
+    #[must_use]
     pub const fn thread_count(mut self, threads: Option<usize>) -> Self {
         match threads {
             Some(num) => self.thread_count = num,

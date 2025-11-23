@@ -5,7 +5,7 @@ use crate::{
     walk::{DirEntryFilter, FilterType, finder_builder::FinderBuilder},
 };
 use dashmap::DashSet;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use std::{
     ffi::OsStr,
     sync::{

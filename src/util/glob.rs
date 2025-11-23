@@ -61,6 +61,7 @@ use std::vec::IntoIter as VecIntoIter;
 /// Error type for glob pattern operations
 #[allow(clippy::error_impl_error)]
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     /// Bare escape at the end of the pattern
     BareEscape,

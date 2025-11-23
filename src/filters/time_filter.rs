@@ -3,11 +3,8 @@ use clap::{
     builder::{PossibleValue, TypedValueParser},
     error::{ContextKind, ContextValue, ErrorKind},
 };
-use std::{
-    ffi::OsStr,
-    fmt,
-    time::{Duration, SystemTime},
-};
+use core::time::Duration;
+use std::{ffi::OsStr, fmt, time::SystemTime};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::exhaustive_enums)]
@@ -61,7 +58,7 @@ pub enum TimeFilter {
 
 impl TimeFilter {
     /**
-     Parses a time string and returns a `TimeFilter`
+     Parses a time string and returns a `TimeFilter`.
 
      # Arguments
 
@@ -75,6 +72,24 @@ impl TimeFilter {
      - `..` separator: between two times (e.g., "2d..1d" = files modified between 2 days and 1 day ago)
      - Supported units: s (seconds), m (minutes), h (hours), d (days), w (weeks), y (years)
 
+     # Examples
+
+     ```
+     use fdf::filters::TimeFilter;
+
+     // Files modified within the last hour
+     let filter = TimeFilter::from_string("-1h").unwrap();
+
+     // Files modified more than 2 days ago
+     let filter = TimeFilter::from_string("+2d").unwrap();
+
+     // Files modified between 2 days and 1 day ago
+     let filter = TimeFilter::from_string("2d..1d").unwrap();
+     ```
+
+     # Errors
+
+     Returns `ParseTimeError::InvalidFormat` if the string cannot be parsed or is in an invalid format.
     */
     pub fn from_string(s: &str) -> Result<Self, ParseTimeError> {
         Self::parse_args(s).ok_or(ParseTimeError::InvalidFormat)

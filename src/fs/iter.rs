@@ -503,8 +503,8 @@ pub trait DirentConstructor {
         This allows no dynamic resizing during iteration, which is costly!
          */
 
-        // SAFETY: write is within buffer bounds
         #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
+        // SAFETY: write is within buffer bounds
         unsafe {
             *path_buffer.as_mut_ptr().add(base_len) = b'/' * (!is_root as u8) // add slash if needed  (this avoids a branch )
         };

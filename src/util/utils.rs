@@ -1,8 +1,8 @@
 use crate::dirent64;
-use crate::{util::memchr_derivations::memrchr};
+use crate::util::memchr_derivations::memrchr;
 use core::ops::Deref;
 
-/*
+/**
   Wrapper for direct getdents syscalls
 
 

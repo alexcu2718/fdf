@@ -178,8 +178,7 @@ where
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> i64 {
         // SAFETY: we're passing a valid buffer
-        unsafe {
-            crate::util::getdents(fd.0, self.as_mut_ptr(), SIZE) }
+        unsafe { crate::util::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
     // TODO: Maybe delete this?

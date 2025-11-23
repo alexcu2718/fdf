@@ -109,7 +109,7 @@ pub struct SearchConfig {
 }
 impl SearchConfig {
     /**
-    Constructor for SearchConfig
+    Constructor for `SearchConfig`
 
     Builds a regex matcher if a valid pattern is provided, otherwise stores None
     Returns an error if the regex compilation fails

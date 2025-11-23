@@ -781,9 +781,9 @@ impl DirEntry {
 
     # Examples
     these tests are broken on macos because of funky stuff  with mac's privacy/security settings.
-    ```ignore
+    ```no_run
 
-    use fdf::DirEntry;
+    use fdf::fs::DirEntry;
     use std::path::Path;
     use std::fs;
     use std::sync::Arc;
@@ -1342,32 +1342,32 @@ impl DirEntry {
        println!("inode: {}", entry.ino());
        Ok(())
        }
-       ```
+    ```
 
 
 
-       # Errors
+    # Errors
 
-       The following returns an `DirEntryError::IOError` error when the file doesn't exist:
+    The following returns an `DirEntryError::IOError` error when the file doesn't exist:
 
-       ```
-       use fdf::{fs::DirEntry, DirEntryError};
-       use std::fs;
+    ```
+    use fdf::{fs::DirEntry, DirEntryError};
+    use std::fs;
 
        // Verify the path doesn't exist first
-       let nonexistent_path = "/definitely/not/a/real/file/lalalalalalalalalalalal";
-       assert!(!fs::metadata(nonexistent_path).is_ok());
+    let nonexistent_path = "/definitely/not/a/real/file/lalalalalalalalalalalal";
+    assert!(!fs::metadata(nonexistent_path).is_ok());
 
        // This will return an DirEntry::IOError because the file does not exist
-       let result = DirEntry::new(nonexistent_path);
-       match result {
+    let result = DirEntry::new(nonexistent_path);
+    match result {
            Ok(_) => panic!("this should never happen!"),
            Err(DirEntryError::IOError(_)) => {}, // Expected error
            Err(_) => panic!("Expected  error, got different error"),
            }
            # // The test passes if we reach this point without panicking
            # Ok::<(), DirEntryError>(())
-           ```
+    ```
            */
     #[inline]
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {

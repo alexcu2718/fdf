@@ -1213,7 +1213,7 @@ mod tests {
         let result = finder.traverse().unwrap().into_iter();
 
         let collected: Vec<_> = result.collect();
-
+        dbg!(&collected);
         assert!(collected.len() > 3);
         //a fairly arbitirary assert, this is to make sure that the result isnt no-opped away.
         //(basically  trying to avoid the same segfault issue seen previously....)

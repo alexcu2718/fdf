@@ -89,7 +89,7 @@ use core::fmt;
 use core::ptr::NonNull;
 
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, fstatat, lstat,
+    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, fstatat,
     realpath, stat,
 };
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
@@ -970,7 +970,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_lstat(&self) -> Result<stat> {
-        stat_syscall!(lstat, self.as_ptr())
+        stat_syscall!(fstatat, self.as_ptr(),AT_SYMLINK_NOFOLLOW)
     }
 
     /**
@@ -998,7 +998,7 @@ impl DirEntry {
     #[inline]
     pub fn get_stat(&self) -> Result<stat> {
         // Simple wrapper to avoid code duplication so I can use the private method within the crate
-        stat_syscall!(stat, self.as_ptr())
+        stat_syscall!(fstatat, self.as_ptr(),AT_SYMLINK_FOLLOW)
     }
 
     /**
@@ -1371,6 +1371,7 @@ impl DirEntry {
            */
     #[inline]
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
+        use libc::lstat;
         let path_ref = path.as_ref().as_bytes();
         let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::NulError)?;
 

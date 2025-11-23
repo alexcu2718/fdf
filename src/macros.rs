@@ -433,7 +433,21 @@ macro_rules! stat_syscall {
 
 
 
-    // For stat/lstat with path pointer
+    // For stat/lstat with path pointer(emulated with fstatat)
+    ($syscall:ident, $path_ptr:expr,$flags:expr) => {{
+        use libc::AT_FDCWD;
+        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: We know the path is valid because internally it's a cstr
+        let res = unsafe { $syscall(AT_FDCWD,$path_ptr, stat_buf.as_mut_ptr(),$flags) };
+
+        if res == 0 {
+            // SAFETY: If the return code is 0, we know it's been initialised properly
+            Ok(unsafe { stat_buf.assume_init() })
+        } else {
+            Err(std::io::Error::last_os_error().into())
+        }
+    }};
+    // for direct lstat/stat usage
     ($syscall:ident, $path_ptr:expr) => {{
         let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: We know the path is valid because internally it's a cstr
@@ -446,6 +460,7 @@ macro_rules! stat_syscall {
             Err(std::io::Error::last_os_error().into())
         }
     }};
+
 
 
 }

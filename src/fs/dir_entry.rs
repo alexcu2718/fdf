@@ -273,7 +273,7 @@ impl DirEntry {
     pub fn is_executable(&self) -> bool {
         // X_OK is the execute permission, requires access call
         // SAFETY: We know the path is valid because internally it's a cstr
-        self.is_regular_file() && unsafe { access(self.as_ptr(), X_OK) == 0 }
+        self.is_regular_file() && unsafe { libc::faccessat(libc::AT_FDCWD, self.as_ptr(), X_OK, 0) == 0 }
     }
 
     /**
@@ -323,7 +323,7 @@ impl DirEntry {
         // Opens the file and returns a file descriptor..
         const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
         // SAFETY: the pointer is null terminated
-        let fd = unsafe { libc::open(self.as_ptr(), FLAGS) };
+        let fd = unsafe { libc::openat(libc::AT_FDCWD,self.as_ptr(), FLAGS) };
 
         if fd < 0 {
             return_os_error!()

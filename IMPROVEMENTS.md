@@ -118,6 +118,10 @@ Experiments such as playing with buffer sizes(linux/android), found in [script h
 
 Others exist, this will be added as time goes on.
 
+TODO: Experiment in printer.rs with passing vectors in printer.rs to another thread (investigate this)
+
+TODO: Investigate different allocators in macos
+
 ## 10. Modularisation (because 7 8 9 )
 
 I wish to follow up with splitting the crate into a cli and internals, with the internals being UNIX/macOS/Linux/Windows

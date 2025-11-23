@@ -10,8 +10,7 @@ use regex::bytes::{Regex, RegexBuilder};
 use std::time::UNIX_EPOCH;
 
 /**
-This struct holds the configuration for searching a Fileystem via traversal
-
+This struct holds the configuration for searching a File system via traversal
 
 It includes options for regex matching, hiding hidden files, keeping directories,
 matching file extensions, whether to search file names only, depth of search,
@@ -109,9 +108,12 @@ pub struct SearchConfig {
     pub(crate) collect_errors: bool,
 }
 impl SearchConfig {
-    // Constructor for SearchConfig
-    // Builds a regex matcher if a valid pattern is provided, otherwise stores None
-    // Returns an error if the regex compilation fails
+    /**
+    Constructor for SearchConfig
+
+    Builds a regex matcher if a valid pattern is provided, otherwise stores None
+    Returns an error if the regex compilation fails
+    */
     #[expect(
         clippy::fn_params_excessive_bools,
         clippy::too_many_arguments,
@@ -135,7 +137,7 @@ impl SearchConfig {
         let (file_name_only, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
             let patt = patt_ref.as_ref();
             let file_name_only = if patt.contains('/') {
-                false //Over ride because if it's got a slash, it's gotta be a full path
+                false // Over ride because if it's got a slash, it's gotta be a full path
             } else {
                 filenameonly
             };
@@ -198,7 +200,7 @@ impl SearchConfig {
         debug_assert!(
             !entry.contains(&b'/'),
             "the filename contains a slash, some arithmetic has gone wrong somewhere!"
-        ); // ensure that the entry is a file name and not a path
+        ); // Ensure that the entry is a file name and not a path
         self.extension_match
             .as_ref()
             .is_none_or(|ext| entry.matches_extension(ext))
@@ -296,7 +298,7 @@ impl SearchConfig {
         );
 
         self.regex_match.as_ref().is_none_or(|reg|
-                // use arithmetic to avoid branching costs
+                // Use arithmetic to avoid branching costs
              { let index_amount=!full_path as usize * dir.file_name_index();
                      // SAFETY: are always indexing within bounds.
             unsafe{reg.is_match(dir.get_unchecked(index_amount..))}

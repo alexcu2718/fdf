@@ -6,3 +6,9 @@ bench_results/*
 *.out
 libc
 valgrind.log
+
+# VSCode 
+settings.json
+
+# MacOS specific
+.DS_Store

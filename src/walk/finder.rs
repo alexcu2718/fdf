@@ -23,7 +23,6 @@ The main entry point for file system search operations.
 `Finder` provides a high-performance, parallel file system traversal API
 with configurable filtering and search criteria. It uses Rayon for parallel
 execution and provides both synchronous and asynchronous result handling.
-
 */
 #[derive(Debug)]
 pub struct Finder {
@@ -44,7 +43,7 @@ pub struct Finder {
     pub(crate) errors: Option<Arc<Mutex<Vec<TraversalError>>>>,
 }
 
-///The Finder struct is used to find files in your filesystem
+/// The Finder struct is used to find files in your filesystem
 impl Finder {
     /// Create a new Finder instance.
     #[must_use]
@@ -195,7 +194,7 @@ impl Finder {
     #[inline]
     const fn keep_hidden(&self, dir: &DirEntry) -> bool {
         !self.search_config.hide_hidden || !dir.is_hidden()
-        // Some efficient boolean shortcircuits here to avoid checking
+        // Some efficient boolean short circuits here to avoid checking
     }
 
     /// Applies custom file filtering logic

@@ -1,9 +1,7 @@
 use crate::dirent64;
-use crate::memchr_derivations::memrchr;
+use crate::{util::memchr_derivations::memrchr};
 use core::ops::Deref;
 
-#[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 /*
   Wrapper for direct getdents syscalls
 
@@ -23,11 +21,13 @@ use core::ops::Deref;
  - 0: End of directory
  - Negative: Error code (check errno)
 */
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> libc::c_long
 where
-    T: crate::ValueType, //i8/u8
+    T: crate::fs::ValueType, //i8/u8
 {
-    // SAFETY:Syscall has no other implicit safety requirements beyond pointer validity
+    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
     unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
 }
 
@@ -189,6 +189,75 @@ My Cat Diavolo is cute.
 
 */
 //cargo-asm --lib fdf::utils::dirent_const_time_strlen (put to inline(never) to display)
+
+/**
+ Returns the length of a `dirent64's d_name` string in constant time using
+ SWAR (SIMD within a register) bit tricks (equivalent to `libc::strlen`, does NOT include the null terminator)
+
+ This function avoids branching and SIMD instructions, achieving O(1) time
+ by reading the final 8 bytes of the structure and applying bit-masking
+ operations to locate the null terminator.
+
+ # Safety
+ The caller must ensure:
+ `dirent` is a valid, non-null pointer to a `libc::dirent64`.
+
+ # Performance
+ This is one of the hottest paths when scanning directories. By eliminating
+ branches and unnecessary memory reads, it improves efficiency compared with
+ conventional approaches.
+
+ # Example
+ ```
+
+ #[cfg(any(target_os = "linux", target_os = "android"))]
+ use libc::dirent64;
+
+ #[cfg(not(any(target_os = "linux", target_os = "android")))]
+ use libc::dirent as dirent64;
+
+
+ use std::env::temp_dir;
+ use std::fs;
+ use std::os::unix::ffi::OsStrExt;
+ use fdf::util::dirent_const_time_strlen;
+
+ let tmp = temp_dir();
+ let target_path = tmp.join("dirent_const_time_test");
+ fs::create_dir_all(&target_path).ok();
+
+ // Create a test file
+ let test_file = target_path.join("test_file.txt");
+ fs::File::create(&test_file).ok();
+
+ // Open directory and read entries
+ let path_cstr = std::ffi::CString::new(target_path.as_os_str().as_bytes()).unwrap();
+ let dir_fd = unsafe { libc::opendir(path_cstr.as_ptr()) };
+ if !dir_fd.is_null() {
+    let mut entry = unsafe { libc::readdir(dir_fd) };
+    while !entry.is_null() {
+        let name_len = unsafe {
+            dirent_const_time_strlen(entry as *const dirent64)
+        };
+
+        let actual_len = unsafe {
+            libc::strlen((&raw const (*entry).d_name).cast())
+        };
+        assert_eq!(name_len, actual_len, "Const-time strlen matches libc strlen");
+        entry = unsafe { libc::readdir(dir_fd) };
+    }
+    unsafe { libc::closedir(dir_fd) };
+ }
+
+ // Cleanup
+ fs::remove_dir_all(&target_path).ok();
+ ```
+
+ # References
+ - [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
+ - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
+
+*/
 #[inline]
 #[cfg(any(
     target_os = "linux",
@@ -214,74 +283,6 @@ My Cat Diavolo is cute.
     clippy::cast_ptr_alignment
 )] //we're aligned (compiler can't see it though and we're doing fancy operations)
 #[must_use]
-/**
- Returns the length of a `dirent64's d_name` string in constant time using
- SWAR (SIMD within a register) bit tricks (equivalent to `libc::strlen`, does NOT include the null terminator)
-
- This function avoids branching and SIMD instructions, achieving O(1) time
-by reading the final 8 bytes of the structure and applying bit-masking
- operations to locate the null terminator.
-
-# Safety
- The caller must ensure:
- `dirent` is a valid, non-null pointer to a `libc::dirent64`.
-
-# Performance
-This is one of the hottest paths when scanning directories. By eliminating
- branches and unnecessary memory reads, it improves efficiency compared with
- conventional approaches.
-
-# Example
-```
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use libc::dirent64;
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-use libc::dirent as dirent64;
-
-
-use std::env::temp_dir;
-use std::fs;
-use std::os::unix::ffi::OsStrExt;
-use fdf::dirent_const_time_strlen;
-
-let tmp = temp_dir();
-let target_path = tmp.join("dirent_const_time_test");
-fs::create_dir_all(&target_path).ok();
-
-// Create a test file
-let test_file = target_path.join("test_file.txt");
-fs::File::create(&test_file).ok();
-
-// Open directory and read entries
-let path_cstr = std::ffi::CString::new(target_path.as_os_str().as_bytes()).unwrap();
-let dir_fd = unsafe { libc::opendir(path_cstr.as_ptr()) };
-if !dir_fd.is_null() {
-    let mut entry = unsafe { libc::readdir(dir_fd) };
-    while !entry.is_null() {
-        let name_len = unsafe {
-            dirent_const_time_strlen(entry as *const dirent64)
-        };
-
-        let actual_len = unsafe {
-            libc::strlen((&raw const (*entry).d_name).cast())
-        };
-        assert_eq!(name_len, actual_len, "Const-time strlen matches libc strlen");
-        entry = unsafe { libc::readdir(dir_fd) };
-    }
-    unsafe { libc::closedir(dir_fd) };
-}
-
-// Cleanup
-fs::remove_dir_all(&target_path).ok();
-```
-
- # References
- - [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
- - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
-
-*/
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
 

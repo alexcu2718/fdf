@@ -1,0 +1,7 @@
+{
+    "name": "fdf-linux",
+    "image": "rust:1.91-slim",
+    "workspaceFolder": "/workspace",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+    "postCreateCommand": "apt-get update && apt-get install -y pkg-config build-essential"
+}

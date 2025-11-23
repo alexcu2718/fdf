@@ -63,7 +63,7 @@ macro_rules! access_dirent {
         (*$entry_ptr).d_off
     }};
     ($entry_ptr:expr,d_name) => {{
-        //see reference https://github.com/rust-lang/rust/blob/8712e4567551a2714efa66dac204ec7137bc5605/library/std/src/sys/fs/unix.rs#L740
+         // See reference https://github.com/rust-lang/rust/blob/8712e4567551a2714efa66dac204ec7137bc5605/library/std/src/sys/fs/unix.rs#L740
          (&raw const (*$entry_ptr).d_name).cast::<_>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
     }};
 
@@ -78,8 +78,8 @@ macro_rules! access_dirent {
 
     ))]
         {
-            libc::DT_UNKNOWN //return D_TYPE unknown on these OS'es, because the struct does not hold the type!
-            //https://github.com/rust-lang/rust/blob/d85276b256a8ab18e03b6394b4f7a7b246176db7/library/std/src/sys/fs/unix.rs#L314
+            libc::DT_UNKNOWN // Return D_TYPE unknown on these OS'es, because the struct does not hold the type!
+            // https://github.com/rust-lang/rust/blob/d85276b256a8ab18e03b6394b4f7a7b246176db7/library/std/src/sys/fs/unix.rs#L314
         }
         #[cfg(not(any(
         target_os = "solaris",
@@ -129,7 +129,7 @@ macro_rules! access_stat {
         #[cfg(target_os = "netbsd")]
         {
             $stat_struct.st_mtimensec as _
-        } //why did they do such a specific change
+        } // Why did they do such a specific change
 
         #[cfg(not(target_os = "netbsd"))]
         {
@@ -139,7 +139,7 @@ macro_rules! access_stat {
 
     ($stat_struct:expr, st_mtime) => {{ $stat_struct.st_mtime as _ }};
 
-    // inode number, normalised to u64 for compatibility
+    // Inode number, normalised to u64 for compatibility
     ($stat_struct:expr, st_ino) => {{
         #[cfg(any(
             target_os = "freebsd",
@@ -166,19 +166,19 @@ macro_rules! access_stat {
     ($stat_struct:expr, $field:ident) => {{ $stat_struct.$field as _ }};
 }
 
-#[macro_export]
 /**
- A compile time assert, mirroring `static_assert` from C++
+A compile time assert, mirroring `static_assert` from C++
 
- # Examples
- ```
- use fdf::const_assert;
- const CONSTANT_VALUE:usize=69;
- const_assert!(2 + 2 == 4);
- const_assert!(size_of::<u32>() >= 4, "u32 must be 4 bytes!");
- const_assert!(CONSTANT_VALUE > 0, "CONSTANT_VALUE must be positive");
- ```
+# Examples
+```
+use fdf::const_assert;
+const CONSTANT_VALUE:usize=69;
+const_assert!(2 + 2 == 4);
+const_assert!(size_of::<u32>() >= 4, "u32 must be 4 bytes!");
+const_assert!(CONSTANT_VALUE > 0, "CONSTANT_VALUE must be positive");
+```
 */
+#[macro_export]
 macro_rules! const_assert {
     ($cond:expr $(,)?) => {
         const _: () = {
@@ -425,9 +425,9 @@ macro_rules! stat_syscall {
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know it's been initialised properly
-            $crate::FileType::from_stat(&unsafe { stat_buf.assume_init() })
+            $crate::fs::FileType::from_stat(&unsafe { stat_buf.assume_init() })
         } else {
-            $crate::FileType::Unknown
+            $crate::fs::FileType::Unknown
         }
     }};
 

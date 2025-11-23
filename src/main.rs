@@ -1,9 +1,8 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
-use fdf::{
-    FileTypeFilter, FileTypeParser, Finder, SearchConfigError, SizeFilter, SizeFilterParser,
-    TimeFilter, TimeFilterParser,
-};
+use fdf::filters::{FileTypeFilterParser, SizeFilterParser, TimeFilterParser};
+use fdf::walk::Finder;
+use fdf::{SearchConfigError, filters};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
@@ -181,7 +180,7 @@ struct Args {
     help = "Filter by file size (supports custom sizes with +/- prefixes)",
     verbatim_doc_comment
 )]
-    size: Option<SizeFilter>,
+    size: Option<filters::SizeFilter>,
     /// Filter by file modification time
     ///
     /// PREFIXES:
@@ -214,7 +213,7 @@ struct Args {
     help = "Filter by file modification time (supports relative times with +/- prefixes)",
     verbatim_doc_comment
 )]
-    time: Option<TimeFilter>,
+    time: Option<filters::TimeFilter>,
     /// Filter by file type, eg -d (directory) -f (regular file)
     ///
     /// Available options are:
@@ -233,12 +232,12 @@ struct Args {
     short = 't',
     long = "type",
     required = false,
-    value_parser = FileTypeParser,
+    value_parser = FileTypeFilterParser,
     help = "Filter by file type",
     long_help = "Filter by file type:\n  d, dir, directory    - Directory\n  u, unknown           - Unknown type\n  l, symlink, link     - Symbolic link\n  f, file, regular     - Regular file\n  p, pipe, fifo        - Pipe/FIFO\n  c, char, chardev     - Character device\n  b, block, blockdev   - Block device\n  s, socket            - Socket\n  e, empty             - Empty file\n  x, exec, executable  - Executable file",
     verbatim_doc_comment
 )]
-    type_of: Option<FileTypeFilter>,
+    type_of: Option<filters::FileTypeFilter>,
 }
 #[allow(
     clippy::let_underscore_must_use,

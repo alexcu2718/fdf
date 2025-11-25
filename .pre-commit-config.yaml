@@ -30,6 +30,14 @@ repos:
         files: \.rs$
         pass_filenames: false
         always_run: true
+      - id: cargo-doc
+        name: Cargo Doc
+        description: Generate and check Rust documentation
+        entry: cargo doc --no-deps
+        language: system
+        files: \.rs$
+        pass_filenames: false
+        always_run: true
       - id: cargo-test
         name: Cargo Test
         description: Run Rust tests

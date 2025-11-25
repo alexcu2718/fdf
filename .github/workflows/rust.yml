@@ -49,12 +49,14 @@ jobs:
         run: |
           cargo build --verbose
           cargo test --verbose
+          cargo doc --verbose
 
       - name: Test on macOS
         if: matrix.os == 'macos'
         run: |
           cargo build --verbose
           cargo test --verbose
+          cargo doc --verbose
 
       - name: Test on FreeBSD
         if: matrix.os == 'freebsd'
@@ -70,6 +72,7 @@ jobs:
             . ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo doc --verbose
 
       - name: Test on OpenBSD
         if: matrix.os == 'openbsd'
@@ -85,6 +88,7 @@ jobs:
             . ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo doc --verbose
 
       - name: Test on Linux s390x (big-endian)
         if: matrix.os == 'linux' && matrix.arch == 's390x'
@@ -102,6 +106,7 @@ jobs:
             source ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo doc --verbose
 
       - name: Test on Linux RISC-V64
         if: matrix.os == 'linux' && matrix.arch == 'riscv64'
@@ -119,6 +124,7 @@ jobs:
             source ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo doc --verbose
 
       - name: Test on Linux aarch64
         if: matrix.os == 'linux' && matrix.arch == 'aarch64'
@@ -136,6 +142,7 @@ jobs:
             source ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo doc --verbose
 
       - name: Test on Alpine in Docker
         if: matrix.os == 'alpine' && matrix.arch == 'x86_64'
@@ -147,4 +154,5 @@ jobs:
             . /root/.cargo/env &&
             cargo build --verbose &&
             cargo test --verbose
+            cargo doc --verbose
           "

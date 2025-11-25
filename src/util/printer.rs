@@ -124,12 +124,12 @@ where
     writer.flush()?;
 
     //If errors were sent, show them.
-    if let Some(errors_arc) = errors
-        && print_errors
-    {
-        if let Ok(error_vec) = errors_arc.lock() {
-            for error in error_vec.iter() {
-                eprintln!("{error}");
+    if print_errors {
+        if let Some(errors_arc) = errors {
+            if let Ok(error_vec) = errors_arc.lock() {
+                for error in error_vec.iter() {
+                    eprintln!("{error}");
+                }
             }
         }
     }

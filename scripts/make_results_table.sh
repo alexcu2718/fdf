@@ -18,6 +18,10 @@ function format_cmd(cmd) {
     gsub(/^"|"$/, "", cmd)
     return cmd
 }
+BEGIN {
+    speedup_sum = 0
+    speedup_count = 0
+}
 {
     line = $0
     gsub(/^\| /, "", line)  # Remove leading "| "
@@ -50,7 +54,10 @@ function format_cmd(cmd) {
                 split(fd_mean, fd_parts, " ± ")
 
                 if (fdf_parts[1] + 0 > 0) {
-                    speedup = sprintf("%.2fx", fd_parts[1] / fdf_parts[1])
+                    speedup_value = fd_parts[1] / fdf_parts[1]
+                    speedup = sprintf("%.2fx", speedup_value)
+                    speedup_sum += speedup_value
+                    speedup_count++
                     printf "| %-50s | %-15s | %-15s | %-8s | %-15s |\n", "`" cmd "`", fdf_mean, fd_mean, "**" speedup "**", fd_relative
                 } else {
                     printf "| %-50s | %-15s | %-15s | %-8s | %-15s |\n", "`" cmd "`", fdf_mean, fd_mean, "N/A", fd_relative
@@ -58,6 +65,12 @@ function format_cmd(cmd) {
                 fdf_mean = ""
             }
         }
+    }
+}
+END {
+    if (speedup_count > 0) {
+        avg_speedup = sprintf("%.2fx", speedup_sum / speedup_count)
+        printf "\n**Average Speedup: %s**\n", avg_speedup
     }
 }
 ' > results_table.md

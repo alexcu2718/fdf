@@ -317,6 +317,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
 }
 
 //TODO! I realise people could have massive filesystems, i should probably write a rebuild script on value change.
+// TODO! add floating point support
 /**
  Macro to create a const from an env var with compile-time parsing,
 
@@ -333,6 +334,9 @@ macro_rules! skip_dot_or_dot_dot_entries {
  use fdf::const_from_env;
  const_from_env!(MYVAR: usize = "NYVAR", 6969);
  assert_eq!(MYVAR, 6969); //6969 is the default value if the environment variable NYVAR is not set
+
+ const_from_env!(NEG:isize="TEST_VAR",-50);
+ assert!(NEG==-50 || NEG==-100); //tested via setting 'export TEST_VAR=-100'.
  ```
   This macro allows you to define a constant that can be set via an environment variable at compile time.
 
@@ -350,11 +354,27 @@ macro_rules! const_from_env {
             // This is used only when an environment variable is found.
             #[allow(clippy::single_call_fn)]
             #[allow(clippy::indexing_slicing)] //this will panic at compile time, intentionally.
+            #[allow(unused_comparisons)] // Type limit checks may be trivial for some types
             const fn parse_env(s: &str) -> $t {
-                let mut n: $t = 0;
                 let s_bytes = s.as_bytes();
-                let mut i = 0;
-
+                
+                if s_bytes.len() == 0 {
+                    panic!(concat!("Empty environment variable: ", stringify!($env)));
+                }
+                
+                // Check for negative sign
+                let is_negative = s_bytes[0] == b'-';
+                
+                // Panic at compile time if trying to use negative with unsigned type
+                if is_negative && <$t>::MIN >= 0 {
+                    panic!(concat!("Negative value not supported for unsigned type in: ", stringify!($env)));
+                }
+                
+                let start_idx = if is_negative { 1 } else { 0 };
+                let mut n: $t = 0;
+                let mut i = start_idx;
+                
+                // Parse digits
                 while i < s_bytes.len() {
                     let b = s_bytes[i];
                     match b {
@@ -365,6 +385,12 @@ macro_rules! const_from_env {
                     }
                     i += 1;
                 }
+                
+                // Apply negation for signed types
+                if is_negative {
+                    n = 0 - n;
+                }
+                
                 n
             }
 

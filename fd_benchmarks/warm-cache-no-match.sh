@@ -14,6 +14,6 @@ echo -e "\nRunning benchmarks..."
 hyperfine \
   --warmup "$WARMUP_COUNT" \
   --prepare 'sync; sleep 0.2' \
-  "$COMMAND_FD" \
   "$COMMAND_FIND" \
+  "$COMMAND_FD" \
   --export-markdown "$OUTPUT_DIR/results-warm-cache-no-match.md"

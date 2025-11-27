@@ -415,6 +415,7 @@ pub trait DirentConstructor {
             depth: self.parent_depth() + 1,
             file_name_index: base_len,
             is_traversible_cache: Cell::new(None), // Lazy cache for traversal checks
+            filedes:Some(self.file_descriptor().0),
         }
     }
 

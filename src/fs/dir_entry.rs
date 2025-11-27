@@ -164,7 +164,9 @@ pub struct DirEntry {
     ///
     /// `None` means not computed yet, `Some(bool)` means cached result.
     pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
-} //38 bytes, rounded to 40
+    ///
+    pub(crate) filedes:Option<i32>//8 bytes   CHANGE THIS LATER TO ARC and make this a WEAK REF TODO
+} //48
 
 impl core::ops::Deref for DirEntry {
     type Target = [u8];
@@ -271,9 +273,19 @@ impl DirEntry {
       ```
     */
     pub fn is_executable(&self) -> bool {
+        if !self.is_regular_file() {
+            return false;
+        }
+
+        // If we have a valid file descriptor, use faccessat for relative path access
+        if let Some(fd) = self.filedes {
+            // SAFETY: The path is guaranteed to be null-terminated
+            return unsafe { libc::faccessat(fd, self.file_name_cstr().as_ptr(), X_OK, 0) == 0 };
+        }
+
         // X_OK is the execute permission, requires access call
         // SAFETY: We know the path is valid because internally it's a cstr
-        self.is_regular_file() && unsafe { access(self.as_ptr(), X_OK) == 0 }
+        unsafe { access(self.as_ptr(), X_OK) == 0 }
     }
 
     /**
@@ -830,6 +842,7 @@ impl DirEntry {
                 depth: self.depth,
                 file_name_index,
                 is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)),
+                filedes:None,
             })
         })
     }
@@ -866,6 +879,7 @@ impl DirEntry {
                     depth: self.depth,
                     file_name_index,
                     is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)),
+                    filedes:None,
                 },
                 statted,
             ))
@@ -904,9 +918,14 @@ impl DirEntry {
     */
     #[inline]
     pub fn is_writable(&self) -> bool {
-        //maybe i can automatically exclude certain files from this check to
-        //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
-        // SAFETY: The path is guaranteed to be a null terminated
+        // If we have a valid file descriptor, use faccessat for relative path access
+        if let Some(fd) = self.filedes{
+            // SAFETY: The path is guaranteed to be null-terminated
+            return unsafe { libc::faccessat(fd, self.file_name_cstr().as_ptr(), W_OK, 0) == 0 };
+        }
+
+        // TODO: Investigate automatically excluding certain files from this check to reduce syscall overhead
+        // SAFETY: The path is guaranteed to be null-terminated
         unsafe { access(self.as_ptr(), W_OK) == 0 }
     }
 
@@ -970,6 +989,16 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_lstat(&self) -> Result<stat> {
+        // If we have a valid file descriptor, use fstatat for relative path access
+        if let Some(fd) = self.filedes {
+            return stat_syscall!(
+                fstatat,
+                fd,
+                self.file_name_cstr().as_ptr(),
+                AT_SYMLINK_NOFOLLOW
+            );
+        }
+
         stat_syscall!(lstat, self.as_ptr())
     }
 
@@ -997,6 +1026,16 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_stat(&self) -> Result<stat> {
+        // If we have a valid file descriptor, use fstatat for relative path access
+        if let Some(fd) = self.filedes {
+            return stat_syscall!(
+                fstatat,
+                fd,
+                self.file_name_cstr().as_ptr(),
+                AT_SYMLINK_FOLLOW
+            );
+        }
+
         // Simple wrapper to avoid code duplication so I can use the private method within the crate
         stat_syscall!(stat, self.as_ptr())
     }
@@ -1384,6 +1423,7 @@ impl DirEntry {
             depth: 0,
             file_name_index: path_ref.file_name_index(),
             is_traversible_cache: Cell::new(None), //no need to check
+            filedes: None,
         })
     }
 

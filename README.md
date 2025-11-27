@@ -2,7 +2,9 @@
 
 [![Rust CI](https://github.com/alexcu2718/fdf/workflows/Rust/badge.svg)](https://github.com/alexcu2718/fdf/actions)
 
-fdf is a high-performance POSIX file finder written in Rust with extensive C FFI. It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct kernel interfacing.
+fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
+
+It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct kernel interfacing.
 
 PLEASE NOTE: This is due to undergo a rename before a 1.0
 
@@ -125,7 +127,7 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 ### Key Optimisations
 
-- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/iter.rs](./src/iter.rs#L195)**
+- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/fs/iter.rs](./src/fs/iter.rs#L195)**
 
 - **find_char_in_word/find_last_char_in_word**: Locates the first/last occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 
@@ -135,7 +137,7 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 The following function provides an elegant solution to avoid branch mispredictions/SIMD instructions during directory entry parsing (a performance-critical loop):
 
-Check source code for further explanation [in src/utils.rs](./src/utils.rs#L195)**
+Check source code for further explanation [in utils.rs](./src/util/utils.rs#L195)**
 
 ```rust
 // Computational complexity: O(1) - truly constant time
@@ -222,7 +224,7 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 
 ### Feature Enhancements (Planned)
 
-More elaborate improvements discussed [at this link]( ./IMPROVEMENTS.md   )
+More elaborate improvements/fixes discussed [at this link]( ./IMPROVEMENTS.md   )
 
 **API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 

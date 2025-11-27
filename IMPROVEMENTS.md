@@ -34,7 +34,7 @@ git checkout 27728cdadcd254a95bda48a3f10b6c8d892bea0d
 ## 2. Filesystem Optimisations
 
 - Implement a more efficient method to exclude ReiserFS - essentially a one-time assertion that isn't repeatedly called
-- Consider improved sorting algorithms in `src/printer.rs`
+- Consider improved sorting algorithms in `src/util/printer.rs`
 
 - Consider using `statx` on Linux, though this presents some challenges due to `statx` only recently becoming available on MUSL. However, `statx` only requests the attributes explicitly asked for, potentially offering speed benefits as well as additional metadata. This requires careful consideration. See the [Rust implementation](https://github.com/rust-lang/rust/blob/07bdbaedc63094281483c40a88a1a8f2f8ffadc5/library/std/src/sys/fs/unix.rs#L105) for reference.
 
@@ -79,6 +79,10 @@ Found 3 outliers among 100 measurements (3.00%)
 
 Implement extra functionality such as custom `.fdfignore` files. This shouldn't be particularly difficult to implement. Additional features to be added as requirements arise.
 
+Another one is the wrap any files from printing in quotes, so they can be passed to xargs (if they annoyingly contain spaces...)
+
+Printing additional file metadata on request (like ls)
+
 **Note**: Ideally implemented after the parallelisation restructure below is resolved.
 
 ## 5. Parallelisation Restructure
@@ -104,7 +108,7 @@ impl TLSRegex {
 
 ## 7. CIFS Filesystem Issue
 
-The `getdents` skip code (in `src/iter.rs` around line 243) encounters issues on certain exotic CIFS filesystems. This was observed on a friend's server setup but hasn't been reproducible since, and access to the original server is no longer available.
+The `getdents` skip code [in src/fs/iter.rs](./src/fs/iter.rs#L195) encounters issues on certain exotic CIFS filesystems. This was observed on a friend's server setup but hasn't been reproducible since, and access to the original server is no longer available.
 
 Reverting to the standard `getdents` "call until 0" paradigm resolved the issue and returned the expected results.
 

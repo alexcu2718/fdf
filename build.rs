@@ -10,7 +10,7 @@ fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
     for line in reader.lines().map_while(Result::ok) {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if let Some(fs_name) = parts.last() {
-            filesystems.push(fs_name.to_string());
+            filesystems.push((*fs_name).to_owned());
         }
     }
 

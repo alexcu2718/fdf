@@ -38,9 +38,8 @@ run_buffer_size_test() {
     local buffer_size=$1
     echo "Testing buffer size: $buffer_size"
 
-    export BUFFER_SIZE=$buffer_size
     cargo clean
-    cargo b -r
+    BUFFER_SIZE=$buffer_size cargo b -r
     rm -rf ../bench_results/*
     rm -rf ../results_table.md
 

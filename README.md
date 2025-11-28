@@ -26,7 +26,7 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 
 ### Fully Supported and CI Tested
 
-- Linux (x86_64, aarch64, s390x, RISC-V64, Alpine MUSL)
+- Linux (x86_64, s390x (Big endian), Alpine( MUSL libc))
 - macOS (Intel and Apple Silicon)
 - FreeBSD (x86_64)
 
@@ -37,6 +37,8 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 - OpenBSD, NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
 - Android (tested on my phone)
 - Illumos and Solaris (x86_64, verified with QEMU)
+
+- I have removed aarch64 Linux and riscv Linux from Github actions due to *VERY UNRELIABLE RUNNERS*
 
 ### Not Yet Supported
 

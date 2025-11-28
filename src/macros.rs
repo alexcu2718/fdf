@@ -357,23 +357,23 @@ macro_rules! const_from_env {
             #[allow(unused_comparisons)] // Type limit checks may be trivial for some types
             const fn parse_env(s: &str) -> $t {
                 let s_bytes = s.as_bytes();
-                
+
                 if s_bytes.len() == 0 {
                     panic!(concat!("Empty environment variable: ", stringify!($env)));
                 }
-                
+
                 // Check for negative sign
                 let is_negative = s_bytes[0] == b'-';
-                
+
                 // Panic at compile time if trying to use negative with unsigned type
                 if is_negative && <$t>::MIN >= 0 {
                     panic!(concat!("Negative value not supported for unsigned type in: ", stringify!($env)));
                 }
-                
+
                 let start_idx = if is_negative { 1 } else { 0 };
                 let mut n: $t = 0;
                 let mut i = start_idx;
-                
+
                 // Parse digits
                 while i < s_bytes.len() {
                     let b = s_bytes[i];
@@ -385,12 +385,12 @@ macro_rules! const_from_env {
                     }
                     i += 1;
                 }
-                
+
                 // Apply negation for signed types
                 if is_negative {
                     n = 0 - n;
                 }
-                
+
                 n
             }
 

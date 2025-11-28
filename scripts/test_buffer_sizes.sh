@@ -1,4 +1,4 @@
- #!/usr/bin/env bash
+#!/usr/bin/env bash
 
 
 
@@ -37,11 +37,17 @@ fi
 run_buffer_size_test() {
     local buffer_size=$1
     echo "Testing buffer size: $buffer_size"
-    
+
     export BUFFER_SIZE=$buffer_size
+    cargo clean
     cargo b -r
-    
+    rm -rf ../bench_results/*
+    rm -rf ../results_table.md
+
     for script in ./warm*.sh; do
+        if [[ "$script" == *"_home_"* ]]; then
+            continue
+        fi
         echo "Running $script with buffer size $buffer_size"
         ./"$script"
         sleep 2
@@ -49,8 +55,6 @@ run_buffer_size_test() {
     SEND_TO="../scripts/${buffer_size}_buffer_size.out"
     $TABLE_SCRIPT > $SEND_TO
     echo "Results saved to $SEND_TO "
-    rm -rf ../bench_results/*
-    rm ../results_table.md
 }
 
 # loop over different buffer sizes (increments of 2000 starting from 4096)
@@ -60,3 +64,7 @@ for i in {0..10}; do
 done
 
 
+TOTAL_OUT_FILE="../buffer_comparison_summarised.md"
+cat ../scripts/*buffer*.out > $TOTAL_OUT_FILE
+
+echo  -e "\n\n\n Results saved to $(realpath $TOTAL_OUT_FILE)"

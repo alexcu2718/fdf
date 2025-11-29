@@ -541,72 +541,12 @@ pub trait DirentConstructor {
             CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..base_len + name_len))
         }
     }
-
-    #[inline]
-    #[allow(clippy::multiple_unsafe_ops_per_block)]
-    #[allow(clippy::wildcard_enum_match_arm)]
-    fn get_filetype_private(&self, d_type: u8, path: &CStr) -> FileType {
-        match FileType::from_dtype(d_type) {
-            FileType::Unknown => {
-                // Fall back to fstatat for filesystems that don't provide d_type (DT_UNKNOWN)
-                /* SAFETY:
-                - `file_index()` points to the start of the file name within `bytes`
-                - The slice from this index to the end includes the null terminator
-                - The slice is guaranteed to represent a valid C string (thus null terminated) */
-                let cstr_name: &CStr = unsafe {
-                    CStr::from_bytes_with_nul_unchecked(
-                        path.to_bytes_with_nul().get_unchecked(self.file_index()..),
-                    )
-                };
-                FileType::from_fd_no_follow(self.file_descriptor(), cstr_name)
-            }
-            known_type => known_type,
-        }
-    }
 }
 
 // Cheap macro to avoid duplicate code maintenance.
 macro_rules! impl_iter {
     ($struct:ty) => {
         impl $struct {
-            /**
-             Determines the file type of a directory entry with fallback resolution.
-
-             This method attempts to determine the file type using the directory entry's
-             `d_type` field when available, with a fallback to fstat-based resolution
-             when the type is unknown or unsupported by the filesystem.
-
-             # Arguments
-             * `d_type` - The file type byte from the directory entry's `d_type` field;
-               This corresponds to DT_* constants in libc (e.g., `DT_REG`, `DT_DIR`).
-             * `filename` - The filename as a C string, used for fallback stat resolution
-               when `d_type` is `DT_UNKNOWN`
-
-             # Returns
-             A `FileType` enum variant representing the determined file type.
-
-             # Behavior
-             - **Fast Path**: When `d_type` contains a known file type (not `DT_UNKNOWN`),
-               returns the corresponding `FileType` without additional system calls.
-             - **Fallback Path**: When `d_type` is `DT_UNKNOWN`, performs a `fstat` call
-               on the file to determine its actual type.
-             - **Symlink Handling**: For `DT_LNK`, returns `FileType::Symlink` directly
-               without following the link.
-
-             # Performance Notes
-             - Prefer using directory entries with supported `d_type` to avoid stat calls
-             - The fallback stat call adds filesystem overhead but ensures correctness
-             - Some filesystems (e.g., older XFS, NTFS) may return `DT_UNKNOWN`
-            */
-            #[inline]
-            pub fn get_filetype(
-                &self,
-                d_type: u8,
-                filename: &core::ffi::CStr,
-            ) -> $crate::fs::FileType {
-                self.get_filetype_private(d_type, filename)
-            }
-
             /**
             Returns the file descriptor for this directory.
 

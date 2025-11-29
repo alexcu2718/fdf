@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 
+# shellcheck disable=SC2001
 
-cd "$(dirname $0)"
+cd "$(dirname "$0")" || exit
 
 output_file="dirent_structs.txt"
-WORD_SIZE=$(getconf LONG_BIT)
+#WORD_SIZE=$(getconf LONG_BIT) #unused, i might use it later
 
 SETCD="$PWD"
 
@@ -17,9 +18,9 @@ fi
 
 [ -d $LIBC_LOCATION ] || { echo "$LIBC_LOCATION not found investigate this!"; exit 1; }
 
-cd $LIBC_LOCATION && git pull  > /dev/null 2>&1 
+cd $LIBC_LOCATION && git pull  > /dev/null 2>&1
 
-cd $SETCD
+cd "$SETCD" || exit
 
 
 
@@ -42,5 +43,3 @@ rg -l --pcre2 -U '(?s)(pub struct dirent(64)?\s*\{.*?\}|pub type ino.*;)' $LIBC_
 done > $output_file
 
 cat $output_file
-
-

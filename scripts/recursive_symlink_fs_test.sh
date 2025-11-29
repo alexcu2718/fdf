@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 echo -e "IMPORTANT: PLEASE DELETE THE FILE THE FILE \n  OTHERWISE YOU'LL HAVE SOME FUNKY effects trying to do anything in this directory!\n"
-cd "$(dirname "$0" )"
+cd "$(dirname "$0" )" || exit
 cd ..
 
 TEST_DIR="looptest"
@@ -60,7 +60,7 @@ fi
 
 
 if [ -d "$LOOP_DIR" ]; then
-    read -p "Remove $LOOP_DIR directory? (y/N): " remove_answer
+    read -rp "Remove $LOOP_DIR directory? (y/N): " remove_answer
     case "$remove_answer" in
         [yY])
             echo "Cleaning up test directory..."

@@ -1,19 +1,6 @@
 #!/usr/bin/env bash
 
-
-source "prelude.sh"
+# shellcheck disable=SC1091
 source "new_prelude.sh"
 PATTERN="THISSHOULDNEVERMATCH"
-#i dont use gitignore so -HI is equivalent on both tools
-COMMAND_FD="fd $PATTERN '$SEARCH_ROOT' -HI"
-COMMAND_FIND="fdf $PATTERN '$SEARCH_ROOT' -HI"
-OUTPUT_DIR="./bench_results"
-mkdir -p "$OUTPUT_DIR"
-
-echo -e "\nRunning benchmarks..."
-hyperfine \
-  --warmup "$WARMUP_COUNT" \
-  --prepare 'sync; sleep 0.2' \
-  "$COMMAND_FIND" \
-  "$COMMAND_FD" \
-  --export-markdown "$OUTPUT_DIR/results-warm-cache-no-match.md"
+run_warm_benchmark "no-match" "$PATTERN '$SEARCH_ROOT' -HI" "$PATTERN '$SEARCH_ROOT' -HI" "no-match" 1

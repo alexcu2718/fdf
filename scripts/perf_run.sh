@@ -14,7 +14,7 @@ FDF_COMMAND="./target/release/fdf -HI $PATTERN $HOME"
 FD_COMMAND="fd -HI $PATTERN $HOME"
 
 
-
+# shellcheck disable=SC2086
 perf stat -e cache-misses,cache-references,L1-dcache-load-misses,L1-dcache-loads,LLC-load-misses,LLC-loads,branches,branch-misses $FDF_COMMAND > /dev/null
-
+# shellcheck disable=SC2086
 perf stat -e cache-misses,cache-references,L1-dcache-load-misses,L1-dcache-loads,LLC-load-misses,LLC-loads,branches,branch-misses $FD_COMMAND > /dev/null

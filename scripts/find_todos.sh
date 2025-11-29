@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-cd "$(dirname "$0" )"
+cd "$(dirname "$0" )" || exit
 cd ..
 
 if command -v rg &> /dev/null; then

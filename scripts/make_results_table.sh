@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-cd "$(dirname "$0" )"
+
+cd "$(dirname "$0" )" || exit
 cd ..
 echo -e "Benchmark results for $(uname -a )\n\n"
-printf "| %-50s | %-15s | %-15s | %-8s | %-16s |\n" "Test Case" "fdf Mean" "fd Mean" "Speedup" "Relative"
+printf "| %-50s | %-15s | %-15s | %-9s | %-15s |\n" "Test Case" "fdf Mean" "fd Mean" "Speedup" "Relative"
 printf "| %-50s | %-15s | %-15s | %-8s | %-15s |\n" ":----------" ":--------:" ":-------:" ":-------:" ":--------:"
 
 cat bench_results/*.md | grep -Ei '^\|' | grep -Ei -v '\|:' | grep -v 'Command.*Mean.*Min.*Max.*Relative' | \

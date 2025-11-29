@@ -64,19 +64,19 @@ impl ReadDir {
 
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        let dir_stream = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
-        let (path_buffer, path_len) = Self::init_from_direntry(dir_path);
+        let dir = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
+        let (path_buffer, file_name_index) = Self::init_from_path(dir_path.as_bytes());
         // Mutate the buffer to contain the full path, then add a null terminator and record the new length
         // We use this length to index to get the filename (store full path -> index to get filename)
 
         // SAFETY: dir is a non null pointer,the pointer is guaranteed to be valid
-        let dirfd = unsafe { FileDes(libc::dirfd(dir_stream.as_ptr())) };
+        let dirfd = unsafe { FileDes(libc::dirfd(dir.as_ptr())) };
         debug_assert!(dirfd.is_open(), "We expect it to be open");
 
         Ok(Self {
-            dir: dir_stream,
+            dir,
             path_buffer,
-            file_name_index: path_len,
+            file_name_index,
             parent_depth: dir_path.depth, //inherit depth
             fd: dirfd,
         })
@@ -221,7 +221,7 @@ impl GetDents {
 
          Example:
          - Buffer capacity: 4600 bytes (It is arbitrary)
-         - Largest dirent64 size: 280 bytes (Well, see below...)
+         - Largest dirent64 size: 280 bytes (Well, see below...)  (it can be up to 4000+ on reiserfs, or 1080~ ish on openzfs( see the filesystem copy paste on this page))
          - If getdents returns ≤ 4320 bytes (4600 - 280), then even if we made another
            system call, it would definitively call 0 bytes on next call, so we skip it!
            Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
@@ -230,6 +230,12 @@ impl GetDents {
         // Access the last field and then round up to find the minimum struct size
         const MINIMUM_DIRENT_SIZE: usize =
             core::mem::offset_of!(dirent64, d_name).next_multiple_of(8); //==24 on these systems
+
+        // similar to a `static_assert` from c++
+        const_assert!(
+            MINIMUM_DIRENT_SIZE == 24,
+            "minimum dirent size isnt 24 on this system, please report the error"
+        );
 
         // Note, we don't support reiser due to it's massive file name length
         // This should support Openzfs, ZFS is the only FS on linux which has a size greater than 512 bytes
@@ -293,13 +299,13 @@ impl GetDents {
         let fd = dir.open()?; //getting the file descriptor
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
-        let (path_buffer, path_len) = Self::init_from_direntry(dir);
-        let buffer = crate::fs::types::SyscallBuffer::new();
+        let (path_buffer, file_name_index) = Self::init_from_path(dir);
+        let syscall_buffer = crate::fs::types::SyscallBuffer::new();
         Ok(Self {
             fd,
-            syscall_buffer: buffer,
+            syscall_buffer,
             path_buffer,
-            file_name_index: path_len,
+            file_name_index,
             parent_depth: dir.depth,
             offset: 0,
             remaining_bytes: 0,
@@ -342,8 +348,8 @@ impl GetDents {
                     unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
 
                 debug_assert!(
-                    (self.syscall_buffer.as_ptr() as usize % 8) == 0 && self.offset % 8 == 0,
-                    "the pointer/offset SHOULD be  aligned to 8 bytes"
+                    d as usize % 8 == 0,
+                    "the memory address of the dirent should be SHOULD be  aligned to 8 bytes"
                 ); //alignment check
                 debug_assert!(!d.is_null(), "dirent is null in get next entry!");
                 // SAFETY: dirent is not null so field access is safe
@@ -390,48 +396,32 @@ pub trait DirentConstructor {
     #[allow(clippy::wildcard_enum_match_arm, reason = "exhaustive")]
     #[allow(clippy::multiple_unsafe_ops_per_block)]
     /// Constructs a `DirEntry` from a raw directory entry pointer
-    #[allow(unused_unsafe)] //lazy fix for illumos/solaris (where we dont actually dereference the pointer, just return unknown TODO-MAKE MORE ELEGANT)
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {
-        let base_len = self.file_index();
         debug_assert!(!drnt.is_null(), "drnt should never be null!");
-        // SAFETY: The `drnt` must not be null (checked before using)
-        let dtype = unsafe { access_dirent!(drnt, d_type) }; //need to optimise this for illumos/solaris TODO!
-        // SAFETY: Same as above^
-        let inode = unsafe { access_dirent!(drnt, d_ino) };
-
         // SAFETY: The `drnt` must not be null(by precondition)
-        let full_path: &CStr = unsafe { self.construct_path(drnt) };
-        let path: Box<CStr> = full_path.into();
+        let (f_path, inode, file_type): (&CStr, u64, FileType) =
+            unsafe { self.construct_path(drnt) };
 
-        let file_type: FileType = match FileType::from_dtype(dtype) {
-            FileType::Unknown => stat_syscall!(
-                fstatat,
-                self.file_descriptor().0,
-                access_dirent!(drnt, d_name),
-                AT_SYMLINK_NOFOLLOW,
-                DTYPE
-            ),
-            not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
-        };
+        let path: Box<CStr> = f_path.into();
+        let file_name_index = self.file_index();
 
         DirEntry {
             path,
             file_type,
             inode,
             depth: self.parent_depth() + 1,
-            file_name_index: base_len,
+            file_name_index,
             is_traversible_cache: Cell::new(None), // Lazy cache for traversal checks
         }
     }
 
     #[inline]
-    fn init_from_direntry(dir_path: &DirEntry) -> (Vec<u8>, usize) {
-        let dir_path_in_bytes = dir_path.as_bytes();
-        let mut base_len = dir_path_in_bytes.len(); // get length of directory path
+    fn init_from_path(dir_path: &[u8]) -> (Vec<u8>, usize) {
+        let mut base_len = dir_path.len(); // get length of directory path
 
-        let is_root = dir_path_in_bytes == b"/";
+        let is_root = dir_path == b"/";
 
-        let needs_slash: usize = usize::from(!is_root);
+        let needs_slash = usize::from(!is_root);
 
         /*
         https://en.wikipedia.org/wiki/Comparison_of_file_systems#Limits
@@ -482,21 +472,17 @@ pub trait DirentConstructor {
 
         /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
          SAFETY:
-         - `dir_path_in_bytes.as_ptr()` is valid for reads of `base_len` bytes (source slice length)
+         - `dir_path.as_ptr()` is valid for reads of `base_len` bytes (source slice length)
          - `path_buffer.as_mut_ptr()` is valid for writes of `base_len` bytes (we allocated `total_capacity >= base_len`)
-         - The memory regions are guaranteed non-overlapping: `dir_path_in_bytes` points to existing data
+         - The memory regions are guaranteed non-overlapping: `dir_path` points to existing data
            while `path_buffer` points to freshly allocated memory
          - Both pointers are properly aligned for u8 access
-         - `base_len` equals `dir_path_in_bytes.len()`, ensuring we don't read beyond source bounds
+         - `base_len` equals `dir_path.len()`, ensuring we don't read beyond source bounds
         */
         unsafe {
-            core::ptr::copy_nonoverlapping(
-                dir_path_in_bytes.as_ptr(),
-                path_buffer.as_mut_ptr(),
-                base_len,
-            )
+            core::ptr::copy_nonoverlapping(dir_path.as_ptr(), path_buffer.as_mut_ptr(), base_len)
         };
-        //https://en.cppreference.com/w/c/string/byte/memcpy
+        //https://en.cppreference.com/w/c/string/byte/memcpy (usually I hate cppreference but it's fine for this)
         // from above "memcpy is the fastest library routine for memory-to-memory copy"
 
         // SAFETY: We've allocated enough capacity and only need to set the length
@@ -511,7 +497,7 @@ pub trait DirentConstructor {
         #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
         // SAFETY: write is within buffer bounds
         unsafe {
-            *path_buffer.as_mut_ptr().add(base_len) = b'/' //
+            *path_buffer.as_mut_ptr().add(base_len) = b'/' //this doesnt matter for non directories, since we're overwriting it anyway
         };
 
         base_len += needs_slash; // update length if slash added (we're tracking the baselen, we dont care about the slash on the end because we're truncating it anyway)
@@ -521,20 +507,39 @@ pub trait DirentConstructor {
 
     /**
     Constructs a full path by appending the directory entry name to the base path
+
+    returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
     #[inline]
-    unsafe fn construct_path(&mut self, drnt: *const dirent64) -> &CStr {
+    unsafe fn construct_path(&mut self, drnt: *const dirent64) -> (&CStr, u64, FileType) {
+        // Note to adrian, I refactored this to avoid cache misses.
         debug_assert!(!drnt.is_null(), "drnt is null in construct path!");
-        let base_len = self.file_index();
         // SAFETY: The `drnt` must not be null (checked before using)
-        let d_name = unsafe { access_dirent!(drnt, d_name) };
-        // SAFETY: as above
+        let d_name: *const u8 = unsafe { access_dirent!(drnt, d_name) };
+        // SAFETY: same as above
+        let d_ino: u64 = unsafe { access_dirent!(drnt, d_ino) };
+        // SAFETY: as above.
+        let dtype: u8 = unsafe { access_dirent!(drnt, d_type) }; //need to optimise this for illumos/solaris TODO! (small nit)
+        // SAFETY: Same as above^
         // Add 1 to include the null terminator
-        let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 };
+        let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
+        let base_len: usize = self.file_index();
 
-        let path_buffer = self.path_buffer();
+        // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
+        #[allow(clippy::wildcard_enum_match_arm)] // ANYTHING but unknown is fine.
+        let file_type: FileType = match FileType::from_dtype(dtype) {
+            FileType::Unknown => stat_syscall!(
+                fstatat,
+                self.file_descriptor().0, //borrow before mutably borrowing the path buffer
+                d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+                AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+                DTYPE
+            ),
+            not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
+        };
+        let path_buffer: &mut Vec<u8> = self.path_buffer();
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
-        let buffer = unsafe { &mut path_buffer.get_unchecked_mut(base_len..) };
+        let buffer: &mut [u8] = unsafe { path_buffer.get_unchecked_mut(base_len..) };
 
         // SAFETY: `d_name` and `buffer` don't overlap (different memory regions)
         // - Both pointers are properly aligned for byte copying
@@ -543,7 +548,13 @@ pub trait DirentConstructor {
         #[allow(clippy::multiple_unsafe_ops_per_block)]
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         unsafe {
-            CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..base_len + name_len))
+            (
+                CStr::from_bytes_with_nul_unchecked(
+                    path_buffer.get_unchecked(..base_len + name_len),
+                ),
+                d_ino,
+                file_type,
+            )
         }
     }
 }

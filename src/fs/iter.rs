@@ -330,6 +330,7 @@ impl GetDents {
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
     */
     #[inline]
+    #[allow(clippy::integer_division_remainder_used)] //debug only
     #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         loop {
@@ -339,6 +340,11 @@ impl GetDents {
                 // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
                 let d: *mut dirent64 =
                     unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+
+                debug_assert!(
+                    (self.syscall_buffer.as_ptr() as usize % 8) == 0 && self.offset % 8 == 0,
+                    "the pointer/offset SHOULD be  aligned to 8 bytes"
+                ); //alignment check
                 debug_assert!(!d.is_null(), "dirent is null in get next entry!");
                 // SAFETY: dirent is not null so field access is safe
                 let reclen = unsafe { access_dirent!(d, d_reclen) };
@@ -419,7 +425,6 @@ pub trait DirentConstructor {
     }
 
     #[inline]
-    #[expect(clippy::cast_lossless, reason = "stylistic stupidity")]
     fn init_from_direntry(dir_path: &DirEntry) -> (Vec<u8>, usize) {
         let dir_path_in_bytes = dir_path.as_bytes();
         let mut base_len = dir_path_in_bytes.len(); // get length of directory path
@@ -506,10 +511,10 @@ pub trait DirentConstructor {
         #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
         // SAFETY: write is within buffer bounds
         unsafe {
-            *path_buffer.as_mut_ptr().add(base_len) = b'/' * (!is_root as u8) // add slash if needed  (this avoids a branch )
+            *path_buffer.as_mut_ptr().add(base_len) = b'/' //
         };
 
-        base_len += needs_slash; // update length if slash added
+        base_len += needs_slash; // update length if slash added (we're tracking the baselen, we dont care about the slash on the end because we're truncating it anyway)
 
         (path_buffer, base_len)
     }

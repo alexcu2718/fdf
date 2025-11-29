@@ -4,10 +4,11 @@
 
 ### This is an experimental script for running benchmarks on different buffer sizes
 ### IT TAKES A WHILE
-cd "$(dirname "$0" )"
+
+cd "$(dirname "$0" )" || exit
 
 
-cd ../fd_benchmarks
+cd ../fd_benchmarks || exit
 
 TABLE_SCRIPT="../scripts/make_results_table.sh"
 
@@ -52,8 +53,8 @@ run_buffer_size_test() {
         sleep 2
     done
     SEND_TO="../scripts/${buffer_size}_buffer_size.out"
-    echo "buffer size $buffer_size" > $SEND_TO
-    $TABLE_SCRIPT >> $SEND_TO
+    echo "buffer size $buffer_size" > "$SEND_TO"
+    $TABLE_SCRIPT >> "$SEND_TO"
     echo "Results saved to $SEND_TO "
 }
 

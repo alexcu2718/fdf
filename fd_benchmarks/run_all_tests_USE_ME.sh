@@ -57,17 +57,14 @@ fi
 echo -e "\n\nTHERE WILL BE A SMALL DISPARITY IN THESE TESTS DUE TO fd being located in /usr/bin (USUALLY) ((different permissions!))\n, differences are expected to be very small";
 echo -e "there will also be predictable temporary files created!\n\n"
 echo "these tests will take a while!"
-read -rp 'Do you want to run speed/correctness benchmarks for home directory? [y/n]:' run_benchmarks_home
 
-if [[ "$run_benchmarks_home" =~ ^[Yy]$ ]]; then
-    for script in ./warm*_home_dir.sh; do
-        echo "Running $script"
-        ./"$script"
-        sleep 2
-    done
-else
-    echo "Skipping benchmarks for home directory."
-fi
+
+for script in ./warm*_home_dir.sh; do
+    echo "Running $script"
+    ./"$script"
+    sleep 2
+done
+
 
 
 if [[ "$(uname -s)" == "Linux" ]]; then

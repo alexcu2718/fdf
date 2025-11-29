@@ -47,6 +47,7 @@ impl ReadDir {
     - `Some(NonNull<dirent64>)` when a directory entry is successfully read
     - `None` when the end of directory is reached or if an error occurs
 
+
     # Notes
     - Unlike the `getdents64`/`getdirentries64` system calls type approach, this implementation uses the
       standard libc directory handling functions

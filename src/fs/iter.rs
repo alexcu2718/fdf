@@ -70,15 +70,15 @@ impl ReadDir {
         // We use this length to index to get the filename (store full path -> index to get filename)
 
         // SAFETY: dir is a non null pointer,the pointer is guaranteed to be valid
-        let dirfd = unsafe { FileDes(libc::dirfd(dir.as_ptr())) };
-        debug_assert!(dirfd.is_open(), "We expect it to be open");
+        let fd = unsafe { FileDes(libc::dirfd(dir.as_ptr())) };
+        debug_assert!(fd.is_open(), "We expect it to be open");
 
         Ok(Self {
             dir,
             path_buffer,
             file_name_index,
             parent_depth: dir_path.depth, //inherit depth
-            fd: dirfd,
+            fd,
         })
     }
 }

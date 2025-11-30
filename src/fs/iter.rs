@@ -100,8 +100,7 @@ impl Drop for ReadDir {
         // SAFETY:  not required
         unsafe { libc::closedir(self.dir.as_ptr()) };
         // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
-        // unsafe { crate::syscalls::close_asm(self.fd.0) }; // TODO: asm implementation, for when i feel like testing if it does anything useful.
-    }
+    } // TODO! Investigate how std lib manages to not piss of FDsan ( i want to pass ownership to the FileDes BUT android complains, even though it works. weird.)
 }
 
 /**
@@ -189,7 +188,7 @@ impl GetDents {
         clippy::cast_possible_truncation,
         reason = "hot function, worth some easy optimisation, not caring about 32bit target"
     )]
-    pub(crate) fn fill_buffer(&mut self) -> bool {
+    pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.end_of_stream {
             return false;
@@ -230,9 +229,9 @@ impl GetDents {
 
         // Access the last field and then round up to find the minimum struct size
         const MINIMUM_DIRENT_SIZE: usize =
-            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8); //==24 on these systems
+            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
 
-        // similar to a `static_assert` from c++
+        // similar to a `static_assert` from c++ (compile time not runtime assert)
         const_assert!(
             MINIMUM_DIRENT_SIZE == 24,
             "minimum dirent size isnt 24 on this system, please report the error"
@@ -340,34 +339,25 @@ impl GetDents {
     #[allow(clippy::integer_division_remainder_used)] //debug only
     #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
-        loop {
-            //we have to use a loop essentially because of the iterative buffer filling semantics, I dislike the complexity!
-            // If we have data in buffer, try to get next entry
-            if self.offset < self.remaining_bytes {
-                // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
-                let d: *mut dirent64 =
-                    unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
-
-                debug_assert!(
-                    d as usize % 8 == 0,
-                    "the memory address of the dirent should be SHOULD be  aligned to 8 bytes"
-                ); //alignment check
-                debug_assert!(!d.is_null(), "dirent is null in get next entry!");
-                // SAFETY: dirent is not null so field access is safe
-                let reclen = unsafe { access_dirent!(d, d_reclen) };
-
-                self.offset += reclen; // increment the offset by the size of the dirent structure
-
-                // SAFETY: dirent is not null
-                return unsafe { Some(NonNull::new_unchecked(d)) };
-            }
-
-            // Buffer is empty, try to fill it
-            if !self.fill_buffer() {
+        while self.offset >= self.remaining_bytes {
+            // if no more entries remaining, return None
+            if !self.are_more_entries_remaining() {
                 return None; // No more data to read
             }
-            // Buffer filled successfully, loop to try reading again
         }
+
+        // We have data in buffer, get next entry
+        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
+        let drnt: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+
+        // Quick sanity checks for debug builds (alignment check+nullcheck)
+        debug_assert!(drnt as usize % 8 == 0, "the dirent is malformed"); //not aligned to 8 bytes
+        debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
+        // SAFETY: dirent is not null so field access is safe
+        self.offset += unsafe { access_dirent!(drnt, d_reclen) };
+        // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
+        // SAFETY: dirent is not null
+        unsafe { Some(NonNull::new_unchecked(drnt)) }
     }
 }
 
@@ -394,16 +384,14 @@ pub trait DirentConstructor {
     fn file_descriptor(&self) -> &FileDes;
 
     #[inline]
-    #[allow(clippy::wildcard_enum_match_arm, reason = "exhaustive")]
-    #[allow(clippy::multiple_unsafe_ops_per_block)]
     /// Constructs a `DirEntry` from a raw directory entry pointer
     unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {
         debug_assert!(!drnt.is_null(), "drnt should never be null!");
         // SAFETY: The `drnt` must not be null(by precondition)
-        let (f_path, inode, file_type): (&CStr, u64, FileType) =
+        let (cstrpath, inode, file_type): (&CStr, u64, FileType) =
             unsafe { self.construct_path(drnt) };
 
-        let path: Box<CStr> = f_path.into();
+        let path: Box<CStr> = cstrpath.into();
         let file_name_index = self.file_index();
 
         DirEntry {
@@ -442,7 +430,6 @@ pub trait DirentConstructor {
         GFS	255 bytes
         GFS2	255 bytes
         GPFS	255 UTF-8 codepoints
-        HFS	31 bytes
         HFS Plus	255 UTF-16 code units /510  bytes
         JFS	255 bytes
         JFS1	255 bytes
@@ -521,8 +508,7 @@ pub trait DirentConstructor {
         let d_ino: u64 = unsafe { access_dirent!(drnt, d_ino) };
         // SAFETY: as above.
         let dtype: u8 = unsafe { access_dirent!(drnt, d_type) }; //need to optimise this for illumos/solaris TODO! (small nit)
-        // SAFETY: Same as above^
-        // Add 1 to include the null terminator
+        // SAFETY: Same as above^ (Add 1 to include the null terminator)
         let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
         let base_len: usize = self.file_index();
 
@@ -538,25 +524,24 @@ pub trait DirentConstructor {
             ),
             not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
         };
-        let path_buffer: &mut Vec<u8> = self.path_buffer();
+        // Get the portion of the buffer that goes past the last slash
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
-        let buffer: &mut [u8] = unsafe { path_buffer.get_unchecked_mut(base_len..) };
+        let buffer: &mut [u8] = unsafe { self.path_buffer().get_unchecked_mut(base_len..) };
 
         // SAFETY: `d_name` and `buffer` don't overlap (different memory regions)
         // - Both pointers are properly aligned for byte copying
         // - `name_len` is within `buffer` bounds
+        // Copy the name into the final portion
         unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) };
         #[allow(clippy::multiple_unsafe_ops_per_block)]
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
-        unsafe {
-            (
-                CStr::from_bytes_with_nul_unchecked(
-                    path_buffer.get_unchecked(..base_len + name_len),
-                ),
-                d_ino,
-                file_type,
+        let full_path = unsafe {
+            CStr::from_bytes_with_nul_unchecked(
+                self.path_buffer().get_unchecked(..base_len + name_len),
             )
-        }
+        }; //truncate the buffer to the first null terminator of the full path
+
+        (full_path, d_ino, file_type)
     }
 }
 

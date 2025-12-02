@@ -7,7 +7,7 @@ bench_results/*
 *.out
 libc
 valgrind.log
-
+flamegraph*
 # VSCode
 settings.json
 

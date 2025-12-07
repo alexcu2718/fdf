@@ -7,7 +7,7 @@ bench_results/*
 *.out
 libc
 valgrind.log
-
+research/dirent_structs.txt
 # VSCode
 settings.json
 

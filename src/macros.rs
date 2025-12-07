@@ -272,10 +272,14 @@ macro_rules! skip_dot_or_dot_dot_entries {
             {
                 // Linux/Solaris/Illumos optimisation: check d_type first
                 const MINIMUM_DIRENT_SIZE: usize =
-                    core::mem::offset_of!($crate::dirent64, d_name).next_multiple_of(8); //==24
+                    core::mem::offset_of!($crate::dirent64, d_name).next_multiple_of(8);
+                const_assert!(
+                    MINIMUM_DIRENT_SIZE == 24,
+                    "The minimum dirent size should be 24 on these platforms"
+                );
+
                 match access_dirent!($entry, d_type) {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
-                        // The value for 24 is checked in util.
                         if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
                             let name_ptr: *const u8 = access_dirent!($entry, d_name);
                             match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
@@ -359,10 +363,9 @@ macro_rules! const_from_env {
         pub const $name: $t = {
             #[allow(clippy::single_call_fn)]
             #[allow(clippy::cast_possible_truncation)] // bad const eval machinery
-            #[allow(clippy::cast_sign_loss)]
+            #[allow(clippy::cast_sign_loss)] // as above
             #[allow(clippy::indexing_slicing)]
-            #[allow(unused_comparisons)]
-            #[allow(clippy::missing_asserts_for_indexing)]
+            #[allow(clippy::missing_asserts_for_indexing)] //compile time only crash(intentional)
             const fn parse_env(s: &str) -> $t {
                 let s_bytes = s.as_bytes();
                 if s_bytes.len() == 0 {
@@ -372,6 +375,10 @@ macro_rules! const_from_env {
                 if !s_bytes.is_ascii(){
                     panic!(concat!("Non ASCII characters in", stringify!($env)));
                 }
+
+
+
+
 
                 const TYPE_OF:&str=stringify!($t);
 
@@ -493,7 +500,7 @@ macro_rules! stat_syscall {
         };
 
         if res == 0 {
-            // SAFETY: If the return code is 0, we know the stat structure has been properly initialized
+            // SAFETY: If the return code is 0, we know the stat structure has been properly initialised
             Ok(unsafe { stat_buf.assume_init() })
         } else {
             Err(std::io::Error::last_os_error().into())

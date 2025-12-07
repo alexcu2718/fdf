@@ -381,6 +381,7 @@ macro_rules! const_from_env {
                 assert!(!matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
                 // Eq is not supported in const yet matches is, weird. annoying work around.
                 assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),concat!("Negative detected in unsigned env var ",stringify!($env)));
+                assert!((TYPE_OF_AS_BYTES[0]==b'u' && $default>=<$t>::MIN ) || TYPE_OF_AS_BYTES[0]!=b'u',concat!("Negative default for not allowed for ",stringify!($default)));
 
 
 

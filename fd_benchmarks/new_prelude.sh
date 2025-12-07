@@ -2,7 +2,12 @@
 
 
 
-cd "$(dirname "$0")" || exit
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+    cd "$(dirname "${BASH_SOURCE[0]}")" || exit
+else
+
+    cd "$(dirname "$0")" || exit
+fi
 
 
 

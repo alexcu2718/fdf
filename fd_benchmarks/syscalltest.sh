@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 
+cd  "$(realpath "$(dirname "$0")")" || exit 1
 # shellcheck disable=SC1091
 set -euo pipefail
 source "new_prelude.sh"

@@ -316,6 +316,8 @@ macro_rules! skip_dot_or_dot_dot_entries {
     }};
 }
 
+//TODO! I realise people could have massive filesystems, i should probably write a rebuild script on value change.
+// TODO! add floating point support
 /**
  Macro to create a const from an env var with compile-time parsing,
 
@@ -329,27 +331,18 @@ macro_rules! skip_dot_or_dot_dot_entries {
 
  Example usage:
  ```
-// Unfortunately it is *impossible* to test(in rust) this due to build time constants and compile time ordering
  use fdf::const_from_env;
-
  const_from_env!(MYVAR: usize = "NYVAR", 6969);
  assert_eq!(MYVAR, 6969); //6969 is the default value if the environment variable NYVAR is not set
 
  const_from_env!(NEG:isize="TEST_VAR",-50);
  assert!(NEG==-50 || NEG==-100); //tested via setting 'export TEST_VAR=-100'.
-
-
- const_from_env!(FLOATY:f32="TESTFLOAT",-50.1);
- assert!(FLOATY==-60.1 || FLOATY==-50.1); // tested via setting `export TESTFLOAT=-60.1`
-
- const_from_env!(TESTDOTFIRST:f64="TESTDOTFIRST",0.00);
- assert!(TESTDOTFIRST==0.01 || TESTDOTFIRST==0.00); // Tested same as above.
  ```
   This macro allows you to define a constant that can be set via an environment variable at compile time.
 
  # Notes
  - The value is parsed at compile time
- - Environment variables must contain only numeric and '-'/'+'/'.' characters
+ - Environment variables must contain only numeric characters
 */
 #[macro_export]
 #[allow(clippy::doc_markdown)]
@@ -357,111 +350,55 @@ macro_rules! const_from_env {
     ($(#[$meta:meta])* $name:ident: $t:ty = $env:expr, $default:expr) => {
         $(#[$meta])*
         pub const $name: $t = {
+            // A helper const function to parse a string into a number.
+            // This is used only when an environment variable is found.
             #[allow(clippy::single_call_fn)]
-            #[allow(clippy::cast_possible_truncation)] // bad const eval machinery
-            #[allow(clippy::cast_sign_loss)]
-            #[allow(clippy::indexing_slicing)]
-            #[allow(unused_comparisons)]
-            #[allow(clippy::missing_asserts_for_indexing)]
+            #[allow(clippy::indexing_slicing)] //this will panic at compile time, intentionally.
+            #[allow(unused_comparisons)] // Type limit checks may be trivial for some types
             const fn parse_env(s: &str) -> $t {
                 let s_bytes = s.as_bytes();
+
                 if s_bytes.len() == 0 {
                     panic!(concat!("Empty environment variable: ", stringify!($env)));
                 }
 
-                if !s_bytes.is_ascii(){
-                    panic!(concat!("Non ASCII characters in", stringify!($env)));
-                }
-
-                const TYPE_OF:&str=stringify!($t);
-
-                const TYPE_OF_AS_BYTES:&[u8]=TYPE_OF.as_bytes();
-
-                assert!(!matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
-                assert!(!matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
-                // Eq is not supported in const yet matches is, weird. annoying work around.
-                assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),concat!("Negative detected in unsigned env var ",stringify!($env)));
-
-
-
-                // Detect if we're parsing a float type
-                const IS_FLOAT: bool = TYPE_OF_AS_BYTES[0]==b'f';
-
-
+                // Check for negative sign
                 let is_negative = s_bytes[0] == b'-';
-                let is_positive = s_bytes[0] == b'+';
-                let start_idx:usize = if is_negative || is_positive { 1 } else { 0 };
 
-                if IS_FLOAT {
-
-
-                    let mut integer_part: f64 = 0.0;
-                    let mut fraction_part: f64 = 0.0;
-                    let mut fraction_divisor: f64 = 1.0;
-                    const TEN:f64=10.0;
-                    let mut in_fraction = false;
-                    let mut i = start_idx;
-
-                    while i < s_bytes.len() {
-                        let b = s_bytes[i];
-                        match b {
-                            b'0'..=b'9' => {
-                                let digit = (b - b'0') as f64; // Cast to higher precision then truncate later
-                                if in_fraction {
-                                    fraction_divisor *= TEN;
-                                    fraction_part = fraction_part * TEN + digit;
-                                } else {
-                                    integer_part = integer_part * TEN + digit;
-                                }
-                            }
-                            b'.' => {
-                                if in_fraction {
-                                    panic!(concat!("Multiple decimal points in: ", stringify!($env)));
-                                }
-                                in_fraction = true;
-                            }
-                            _ => panic!(concat!("Invalid float value in: ", stringify!($env))),
-                        }
-                        i += 1;
-                    }
-
-                    let mut result = integer_part + (fraction_part / fraction_divisor);
-                    if is_negative {
-                        result = -result;
-                    }
-
-
-
-                    result as $t
-                } else {
-
-                    const TEN:$t = 10 as $t;
-                    const ZERO:$t = 0 as $t;
-
-                    let mut n = 0 as $t;
-                    let mut i = start_idx;
-
-                    while i < s_bytes.len() {
-                        let b = s_bytes[i];
-                        match b {
-                            b'0'..=b'9' => {
-                                n = n * TEN + (b - b'0') as $t;
-                            }
-                            _ => panic!(concat!("Invalid numeric value in: ", stringify!($env))),
-                        }
-                        i += 1;
-                    }
-
-                    if is_negative {
-                        n = ZERO - n; // have to do a trick here for signed ints
-                    }
-
-                    n
+                // Panic at compile time if trying to use negative with unsigned type
+                if is_negative && <$t>::MIN >= 0 {
+                    panic!(concat!("Negative value not supported for unsigned type in: ", stringify!($env)));
                 }
+
+                let start_idx = if is_negative { 1 } else { 0 };
+                let mut n: $t = 0;
+                let mut i = start_idx;
+
+                // Parse digits
+                while i < s_bytes.len() {
+                    let b = s_bytes[i];
+                    match b {
+                        b'0'..=b'9' => {
+                            n = n * 10 + (b - b'0') as $t;
+                        }
+                        _ => panic!(concat!("Invalid numeric value in environment variable: ", stringify!($env))),
+                    }
+                    i += 1;
+                }
+
+                // Apply negation for signed types
+                if is_negative {
+                    n = 0 - n;
+                }
+
+                n
             }
 
+            // Check if the environment variable is set.
             match option_env!($env) {
+                // If it's set, parse the string value.
                 Some(val) => parse_env(val),
+                // If not, use the default
                 None => $default as _,
             }
         };

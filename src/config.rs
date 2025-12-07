@@ -8,6 +8,43 @@ use core::ops::Deref;
 use core::time::Duration;
 use regex::bytes::{Regex, RegexBuilder};
 use std::time::UNIX_EPOCH;
+use thread_local::ThreadLocal;
+
+pub struct TLSRegex {
+    base: Regex,
+    local: ThreadLocal<Regex>,
+}
+
+impl Clone for TLSRegex {
+    fn clone(&self) -> Self {
+        Self {
+            base: self.base.clone(),
+            local: ThreadLocal::new(),
+        }
+    }
+}
+
+impl core::fmt::Debug for TLSRegex {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TLSRegex")
+            .field("base", &self.base)
+            .finish_non_exhaustive()
+    }
+}
+
+impl TLSRegex {
+    const fn new(regex: Regex) -> Self {
+        Self {
+            base: regex,
+            local: ThreadLocal::new(),
+        }
+    }
+
+    #[inline]
+    pub fn is_match(&self, path: &[u8]) -> bool {
+        self.local.get_or(|| self.base.clone()).is_match(path)
+    }
+}
 
 /**
 This struct holds the configuration for searching a File system via traversal
@@ -24,8 +61,9 @@ pub struct SearchConfig {
 
     If `None`, matches all files (equivalent to an empty pattern).
     When `file_name_only` is true, only matches against the base filename.
+    Uses thread-local storage for efficient multi-threaded regex matching.
     */
-    pub(crate) regex_match: Option<Regex>,
+    pub(crate) regex_match: Option<TLSRegex>,
 
     /**
     Whether to exclude hidden files and directories
@@ -166,7 +204,7 @@ impl SearchConfig {
                 if let Err(regerror) = reg {
                     return Err(SearchConfigError::RegexError(regerror));
                 }
-                reg.ok()
+                reg.ok().map(TLSRegex::new)
             };
 
         Ok(Self {

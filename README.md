@@ -129,7 +129,7 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 ### Key Optimisations
 
-- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.  This approach enables single-pass reads for small directories and reduces getdents invocations by roughly 50% in testing. See the skip code(or follow link) [in src/fs/iter.rs](./src/fs/iter.rs#L195)**
+- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.
 
 - **find_char_in_word/find_last_char_in_word**: Locates the first/last occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 

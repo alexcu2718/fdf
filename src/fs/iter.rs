@@ -194,67 +194,14 @@ impl GetDents {
             return false;
         }
 
-        // Read directory entries, ignoring negative error codes
+        // Read directory entries, ignoring negative error codes(same as readdir semantics)
         let remaining_bytes = self.syscall_buffer.getdents(&self.fd);
 
         let has_bytes_remaining = remaining_bytes.is_positive();
-        /*
-         Use a bit hack to make this statement branchless
-         https://graphics.stanford.edu/~seander/bithacks.html#IntegerAbs
+        // Cast the boolean to 0/1  (because 0 * x=0, trivially), keeping only positive results(avoid branching)
+        self.remaining_bytes = usize::from(has_bytes_remaining) * (remaining_bytes as usize);
 
-        basically equivalent to .max(0) as usize but without branching
-
-        */
-        const NUM_OF_BITS_MINUS_1: usize = (usize::BITS - 1) as usize;
-        self.remaining_bytes =
-            (remaining_bytes & !(remaining_bytes >> NUM_OF_BITS_MINUS_1)) as usize;
-
-        /*
-         Smart end-of-stream detection: Avoid unnecessary system calls by detecting when
-         we've likely exhausted the directory based on the returned byte count.
-
-         Why this works:
-         - A full directory read returns exactly buffer.max_capacity() bytes
-         - A partial read (end approaching) returns less than maximum
-         - If returned bytes ≤ (max_capacity - largest_dirent_size), the file descriptor is exhausted
-         - Meaning that the next system call will return 0 anyway.
-
-         Example:
-         - Buffer capacity: 4600 bytes (It is arbitrary)
-         - Largest dirent64 size: 280 bytes (Well, see below...)  (it can be up to 4000+ on reiserfs, or 1080~ ish on openzfs( see the filesystem copy paste on this page))
-         - If getdents returns ≤ 4320 bytes (4600 - 280), then even if we made another
-           system call, it would definitively call 0 bytes on next call, so we skip it!
-           Through this optimisation, we can truly 1 shot small directories, as well as remove number of getdents calls down by 50%! (rough tests)
-        */
-
-        // Access the last field and then round up to find the minimum struct size
-        const MINIMUM_DIRENT_SIZE: usize =
-            core::mem::offset_of!(dirent64, d_name).next_multiple_of(8);
-
-        // similar to a `static_assert` from c++ (compile time not runtime assert)
-        const_assert!(
-            MINIMUM_DIRENT_SIZE == 24,
-            "minimum dirent size isnt 24 on this system, please report the error"
-        );
-
-        // Note, we don't support reiser due to it's massive file name length
-        // This should support Openzfs, ZFS is the only FS on linux which has a size greater than 512 bytes
-        const MAX_SIZED_DIRENT: usize = 1023 + 1 + MINIMUM_DIRENT_SIZE; // max size of ZFS+NUL + non variable fields
-        // Normally the max should be 255 but there's 510 for CIFS or any UTF16 encoded Filesystem
-        // Then there's the exception for ZFS with 1023.
-
-        // See proof at bottom of page.
-        self.end_of_stream = !has_bytes_remaining
-            || self.syscall_buffer.max_capacity() - MAX_SIZED_DIRENT >= self.remaining_bytes; //a boolean
-
-        /*
-        you can't have perfection in systems programming, so many variables!
-        Ultimately this is a heuristic way, it's not fool proof,
-        it won't however miss any entries but it CAN sometimes call `getdents64` to get a 0
-        which (officially) indicates EOF
-
-        Actually, it's funny because this optimisation will be even MORE helpful for network file systems!
-        */
+        self.end_of_stream = !has_bytes_remaining;
 
         // Reset to start reading from the beginning of the new buffer data for the case where it's got
         self.offset = 0;
@@ -351,8 +298,8 @@ impl GetDents {
         let drnt: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)
-        debug_assert!(drnt as usize % 8 == 0, "the dirent is malformed"); //not aligned to 8 bytes
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
+        debug_assert!(drnt as usize % 8 == 0, "the dirent is malformed"); //not aligned to 8 bytes
         // SAFETY: dirent is not null so field access is safe
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)

@@ -93,6 +93,8 @@ A workaround exists, interestingly documented in [this GitHub issue](https://git
 
 This might be fixed due to this change however [see link](https://github.com/rust-lang/regex/issues/934#issuecomment-1703860708)
 
+**NOTE** I have since implemented this after confirmation of perf increase, next to add the features above.
+
 ```rust
 struct TLSRegex {
     base: regex::bytes::Regex,
@@ -106,13 +108,21 @@ impl TLSRegex {
 }
 ```
 
-## 7. CIFS Filesystem Issue
+## 7. CIFS Filesystem Issue #FIXED#
 
 The `getdents` skip code [in src/fs/iter.rs](./src/fs/iter.rs#L195) encounters issues on certain exotic CIFS filesystems. This was observed on a friend's server setup but hasn't been reproducible since, and access to the original server is no longer available.
 
 Reverting to the standard `getdents` "call until 0" paradigm resolved the issue and returned the expected results.
 
 However, I want to keep the syscall skip, I suspect it may be something to do with the block size.
+
+EDIT: After much research and debugging, it seems impossible to find a way around it.
+
+I have retained the hash for it here.
+
+```bash
+git checkout aebe2280f177e768841dd29eb489d89ee9eb8c23
+```
 
 ## 8. Performance Profiling
 

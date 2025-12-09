@@ -137,17 +137,20 @@ impl Finder {
     * `use_colours` - Enable ANSI colour output for better readability(if supported/going to a TTY)
     * `result_count` - Optional limit on the number of results to display
     * `sort` - Enable sorting of the final results (has significant computational cost)
+    * `null_terminated` Enable a NUL as the terminator for non TTY output (for xargs compatibility with -0 flag)
     * `print_errors` - Print any errors collected (if errors were collected during traversal via the builder)
 
     # Errors
     Returns [`SearchConfigError::IOError`] if the search operation fails
     */
     #[inline]
+    #[allow(clippy::fn_params_excessive_bools)] //convenience
     pub fn print_results(
         self,
         use_colours: bool,
         result_count: Option<usize>,
         sort: bool,
+        null_terminated: bool,
         print_errors: bool,
     ) -> core::result::Result<(), SearchConfigError> {
         let errors = self.errors.clone();
@@ -158,6 +161,7 @@ impl Finder {
             use_colours,
             sort,
             print_errors,
+            null_terminated,
             errors.as_ref(),
         )
     }

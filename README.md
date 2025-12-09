@@ -125,6 +125,8 @@ whereas my implementation prevents hangs. It may, however, return more results t
 
 To avoid issues, use --same-file-system when traversing symlinks. Both fd and find also handle them poorly without such flags. My approach ensures the program always terminates safely, even in complex directories like ~/.steam, ~/.wine, /sys, and /proc.
 
+The flag -I includes directories in output(as opposed to ignore files), I will change this in future.
+
 ## Technical Highlights
 
 ### Key Optimisations
@@ -257,6 +259,9 @@ fdf . ~ -e jpg
 # Find all  Python files in /usr/local (including hidden files)
 fdf . /usr/local -e py -H
 
+# Null terminated all output instead of newlines, mainly for command passing to other functions
+fdf -HI --print 0 . ~ | xargs -0 realpath
+
 
 # Generate shell completions for Zsh/bash (also supports powershell/fish!)
 # For Zsh
@@ -286,7 +291,7 @@ Options:
           Enable case-sensitive matching, defaults to false
 
   -e, --extension <EXTENSION>
-          filters based on extension, eg --extension .txt or -E txt
+          An example command would be `fdf -HI -e  c '^str' /
 
   -j, --threads <THREAD_NUM>
           Number of threads to use, defaults to available threads available on your computer
@@ -328,6 +333,9 @@ Options:
 
       --same-file-system
           Only traverse the same filesystem as the starting directory
+
+  -0, --print0
+          Makes all output null terminated as opposed to newline terminated, only applies to non-coloured output and redirected(useful for xargs)
 
       --size <SIZE>
           Filter by file size
@@ -431,6 +439,7 @@ Options:
 
   -V, --version
           Print version
+
 ```
 
 ### Potential Future Enhancements

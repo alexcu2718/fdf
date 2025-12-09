@@ -8,7 +8,7 @@ use crate::{
     util::BytePath,
 };
 use compile_time_ls_colours::file_type_colour;
-use rayon::prelude::*;
+use rayon::prelude::ParallelSliceMut as _;
 use std::{
     io::{BufWriter, IsTerminal as _, Write, stdout},
     sync::{Arc, Mutex},
@@ -43,17 +43,27 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 
 /// A convenient function to print results
 #[inline]
-fn write_nocolour<W, I>(writer: &mut W, iter_paths: I) -> std::io::Result<()>
+#[allow(clippy::fn_params_excessive_bools)] //convenience
+fn write_nocolour<W, I>(writer: &mut W, iter_paths: I, null_terminated: bool) -> std::io::Result<()>
 where
     W: Write,
     I: IntoIterator<Item = DirEntry>,
 {
+    const NULL_TERMINATED_CRLF: &[u8] = b"/\0";
+    const NULL_TERMINATED_NEWLINE: &[u8] = b"\0";
+    let terminator_array = if null_terminated {
+        //  https://tenor.com/en-GB/view/the-terminator-you-are-terminated-youre-fired-arnold-schwarzenegger-gif-22848847
+        [NULL_TERMINATED_NEWLINE, NULL_TERMINATED_CRLF]
+    } else {
+        NEWLINES_PLAIN
+    };
+
     for path in iter_paths {
         writer.write_all(&path)?;
         // SAFETY: We're indexing in bounds (trivially, either 0 or 1, this should never need to be checked but im too lazy to check assembly on it)
         // If it's a directory, we access index 1, which adds a / to the end
         // Due to this being a difficult to predict branch, it seemed prudent to get rid of.
-        writer.write_all(unsafe { NEWLINES_PLAIN.get_unchecked(path.is_dir() as usize) })?;
+        writer.write_all(unsafe { terminator_array.get_unchecked(path.is_dir() as usize) })?;
     }
     Ok(())
 }
@@ -75,12 +85,14 @@ where
 
 #[inline]
 #[allow(clippy::print_stderr, reason = "only enabled if requested")]
+#[allow(clippy::fn_params_excessive_bools)] //convenience
 pub fn write_paths_coloured<I>(
     path_iter: I,
     limit: Option<usize>,
     nocolour: bool,
     sort: bool,
     print_errors: bool,
+    null_terminated: bool,
     errors: Option<&Arc<Mutex<Vec<TraversalError>>>>,
 ) -> Result<(), SearchConfigError>
 where
@@ -109,7 +121,7 @@ where
         if use_colour {
             write_coloured(&mut writer, iter_paths)?
         } else {
-            write_nocolour(&mut writer, iter_paths)?;
+            write_nocolour(&mut writer, iter_paths, null_terminated)?;
         }
     } else {
         let iter_paths = path_iter.take(true_limit);
@@ -117,7 +129,7 @@ where
         if use_colour {
             write_coloured(&mut writer, iter_paths)?
         } else {
-            write_nocolour(&mut writer, iter_paths)?;
+            write_nocolour(&mut writer, iter_paths, null_terminated)?;
         }
     }
 

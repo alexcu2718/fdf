@@ -6,6 +6,8 @@ use fdf::{SearchConfigError, filters};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
+use std::os::unix::ffi::OsStrExt as _;
+use std::os::unix::ffi::OsStringExt as _;
 
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -148,6 +150,15 @@ struct Args {
         help = "Only traverse the same filesystem as the starting directory"
     )]
     same_file_system: bool,
+    #[arg(
+        short = '0',
+        long = "print0",
+        alias = "null-terminated",
+        required = false,
+        default_value_t = false,
+        help = "Makes all output null terminated as opposed to newline terminated, only applies to non-coloured output and redirected(useful for xargs)"
+    )]
+    print0: bool,
     /// Filter by file size
     ///
     /// PREFIXES:
@@ -255,8 +266,22 @@ fn main() -> Result<(), SearchConfigError> {
         return Ok(());
     }
 
-    let path = args.directory.unwrap_or_else(|| ".".into());
-    let finder = Finder::init(&path)
+    let path: OsString = args.directory.unwrap_or_else(|| ".".into());
+    let path_as_bytes = path.as_bytes();
+
+    // remove trailing slashes (but keep root "/")
+    let final_path = if path_as_bytes.len() > 1 && path_as_bytes.ends_with(b"/") {
+        let mut trimmed = path_as_bytes.to_vec();
+        while trimmed.len() > 1 && trimmed.last() == Some(&b'/') {
+            trimmed.pop();
+        }
+
+        OsString::from_vec(trimmed)
+    } else {
+        path
+    };
+
+    let finder = Finder::init(&final_path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
@@ -276,7 +301,13 @@ fn main() -> Result<(), SearchConfigError> {
         .thread_count(args.thread_num)
         .build()?;
 
-    let _ = finder.print_results(args.no_colour, args.top_n, args.sort, args.show_errors);
+    let _ = finder.print_results(
+        args.no_colour,
+        args.top_n,
+        args.sort,
+        args.print0,
+        args.show_errors,
+    );
 
     Ok(())
 }

@@ -31,6 +31,5 @@ cargo clippy --all -- \
   -A clippy::single_call_fn \
   -A clippy::absolute_paths \
   -A clippy::let_underscore_untyped \
-  -A clippy::missing_docs_in_private_items \
   -A clippy::items_after_statements \
   -A clippy::mod_module_files

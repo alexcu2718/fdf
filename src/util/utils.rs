@@ -112,17 +112,12 @@ where
     /// Returns 0 for length 1 byte paths
     #[inline]
     fn file_name_index(&self) -> usize {
-        if __is_length_one(self) {
+        if self.len() == 1 {
             return 0;
         }
         debug_assert!(!self.is_empty(), "should never be empty");
         memrchr(b'/', self).map_or(1, |pos| pos + 1)
     }
-}
-
-#[cold]
-const fn __is_length_one(bytes: &[u8]) -> bool {
-    bytes.len() == 1
 }
 
 #[inline]
@@ -188,7 +183,7 @@ Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
 My Cat Diavolo is cute.
 
 */
-//cargo-asm --lib fdf::utils::dirent_const_time_strlen (put to inline(never) to display)
+//cargo-asm --lib fdf::util::utils::dirent_const_time_strlen (put to inline(never) to display)
 
 /**
  Returns the length of a `dirent64's d_name` string in constant time using

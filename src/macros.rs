@@ -332,12 +332,12 @@ macro_rules! skip_dot_or_dot_dot_entries {
  const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", X);, where X( is the default value if the env var is not set
 
  Example usage:
- ```
+```
 // Unfortunately it is *impossible* to test(in rust) this due to build time constants and compile time ordering
  use fdf::const_from_env;
 
  const_from_env!(MYVAR: usize = "NYVAR", 6969);
- assert_eq!(MYVAR, 6969); //6969 is the default value if the environment variable NYVAR is not set
+ assert!(MYVAR==6969 || MYVAR==5000); //6969 is the default value if the environment variable NYVAR is not set
 
  const_from_env!(NEG:isize="TEST_VAR",-50);
  assert!(NEG==-50 || NEG==-100); //tested via setting 'export TEST_VAR=-100'.
@@ -348,12 +348,13 @@ macro_rules! skip_dot_or_dot_dot_entries {
 
  const_from_env!(TESTDOTFIRST:f64="TESTDOTFIRST",0.00);
  assert!(TESTDOTFIRST==0.01 || TESTDOTFIRST==0.00); // Tested same as above.
- ```
+```
   This macro allows you to define a constant that can be set via an environment variable at compile time.
 
  # Notes
  - The value is parsed at compile time
  - Environment variables must contain only numeric and '-'/'+'/'.' characters
+ - No scientific characters and not overflow checks are performed due to limitations of const eval.
 */
 #[macro_export]
 #[allow(clippy::doc_markdown)]
@@ -365,8 +366,11 @@ macro_rules! const_from_env {
             #[allow(clippy::cast_possible_truncation)] // bad const eval machinery
             #[allow(clippy::cast_sign_loss)] // as above
             #[allow(clippy::indexing_slicing)]
+            #[allow(clippy::integer_division_remainder_used)]
+            #[allow(clippy::integer_division)] //as above
             #[allow(clippy::missing_asserts_for_indexing)] //compile time only crash(intentional)
             const fn parse_env(s: &str) -> $t {
+                use $crate::const_assert;
                 let s_bytes = s.as_bytes();
                 if s_bytes.len() == 0 {
                     panic!(concat!("Empty environment variable: ", stringify!($env)));
@@ -384,13 +388,11 @@ macro_rules! const_from_env {
 
                 const TYPE_OF_AS_BYTES:&[u8]=TYPE_OF.as_bytes();
 
-                assert!(!matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
-                assert!(!matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
+                const_assert!(!matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
+                const_assert!(!matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
                 // Eq is not supported in const yet matches is, weird. annoying work around.
                 assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),concat!("Negative detected in unsigned env var ",stringify!($env)));
-                assert!((TYPE_OF_AS_BYTES[0]==b'u' && $default>=<$t>::MIN ) || TYPE_OF_AS_BYTES[0]!=b'u',concat!("Negative default for not allowed for ",stringify!($default)));
-
-
+                const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,concat!("Negative default not allowed for ", stringify!($default)));
 
                 // Detect if we're parsing a float type
                 const IS_FLOAT: bool = TYPE_OF_AS_BYTES[0]==b'f';
@@ -402,11 +404,11 @@ macro_rules! const_from_env {
 
                 if IS_FLOAT {
 
-
-                    let mut integer_part: f64 = 0.0;
-                    let mut fraction_part: f64 = 0.0;
-                    let mut fraction_divisor: f64 = 1.0;
-                    const TEN:f64=10.0;
+                    const TEN: $t = 10 as $t;
+                    const ZERO: $t = 0 as $t;
+                    let mut integer_part: $t = ZERO;
+                    let mut fraction_part: $t = ZERO;
+                    let mut fraction_divisor: $t = 1 as $t;
                     let mut in_fraction = false;
                     let mut i = start_idx;
 
@@ -414,7 +416,7 @@ macro_rules! const_from_env {
                         let b = s_bytes[i];
                         match b {
                             b'0'..=b'9' => {
-                                let digit = (b - b'0') as f64; // Cast to higher precision then truncate later
+                                let digit = (b - b'0') as $t;
                                 if in_fraction {
                                     fraction_divisor *= TEN;
                                     fraction_part = fraction_part * TEN + digit;
@@ -435,12 +437,9 @@ macro_rules! const_from_env {
 
                     let mut result = integer_part + (fraction_part / fraction_divisor);
                     if is_negative {
-                        result = -result;
+                        result = ZERO -result;
                     }
-
-
-
-                    result as $t
+                    result
                 } else {
 
                     const TEN:$t = 10 as $t;

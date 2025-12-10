@@ -1,5 +1,7 @@
 #![allow(clippy::undocumented_unsafe_blocks)]
 
+const MIN_THREADS: usize = 1;
+
 #[cfg(target_os = "linux")]
 fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
     use std::io::BufRead as _;
@@ -23,7 +25,6 @@ fn main() {
     println!("cargo:rerun-if-changed=/proc/filesystems");
 
     //set threadcounts for rayon.
-    const MIN_THREADS: usize = 1;
     let num_threads =
         std::thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
 

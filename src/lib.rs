@@ -145,35 +145,6 @@ mod test;
 mod error;
 pub use error::{DirEntryError, FilesystemIOError, SearchConfigError, TraversalError};
 
-// mod types;
-
-// pub use types::FileDes;
-// pub use types::Result;
-
-// pub(crate) use types::{DirEntryFilter, FilterType};
-
-// mod util;
-
-// pub(crate) use utils::BytePath;
-// #[cfg(any(
-//     target_os = "linux",
-//     target_os = "android",
-//     target_os = "emscripten",
-//     target_os = "illumos",
-//     target_os = "solaris",
-//     target_os = "redox",
-//     target_os = "hermit",
-//     target_os = "fuchsia",
-//     target_os = "macos",
-//     target_os = "freebsd",
-//     target_os = "dragonfly",
-//     target_os = "openbsd",
-//     target_os = "netbsd",
-//     target_os = "aix",
-//     target_os = "hurd"
-// ))]
-// pub use utils::dirent_const_time_strlen;
-
 mod config;
 pub use config::SearchConfig;
 

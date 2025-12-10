@@ -1,5 +1,3 @@
-#![allow(clippy::must_use_candidate)]
-
 use crate::fs::{DirEntry, FileType};
 use crate::fs::{FileDes, Result};
 use crate::{dirent64, readdir64};
@@ -178,6 +176,7 @@ impl GetDents {
 
        */
     #[inline]
+    #[must_use]
     pub const fn remaining_bytes(&self) -> usize {
         self.remaining_bytes
     }
@@ -228,6 +227,7 @@ impl GetDents {
      Errors are typically silent as read-ahead failures don't affect correctness.
     */
     #[inline]
+    #[must_use]
     #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
     #[cfg(target_os = "linux")] // Only available on linux to my knowledge
     pub fn readahead(&self, count: usize) -> isize {
@@ -352,10 +352,10 @@ pub trait DirentConstructor {
     }
 
     #[inline]
-    fn init_from_path(dir_path: &[u8]) -> (Vec<u8>, usize) {
-        let mut base_len = dir_path.len(); // get length of directory path
+    fn init_from_path(path: &[u8]) -> (Vec<u8>, usize) {
+        let mut base_len = path.len(); // get length of directory path
 
-        let is_root = dir_path == b"/";
+        let is_root = path == b"/";
 
         let needs_slash = usize::from(!is_root);
 
@@ -415,7 +415,8 @@ pub trait DirentConstructor {
          - `base_len` equals `dir_path.len()`, ensuring we don't read beyond source bounds
         */
         unsafe {
-            core::ptr::copy_nonoverlapping(dir_path.as_ptr(), path_buffer.as_mut_ptr(), base_len)
+            path.as_ptr()
+                .copy_to_nonoverlapping(path_buffer.as_mut_ptr(), base_len)
         };
         //https://en.cppreference.com/w/c/string/byte/memcpy (usually I hate cppreference but it's fine for this)
         // from above "memcpy is the fastest library routine for memory-to-memory copy"
@@ -504,6 +505,7 @@ macro_rules! impl_iter {
             ISSUE: this file descriptor is only closed by the iterator due to current limitations
             */
             #[inline]
+            #[must_use]
             pub const fn dirfd(&self) -> &$crate::fs::FileDes {
                 &self.fd
             }

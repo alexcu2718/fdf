@@ -6,8 +6,6 @@ use fdf::{SearchConfigError, filters};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
-use std::os::unix::ffi::OsStrExt as _;
-use std::os::unix::ffi::OsStringExt as _;
 
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -267,21 +265,8 @@ fn main() -> Result<(), SearchConfigError> {
     }
 
     let path: OsString = args.directory.unwrap_or_else(|| ".".into());
-    let path_as_bytes = path.as_bytes();
 
-    // remove trailing slashes (but keep root "/")
-    let final_path = if path_as_bytes.len() > 1 && path_as_bytes.ends_with(b"/") {
-        let mut trimmed = path_as_bytes.to_vec();
-        while trimmed.len() > 1 && trimmed.last() == Some(&b'/') {
-            trimmed.pop();
-        }
-
-        OsString::from_vec(trimmed)
-    } else {
-        path
-    };
-
-    let finder = Finder::init(&final_path)
+    let finder = Finder::init(&path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)

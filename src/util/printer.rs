@@ -17,9 +17,13 @@ const NEWLINE: &[u8] = b"\n";
 const NEWLINE_CRLF: &[u8] = b"/\n";
 const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
 const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
-// Creating two look  arrays(look up tables) to do branchless formatting for paths
+
+const NULL_TERMINATED_CRLF: &[u8] = b"/\0";
+const NULL_TERMINATED_NEWLINE: &[u8] = b"\0";
+// Creating lookup  arrays(look up tables) to do branchless formatting for paths
 const NEWLINES_RESET: [&[u8]; 2] = [NEWLINE_RESET, NEWLINE_CRLF_RESET];
 const NEWLINES_PLAIN: [&[u8]; 2] = [NEWLINE, NEWLINE_CRLF];
+const NULL_TERMINATED_PLAIN: [&[u8]; 2] = [NULL_TERMINATED_NEWLINE, NULL_TERMINATED_CRLF];
 
 const RESET: &[u8] = b"\x1b[0m";
 #[inline]
@@ -49,11 +53,9 @@ where
     W: Write,
     I: IntoIterator<Item = DirEntry>,
 {
-    const NULL_TERMINATED_CRLF: &[u8] = b"/\0";
-    const NULL_TERMINATED_NEWLINE: &[u8] = b"\0";
     let terminator_array = if null_terminated {
         //  https://tenor.com/en-GB/view/the-terminator-you-are-terminated-youre-fired-arnold-schwarzenegger-gif-22848847
-        [NULL_TERMINATED_NEWLINE, NULL_TERMINATED_CRLF]
+        NULL_TERMINATED_PLAIN
     } else {
         NEWLINES_PLAIN
     };
@@ -64,6 +66,8 @@ where
         // If it's a directory, we access index 1, which adds a / to the end
         // Due to this being a difficult to predict branch, it seemed prudent to get rid of.
         writer.write_all(unsafe { terminator_array.get_unchecked(path.is_dir() as usize) })?;
+        // I don't append a slash for symlinks that are directories when not sending to stdout
+        // This is to avoid calling stat on symlinks. It seems extremely wasteful.
     }
     Ok(())
 }

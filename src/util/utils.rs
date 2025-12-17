@@ -198,9 +198,8 @@ My Cat Diavolo is cute.
  `dirent` is a valid, non-null pointer to a `libc::dirent64`.
 
  # Performance
- This is one of the hottest paths when scanning directories. By eliminating
- branches and unnecessary memory reads, it improves efficiency compared with
- conventional approaches.
+ This is almost always faster(by a significant amount) than strlen for dirents, expect in the case of trivially short names (potentially)
+On some systems
 
  # Example
  ```
@@ -244,7 +243,6 @@ My Cat Diavolo is cute.
     unsafe { libc::closedir(dir_fd) };
  }
 
- // Cleanup
  fs::remove_dir_all(&target_path).ok();
  ```
 
@@ -330,6 +328,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         /* When the record length is 24/`MIN_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 16/17/18 (or opposite, for big endian...sigh...), the d_name starts at 19, so anything before is invalid anyway.
+        On Solaris/Illumos, it may mask the first byte? This is irrelevant, as names *cannot* start with a NUL byte!
+        (I have tested on these platforms but not extensively)
 
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
@@ -355,15 +355,14 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
            Check hackers delight reference above for better explanation.
 
-          Then use a niche optimisation, because the last word will ALWAYS contain a null terminator, we can use `NonZeroU64`,
+          Then use a niche optimisation, because the last word will ALWAYS contain a null terminator,
+          so we can use `NonZeroU64`!,
           This has the benefit of using a smarter intrinsic
           https://doc.rust-lang.org/src/core/num/nonzero.rs.html#599
         https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
         https://doc.rust-lang.org/beta/std/intrinsics/fn.cttz_nonzero.html
 
-        This allows us to skip a 0 check which then allows us to use tzcnt on most cpu's
-
-             Check hackers delight reference above for better explanation.
+        This allows us to skip a 0 check which then allows us to use tzcnt/lzcnt on most cpu's
          */
 
         //SAFETY: The u64 can never be all 0's post-SWAR
@@ -380,7 +379,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         //check final calculation
         debug_assert!(
             reclen - DIRENT_HEADER_START +byte_pos -8
-                //SAFETY: debug only.
+                //SAFETY: should never matter because debug assert checks pointer validity above.
                     == unsafe{core::ffi::CStr::from_ptr(access_dirent!(drnt, d_name)).count_bytes() },
             "const swar dirent length calculation failed!"
         );

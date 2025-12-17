@@ -328,9 +328,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
 
  (Please read the docs carefully)
 
-
- const_from_env!(LOCAL_PATH_MAX: usize = "LOCAL_PATH_MAX", X);, where X( is the default value if the env var is not set
-
  Example usage:
 ```
 // Unfortunately it is *impossible* to test(in rust) this due to build time constants and compile time ordering
@@ -357,7 +354,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
  - No scientific characters and not overflow checks are performed due to limitations of const eval.
 */
 #[macro_export]
-#[allow(clippy::doc_markdown)]
 macro_rules! const_from_env {
     ($(#[$meta:meta])* $name:ident: $t:ty = $env:expr, $default:expr) => {
         $(#[$meta])*

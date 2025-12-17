@@ -141,20 +141,16 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
 #[derive(Clone)] //could probably implement a more specialised clone.
 pub struct DirEntry {
     /// Path to the entry, stored as a Boxed `CStr`
-    //(to avoid storing the capacity)
     /// This allows easy C ffi by just calling `.as_ptr()`
+    //(to avoid storing the capacity, since the path is immutable once set)
     pub(crate) path: Box<CStr>, //16 bytes
 
     /// File type (file, directory, symlink, etc.).
-    ///
-    /// Stored as a 1-byte enum.
-    pub(crate) file_type: FileType,
+    pub(crate) file_type: FileType, //1 byte
 
     /// Inode number of the file.
     pub(crate) inode: u64, //8 bytes
-    //
     /// Depth of the directory entry relative to the root.
-    ///
     pub(crate) depth: u32, //4bytes
 
     /// Offset in the path buffer where the file name starts.
@@ -833,8 +829,49 @@ impl DirEntry {
             })
         })
     }
+    /**
+    Returns the parent path as byte slice, or None if at root.
 
-    /// Returns the parent path as byte slice, or None if at root.
+    # Examples
+
+    Basic usage with a temporary directory and file:
+
+    ```
+    use fdf::fs::DirEntry;
+    use std::fs::File;
+    use std::os::unix::ffi::OsStrExt;
+    let tmp = std::env::temp_dir().join("fdf_parent_test_dir");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    let file_path = tmp.join("file.txt");
+    File::create(&file_path).unwrap();
+
+    let entry = DirEntry::new(&file_path).unwrap();
+    assert_eq!(entry.parent().unwrap(), tmp.as_os_str().as_bytes());
+
+    std::fs::remove_file(&file_path).unwrap();
+    std::fs::remove_dir_all(&tmp).unwrap();
+    ```
+
+    Root path yields `None` for parent (guarded to avoid failing on unusual systems):
+    dot entries return an empty byte slice, mirroring semantics from stdlib.
+
+    ```
+    use fdf::fs::DirEntry;
+
+    let root = DirEntry::new("/");
+    if let Ok(e) = root {
+        assert!(e.parent().is_none());
+    }
+
+    let dot=DirEntry::new(".");
+    if let Ok(dotentry)=dot{
+    let parent=dotentry.parent();
+    assert!(dotentry.parent().is_some_and(|x| x.is_empty()));
+    }
+
+    ```
+    */
     #[inline]
     pub fn parent(&self) -> Option<&[u8]> {
         self.as_path()
@@ -842,9 +879,9 @@ impl DirEntry {
             .map(|path| path.as_os_str().as_bytes())
     }
 
-    /// Similar to above function but modified for internal use within size filtering.
-    /// TODO, make this public at some point.
-    /// This just avoids calling stat twice basically.
+    //Similar to above function but modified for internal use within size filtering.
+    // This just avoids calling stat twice basically.
+    // TODO, make this public at some point.
     #[inline]
     pub(crate) fn to_full_path_with_stat(&self) -> Result<(Self, stat)> {
         debug_assert!(
@@ -1015,7 +1052,7 @@ impl DirEntry {
 
     # Errors
     Returns `DirEntryError::IOError` if the stat operation fails
-    *
+
     */
     #[inline]
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
@@ -1079,7 +1116,7 @@ impl DirEntry {
     ///
     /// This is a unique identifier for the file on the filesystem, it is not the same
     /// as the file name or path, it is a number that identifies the file on the
-    /// It should be u32 on BSD's but I use u64 for consistency across platforms
+    // It should be u32 on BSD's but I use u64 for consistency across platforms
     #[inline]
     #[must_use]
     pub const fn ino(&self) -> u64 {
@@ -1207,20 +1244,14 @@ impl DirEntry {
     */
     #[inline]
     #[must_use]
-    #[allow(
-        unfulfilled_lint_expectations,
-        reason = "some OS'es differ on interepretation of i8/u8 for pointers"
-    )]
-    #[allow(clippy::unnecessary_cast, reason = "as above")]
+    #[allow(clippy::eq_op)] //for assert
     #[expect(clippy::multiple_unsafe_ops_per_block, reason = "stylistic")]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "casting i8 to u8 is fine for characters"
-    )]
     pub const fn is_hidden(&self) -> bool {
+        const_assert!(b'.' == 46); //showing that the dot character is 46
+
         // SAFETY: file_name_index() is guaranteed to be within bounds
         // and we're using pointer arithmetic which is const-compatible (slight const hack)
-        unsafe { *self.as_ptr().add(self.file_name_index()) as u8 == b'.' }
+        unsafe { *self.as_ptr().add(self.file_name_index()) == 46 }
     }
 
     /**
@@ -1354,7 +1385,7 @@ impl DirEntry {
     use fdf::{fs::DirEntry, DirEntryError};
     use std::fs;
 
-       // Verify the path doesn't exist first
+    // Verify the path doesn't exist first
     let nonexistent_path = "/definitely/not/a/real/file/lalalalalalalalalalalal";
     assert!(!fs::metadata(nonexistent_path).is_ok());
 
@@ -1365,25 +1396,35 @@ impl DirEntry {
            Err(DirEntryError::IOError(_)) => {}, // Expected error
            Err(_) => panic!("Expected  error, got different error"),
            }
-           # // The test passes if we reach this point without panicking
-           # Ok::<(), DirEntryError>(())
+
     ```
-           */
+    */
     #[inline]
     pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
-        let path_ref = path.as_ref().as_bytes();
+        // It doesn't really matter if this constructor is 'expensive' mostly because the iterator constructs
+        // this without lstat.
+        let mut path_ref = path.as_ref().as_bytes();
+        // Strip trailing slash
+        if path_ref != b"/" {
+            if let Some(stripped) = path_ref.strip_suffix(b"/") {
+                path_ref = stripped;
+            }
+        }
+
         let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::NulError)?;
 
         // extract information from successful stat
         let get_stat = stat_syscall!(lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
         let inode = access_stat!(get_stat, st_ino);
+        let file_name_index = path_ref.file_name_index();
+        let file_type = FileType::from_stat(&get_stat);
         Ok(Self {
             path: cstring.into(),
-            file_type: get_stat.into(),
+            file_type,
             inode,
             depth: 0,
-            file_name_index: path_ref.file_name_index(),
-            is_traversible_cache: Cell::new(None), //no need to check
+            file_name_index,
+            is_traversible_cache: Cell::new(None), //no need to check(we'd need to call stat instead!)
         })
     }
 

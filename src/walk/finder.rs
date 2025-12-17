@@ -143,6 +143,8 @@ impl Finder {
     # Errors
     Returns [`SearchConfigError::IOError`] if the search operation fails
     */
+    //TODO! reformulate this into a builder when I feel like it
+    // I also want to add additional settings like printing info like 'ls -al', eventually anyway.
     #[inline]
     #[allow(clippy::fn_params_excessive_bools)] //convenience
     pub fn print_results(

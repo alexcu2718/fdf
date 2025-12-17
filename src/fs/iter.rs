@@ -38,6 +38,9 @@ impl ReadDir {
     The function handles the underlying directory stream management automatically,
     including positioning and error conditions.
 
+    This was *MAINLY* implemented to give a lower level interface so that one can use `std::iter::from_fn`
+    It's not meant to be used without explicit reason.
+
     IMPORTANT: This function returns ALL directory entries, including "." and ".." entries.
     Filtering of these entries should be handled by the caller if desired.
 
@@ -97,8 +100,10 @@ impl Drop for ReadDir {
         );
         // SAFETY:  not required
         unsafe { libc::closedir(self.dir.as_ptr()) };
-        // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
-    } // TODO! Investigate how std lib manages to not piss of FDsan ( i want to pass ownership to the FileDes BUT android complains, even though it works. weird.)
+    }
+    // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
+    // TODO! Investigate how std lib manages to not piss off FDsan
+    //( i want to pass ownership to the FileDes BUT android complains, even though it works. weird.)
 }
 
 /**
@@ -287,12 +292,10 @@ impl GetDents {
     #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         while self.offset >= self.remaining_bytes {
-            // if no more entries remaining, return None
             if !self.are_more_entries_remaining() {
-                return None; // No more data to read
+                return None;
             }
         }
-
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
         let drnt: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
@@ -407,12 +410,12 @@ pub trait DirentConstructor {
 
         /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
          SAFETY:
-         - `dir_path.as_ptr()` is valid for reads of `base_len` bytes (source slice length)
+         - `path.as_ptr()` is valid for reads of `base_len` bytes (source slice length)
          - `path_buffer.as_mut_ptr()` is valid for writes of `base_len` bytes (we allocated `total_capacity >= base_len`)
-         - The memory regions are guaranteed non-overlapping: `dir_path` points to existing data
+         - The memory regions are guaranteed non-overlapping: `path` points to existing data
            while `path_buffer` points to freshly allocated memory
          - Both pointers are properly aligned for u8 access
-         - `base_len` equals `dir_path.len()`, ensuring we don't read beyond source bounds
+         - `base_len` equals `path.len()`, ensuring we don't read beyond source bounds
         */
         unsafe {
             path.as_ptr()
@@ -458,7 +461,6 @@ pub trait DirentConstructor {
         let dtype: u8 = unsafe { access_dirent!(drnt, d_type) }; //need to optimise this for illumos/solaris TODO! (small nit)
         // SAFETY: Same as above^ (Add 1 to include the null terminator)
         let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
-        let base_len: usize = self.file_index();
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[allow(clippy::wildcard_enum_match_arm)] // ANYTHING but unknown is fine.
@@ -472,6 +474,7 @@ pub trait DirentConstructor {
             ),
             not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
         };
+        let base_len = self.file_index();
         // Get the portion of the buffer that goes past the last slash
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
         let buffer: &mut [u8] = unsafe { self.path_buffer().get_unchecked_mut(base_len..) };
@@ -480,7 +483,7 @@ pub trait DirentConstructor {
         // - Both pointers are properly aligned for byte copying
         // - `name_len` is within `buffer` bounds
         // Copy the name into the final portion
-        unsafe { core::ptr::copy_nonoverlapping(d_name, buffer.as_mut_ptr(), name_len) };
+        unsafe { d_name.copy_to_nonoverlapping(buffer.as_mut_ptr(), name_len) };
         #[allow(clippy::multiple_unsafe_ops_per_block)]
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         let full_path = unsafe {
@@ -568,10 +571,11 @@ macro_rules! impl_iterator_for_dirent {
             #[inline]
             fn next(&mut self) -> Option<Self::Item> {
                 while let Some(drnt) = self.get_next_entry() {
-                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue); // this just skips dot entries in a really efficient manner(avoids strlen)
+                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
+                    // this just skips dot entries in a really efficient manner(avoids strlen) by checking dtype first on most OS'es
                     return Some(self.construct_direntry(drnt));
                 }
-                None // signal end of directory
+                None // signal end
             }
         }
     };

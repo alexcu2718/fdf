@@ -82,7 +82,7 @@ This executes a comprehensive suite of internal library tests, CLI tests, and be
 
 ## Performance Benchmarks
 
-The benchmarks are fully repeatable using the testing code above and cover file type filtering, extension matching, file sizes, and many other scenarios. The following results were obtained on a local system and the LLVM repo to provide realistic usage examples:
+The benchmarks are fully repeatable using the testing code above and cover file type filtering, extension matching, file sizes, and many other scenarios. The following results were obtained on a local system and the LLVM repo to provide realistic usage  examples:
 (These are tests done via hyperfine and summarised to save space here.)
 
 (*TESTED ON LINUX, other OS's will (probably) be lower due to specific linux optimisations)
@@ -91,7 +91,9 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 
 Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but macos has less optimisations, perhaps testing in QEMU is not ideal for mac!
 
-| Test Case                              | Files Found | fdf Time (mean) | fd Time (mean) | Speedup (×)       | Notes           |
+```bash
+
+| Test Case                              | Files Found | fdf Time (mean) | fd Time (mean) | Speedup (×)       | Notes          |
 |---------------------------------------|-------------|-----------------|----------------|-------------------|-----------------|
 | Depth-limited (depth=2, LLVM)         | 396         | 9.9 ms          | 18.1 ms        | 1.82 ± 0.40       | No differences  |
 | File extension (.c, LLVM)             | 12,801      | 13.7 ms         | 27.4 ms        | 2.00 ± 0.21       | No differences  |
@@ -112,6 +114,8 @@ Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but mac
 | Type filter (directory, home)         | 237,603     | 307.7 ms        | 519.5 ms       | 1.69 ± 0.05       | No differences  |
 | Type filter (empty, home)             | 27,361      | 921.8 ms        | 1.258 s        | 1.36 ± 0.03       | No differences  |
 | Type filter (executable, home)        | 63,863      | 624.2 ms        | 887.8 ms       | 1.42 ± 0.05       | No differences  |
+
+```
 
 **Average speedup:** **1.8× faster**
 
@@ -148,7 +152,7 @@ Check source code for further explanation [in utils.rs](./src/util/utils.rs#L195
 // Used on Linux/Solaris/Illumos/Android systems; BSD systems/macOS store name length trivially
 // SIMD within a register, so no architecture dependence
 //http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm
- #[cfg(any(target_os = "linux",target_os = "android",target_os = "emscripten", target_os = "illumos",target_os = "solaris",
+ #[cfg(any(target_os = "linux",target_os = "android",target_os = "emscripten",
         target_os = "redox", target_os = "hermit", target_os = "fuchsia"))]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     use core::num::NonZeroU64;

@@ -212,15 +212,9 @@ macro_rules! const_assert {
     - The branch is easier for the CPU to predict
     - Expensive string length or comparison operations are avoided for roughly ninety percent of entries
 
- 2. PLATFORM-SPECIFIC OPTIMISATIONS:
-    - Linux, Solaris, Illumos: Uses the known property that `d_reclen` equals
-      `OFFSET_OF_NAME(24)` for the "." and ".." entries.
-    - BSD systems (macOS, FreeBSD, OpenBSD, NetBSD): Uses `d_namlen` for quick
-      length checks.
-    - Other systems: Falls back to a safe byte-by-byte comparison.
 
- Why this matters:
- - These checks are performed for every directory entry during traversal.
+ Why this matters( a lot of complexity!)
+ - These checks are performed for EVERY entry during traversal.
  - Standard traversal code often relies on `strcmp` or `strlen`; this approach
    avoids those calls where possible.
  - Improved branch prediction provides cumulative performance benefits
@@ -240,7 +234,10 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 target_os = "freebsd",
                 target_os = "openbsd",
                 target_os = "netbsd",
-                target_os = "dragonfly"
+                target_os = "dragonfly",
+                target_os="aix",
+                target_os="hurd" //even tho i dont plan to support hurd, just better practice.
+
             ))]
             {
                 // BSD/macOS optimisation: check d_namlen first as primary filter
@@ -249,11 +246,12 @@ macro_rules! skip_dot_or_dot_dot_entries {
                     // Only check d_type for potential "." or ".." entries
                     match access_dirent!($entry, d_type) {
                         libc::DT_DIR | libc::DT_UNKNOWN => {
-                            let name_ptr: *const u8 = access_dirent!($entry, d_name);
+                            // first 2 bytes, see explanation below
+                            let f2b: [u8; 2] = *access_dirent!($entry, d_name);
                             // Combined check using pattern
-                            match (namelen, *name_ptr.add(0), *name_ptr.add(1)) {
-                                (1, b'.', _) => $action,    // "." - length 1, first char '.'
-                                (2, b'.', b'.') => $action, // ".." - length 2, both chars '.'
+                            match (namelen, f2b) {
+                                (1, [b'.', _]) => $action,    // "." - length 1, first char '.'
+                                (2, [b'.', b'.']) => $action, // ".." - length 2, both chars '.'
                                 _ => (),
                             }
                         }
@@ -267,10 +265,12 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 target_os = "linux",
                 target_os = "solaris",
                 target_os = "illumos",
-                target_os = "android"
+                target_os = "android",
+                target_os="fuchsia",
+                target_os="redox",
             ))]
             {
-                // Linux/Solaris/Illumos optimisation: check d_type first
+                // Linux/Solaris/Illumos/etc optimisation: check d_type first
                 const MINIMUM_DIRENT_SIZE: usize =
                     core::mem::offset_of!($crate::dirent64, d_name).next_multiple_of(8);
                 const_assert!(
@@ -281,9 +281,12 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 match access_dirent!($entry, d_type) {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
                         if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
-                            let name_ptr: *const u8 = access_dirent!($entry, d_name);
-                            match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
-                                (b'.', 0, _) | (b'.', b'.', 0) => $action, //similar to above
+                            // f3b=first 3 bytes, the d_name is guaranteed to be 5 or more bytes long (from point 19 to 24)
+                            // this is because the pointer is padded up to 24, its filled with junk after the first null terminator however.
+                            let f3b: [u8; 3] = *access_dirent!($entry, d_name);
+
+                            match f3b {
+                                [b'.', 0, _] | [b'.', b'.', 0] => $action, //similar to above
                                 _ => (),
                             }
                         }
@@ -301,17 +304,22 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 target_os = "netbsd",
                 target_os = "solaris",
                 target_os = "illumos",
-                target_os = "android"
+                target_os = "android",
+                target_os = "aix",
+                target_os="hurd",
+                target_os="fuchsia",
+                target_os="redox"
             )))]
             {
                 // Fallback for other systems: check d_type first
                 match access_dirent!($entry, d_type) {
                     libc::DT_DIR | libc::DT_UNKNOWN => {
-                        let name_ptr: *const u8 = access_dirent!($entry, d_name);
-                        match (*name_ptr.add(0), *name_ptr.add(1), *name_ptr.add(2)) {
-                            (b'.', 0, _) | (b'.', b'.', 0) => $action,
-                            _ => (),
-                        }
+                        // check above explanation.
+                        let f3b: [u8; 3] = *access_dirent!($entry, d_name);
+                        match f3b {
+                                [b'.', 0, _] | [b'.', b'.', 0] => $action, //similar to above
+                                _ => (),
+                            }
                     }
                     _ => (),
                 }

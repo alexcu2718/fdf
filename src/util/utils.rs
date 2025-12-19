@@ -135,9 +135,6 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "linux",
         target_os = "android",
         target_os = "emscripten",
-        target_os = "illumos",
-        target_os = "solaris",
-        target_os = "redox",
         target_os = "hermit",
         target_os = "fuchsia",
         target_os = "macos",
@@ -157,8 +154,6 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "linux",
         target_os = "android",
         target_os = "emscripten",
-        target_os = "illumos",
-        target_os = "solaris",
         target_os = "redox",
         target_os = "hermit",
         target_os = "fuchsia",
@@ -182,7 +177,14 @@ Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
  (c) Alexander Curtis .
 My Cat Diavolo is cute.
 
+
+
+
 */
+// TODO! this only fails on solaris/illumos when going from root, WHY???? that makes no sense. I had to remove solaris/illumos support for this function. I am being too lazy to debug it
+// I never came across the issue simply because I never tried searching from root on my VM, until today.... what a fucking weird bug JFC, I should investigate this if i feel like it.
+// REALLY REALLY WEIRD. Pull out GDB, hackers delight and an ASCII table...
+
 //cargo-asm --lib fdf::util::utils::dirent_const_time_strlen (put to inline(never) to display)
 
 /**
@@ -256,8 +258,6 @@ On some systems
     target_os = "linux",
     target_os = "android",
     target_os = "emscripten",
-    target_os = "illumos",
-    target_os = "solaris",
     target_os = "redox",
     target_os = "hermit",
     target_os = "fuchsia",
@@ -294,8 +294,6 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         target_os = "linux",
         target_os = "android",
         target_os = "emscripten", // best effort, no guarantees
-        target_os = "illumos",
-        target_os = "solaris",
         target_os = "redox", // best effort, no guarantees
         target_os = "hermit", // best effort, no guarantees
         target_os = "fuchsia" // best effort, no guarantees
@@ -325,11 +323,9 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         // Create a mask for the first 3 bytes in the case where reclen==24, this handles the big endian case too.
         const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
-
         /* When the record length is 24/`MIN_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 16/17/18 (or opposite, for big endian...sigh...), the d_name starts at 19, so anything before is invalid anyway.
-        On Solaris/Illumos, it may mask the first byte? This is irrelevant, as names *cannot* start with a NUL byte!
-        (I have tested on these platforms but not extensively)
+
 
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */

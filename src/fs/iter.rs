@@ -49,6 +49,7 @@ impl ReadDir {
     - `None` when the end of directory is reached or if an error occurs
 
 
+
     # Notes
     - Unlike the `getdents64`/`getdirentries64` system calls type approach, this implementation uses the
       standard libc directory handling functions
@@ -88,6 +89,7 @@ impl ReadDir {
 impl Drop for ReadDir {
     /**
     Closes the directory file descriptor to prevent resource leaks.
+
 
     File descriptors are limited system resources, so proper cleanup
     is essential.
@@ -458,7 +460,9 @@ pub trait DirentConstructor {
         // SAFETY: same as above
         let d_ino: u64 = unsafe { access_dirent!(drnt, d_ino) };
         // SAFETY: as above.
-        let dtype: u8 = unsafe { access_dirent!(drnt, d_type) }; //need to optimise this for illumos/solaris TODO! (small nit)
+        #[allow(unused_unsafe)]
+        // This returns dtype `DT_UNKNOWN` for systems without d_type, EG, so this call is not *unsafe* for them.
+        let dtype: u8 = unsafe { access_dirent!(drnt, d_type) }; // TODO, for systems without dtype, just always call fstat? not big priority.
         // SAFETY: Same as above^ (Add 1 to include the null terminator)
         let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
 

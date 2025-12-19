@@ -7,13 +7,12 @@ pub use glob::{Error, glob_to_regex};
 pub use memchr_derivations::{
     contains_zero_byte, find_char_in_word, find_last_char_in_word, find_zero_byte_u64, memrchr,
 };
+
 pub(crate) use printer::write_paths_coloured;
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
     target_os = "emscripten",
-    target_os = "illumos",
-    target_os = "solaris",
     target_os = "redox",
     target_os = "hermit",
     target_os = "fuchsia",

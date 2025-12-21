@@ -149,7 +149,7 @@ Check source code for further explanation [in utils.rs](./src/util/utils.rs#L195
 
 ```rust
 // Computational complexity: O(1) - truly constant time
-// Used on Linux/Solaris/Illumos/Android systems; BSD systems/macOS store name length trivially
+// Used mostly on Linux type systems
 // SIMD within a register, so no architecture dependence
 //http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm
  #[cfg(any(target_os = "linux",target_os = "android",target_os = "emscripten",

@@ -263,8 +263,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
 
             #[cfg(any(
                 target_os = "linux",
-                target_os = "solaris",
-                target_os = "illumos",
                 target_os = "android",
                 target_os="fuchsia",
                 target_os="redox",
@@ -302,8 +300,6 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 target_os = "openbsd",
                 target_os = "dragonfly",
                 target_os = "netbsd",
-                target_os = "solaris",
-                target_os = "illumos",
                 target_os = "android",
                 target_os = "aix",
                 target_os="hurd",

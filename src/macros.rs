@@ -250,8 +250,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                             let f2b: [u8; 2] = *access_dirent!($entry, d_name);
                             // Combined check using pattern
                             match (namelen, f2b) {
-                                (1, [b'.', _]) => $action,    // "." - length 1, first char '.'
-                                (2, [b'.', b'.']) => $action, // ".." - length 2, both chars '.'
+                                (1, [b'.', _]) | (2, [b'.', b'.'])  => $action,
                                 _ => (),
                             }
                         }

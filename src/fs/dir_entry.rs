@@ -590,7 +590,7 @@ impl DirEntry {
             // if empty, then only 2 entries expected, . and .., this means only 48 or below (or neg if errors, who cares.)
             return dents <= 2 * MINIMUM_DIRENT_SIZE;
         }
-        false
+        false //return false is open fails
     }
 
     /**

@@ -554,9 +554,7 @@ impl DirEntry {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                let result = self
-                    .getdents() //use getdents on linux/android to avoid  extra stat calls
-                    .is_ok_and(|mut entries| entries.next().is_none());
+                let result = self.is_empty_dir();
                 #[cfg(not(any(target_os = "linux", target_os = "android")))]
                 let result = self
                     .readdir()
@@ -565,6 +563,34 @@ impl DirEntry {
             }
             _ => false,
         }
+    }
+
+    #[inline]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    /// Specialisation for empty checks on linux/android (avoid a heap alloc)
+    pub(crate) fn is_empty_dir(&self) -> bool {
+        use crate::fs::AlignedBuffer;
+        use crate::util::getdents;
+        const BUF_SIZE: usize = 500; //pretty arbitrary.
+        #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
+        const MINIMUM_DIRENT_SIZE: i64 =
+            core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8) as _;
+        debug_assert!(
+            self.file_type == FileType::Directory || self.file_type == FileType::Symlink,
+            " Only expect dirs/symlinks to pass through this private func"
+        );
+        let dirfd = self.open();
+        if let Ok(fd) = dirfd {
+            let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
+            // SAFETY: guaranteed open, valid ptr etc.
+            let dents = unsafe { getdents(fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
+
+            // SAFETY: Closed only once confirmed open
+            unsafe { libc::close(fd.0) };
+            // if empty, then only 2 entries expected, . and .., this means only 48 or below (or neg if errors, who cares.)
+            return dents <= 2 * MINIMUM_DIRENT_SIZE;
+        }
+        false //return false is open fails
     }
 
     /**

@@ -502,3 +502,99 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // text[..offset].iter().rposition(|elt| *elt == x), avoid a bounds check
     // I checked the assembly and it inserted panic branches, didn't like it (since this is panic free)
 }
+
+#[inline]
+#[must_use]
+pub const fn contains_zero_byte_old(x: usize) -> bool {
+    x.wrapping_sub(LO_USIZE) & !x & HI_USIZE != 0
+}
+
+#[must_use]
+#[inline]
+#[allow(clippy::cast_ptr_alignment)] //burntsushi wrote this so...
+pub fn memrchr_old(x: u8, text: &[u8]) -> Option<usize> {
+    // Scan for a single byte value by reading two `usize` words at a time.
+
+    //
+
+    // Split `text` in three parts:
+
+    // - unaligned tail, after the last word aligned address in text,
+
+    // - body, scanned by 2 words at a time,
+
+    // - the first remaining bytes, < 2 word size.
+
+    let len = text.len();
+
+    let ptr = text.as_ptr();
+
+    type Chunk = usize;
+
+    let (min_aligned_offset, max_aligned_offset) = {
+        // We call this just to obtain the length of the prefix and suffix.
+
+        // In the middle we always process two chunks at once.
+
+        // SAFETY: transmuting `[u8]` to `[usize]` is safe except for size differences
+
+        // which are handled by `align_to`.
+
+        let (prefix, _, suffix) = unsafe { text.align_to::<(Chunk, Chunk)>() };
+
+        (prefix.len(), len - suffix.len())
+    };
+
+    let mut offset = max_aligned_offset;
+
+    // compiler can't elide bounds checks on this.
+    //if let Some(index) = text[offset..].iter().rposition(|elt| *elt == x)
+    if let Some(index) = unsafe {
+        text.get_unchecked(offset..)
+            .iter()
+            .rposition(|elt| *elt == x)
+    } {
+        return Some(offset + index);
+    }
+
+    // Search the body of the text, make sure we don't cross min_aligned_offset.
+
+    // offset is always aligned, so just testing `>` is sufficient and avoids possible
+
+    // overflow.
+
+    let repeated_x = repeat_u8(x);
+
+    const CHUNK_BYTES: usize = size_of::<Chunk>();
+
+    while offset > min_aligned_offset {
+        // SAFETY: offset starts at len - suffix.len(), as long as it is greater than
+        // min_aligned_offset (prefix.len()) the remaining distance is at least 2 * chunk_bytes.
+        unsafe {
+            let u = *(ptr.add(offset - 2 * CHUNK_BYTES).cast::<Chunk>());
+
+            let v = *(ptr.add(offset - CHUNK_BYTES).cast::<Chunk>());
+
+            // Break if there is a matching byte.
+
+            let zu = contains_zero_byte_old(u ^ repeated_x);
+
+            let zv = contains_zero_byte_old(v ^ repeated_x);
+
+            if zu || zv {
+                break;
+            }
+        }
+
+        offset -= 2 * CHUNK_BYTES;
+    }
+
+    // Find the byte before the point the body loop stopped.
+    unsafe {
+        text.get_unchecked(..offset)
+            .iter()
+            .rposition(|elt| *elt == x)
+    }
+    // text[..offset].iter().rposition(|elt| *elt == x), avoid a bounds check
+    // I checked the assembly and it inserted panic branches, didn't like it (since this is panic free)
+}

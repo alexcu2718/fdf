@@ -5,7 +5,8 @@ mod utils;
 
 pub use glob::{Error, glob_to_regex};
 pub use memchr_derivations::{
-    contains_zero_byte, find_char_in_word, find_last_char_in_word, find_zero_byte_u64, memrchr,
+    contains_zero_byte, find_char_in_word, find_last_char_in_word, find_zero_byte_u64, memchr,
+    memrchr,
 };
 
 pub(crate) use printer::write_paths_coloured;

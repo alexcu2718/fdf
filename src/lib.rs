@@ -170,3 +170,5 @@ pub mod filters;
 pub mod fs;
 pub mod util;
 pub mod walk;
+
+pub use util::memchr;

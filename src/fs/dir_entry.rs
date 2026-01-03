@@ -1199,7 +1199,8 @@ impl DirEntry {
         is_traversible
     }
 
-    /** Checks if the file is hidden (e.g., `.gitignore`, `.config`).
+    /**
+     Checks if the file is hidden (e.g., `.gitignore`, `.config`).
 
     A file is considered hidden if its filename (not the full path)
     starts with a dot ('.') character.
@@ -1254,19 +1255,7 @@ impl DirEntry {
     std::fs::remove_file(tmp).unwrap();
     ```
 
-    ```
-    use fdf::fs::DirEntry;
-    use std::fs::File;
 
-    // Edge case: just a dot
-    let tmp = std::env::temp_dir().join(".helo");
-    File::create(&tmp).unwrap();
-
-    let entry = DirEntry::new(&tmp).unwrap();
-    assert!(entry.is_hidden());
-
-    std::fs::remove_file(tmp).unwrap();
-    ```
     */
     #[inline]
     #[must_use]

@@ -493,11 +493,13 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     }
 
     // Find the byte before the point the body loop stopped.
-    unsafe {
+    let res = unsafe {
         text.get_unchecked(..offset)
             .iter()
             .rposition(|elt| *elt == x)
-    }
+    };
+    debug_assert!(res == memrchr_old(x, text));
+    res
 
     // text[..offset].iter().rposition(|elt| *elt == x), avoid a bounds check
     // I checked the assembly and it inserted panic branches, didn't like it (since this is panic free)

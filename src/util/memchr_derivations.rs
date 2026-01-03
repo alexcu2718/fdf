@@ -61,6 +61,9 @@ assert!(memchr(find,text).unwrap()==1);
 
 
  */
+
+#[inline]
+#[must_use]
 pub fn memchr(x: u8, text: &[u8]) -> Option<usize> {
     // Fast path for small slices.
 
@@ -141,12 +144,24 @@ fn memchr_aligned(x: u8, text: &[u8]) -> Option<usize> {
 
             let zu = contains_zero_byte(u ^ repeated_x);
 
-            // if let Some(lower)=zu
-
             let zv = contains_zero_byte(v ^ repeated_x);
+            #[cfg(target_endian = "little")]
+            if let Some(lower) = zu {
+                return Some(offset + (lower.trailing_zeros() >> 3) as usize);
+            }
+            #[cfg(target_endian = "little")]
+            if let Some(upper) = zv {
+                return Some(offset + USIZE_BYTES + (upper.trailing_zeros() >> 3) as usize);
+            }
 
-            if zu.is_some() || zv.is_some() {
-                break;
+            #[cfg(target_endian = "big")]
+            if let Some(lower) = zu {
+                return Some(offset + (lower.leading_zeros() >> 3) as usize);
+            }
+
+            #[cfg(target_endian = "big")]
+            if let Some(upper) = zv {
+                return Some(offset + USIZE_BYTES + (upper.leading_zeros() >> 3) as usize);
             }
         }
 

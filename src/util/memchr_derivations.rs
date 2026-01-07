@@ -241,6 +241,8 @@ const fn contains_zero_byte_reversed(x: usize) -> Option<NonZeroUsize> {
 
 /*
 
+FROM HACKERS DELIGHT (LOVE IT)
+
 the rightmost 0-byte.
 Figure 6-2 shows a branch-free procedure for this function. The idea is to convert each 0-byte to 0x80,
 and each nonzero byte to 0x00, and then use number of leading zeros. This procedure executes in

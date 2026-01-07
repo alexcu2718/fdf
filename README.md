@@ -137,6 +137,8 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 
 - **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.
 
+- **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
+
 - **find_char_in_word/find_last_char_in_word**: Locates the first/last occurrence of a byte in a 64-bit word using SWAR (SIMD within a register), implemented as a const function
 
 - **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)

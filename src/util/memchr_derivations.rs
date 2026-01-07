@@ -23,11 +23,36 @@ const fn repeat_u8(x: u8) -> usize {
     usize::from_ne_bytes([x; size_of::<usize>()])
 }
 
+const LO_USIZE: usize = repeat_u8(0x01);
+const HI_USIZE: usize = repeat_u8(0x80);
+
+const LO_U64: u64 = repeat_u64(0x01);
+
+const HI_U64: u64 = repeat_u64(0x80);
+
+const USIZE_BYTES: usize = size_of::<usize>();
+
+const INVERTED_HIGH: usize = !HI_USIZE;
+
 // I am simply too lazy to comment all of these, it turns out a nice optimisation existed for memrchr
 // I have done so, it seems the same optimisation is available for memchr but I need to work on the details
 // Once done, I'll add it to the stdlib.
 
 // simplifying macro
+macro_rules! find_swar_last_index {
+    // SWAR
+    ($num:expr) => {{
+        #[cfg(target_endian = "big")]
+        {
+            (USIZE_BYTES - 1 - (($num.trailing_zeros()) >> 3) as usize)
+        }
+        #[cfg(target_endian = "little")]
+        {
+            (USIZE_BYTES - 1 - (($num.leading_zeros()) >> 3) as usize)
+        }
+    }};
+}
+
 macro_rules! find_swar_index {
     // SWAR
     ($num:expr) => {{
@@ -42,32 +67,10 @@ macro_rules! find_swar_index {
     }};
 }
 
-// simplifying macro
-macro_rules! find_swar_last_index {
-    // SWAR
-    ($num:expr) => {{
-        #[cfg(target_endian = "big")]
-        {
-            (((usize::BITS - 1) - $num.trailing_zeros()) >> 3) as usize
-        }
-        #[cfg(target_endian = "little")]
-        {
-            (((usize::BITS - 1) - $num.leading_zeros()) >> 3) as usize
-        }
-    }};
-}
-
 #[inline]
 const fn repeat_u64(byte: u8) -> u64 {
     u64::from_ne_bytes([byte; size_of::<u64>()])
 }
-
-const LO_USIZE: usize = repeat_u8(0x01);
-
-const HI_USIZE: usize = repeat_u8(0x80);
-const LO_U64: u64 = repeat_u64(0x01);
-
-const HI_U64: u64 = repeat_u64(0x80);
 
 /**
  Returns the index (0–7) of the first zero byte in a `u64` word.
@@ -197,7 +200,7 @@ assert_eq!(find_last_char_in_word(b'e', new_bytes), Some(4)); // last 'e'
 pub const fn find_last_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     //http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm
     // I am too lazy to type this out again. Check the line containing `The position of the rightmost 0-byte is given by t`
-    const MASK: u64 = repeat_u64(0x7F);
+    const MASK: u64 = !HI_U64;
     let x = u64::from_ne_bytes(bytestr) ^ repeat_u64(c);
     let y = (x & MASK).wrapping_add(MASK);
 
@@ -232,11 +235,20 @@ the return value is ** 1 byte** in size, minimal addressable unit(on all archite
 
 
 */
-const fn contains_zero_byte_reversed(x: usize) -> Option<NonZeroUsize> {
-    const MASK: usize = repeat_u8(0x7F);
+#[must_use]
+// TODO TIDY UP SAFETY SHIT
+const unsafe fn find_zero_byte_reversed(x: usize) -> usize {
+    let y = (x & INVERTED_HIGH).wrapping_add(INVERTED_HIGH);
+    // SAFETY: Preserves property x>0
+    let ans = unsafe { NonZeroUsize::new_unchecked(!(y | x | INVERTED_HIGH)) };
+    find_swar_last_index!(ans)
+}
 
-    let y = (x & MASK).wrapping_add(MASK);
-    NonZeroUsize::new(!(y | x | MASK))
+#[inline]
+#[must_use]
+const fn check_for_zero_byte(x: usize) -> Option<NonZeroUsize> /* MINIMUM ADDRESSABLE SIZE =1 BYTE YAY*/
+{
+    NonZeroUsize::new(x.wrapping_sub(LO_USIZE) & !x & HI_USIZE)
 }
 
 /*
@@ -330,31 +342,40 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     let repeated_x = repeat_u8(x);
 
-    const CHUNK_BYTES: usize = size_of::<Chunk>();
-
     while offset > min_aligned_offset {
         // SAFETY: offset starts at len - suffix.len(), as long as it is greater than
         // min_aligned_offset (prefix.len()) the remaining distance is at least 2 * chunk_bytes.
-        unsafe {
-            let u = ptr.add(offset - 2 * CHUNK_BYTES).cast::<usize>().read();
+        // SAFETY: as above
+        let u = unsafe { ptr.add(offset - 2 * USIZE_BYTES).cast::<usize>().read() };
+        // SAFETY: as above
+        let v = unsafe { ptr.add(offset - USIZE_BYTES).cast::<usize>().read() };
 
-            let v = ptr.add(offset - CHUNK_BYTES).cast::<usize>().read();
-
-            // Break if there is a matching byte.
-            // **CHECK UPPER FIRST** //
-            if let Some(upper) = contains_zero_byte_reversed(v ^ repeated_x) {
-                let zero_byte_pos = find_swar_last_index!(upper);
-                return Some(offset - CHUNK_BYTES + zero_byte_pos);
-            }
-            // THEN CHECK LOWER
-            if let Some(lower) = contains_zero_byte_reversed(u ^ repeated_x) {
-                let zero_byte_pos = find_swar_last_index!(lower);
-
-                return Some(offset - 2 * CHUNK_BYTES + zero_byte_pos);
-            }
+        // Break if there is a matching byte.
+        // **CHECK UPPER FIRST**
+        let xorred_upper = v ^ repeated_x;
+        // use the original SWAR (fewer instructions) to check for zero byte
+        if check_for_zero_byte(xorred_upper).is_some() {
+            // Then apply alternative SWAR (guaranteed to be nonzero)
+            // We need to use an alternative SWAR method because HASZERO propagates 0xFF right(or left, depending on endianness) wise after match
+            // this could be done with a byte swap but thats 1 (or more, depending on arch) instructions
+            // use this only when a match is FOUND
+            // SAFETY: GUARANTEED NON ZERO
+            let zero_byte_pos = unsafe { find_zero_byte_reversed(xorred_upper) };
+            //todo check asm to see if constant folding is done! (should be due to inlining?)
+            return Some(offset - USIZE_BYTES + zero_byte_pos);
         }
 
-        offset -= 2 * CHUNK_BYTES;
+        let xorred_lower = u ^ repeated_x;
+        if check_for_zero_byte(xorred_lower).is_some() {
+            // TODO, TIDY UP SAFETY? use nonzerousize etc.
+            // same stuff as above otherwise
+            // SAFETY: GUARANTEED NON ZERO
+            let zero_byte_pos = unsafe { find_zero_byte_reversed(xorred_lower) };
+
+            return Some(offset - 2 * USIZE_BYTES + zero_byte_pos);
+        }
+
+        offset -= 2 * USIZE_BYTES;
     }
     // SAFETY: trivially within bounds
     // Find the byte before the point the body loop stopped.

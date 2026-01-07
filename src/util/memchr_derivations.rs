@@ -1,7 +1,5 @@
 #![allow(clippy::host_endian_bytes)]
 #![allow(clippy::multiple_unsafe_ops_per_block)]
-#![allow(clippy::undocumented_unsafe_blocks)]
-#![allow(clippy::empty_line_after_doc_comments)]
 
 // I was reading through the std library for random silly things and I found this , https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161
 // this essentially provides a more rigorous foundation to my SWAR technique.
@@ -313,6 +311,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     // compiler can't elide bounds checks on this.
     //if let Some(index) = text[offset..].iter().rposition(|elt| *elt == x)
+    // SAFETY: trivially within bounds
     if let Some(index) = unsafe {
         text.get_unchecked(offset..)
             .iter()
@@ -355,7 +354,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
         offset -= 2 * CHUNK_BYTES;
     }
-
+    // SAFETY: trivially within bounds
     // Find the byte before the point the body loop stopped.
     unsafe {
         text.get_unchecked(..offset)

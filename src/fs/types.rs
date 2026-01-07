@@ -12,6 +12,7 @@ pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
 
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct FileDes(pub(crate) i32);
 
 impl FileDes {

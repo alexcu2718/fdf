@@ -1,9 +1,18 @@
+// simple toggleable tests
+
+#[cfg(test)]
+const DETERMINISTIC: bool = true;
+
+#[cfg(test)]
+const RANDOM_SEED: u64 = 4269;
+
 #[cfg(test)]
 mod tests {
     #![allow(unused_imports)]
+    use super::*;
     use crate::filters::{SizeFilter, TimeFilter};
     use crate::fs::{DirEntry, FileType};
-    use crate::util::{BytePath, find_char_in_word, find_last_char_in_word, find_zero_byte_u64};
+    use crate::util::{BytePath, find_char_in_word, find_last_char_in_word};
     use crate::walk::Finder;
     use chrono::{Duration as ChronoDuration, Utc};
     use env_home::env_home_dir;
@@ -22,13 +31,8 @@ mod tests {
 
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    fn create_byte_array(s: &str) -> [u8; 8] {
-        let mut bytes = [0u8; 8];
-        let s_bytes = s.as_bytes();
-        let len = s_bytes.len().min(8);
-        bytes[..len].copy_from_slice(&s_bytes[..len]);
-        bytes
-    }
+    use rand::rngs::StdRng;
+    use rand::{Rng, RngCore, SeedableRng, rng};
 
     #[allow(dead_code)]
     #[repr(C)]
@@ -38,6 +42,185 @@ mod tests {
         d_reclen: u16,
         d_type: u8,
         d_name: [u8; 256], // from definition in linux, this is really hacked in order to show my fancy-schmancy SWAR works.
+    }
+
+    pub fn generate_random_byte_strings(
+        count: usize,
+        string_size: usize,
+        deterministic: bool,
+    ) -> Vec<Vec<u8>> {
+        let mut rng: Box<dyn RngCore> = if deterministic {
+            Box::new(StdRng::seed_from_u64(RANDOM_SEED))
+        } else {
+            Box::new(rng())
+        };
+
+        let mut strings = Vec::with_capacity(count);
+
+        for _ in 0..count {
+            // random strings with varying lengths from 0 to MAX SIZED STRING
+            let length = rng.random_range(0..=string_size);
+            let bytes: Vec<u8> = (0..length).map(|_| rng.random()).collect();
+            strings.push(bytes);
+        }
+
+        strings
+    }
+
+    pub fn generate_random_u64_arrays(count: usize, deterministic: bool) -> Vec<[u8; 8]> {
+        let mut rng: Box<dyn RngCore> = if deterministic {
+            Box::new(StdRng::seed_from_u64(RANDOM_SEED))
+        } else {
+            Box::new(rng())
+        };
+
+        let mut arrays = Vec::with_capacity(count);
+        for _ in 0..count {
+            let mut bytes = [0u8; 8];
+            rng.fill_bytes(&mut bytes);
+            arrays.push(bytes);
+        }
+
+        arrays
+    }
+
+    fn create_byte_array(s: &str) -> [u8; 8] {
+        let mut bytes = [0u8; 8];
+        let s_bytes = s.as_bytes();
+        let len = s_bytes.len().min(8);
+        bytes[..len].copy_from_slice(&s_bytes[..len]);
+        bytes
+    }
+
+    #[test]
+    fn tmemrchr() {
+        let byte_strings = generate_random_byte_strings(10000, 10000, DETERMINISTIC);
+        let random_chars = 0..=u8::MAX;
+
+        for byte in random_chars {
+            for string in &byte_strings {
+                test_memrchr(byte, string);
+            }
+        }
+    }
+
+    #[test]
+    fn test_reversed() {
+        let arrays = generate_random_u64_arrays(10000, DETERMINISTIC);
+
+        for bytes in arrays.iter() {
+            for i in 0..=u8::MAX {
+                let expected_pos = bytes.iter().rposition(|&b| b == i);
+
+                let detected_pos = crate::util::find_last_char_in_word(i, *bytes);
+
+                assert_eq!(
+                    detected_pos,
+                    expected_pos,
+                    "Mismatch for word={:#018x} bytes={bytes:?} in contains last zero byte!",
+                    u64::from_ne_bytes(*bytes)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_forward() {
+        let arrays = generate_random_u64_arrays(10000, DETERMINISTIC);
+
+        for bytes in arrays.iter() {
+            for i in 0..=u8::MAX {
+                let expected_pos = bytes.iter().position(|&b| b == i);
+
+                let detected_pos = crate::util::find_char_in_word(i, *bytes);
+
+                assert_eq!(
+                    detected_pos,
+                    expected_pos,
+                    "Mismatch for word={:#018x} bytes={bytes:?} in contains last zero byte!",
+                    u64::from_ne_bytes(*bytes)
+                );
+            }
+        }
+    }
+
+    fn test_memrchr(search: u8, sl: &[u8]) {
+        let realans = sl.iter().rposition(|b| *b == search);
+        let memrchrtest = crate::util::memrchr(search, sl);
+        assert!(
+            memrchrtest == realans,
+            "test failed in memrchr: expected {realans:?}, got {memrchrtest:?} for byte {search:#04x}\n
+            searching for {} with ASCII value {search} in slice {}",
+            char::from_u32(search as _).unwrap(),String::from_utf8_lossy(sl)
+        );
+    }
+
+    fn dirent_reclen_for_name_len(name_len: usize) -> u16 {
+        debug_assert!(name_len <= 255);
+        let header_start = core::mem::offset_of!(Dirent64, d_name);
+        // +1 for the required null terminator
+        let min_len = header_start + name_len + 1;
+        // `dirent_const_time_strlen` assumes 8-byte alignment / `d_reclen` multiples of 8.
+        let reclen = min_len.next_multiple_of(8);
+        debug_assert!(reclen <= u16::MAX as usize);
+        reclen as u16
+    }
+
+    fn generate_random_dirents64(
+        count: usize,
+        max_name_len: usize,
+        deterministic: bool,
+    ) -> Vec<Dirent64> {
+        let max_name_len = max_name_len.min(255);
+        let random_names = generate_random_byte_strings(count, max_name_len, deterministic);
+
+        let mut dirents = Vec::with_capacity(count);
+
+        for raw in random_names {
+            let name_len = raw.len().min(255);
+            let mut entry = Dirent64 {
+                d_ino: 0,
+                d_off: 0,
+                d_reclen: dirent_reclen_for_name_len(name_len),
+                d_type: 0,
+                d_name: [0; 256],
+            };
+
+            for (i, &b) in raw.iter().take(name_len).enumerate() {
+                entry.d_name[i] = if b == 0 { 1 } else { b };
+            }
+            entry.d_name[name_len] = 0;
+
+            dirents.push(entry);
+        }
+
+        dirents
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_dirent_const_time_strlen_randomised_dirents() {
+        let dirents = generate_random_dirents64(2_000, 255, DETERMINISTIC);
+
+        for entry in &dirents {
+            let expected = entry
+                .d_name
+                .iter()
+                .position(|&b| b == 0)
+                .expect("generated d_name must contain a null terminator");
+
+            let got = unsafe {
+                crate::util::dirent_const_time_strlen(std::mem::transmute::<
+                    *const Dirent64,
+                    *const libc::dirent64,
+                >(entry))
+            };
+
+            assert_eq!(
+                got, expected,
+                "dirent_const_time_strlen mismatch: got {got}, expected {expected}"
+            );
+        }
     }
 
     #[test]
@@ -280,106 +463,6 @@ mod tests {
 
         // cleanup
         fs::remove_file(file_path).ok();
-    }
-
-    #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn test_dirent_const_time_strlen_optimal_abc() {
-        let mut entry = Dirent64 {
-            d_ino: 0,
-            d_off: 0,
-            d_reclen: 24, // Must be multiple of 8, this is 3 * u64
-            d_type: 0,
-            d_name: [0; 256],
-        };
-
-        entry.d_name[0] = b'a';
-        entry.d_name[1] = b'b';
-        entry.d_name[2] = b'c';
-        entry.d_name[3] = 0;
-        //god i hacked this sorry
-        let len = unsafe {
-            crate::util::dirent_const_time_strlen(std::mem::transmute::<
-                *const Dirent64,
-                *const libc::dirent64,
-            >(&entry))
-        };
-
-        assert_eq!(len, 3);
-    }
-
-    #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn test_dirent_const_time_strlen_single_char() {
-        let mut entry = Dirent64 {
-            d_ino: 0,
-            d_off: 0,
-            d_reclen: 24,
-            d_type: 0,
-            d_name: [0; 256],
-        };
-
-        entry.d_name[0] = b'x';
-        entry.d_name[1] = 0;
-        let len = unsafe {
-            crate::util::dirent_const_time_strlen(std::mem::transmute::<
-                *const Dirent64,
-                *const libc::dirent64,
-            >(&entry))
-        };
-
-        assert_eq!(len, 1);
-    }
-
-    #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn test_dirent_const_time_strlen_max_aligned() {
-        let mut entry = Dirent64 {
-            d_ino: 0,
-            d_off: 0,
-            d_reclen: 32,
-            d_type: 0,
-            d_name: [0; 256],
-        };
-
-        // 7 chars + null terminator = 8 bytes (perfectly aligned)
-        let s = b"abcdefg";
-        entry.d_name[..s.len()].copy_from_slice(s);
-        entry.d_name[s.len()] = 0;
-
-        let len = unsafe {
-            crate::util::dirent_const_time_strlen(std::mem::transmute::<
-                *const Dirent64,
-                *const libc::dirent64,
-            >(&entry))
-        };
-
-        assert_eq!(len, 7);
-    }
-
-    #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn test_dirent_const_time_strlen_exactly_buffer() {
-        let mut entry = Dirent64 {
-            d_ino: 0,
-            d_off: 0,
-            d_reclen: 256 + 24, //large enough to fit full name
-            d_type: 0,
-            d_name: [0; 256],
-        };
-
-        // create entire buffer with non-null then add null at end
-        entry.d_name.fill(b'x');
-        entry.d_name[255] = 0;
-
-        let len = unsafe {
-            crate::util::dirent_const_time_strlen(std::mem::transmute::<
-                *const Dirent64,
-                *const libc::dirent64,
-            >(&entry))
-        };
-
-        assert_eq!(len, 255);
     }
 
     #[test]

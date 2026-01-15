@@ -171,10 +171,20 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     let mask = MASK * ((reclen == 24) as u64); // branchless mask (multiply by 0 or 1)
     let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short (when reclen==24)
     //The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
+    #[cfg(target_endian = "little")]
+    //SAFETY: The u64 can never be all 0's post-SWAR
     let zero_bit = unsafe {
-        // Use specialised instructions (ctlz_nonzero)
-        //to avoid 0 check for bitscan forward so it compiles to tzcnt on most CPU's
         NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
+    };
+    //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
+    // ^ Reference for the BE algorithm
+    // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
+    #[cfg(target_endian = "big")]
+    //SAFETY: The u64 can never be all 0's post-SWAR
+    let zero_bit = unsafe {
+        NonZeroU64::new_unchecked(
+            (!candidate_pos & !HI_U64).wrapping_add(LO_U64) & (!candidate_pos & HI_U64),
+        )
     };
 
     // Find the position of the null terminator
@@ -186,8 +196,6 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     // we then use the position of the `true` null terminator and subtract the 8, it's junk.
     reclen - DIRENT_HEADER_START + byte_pos - 8
 }
-
-
 ```
 
 ## Why?

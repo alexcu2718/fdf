@@ -253,6 +253,7 @@ On some systems
  # References
  - [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
  - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
+ - [Wojciech Muła ] (<http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd>)
 
 */
 #[inline]
@@ -363,9 +364,20 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         This allows us to skip a 0 check which then allows us to use tzcnt/lzcnt on most cpu's
          */
 
+        #[cfg(target_endian = "little")]
         //SAFETY: The u64 can never be all 0's post-SWAR
         let zero_bit = unsafe {
             NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
+        };
+        //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
+        // ^ Reference for the BE algorithm
+        // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
+        #[cfg(target_endian = "big")]
+        //SAFETY: The u64 can never be all 0's post-SWAR
+        let zero_bit = unsafe {
+            NonZeroU64::new_unchecked(
+                (!candidate_pos & !HI_U64).wrapping_add(LO_U64) & (!candidate_pos & HI_U64),
+            )
         };
 
         // Find the position of the null terminator
@@ -394,7 +406,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 }
 
 /*
-     assembly output:
+     assembly output: x86 with BMI
 
         movzx eax, word ptr [rdi + 16]
         xor ecx, ecx

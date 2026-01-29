@@ -1,7 +1,7 @@
+use core::mem::offset_of;
+use core::num::NonZeroU64;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use fdf::access_dirent;
-
-use core::num::NonZeroU64;
 use std::hint::black_box;
 
 /// Modified version to work for this test function(copy pasted really)
@@ -14,7 +14,7 @@ use std::hint::black_box;
 /// - The buffer must not be mutated while this function is executing.
 #[inline]
 pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
-    const DIRENT_HEADER_START: usize = core::mem::offset_of!(LibcDirent64, d_name);
+    const DIRENT_HEADER_START: usize = offset_of!(LibcDirent64, d_name);
     const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
     const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
     const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
@@ -24,7 +24,8 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
       This works because dirents are always 8-byte aligned.
     */
     // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
-    let last_word: u64 = unsafe { *(dirent.byte_add(reclen - 8).cast::<u64>()) };
+    // and alignment is guranteed by the kernel
+    let last_word: u64 = unsafe { dirent.byte_add(reclen - 8).cast::<u64>().read() };
 
     const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
@@ -32,8 +33,18 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
 
     let candidate_pos: u64 = last_word | mask;
 
+    #[cfg(target_endian = "little")]
+    //SAFETY: The u64 can never be all 0's post-SWAR
     let zero_bit = unsafe {
         NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
+    };
+    //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
+    #[cfg(target_endian = "big")]
+    //SAFETY: The u64 can never be all 0's post-SWAR
+    let zero_bit = unsafe {
+        NonZeroU64::new_unchecked(
+            (!candidate_pos & !HI_U64).wrapping_add(LO_U64) & (!candidate_pos & HI_U64),
+        )
     };
     // Find the position of the null terminator
     #[cfg(target_endian = "little")]
@@ -55,7 +66,7 @@ pub struct LibcDirent64 {
 }
 
 const fn calculate_min_reclen(name_len: usize) -> u16 {
-    const HEADER_SIZE: usize = std::mem::offset_of!(LibcDirent64, d_name);
+    const HEADER_SIZE: usize = offset_of!(LibcDirent64, d_name);
     let total_size = HEADER_SIZE + name_len + 1;
     total_size.next_multiple_of(8) as _
     //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length

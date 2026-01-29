@@ -303,13 +303,14 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     ))]
     // On these systems where we need a bit of 'black magic' (no d_namlen field)
     {
+        use core::mem::offset_of;
         use core::num::NonZeroU64;
         // Offset from the start of the struct to the beginning of d_name.
-        const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
+        const DIRENT_HEADER_START: usize = offset_of!(dirent64, d_name);
         // Access the last field and then round up to find the minimum struct size
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
-        // A custom macro similar to static_assert from C++ (no runtime cost, crash at compile time!)
-        const_assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!");
+        // Compile time assert
+        const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
 
         const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
         const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
@@ -322,9 +323,10 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
 
         // SAFETY: We're indexing in bounds within the pointer. Since the reclen is size of the struct in bytes.
-        let last_word: u64 = unsafe { *(drnt.byte_add(reclen - 8).cast::<u64>()) };
+        let last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
 
         // Create a mask for the first 3 bytes in the case where reclen==24, this handles the big endian case too.
+
         const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
         /* When the record length is 24/`MIN_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 16/17/18 (or opposite, for big endian...sigh...), the d_name starts at 19, so anything before is invalid anyway.
@@ -390,7 +392,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         debug_assert!(
             reclen - DIRENT_HEADER_START +byte_pos -8
                 //SAFETY: should never matter because debug assert checks pointer validity above.
-                    == unsafe{core::ffi::CStr::from_ptr(access_dirent!(drnt, d_name)).count_bytes() },
+                    == unsafe{core::ffi::CStr::from_ptr((core::ptr::addr_of!((*drnt).d_name)).cast()).count_bytes() },
+            // Use `addr_of` because the `d_name` isn't guaranteed to be [c_char;256] (variable length array)
             "const swar dirent length calculation failed!"
         );
         /*

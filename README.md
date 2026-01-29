@@ -149,6 +149,8 @@ The following function provides an elegant solution to avoid branch mispredictio
 
 Check source code for further explanation [in utils.rs](./src/util/utils.rs#L195)**
 
+(This version is simplified from the actual implementation)
+
 ```rust
 // Computational complexity: O(1) - truly constant time
 // Used mostly on Linux type systems
@@ -166,7 +168,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
     let reclen = unsafe { (*drnt).d_reclen as usize };
     // Access the last 8 bytes of the word (this is an aligned read due to kernel providing 8 byte aligned dirent structs!)
-    let last_word: u64 = unsafe { *(drnt.byte_add(reclen - 8).cast::<u64>()) };
+    let last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
     // reclen is always multiple of 8 so alignment is guaranteed
     let mask = MASK * ((reclen == 24) as u64); // branchless mask (multiply by 0 or 1)
     let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short (when reclen==24)

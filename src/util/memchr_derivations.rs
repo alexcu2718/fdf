@@ -39,7 +39,7 @@ const USIZE_BYTES: usize = size_of::<usize>();
 // https://github.com/gituser12981u2/memchr_stuff/blob/big_endian_fix/src/memchr_new.rs
 
 // simplifying macro
-macro_rules! find_swar_last_index {
+macro_rules! find_last_NUL {
     // SWAR
     ($num:expr) => {{
         #[cfg(target_endian = "big")]
@@ -53,7 +53,7 @@ macro_rules! find_swar_last_index {
     }};
 }
 
-macro_rules! find_swar_index {
+macro_rules! find_first_NUL {
     // SWAR
     ($num:expr) => {{
         #[cfg(target_endian = "big")]
@@ -134,7 +134,7 @@ pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     */
 
     match swarred {
-        Some(valid) => Some(find_swar_index!(valid)),
+        Some(valid) => Some(find_first_NUL!(valid)),
         None => None,
     }
 }
@@ -197,38 +197,10 @@ pub const fn find_last_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
     let swarred = x.wrapping_sub(LO_U64) & !x & HI_U64;
 
     match NonZeroU64::new(swarred) {
-        Some(num) => Some(find_swar_last_index!(num)),
+        Some(num) => Some(find_last_NUL!(num)),
         None => None,
     }
 }
-
-/*
-
-FROM HACKERS DELIGHT (LOVE IT)
-
-the rightmost 0-byte.
-Figure 6-2 shows a branch-free procedure for this function. The idea is to convert each 0-byte to 0x80,
-and each nonzero byte to 0x00, and then use number of leading zeros. This procedure executes in
-eight instructions if the machine has the number of leading zeros and nor instructions. Some similar
-tricks are described in [Lamp].
-Figure 6-2 Find leftmost 0-byte, branch-free code.
-int zbytel(unsigned x) {
-unsigned y;
-int n;
-// Original byte: 00 80 other
-y = (x & 0x7F7F7F7F) + 0x7F7F7F7F; // 7F 7F 1xxxxxxx
-y = ~(y | x | 0x7F7F7F7F); // 80 00 00000000
-n = nlz(y) >> 3; // n = 0 ... 4, 4 if x
-return n; // has no 0-byte.
-}
-The position of the rightmost 0-byte is given by the number of trailing 0's in the final value of y
-computed above, divided by 8 (with fraction discarded). Using the expression for computing the
-number of trailing 0's by means of the number of leading zeros instruction (see Section 5- 4, "Counting
-Trailing 0's," on page 84), this can be computed by replacing the assignment to n in the procedure
-above with:
-n = (32 - nlz(~y & (y - 1))) >> 3
-
-*/
 
 /// Returns the last index matching the byte `x` in `text`.
 ///
@@ -284,9 +256,11 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
     // - subtracting `0x01..` borrows from the `0x00` byte into the next byte, so the classic mask may
     //   report both bytes as candidates even though only the first byte is truly zero.
     //
-    // `input << 7` moves each byte’s low bit into that byte’s 0x80 position; bytes with LSB=1 (notably
+    // `!input << 7` moves each byte’s low bit into that byte’s 0x80 position; bytes with LSB=1 (notably
     // 0x01, which is the common “borrow false-positive” case) get their candidate bit cleared.
-    classic &= !(input << 7);
+    // Due to CSE, `!input` is reused (EG on X86_64, register RDI is reused)
+    // Explanation further on https://github.com/gituser12981u2/memchr_stuff/blob/main/src/memchr_new.rs (my own work)
+    classic &= !input << 7;
 
     // SAFETY: `classic != 0` implies there is at least one real zero byte
     // somewhere in the word (false positives only occur alongside a real zero
@@ -302,19 +276,6 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
 const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
     // Classic HASZERO trick. (Mycroft)
     NonZeroUsize::new(input.wrapping_sub(LO_USIZE) & (!input) & HI_USIZE)
-}
-
-#[inline]
-const fn find_last_nul(num: NonZeroUsize) -> usize {
-    #[cfg(target_endian = "big")]
-    {
-        USIZE_BYTES - 1 - ((num.trailing_zeros()) >> 3) as usize
-    }
-
-    #[cfg(target_endian = "little")]
-    {
-        USIZE_BYTES - 1 - ((num.leading_zeros()) >> 3) as usize
-    }
 }
 
 /// Returns the last index matching the byte `x` in `text`.
@@ -398,7 +359,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
         let maybe_match_upper = contains_zero_byte_borrow_fix(upper ^ repeated_x);
 
         if let Some(num) = maybe_match_upper {
-            let zero_byte_pos = find_last_nul(num);
+            let zero_byte_pos = find_last_NUL!(num);
 
             return Some(offset - USIZE_BYTES + zero_byte_pos);
         }
@@ -410,7 +371,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
         if let Some(num) = maybe_match_lower {
             // replace this function
-            let zero_byte_pos = find_last_nul(num);
+            let zero_byte_pos = find_last_NUL!(num);
 
             return Some(offset - 2 * USIZE_BYTES + zero_byte_pos);
         }

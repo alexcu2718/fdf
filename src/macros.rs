@@ -270,7 +270,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 // Linux/Solaris/Illumos/etc optimisation: check d_type first
                 const MINIMUM_DIRENT_SIZE: usize =
                     core::mem::offset_of!($crate::dirent64, d_name).next_multiple_of(8);
-                const_assert!(
+                $crate::const_assert!(
                     MINIMUM_DIRENT_SIZE == 24,
                     "The minimum dirent size should be 24 on these platforms"
                 );
@@ -369,7 +369,7 @@ macro_rules! const_from_env {
             #[allow(clippy::integer_division)] //as above
             #[allow(clippy::missing_asserts_for_indexing)] //compile time only crash(intentional)
             const fn parse_env(s: &str) -> $t {
-                use $crate::const_assert;
+
                 let s_bytes = s.as_bytes();
                 if s_bytes.len() == 0 {
                     panic!(concat!("Empty environment variable: ", stringify!($env)));
@@ -387,11 +387,11 @@ macro_rules! const_from_env {
 
                 const TYPE_OF_AS_BYTES:&[u8]=TYPE_OF.as_bytes();
 
-                const_assert!(!matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
-                const_assert!(!matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
+                $crate::const_assert!(!matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
+                $crate::const_assert!(!matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
                 // Eq is not supported in const yet matches is, weird. annoying work around.
                 assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),concat!("Negative detected in unsigned env var ",stringify!($env)));
-                const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,concat!("Negative default not allowed for ", stringify!($default)));
+                $crate::const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,concat!("Negative default not allowed for ", stringify!($default)));
 
                 // Detect if we're parsing a float type
                 const IS_FLOAT: bool = TYPE_OF_AS_BYTES[0]==b'f';

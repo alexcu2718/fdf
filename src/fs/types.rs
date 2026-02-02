@@ -10,6 +10,15 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
 
+#[cfg(all(target_os = "macos", debug_assertions))]
+pub const MAX_BUFFER_SIZE: usize = 4096;
+
+#[cfg(all(target_os = "macos", not(debug_assertions)))]
+pub const MAX_BUFFER_SIZE: usize = 8 * 4096;
+
+#[cfg(target_os = "macos")]
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, MAX_BUFFER_SIZE>; // In debug mode, stack size is VERY small.
+
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]
 #[repr(transparent)]

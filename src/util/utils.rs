@@ -31,43 +31,43 @@ where
     unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
 }
 
-// #[cfg(target_os = "macos")]
-// #[inline]
-// /**
-//   Wrapper for direct getdirentries64 syscalls
+#[cfg(target_os = "macos")]
+#[inline]
+/**
+  Wrapper for direct getdirentries64 syscalls
 
-//  # Arguments
-//  - `fd`: Open directory file descriptor
-//  - `buffer_ptr`: Raw pointer to output buffer
-//  - `nbytes`: Size of output buffer in bytes
-//  - `basep`: Pointer to location where telldir position is stored
+ # Arguments
+ - `fd`: Open directory file descriptor
+ - `buffer_ptr`: Raw pointer to output buffer
+ - `nbytes`: Size of output buffer in bytes
+ - `basep`: Pointer to location where telldir position is stored
 
-//  # Safety
-//  - Requires valid open directory descriptor
-//  - Buffer must be valid for writes of `nbytes` bytes
-//  - No type checking on generic pointer (T must be i8/u8)
-//  - basep must point to valid memory for `libc::off_t`
+ # Safety
+ - Requires valid open directory descriptor
+ - Buffer must be valid for writes of `nbytes` bytes
+ - No type checking on generic pointer (T must be i8/u8)
+ - basep must point to valid memory for `libc::off_t`
 
-//  # Returns
-//  - Positive: Number of bytes read
-//  - 0: End of directory
-//  - Negative: Error code (check errno)
-// */
-// pub unsafe fn getdirentries64<T>(
-//     fd: libc::c_int,
-//     buffer_ptr: *mut T,
-//     nbytes: libc::size_t,
-//     basep: *mut libc::off_t,
-// ) -> i32
-// where
-//     T: crate::ValueType,
-// {
-//     const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
-//     //https://phrack.org/issues/66/16
-//     // We verify this works via build script, we check if `getdirentries` returns >0 for tmp directory, if not, syscall is broken.
-//     // SAFET******: Syscall has no other implicit safety requirements beyond pointer validity
-//     unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
-// }
+ # Returns
+ - Positive: Number of bytes read
+ - 0: End of directory
+ - Negative: Error code (check errno)
+*/
+pub unsafe fn getdirentries64<T>(
+    fd: libc::c_int,
+    buffer_ptr: *mut T,
+    nbytes: libc::size_t,
+    basep: *mut libc::off_t,
+) -> i32
+where
+    T: crate::fs::ValueType,
+{
+    const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
+    //https://phrack.org/issues/66/16
+    // We verify this works via build script, we check if `getdirentries` returns >0 for tmp directory, if not, syscall is broken.
+    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
+    unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
+}
 
 /// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.

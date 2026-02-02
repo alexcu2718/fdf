@@ -8,6 +8,7 @@ const RANDOM_SEED: u64 = 4269;
 
 #[cfg(test)]
 mod tests {
+    #![allow(dead_code)]
     #![allow(unused_imports)]
     use super::*;
     use crate::filters::{SizeFilter, TimeFilter};

@@ -500,6 +500,139 @@ pub trait DirentConstructor {
     }
 }
 
+#[cfg(target_os = "macos")]
+/**
+macos directory iterator using the `getdirentries` system call.
+
+ Provides more efficient directory traversal than `readdir` for large directories
+ by performing batched reads into a kernel buffer. This reduces system call overhead
+ and improves performance when scanning directories with many entries.
+
+ Unlike some directory iteration methods, this does not implicitly call `stat`
+ on each entry unless required by unusual filesystem behaviour.
+*/
+pub struct GetDirEntries {
+    /// File descriptor of the open directory, wrapped for automatic resource management
+    pub(crate) fd: FileDes,
+    /// Kernel buffer for batch reading directory entries via system call I/O
+    /// ~32kb in size (8*4096, matching macos readdir semantics) in size, optimised for typical directory traversal
+    pub(crate) syscall_buffer: crate::fs::types::SyscallBuffer,
+    /// buffer for constructing full entry paths
+    /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
+    pub(crate) path_buffer: Vec<u8>,
+    /// Length of the base directory path including the trailing slash
+    /// Used for efficient filename extraction and path construction
+    pub(crate) file_name_index: usize,
+    /// Depth of the parent directory in the directory tree hierarchy
+    /// Used to calculate depth for child entries during recursive traversal
+    pub(crate) parent_depth: u32,
+    /// Current read position within the directory entry buffer
+    /// Tracks progress through the currently loaded batch of entries
+    pub(crate) offset: usize,
+    /// Number of bytes remaining to be processed in the current buffer
+    /// Indicates when a new system call is needed to fetch more entries
+    pub(crate) remaining_bytes: usize,
+    /// A marker for when the `FileDes` can give no more entries
+    pub(crate) end_of_stream: bool,
+    /// The base pointer for the getdirentries call
+    pub(crate) base_pointer: i64,
+}
+
+#[cfg(target_os = "macos")]
+impl GetDirEntries {
+    #[inline]
+    #[allow(clippy::multiple_unsafe_ops_per_block)]
+    #[allow(clippy::cast_sign_loss)]
+    pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
+        // Early return if we've already reached end of stream
+        if self.end_of_stream {
+            return false;
+        }
+
+        let remaining_bytes = self
+            .syscall_buffer
+            .getdirentries(&self.fd, &raw mut self.base_pointer);
+
+        // SAFETY: Buffer is already initialised by the kernel(also it's to u8, which has no restrictions)
+        //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
+        // The last bytes-4 is set to 1 to act as a sentinel to mark EOF(this was a PAIN to find out)
+        let is_end_of_buffer = unsafe {
+            self.syscall_buffer
+                .as_ptr()
+                .cast::<u8>()
+                .add(crate::fs::types::MAX_BUFFER_SIZE - 4)
+                .read()
+                == 1
+        };
+
+        let is_more_remaining = remaining_bytes.is_positive();
+        // Branchless check
+        self.remaining_bytes = (remaining_bytes as usize) * usize::from(is_more_remaining);
+
+        self.end_of_stream = is_end_of_buffer;
+
+        self.offset = 0;
+
+        // Return true only if we successfully read non-zero bytes
+        is_more_remaining
+    }
+    #[inline]
+    #[allow(clippy::integer_division_remainder_used)] //debug only
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+        while self.offset >= self.remaining_bytes {
+            if !self.are_more_entries_remaining() {
+                return None;
+            }
+        }
+        // We have data in buffer, get next entry
+        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
+        let drnt: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+
+        // Quick sanity checks for debug builds (alignment check+nullcheck)
+        debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
+        debug_assert!(drnt as usize % 8 == 0, "the dirent is malformed"); //not aligned to 8 bytes
+        // SAFETY: dirent is not null so field access is safe
+        self.offset += unsafe { access_dirent!(drnt, d_reclen) };
+        // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
+        // SAFETY: dirent is not null
+        unsafe { Some(NonNull::new_unchecked(drnt)) }
+    }
+
+    #[inline]
+    pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
+        let fd = dir.open()?; //getting the file descriptor
+        debug_assert!(fd.is_open(), "We expect it to always be open");
+
+        let (path_buffer, path_len) = Self::init_from_path(dir);
+        let buffer = crate::fs::types::SyscallBuffer::new();
+        Ok(Self {
+            fd,
+            syscall_buffer: buffer,
+            path_buffer,
+            file_name_index: path_len,
+            parent_depth: dir.depth,
+            offset: 0,
+            remaining_bytes: 0,
+            end_of_stream: false,
+            base_pointer: 0,
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for GetDirEntries {
+    #[inline]
+    fn drop(&mut self) {
+        debug_assert!(
+            self.fd.is_open(),
+            "We expect the file descriptor to be open before closing"
+        );
+        // SAFETY: only closing HERE
+        unsafe { libc::close(self.fd.0) };
+    }
+}
+
 // Cheap macro to avoid duplicate code maintenance.
 macro_rules! impl_iter {
     ($struct:ty) => {
@@ -597,3 +730,11 @@ impl_iter!(GetDents);
 impl_iterator_for_dirent!(GetDents);
 #[cfg(any(target_os = "linux", target_os = "android"))]
 impl_dirent_constructor!(GetDents);
+
+// Macos only
+#[cfg(target_os = "macos")]
+impl_iter!(GetDirEntries);
+#[cfg(target_os = "macos")]
+impl_iterator_for_dirent!(GetDirEntries);
+#[cfg(target_os = "macos")]
+impl_dirent_constructor!(GetDirEntries);

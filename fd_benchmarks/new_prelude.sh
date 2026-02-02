@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-
+NUM_CPUS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || getconf NPROCESSORS_ONLN 2>/dev/null || echo 1)
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
     cd "$(dirname "${BASH_SOURCE[0]}")" || exit
@@ -105,8 +105,8 @@ run_warm_benchmark() {
 
     if [[ "$skip_diff" == "0" ]]; then
         # sorted output lists (filter out paru and systemd files)
-        eval "$COMMAND_FD" | grep -vE "$EXCLUDE" | sort --parallel="$(nproc)" > "$OUTPUT_DIR/fd_${output_basename}.lst"
-        eval "$COMMAND_FIND" | grep -vE "$EXCLUDE" | sort --parallel="$(nproc)" > "$OUTPUT_DIR/fdf_${output_basename}.lst"
+        eval "$COMMAND_FD" | grep -vE "$EXCLUDE" | sort --parallel="$NUM_CPUS" > "$OUTPUT_DIR/fd_${output_basename}.lst"
+        eval "$COMMAND_FIND" | grep -vE "$EXCLUDE" | sort --parallel="$NUM_CPUS" > "$OUTPUT_DIR/fdf_${output_basename}.lst"
 
         diff -u "$OUTPUT_DIR/fd_${output_basename}.lst" "$OUTPUT_DIR/fdf_${output_basename}.lst" > "$OUTPUT_DIR/fd_diff_${output_basename}.md"
 
@@ -158,8 +158,8 @@ run_cold_benchmark() {
 
 
 
-    eval "$COMMAND_FD" | grep -vE "$EXCLUDE" | sort --parallel="$(nproc)" > "$OUTPUT_DIR/fd_${output_basename}.lst"
-    eval "$COMMAND_FIND" | grep -vE "$EXCLUDE" | sort --parallel="$(nproc)" > "$OUTPUT_DIR/fdf_${output_basename}.lst"
+    eval "$COMMAND_FD" | grep -vE "$EXCLUDE" | sort --parallel="$NUM_CPUS" > "$OUTPUT_DIR/fd_${output_basename}.lst"
+    eval "$COMMAND_FIND" | grep -vE "$EXCLUDE" | sort --parallel="$NUM_CPUS" > "$OUTPUT_DIR/fdf_${output_basename}.lst"
 
     diff -u "$OUTPUT_DIR/fd_${output_basename}.lst" "$OUTPUT_DIR/fdf_${output_basename}.lst" > "$OUTPUT_DIR/fd_diff_${output_basename}.md"
 

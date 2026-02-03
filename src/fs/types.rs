@@ -1,6 +1,4 @@
 use crate::DirEntryError;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::fs::BUFFER_SIZE;
 
 ///Generic result type for directory entry operations
 pub type Result<T> = core::result::Result<T, DirEntryError>;
@@ -8,16 +6,10 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
 /// A buffer used to  hold the bytes sent from the OS for `getdents` calls
 /// We only use a buffer for syscalls on linux because of stable ABI(because we don't need to use a buffer for `ReadDir`)
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
-
-#[cfg(all(target_os = "macos", debug_assertions))]
-pub const MAX_BUFFER_SIZE: usize = 4096;
-
-#[cfg(all(target_os = "macos", not(debug_assertions)))]
-pub const MAX_BUFFER_SIZE: usize = 8 * 4096;
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, { crate::fs::BUFFER_SIZE }>;
 
 #[cfg(target_os = "macos")]
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, MAX_BUFFER_SIZE>; // In debug mode, stack size is VERY small.
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, { crate::fs::BUFFER_SIZE }>;
 
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]

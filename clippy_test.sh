@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #a lot of these lints are...naturally...extremely pedantic.
+
 cargo clippy --all -- \
   -W clippy::all \
   -W clippy::pedantic \
@@ -32,5 +33,4 @@ cargo clippy --all -- \
   -A clippy::absolute_paths \
   -A clippy::let_underscore_untyped \
   -A clippy::items_after_statements \
-  -A clippy::mod_module_files \
-  -A clippy::doc_paragraphs_missing_punctuation
+  -A clippy::mod_module_files

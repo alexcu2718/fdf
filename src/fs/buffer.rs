@@ -134,13 +134,6 @@ where
         self.data.as_mut_ptr().cast()
     }
 
-    /// Returns the max capacity of this buffer
-    #[inline]
-    #[must_use]
-    pub const fn max_capacity(&self) -> usize {
-        SIZE
-    }
-
     /// Returns a const pointer to the buffer's data
     #[inline]
     #[must_use]

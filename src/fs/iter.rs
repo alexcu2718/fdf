@@ -100,7 +100,7 @@ impl Drop for ReadDir {
             self.fd.is_open(),
             "We expect the file descriptor to be open before closing"
         );
-        // SAFETY:  not required
+        // SAFETY: only closing HERE
         unsafe { libc::closedir(self.dir.as_ptr()) };
     }
     // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
@@ -250,11 +250,12 @@ impl GetDents {
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
+        use crate::fs::types::SyscallBuffer;
         let fd = dir.open()?; //getting the file descriptor
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, file_name_index) = Self::init_from_path(dir);
-        let syscall_buffer = crate::fs::types::SyscallBuffer::new();
+        let syscall_buffer = SyscallBuffer::new();
         Ok(Self {
             fd,
             syscall_buffer,
@@ -290,7 +291,6 @@ impl GetDents {
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
     */
     #[inline]
-    #[allow(clippy::integer_division_remainder_used)] //debug only
     #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         while self.offset >= self.remaining_bytes {
@@ -304,7 +304,7 @@ impl GetDents {
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
-        debug_assert!(drnt as usize % 8 == 0, "the dirent is malformed"); //not aligned to 8 bytes
+        debug_assert!(drnt.is_aligned(), "the dirent is malformed"); //not aligned to 8 bytes
         // SAFETY: dirent is not null so field access is safe
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
@@ -544,6 +544,7 @@ impl GetDirEntries {
     #[allow(clippy::multiple_unsafe_ops_per_block)]
     #[allow(clippy::cast_sign_loss)]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
+        use crate::fs::BUFFER_SIZE;
         // Early return if we've already reached end of stream
         if self.end_of_stream {
             return false;
@@ -553,23 +554,94 @@ impl GetDirEntries {
             .syscall_buffer
             .getdirentries(&self.fd, &raw mut self.base_pointer);
 
-        // SAFETY: Buffer is already initialised by the kernel(also it's to u8, which has no restrictions)
+        // SAFETY: Buffer is already initialised by the kernel
+        // The kernel writes the WHOLE of the buffer passed to `getdirentries`
+        //(also it's to u8, which has no restrictions on alignment)
         //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
         // The last bytes-4 is set to 1 to act as a sentinel to mark EOF(this was a PAIN to find out)
+        // It always marks the end of the buffer regardless if EOF or not.
+        // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
+        // (Or at least I cant find it anywhere!)
         let is_end_of_buffer = unsafe {
             self.syscall_buffer
                 .as_ptr()
                 .cast::<u8>()
-                .add(crate::fs::types::MAX_BUFFER_SIZE - 4)
+                .add(BUFFER_SIZE - 4)
                 .read()
                 == 1
         };
 
+        /*
+
+        Example of syscall differences( also note the lack of fstatfs64!)
+
+
+
+            /tmp/fdf_test getdirentries !8 ❯ sudo dtruss -c fd -HI . ~ 2>&1  | tail                              ✘ 0|INT 4s alexc@alexcs-iMac 01:03:12
+
+            psynch_mutexdrop                              165
+            psynch_mutexwait                              165
+            __semwait_signal                              834
+            madvise                                      1337
+            close_nocancel                               5050
+            fstatfs64                                    5054
+            open_nocancel                                5054
+            getdirentries64                              5399
+            write                                        6267
+
+            /tmp/fdf_test getdirentries !8 ❯ sudo dtruss -c ./target/release/fdf -HI . ~ 2>&1 | tail                    47s alexc@alexcs-iMac 01:04:06
+
+            psynch_mutexdrop                               91
+            psynch_mutexwait                               91
+            stat64                                        138
+            psynch_cvsignal                               142
+            psynch_cvwait                                 153
+            write                                        2414
+            close_nocancel                               3538
+            open                                         3543
+            getdirentries64                              3545
+
+            /tmp/fdf_test getdirentries !8 ❯
+
+                    /tmp/fdf_test getdirentries !7 ❯ sudo dtruss -c fd  -HI . ~ 2>&1 | tail                                     16s alexc@alexcs-iMac 00:45:40
+
+                    psynch_mutexwait                              135
+                    stat64                                        138
+                    __semwait_signal                              449
+                    madvise                                       833
+                    close_nocancel                               3551
+                    fstatfs64                                    3553
+                    open_nocancel                                3553
+                    getdirentries64                              3732
+                    write                                        5085
+
+
+
+                             */
+
+        const {
+            assert!(
+                BUFFER_SIZE >= 1024,
+                "Buffer size should be always greater or equal to 1024"
+            )
+        };
+
+        /*
+        #define GETDIRENTRIES64_EXTENDED_BUFSIZE  1024
+
+         __options_decl(getdirentries64_flags_t, unsigned, {
+                    /* the __getdirentries64 returned all entries */
+                    GETDIRENTRIES64_EOF = 1U << 0,
+                });
+                #endif
+
+        \
+                         */
+
+        self.end_of_stream = is_end_of_buffer;
         let is_more_remaining = remaining_bytes.is_positive();
         // Branchless check
         self.remaining_bytes = (remaining_bytes as usize) * usize::from(is_more_remaining);
-
-        self.end_of_stream = is_end_of_buffer;
 
         self.offset = 0;
 
@@ -577,7 +649,6 @@ impl GetDirEntries {
         is_more_remaining
     }
     #[inline]
-    #[allow(clippy::integer_division_remainder_used)] //debug only
     #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         while self.offset >= self.remaining_bytes {
@@ -591,7 +662,7 @@ impl GetDirEntries {
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
-        debug_assert!(drnt as usize % 8 == 0, "the dirent is malformed"); //not aligned to 8 bytes
+        debug_assert!(drnt.is_aligned(), "the dirent is malformed"); //not aligned to 8 bytes
         // SAFETY: dirent is not null so field access is safe
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
@@ -601,11 +672,12 @@ impl GetDirEntries {
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
+        use crate::fs::types::SyscallBuffer;
         let fd = dir.open()?; //getting the file descriptor
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, path_len) = Self::init_from_path(dir);
-        let buffer = crate::fs::types::SyscallBuffer::new();
+        let buffer = SyscallBuffer::new();
         Ok(Self {
             fd,
             syscall_buffer: buffer,

@@ -573,7 +573,7 @@ impl DirEntry {
         use crate::util::getdents;
         const BUF_SIZE: usize = 500; //pretty arbitrary.
         #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
-        const MINIMUM_DIRENT_SIZE: i64 =
+        const MINIMUM_DIRENT_SIZE: isize =
             core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8) as _;
         debug_assert!(
             self.file_type == FileType::Directory || self.file_type == FileType::Symlink,

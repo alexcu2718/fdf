@@ -23,12 +23,13 @@ use core::ops::Deref;
 */
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> libc::c_long
+#[expect(clippy::cast_possible_truncation, reason = "clong is isize")]
+pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
 where
     T: crate::fs::ValueType, //i8/u8
 {
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
-    unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) }
+    unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _ }
 }
 
 #[cfg(target_os = "macos")]

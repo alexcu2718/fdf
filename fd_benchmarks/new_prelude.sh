@@ -60,11 +60,19 @@ if [ ! -e "$fdf_location" ]; then
 	echo "Cloning fdf to $fdf_location..."
 	git clone "$fdf_repo" "$fdf_location" >/dev/null
 	echo "Building fdf..."
-	cd "$fdf_location" || exit 1
-	cargo b -r
+    cd "$fdf_location" || exit 1
+    if [ -n "${BUFFER_SIZE:-}" ]; then
+        BUFFER_SIZE=$BUFFER_SIZE cargo b -r
+    else
+        cargo b -r
+    fi
 else
-	cd "$fdf_location" || exit 1
-	cargo b -r -q #check if it's built just incase
+    cd "$fdf_location" || exit 1
+    if [ -n "${BUFFER_SIZE:-}" ]; then
+        BUFFER_SIZE=$BUFFER_SIZE cargo b -r
+    else
+        cargo b -r
+    fi
 
 fi
 

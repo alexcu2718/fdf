@@ -15,30 +15,11 @@ pub use iter::ReadDir;
 pub use types::{FileDes, Result};
 
 //4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const_from_env!(
-    /// The size of the buffer used for directory entries, set to 4120 by default, but can be customised via environment variable.
-    /// Meant to be above the size of a page basically
-    BUFFER_SIZE:usize="BUFFER_SIZE",(std::mem::offset_of!(crate::dirent64, d_name) + libc::PATH_MAX as usize).next_multiple_of(8)
-); //TODO investigate this more!
-//basically this is the should allow getdents to grab a lot of entries in one go
+#[cfg(all(any(target_os = "linux", target_os = "android"), not(debug_assertions)))]
+pub const BUFFER_SIZE: usize = 8 * 4096;
 
-/*
-
-Interestingly getdents via readdir wrapper uses a much bigger buffer, which I have tested and is significantly less performant.
-
-λ  strace -fn fd NOMATCHLOL --threads 1 2>&1 | grep getdents | head
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 85 entries */, 32768) = 2920
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 0 entries */, 32768) = 0
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 54 entries */, 32768) = 2032
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 0 entries */, 32768) = 0
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 8 entries */, 32768) = 264
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 0 entries */, 32768) = 0
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 4 entries */, 32768) = 96
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 0 entries */, 32768) = 0
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 3 entries */, 32768) = 80
-[pid 123763] [ 217] getdents64(3, 0x7fb934000d30 /* 0 entries */, 32768) = 0
-*/
+#[cfg(all(any(target_os = "linux", target_os = "android"), debug_assertions))]
+pub const BUFFER_SIZE: usize = 4096; // Crashes during testing due to parallel processes taking up too much stack
 
 #[cfg(target_os = "macos")]
 pub const BUFFER_SIZE: usize = 0x2000; //readdir calls this value for buffer size, look at syscall tracing below (8192)

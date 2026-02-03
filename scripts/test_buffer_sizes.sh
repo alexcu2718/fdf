@@ -45,10 +45,8 @@ run_buffer_size_test() {
     rm -rf ../results_table.md
 
     for script in ./warm*.sh; do
-        if [[ "$script" == *"_home_"* ]]; then
-            continue
-        fi
         echo "Running $script with buffer size $buffer_size"
+        export BUFFER_SIZE=$buffer_size
         ./"$script"
         sleep 2
     done
@@ -58,14 +56,14 @@ run_buffer_size_test() {
     echo "Results saved to $SEND_TO "
 }
 
-# loop over different buffer sizes (increments of 2000 starting from 4096)
-for i in {0..10}; do
+#loop over different buffer sizes (increments of 2000 starting from 4096)
+for i in {0..15}; do
     buffer_size=$((4096 + i * 2000))
     run_buffer_size_test $buffer_size
 done
 
 
-TOTAL_OUT_FILE="../buffer_comparison_summarised.md"
-cat ../scripts/*buffer*.out > $TOTAL_OUT_FILE
 
+TOTAL_OUT_FILE="../buffer_comparison_summarised.md"
+ls -v ../scripts/*buffer*.out | xargs cat > "$TOTAL_OUT_FILE"
 echo  -e "\n\n\n Results saved to $(realpath $TOTAL_OUT_FILE)"

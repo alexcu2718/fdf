@@ -191,7 +191,6 @@ impl GetDents {
     #[inline]
     #[expect(
         clippy::cast_sign_loss,
-        clippy::cast_possible_truncation,
         reason = "hot function, worth some easy optimisation, not caring about 32bit target"
     )]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {

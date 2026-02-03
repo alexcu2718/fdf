@@ -135,7 +135,9 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 
 ### Key Optimisations
 
-- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.
+- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls**
+
+- **Reverse engineered MacOS syscalls to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L563)**
 
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
 
@@ -160,34 +162,35 @@ Check source code for further explanation [in utils.rs](./src/util/utils.rs#L195
         target_os = "redox", target_os = "hermit", target_os = "fuchsia"))]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     use core::num::NonZeroU64;
+    use core::mem::offset_of;
     /*The only unsafe action is dereferencing the pointer; This MUST be validated beforehand */
     const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
     const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
     // Create a mask for the first 3 bytes in the case where reclen==24
     const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
+    const DIRENT_HEADER_START: usize = offset_of!(dirent64, d_name);
     let reclen = unsafe { (*drnt).d_reclen as usize };
     // Access the last 8 bytes of the word (this is an aligned read due to kernel providing 8 byte aligned dirent structs!)
-    let last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
+    let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
     // reclen is always multiple of 8 so alignment is guaranteed
     let mask = MASK * ((reclen == 24) as u64); // branchless mask (multiply by 0 or 1)
-    let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short (when reclen==24)
+    last_word |= mask; //Mask out the false nulls when d_name is short (when reclen==24)
     //The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
     #[cfg(target_endian = "little")]
     //SAFETY: The u64 can never be all 0's post-SWAR
     let zero_bit = unsafe {
-        NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
-    };
+            NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
+        };
     //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
     // ^ Reference for the BE algorithm
     // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
     #[cfg(target_endian = "big")]
     //SAFETY: The u64 can never be all 0's post-SWAR
     let zero_bit = unsafe {
-        NonZeroU64::new_unchecked(
-            (!candidate_pos & !HI_U64).wrapping_add(LO_U64) & (!candidate_pos & HI_U64),
-        )
-    };
+            NonZeroU64::new_unchecked(
+                (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
+            )
+        };
 
     // Find the position of the null terminator
     #[cfg(target_endian = "little")]

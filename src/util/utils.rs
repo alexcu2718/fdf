@@ -316,7 +316,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
 
         // SAFETY: We're indexing in bounds within the pointer. Since the reclen is size of the struct in bytes.
-        let last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
+        let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
 
         // Create a mask for the first 3 bytes in the case where reclen==24, this handles the big endian case too.
 
@@ -335,7 +335,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
          - Non-name bytes become 0xFF (guaranteed non-zero)
          - Any null terminator in the name remains detectable
         */
-        let candidate_pos: u64 = last_word | mask;
+        last_word |= mask;
 
         /*
           SWAR null detection algorithm:
@@ -362,7 +362,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         #[cfg(target_endian = "little")]
         //SAFETY: The u64 can never be all 0's post-SWAR
         let zero_bit = unsafe {
-            NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
+            NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
         };
         //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
         // ^ Reference for the BE algorithm
@@ -371,7 +371,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         //SAFETY: The u64 can never be all 0's post-SWAR
         let zero_bit = unsafe {
             NonZeroU64::new_unchecked(
-                (!candidate_pos & !HI_U64).wrapping_add(LO_U64) & (!candidate_pos & HI_U64),
+                (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
             )
         };
 

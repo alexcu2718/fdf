@@ -129,4 +129,6 @@ fn main() {
     check_dirent_has_field("_DIRENT_HAVE_D_NAMLEN", "has_d_namlen");
 
     check_dirent_has_field("_DIRENT_HAVE_D_INO", "has_d_ino");
+
+    //  check_dirent_has_field("_DIRENT_HAVE_D_OFF", "has_d_off");
 }

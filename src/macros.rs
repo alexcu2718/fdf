@@ -67,26 +67,33 @@ macro_rules! access_dirent {
 
 
 
-        #[cfg(any(
+
+
+        #[cfg(all(any(
             target_os = "freebsd",
             target_os = "openbsd",
             target_os = "netbsd",
             target_os = "dragonfly"
-        ))]
+        ),has_d_ino))]
         {
             // SAFETY: Caller must ensure pointer is valid
              (*$entry_ptr).d_fileno as u64
         }
 
-        #[cfg(not(any(
+        #[cfg(all(not(any(
             target_os = "freebsd",
             target_os = "openbsd",
             target_os = "netbsd",
             target_os = "dragonfly"
-        )))]
+        )),has_d_ino))]
         {
             // SAFETY: Caller must ensure pointer is valid
              (*$entry_ptr).d_ino
+        }
+
+        #[cfg(not(has_d_ino))]
+        {
+            0
         }
     }};
 

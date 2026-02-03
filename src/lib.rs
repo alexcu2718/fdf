@@ -105,20 +105,8 @@ compile_error!("This application is not supported on Windows (yet)");
 pub use chrono;
 pub use libc;
 
-// mod finderbuilder;
-// pub use finderbuilder::FinderBuilder;
-
 #[macro_use]
 pub(crate) mod macros;
-
-// mod cli_helpers;
-
-// pub use cli_helpers::{FileTypeParser, SizeFilter, SizeFilterParser, TimeFilter, TimeFilterParser};
-
-// mod iter;
-// #[cfg(any(target_os = "linux", target_os = "android"))]
-// pub use iter::GetDents;
-// pub use iter::ReadDir;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub(crate) use libc::{dirent as dirent64, readdir as readdir64};
@@ -126,33 +114,13 @@ pub(crate) use libc::{dirent as dirent64, readdir as readdir64};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) use libc::{dirent64, readdir64};
 
-// mod printer;
-// pub(crate) use printer::write_paths_coloured;
-
 mod test;
-
-// mod buffer;
-// pub use buffer::{AlignedBuffer, ValueType};
-
-// mod memchr_derivations;
-// pub use memchr_derivations::{
-//     contains_zero_byte, find_char_in_word, find_last_char_in_word, find_zero_byte_u64, memrchr,
-// };
-
-// mod direntry;
-// pub use direntry::DirEntry;
 
 mod error;
 pub use error::{DirEntryError, FilesystemIOError, SearchConfigError, TraversalError};
 
 mod config;
 pub use config::SearchConfig;
-
-// mod glob;
-// pub use glob::glob_to_regex;
-
-// mod filetype;
-// pub use filetype::FileType;
 
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 //miri doesnt support custom allocators

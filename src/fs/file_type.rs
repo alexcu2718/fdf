@@ -34,19 +34,12 @@ assert!(dir_type.is_dir());
     reason = "This is exhaustive (there aren't anymore filetypes than this)"
 )]
 pub enum FileType {
-    /// Block special device file (e.g., /dev/sda)
     BlockDevice = DT_BLK,
-    /// Character special device file (e.g., /dev/tty)
     CharDevice = DT_CHR,
-    /// Directory
     Directory = DT_DIR,
-    /// FIFO (named pipe)
     Pipe = DT_FIFO,
-    /// Symbolic link
     Symlink = DT_LNK,
-    /// Regular file
     RegularFile = DT_REG,
-    /// Socket file
     Socket = DT_SOCK,
     /// Unknown file type (should be rare on supported filesystems)
     Unknown = DT_UNKNOWN,

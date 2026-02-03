@@ -2,8 +2,8 @@ use crate::fs::FileDes;
 use core::ffi::CStr;
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
-    DT_SOCK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, fstatat,
-    mode_t,
+    DT_SOCK, DT_UNKNOWN, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
+    fstatat, mode_t,
 };
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
 
@@ -28,27 +28,21 @@ assert!(dir_type.is_dir());
 ```
 */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u8)]
 #[expect(
     clippy::exhaustive_enums,
     reason = "This is exhaustive (there aren't anymore filetypes than this)"
 )]
 pub enum FileType {
-    /// Block special device file (e.g., /dev/sda)
-    BlockDevice,
-    /// Character special device file (e.g., /dev/tty)
-    CharDevice,
-    /// Directory
-    Directory,
-    /// FIFO (named pipe)
-    Pipe,
-    /// Symbolic link
-    Symlink,
-    /// Regular file
-    RegularFile,
-    /// Socket file
-    Socket,
+    BlockDevice = DT_BLK,
+    CharDevice = DT_CHR,
+    Directory = DT_DIR,
+    Pipe = DT_FIFO,
+    Symlink = DT_LNK,
+    RegularFile = DT_REG,
+    Socket = DT_SOCK,
     /// Unknown file type (should be rare on supported filesystems)
-    Unknown,
+    Unknown = DT_UNKNOWN,
 }
 
 impl FileType {

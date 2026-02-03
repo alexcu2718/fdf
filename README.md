@@ -93,31 +93,31 @@ Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but mac
 
 ```bash
 
-| Test Case                              | Files Found | fdf Time (mean) | fd Time (mean) | Speedup (×)       | Notes          |
-|---------------------------------------|-------------|-----------------|----------------|-------------------|-----------------|
-| Depth-limited (depth=2, LLVM)         | 396         | 9.9 ms          | 18.1 ms        | 1.82 ± 0.40       | No differences  |
-| File extension (.c, LLVM)             | 12,801      | 13.7 ms         | 27.4 ms        | 2.00 ± 0.21       | No differences  |
-| No pattern (LLVM)                     | 176,841     | 15.9 ms         | 31.2 ms        | 1.96 ± 0.22       | No differences  |
-| Relative directory (..)               | 178,794     | 17.3 ms         | 28.9 ms        | 1.67 ± 0.27       | No differences  |
-| Regex pattern (LLVM)                  | 4,439       | 14.6 ms         | 29.5 ms        | 2.02 ± 0.15       | No differences  |
-| Size >1MB (LLVM)                      | 118         | 32.4 ms         | 65.0 ms        | 2.01 ± 0.16       | No differences  |
-| Type filter (directory)               | 15,224      | 15.6 ms         | 29.7 ms        | 1.90 ± 0.39       | No differences  |
-| Type filter (empty)                   | 2,843       | 39.5 ms         | 62.5 ms        | 1.58 ± 0.09       | No differences  |
-| Type filter (executable)              | 929         | 25.5 ms         | 44.8 ms        | 1.76 ± 0.18       | No differences  |
-| Cold cache regex (LLVM)               | —           | 25.5 ms         | 52.9 ms        | 2.07 ± 0.21       | No differences  |
-| Depth-limited (depth=4, home dir)     | 62,513      | 11.1 ms         | 20.8 ms        | 1.88 ± 0.25       | No differences  |
-| File extension (.c, home dir)         | 99,393      | 257.4 ms        | 508.6 ms       | 1.98 ± 0.10       | No differences  |
-| No pattern (home dir)                 | 2,265,808   | 323.0 ms        | 547.1 ms       | 1.69 ± 0.09       | No differences  |
-| Regex pattern (home dir)              | 70,264      | 282.1 ms        | 460.5 ms       | 1.63 ± 0.06       | No differences  |
-| Size >1MB (home dir)                  | 13,201      | 755.3 ms        | 1.338 s        | 1.77 ± 0.07       | No differences  |
-| Size <1MB (home dir)                  | 2,009,097   | 817.4 ms        | 1.514 s        | 1.85 ± 0.06       | No differences  |
-| Type filter (directory, home)         | 237,603     | 307.7 ms        | 519.5 ms       | 1.69 ± 0.05       | No differences  |
-| Type filter (empty, home)             | 27,361      | 921.8 ms        | 1.258 s        | 1.36 ± 0.03       | No differences  |
-| Type filter (executable, home)        | 63,863      | 624.2 ms        | 887.8 ms       | 1.42 ± 0.05       | No differences  |
+
+| Test Case                                          | fdf Mean        | fd Mean         | Speedup   | Relative        |
+| :----------                                        | :--------:      | :-------:       | :-------: | :--------:      |
+| `.' '/home/alexc' -HI -d 4`                        | 7.8 ± 0.3       | 20.1 ± 0.9      | **2.58x** | 2.57 ± 0.16     |
+| `.' '/tmp/llvm-project' -HI -d 2`                  | 2.3 ± 0.1       | 5.4 ± 0.5       | **2.35x** | 2.41 ± 0.26     |
+| `-HI --extension 'c' '' '/home/alexc`              | 95.7 ± 0.5      | 166.7 ± 1.0     | **1.74x** | 1.74 ± 0.01     |
+| `-HI --extension 'c' '' '/tmp/llvm-project`        | 15.4 ± 0.5      | 31.2 ± 0.8      | **2.03x** | 2.03 ± 0.09     |
+| `.' '/home/alexc' -HI`                             | 109.1 ± 2.2     | 189.6 ± 1.3     | **1.74x** | 1.74 ± 0.04     |
+| `.' '/tmp/llvm-project' -HI`                       | 17.2 ± 0.4      | 34.2 ± 0.7      | **1.99x** | 1.98 ± 0.06     |
+| `.' '..' -HI`                                      | 17.7 ± 0.5      | 34.9 ± 0.7      | **1.97x** | 1.96 ± 0.07     |
+| `-HI '.*[0-9].*(md\|\.c)$' '/home/alexc`           | 99.1 ± 1.9      | 154.9 ± 2.2     | **1.56x** | 1.56 ± 0.04     |
+| `-HI '.*[0-9].*(md\|\.c)$' '/tmp/llvm-project`     | 15.7 ± 0.4      | 28.3 ± 1.3      | **1.80x** | 1.80 ± 0.10     |
+| `-HI --size +1mb '' '/home/alexc`                  | 298.5 ± 4.5     | 556.7 ± 2.6     | **1.86x** | 1.87 ± 0.03     |
+| `-HI --size '+1mb' '' '/tmp/llvm-project`          | 41.7 ± 1.2      | 81.5 ± 1.1      | **1.95x** | 1.96 ± 0.06     |
+| `-HI --size -1mb '' '/home/alexc`                  | 331.9 ± 3.1     | 661.5 ± 5.2     | **1.99x** | 1.99 ± 0.02     |
+| `.' '/home/alexc' -HI --type d`                    | 106.0 ± 2.1     | 164.6 ± 1.9     | **1.55x** | 1.55 ± 0.04     |
+| `.' '/tmp/llvm-project' -HI --type d`              | 16.1 ± 0.9      | 30.2 ± 1.0      | **1.88x** | 1.88 ± 0.12     |
+| `.' '/home/alexc' -HI --type e`                    | 331.3 ± 3.2     | 448.1 ± 7.5     | **1.35x** | 1.35 ± 0.03     |
+| `.' '/tmp/llvm-project' -HI --type e`              | 47.1 ± 1.3      | 64.1 ± 1.0      | **1.36x** | 1.36 ± 0.04     |
+| `.' '/home/alexc' -HI --type x`                    | 254.0 ± 5.7     | 834.5 ± 36.0    | **3.29x** | 3.29 ± 0.16     |
+| `.' '/tmp/llvm-project' -HI --type x`              | 40.8 ± 2.2      | 67.2 ± 1.3      | **1.65x** | 1.65 ± 0.09     |
 
 ```
 
-**Average speedup:** **1.8× faster**
+**Average speedup:** **2.01× faster**
 
 ## Distinctions from fd/find
 
@@ -135,7 +135,9 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 
 ### Key Optimisations
 
-- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls.
+- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls**
+
+- **Reverse engineered MacOS syscalls to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L563)**
 
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
 
@@ -160,34 +162,35 @@ Check source code for further explanation [in utils.rs](./src/util/utils.rs#L195
         target_os = "redox", target_os = "hermit", target_os = "fuchsia"))]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     use core::num::NonZeroU64;
+    use core::mem::offset_of;
     /*The only unsafe action is dereferencing the pointer; This MUST be validated beforehand */
     const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
     const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
     // Create a mask for the first 3 bytes in the case where reclen==24
     const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
+    const DIRENT_HEADER_START: usize = offset_of!(dirent64, d_name);
     let reclen = unsafe { (*drnt).d_reclen as usize };
     // Access the last 8 bytes of the word (this is an aligned read due to kernel providing 8 byte aligned dirent structs!)
-    let last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
+    let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
     // reclen is always multiple of 8 so alignment is guaranteed
     let mask = MASK * ((reclen == 24) as u64); // branchless mask (multiply by 0 or 1)
-    let candidate_pos = last_word | mask; //Mask out the false nulls when d_name is short (when reclen==24)
+    last_word |= mask; //Mask out the false nulls when d_name is short (when reclen==24)
     //The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
     #[cfg(target_endian = "little")]
     //SAFETY: The u64 can never be all 0's post-SWAR
     let zero_bit = unsafe {
-        NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
-    };
+            NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
+        };
     //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
     // ^ Reference for the BE algorithm
     // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
     #[cfg(target_endian = "big")]
     //SAFETY: The u64 can never be all 0's post-SWAR
     let zero_bit = unsafe {
-        NonZeroU64::new_unchecked(
-            (!candidate_pos & !HI_U64).wrapping_add(LO_U64) & (!candidate_pos & HI_U64),
-        )
-    };
+            NonZeroU64::new_unchecked(
+                (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
+            )
+        };
 
     // Find the position of the null terminator
     #[cfg(target_endian = "little")]

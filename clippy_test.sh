@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #a lot of these lints are...naturally...extremely pedantic.
+
 cargo clippy --all -- \
   -W clippy::all \
   -W clippy::pedantic \

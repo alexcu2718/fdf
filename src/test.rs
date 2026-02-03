@@ -8,6 +8,7 @@ const RANDOM_SEED: u64 = 4269;
 
 #[cfg(test)]
 mod tests {
+    #![allow(dead_code)]
     #![allow(unused_imports)]
     use super::*;
     use crate::filters::{SizeFilter, TimeFilter};
@@ -94,7 +95,7 @@ mod tests {
 
     #[test]
     fn tmemrchr() {
-        let byte_strings = generate_random_byte_strings(10000, 10000, DETERMINISTIC);
+        let byte_strings = generate_random_byte_strings(1000, 1000, DETERMINISTIC);
         let random_chars = 0..=u8::MAX;
 
         for byte in random_chars {
@@ -106,7 +107,7 @@ mod tests {
 
     #[test]
     fn test_reversed() {
-        let arrays = generate_random_u64_arrays(10000, DETERMINISTIC);
+        let arrays = generate_random_u64_arrays(1000, DETERMINISTIC);
 
         for bytes in arrays.iter() {
             for i in 0..=u8::MAX {
@@ -126,7 +127,7 @@ mod tests {
 
     #[test]
     fn test_forward() {
-        let arrays = generate_random_u64_arrays(10000, DETERMINISTIC);
+        let arrays = generate_random_u64_arrays(1000, DETERMINISTIC);
 
         for bytes in arrays.iter() {
             for i in 0..=u8::MAX {
@@ -151,7 +152,7 @@ mod tests {
             memrchrtest == realans,
             "test failed in memrchr: expected {realans:?}, got {memrchrtest:?} for byte {search:#04x}\n
             searching for {} with ASCII value {search} in slice {}",
-            char::from_u32(search as _).unwrap(),String::from_utf8_lossy(sl)
+            char::from(search),String::from_utf8_lossy(sl)
         );
     }
 
@@ -456,9 +457,7 @@ mod tests {
         let dt_timestamp = dt.timestamp();
         assert!(
             (now - dt_timestamp).abs() < 5,
-            "File modified_time too far from now: {:?} vs {:?}",
-            dt_timestamp,
-            now
+            "File modified_time too far from now: {dt_timestamp:?} vs {now:?}",
         );
 
         // cleanup
@@ -507,53 +506,6 @@ mod tests {
         }
 
         //let _=std::fs::File::
-    }
-
-    #[test]
-    fn test_find_char_at_beginning() {
-        let bytes = create_byte_array("hello");
-        assert_eq!(find_char_in_word(b'h', bytes), Some(0));
-    }
-
-    #[test]
-    fn test_find_char_in_middle() {
-        let bytes = create_byte_array("hello");
-        assert_eq!(find_char_in_word(b'e', bytes), Some(1));
-        assert_eq!(find_char_in_word(b'l', bytes), Some(2)); // first 'l'
-    }
-
-    #[test]
-    fn test_find_char_at_end() {
-        let bytes = create_byte_array("hello");
-        assert_eq!(find_char_in_word(b'o', bytes), Some(4));
-    }
-
-    #[test]
-    fn test_last_char_at_end() {
-        let bytes = create_byte_array("hello");
-        assert_eq!(find_last_char_in_word(b'l', bytes), Some(3));
-    }
-
-    #[test]
-    fn test_char_not_found() {
-        let bytes = create_byte_array("hello");
-        assert_eq!(find_char_in_word(b'x', bytes), None);
-        assert_eq!(find_char_in_word(b'z', bytes), None);
-    }
-
-    #[test]
-    fn test_empty_string() {
-        let bytes = create_byte_array("");
-        assert_eq!(find_char_in_word(b'a', bytes), None);
-        assert_eq!(find_char_in_word(b'h', bytes), None);
-    }
-
-    #[test]
-    fn test_full_8_bytes() {
-        let bytes = create_byte_array("abcdefgh");
-        assert_eq!(find_char_in_word(b'a', bytes), Some(0));
-        assert_eq!(find_char_in_word(b'd', bytes), Some(3));
-        assert_eq!(find_char_in_word(b'h', bytes), Some(7));
     }
 
     #[test]

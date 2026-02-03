@@ -294,5 +294,26 @@ fn main() -> Result<(), SearchConfigError> {
         args.show_errors,
     );
 
+    // #[cfg(has_d_type)]
+    // println!("has_my_dtype: enabled");
+
+    // #[cfg(not(has_d_type))]
+    // println!("has_my_dtype: not enabled");
+
+    // #[cfg(not(has_d_namlen))]
+    // println!("has_namlen not enabled");
+
+    // #[cfg(has_d_namlen)]
+    // println!("has_namlen  enabled");
+
+    // #[cfg(has_d_reclen)]
+    // println!("has_reclen enabled");
+
+    // #[cfg(not(has_d_reclen))]
+    // println!("has_reclen not enabled");
+
+    // #[cfg(has_d_ino)]
+    // println!("has d_ino enabled");
+
     Ok(())
 }

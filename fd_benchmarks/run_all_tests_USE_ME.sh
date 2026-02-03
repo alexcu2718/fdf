@@ -14,6 +14,14 @@ if ! which hyperfine > /dev/null 2>&1; then
     exit 1
 fi
 
+
+if ! which fd > /dev/null 2>&1; then
+    echo "'fd' does not seem to be installed."
+    echo "You can get it here: https://github.com/sharkdp/fd?tab=readme-ov-file#installation"
+    exit 1
+fi
+
+
 # Check if llvm-project already exists
 if [[ -d "$LLVM_DIR" ]]; then
     run_benchmarks="y"

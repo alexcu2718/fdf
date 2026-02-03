@@ -134,13 +134,6 @@ where
         self.data.as_mut_ptr().cast()
     }
 
-    /// Returns the max capacity of this buffer
-    #[inline]
-    #[must_use]
-    pub const fn max_capacity(&self) -> usize {
-        SIZE
-    }
-
     /// Returns a const pointer to the buffer's data
     #[inline]
     #[must_use]
@@ -176,19 +169,17 @@ where
     /// Executes the getdents64 system call using <unistd.h>/direct `libc` syscalls
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> i64 {
+    pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> isize {
         // SAFETY: we're passing a valid buffer
         unsafe { crate::util::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
-    // TODO: Maybe delete this?
-    // #[inline] Irrelevant because of macos semantics.
-    // #[cfg(target_os = "macos")]
-    // #[allow(clippy::not_unsafe_ptr_arg_deref)] // Shut up
-    // pub fn getdirentries(&mut self, fd: &crate::FileDes, basep: *mut i64) -> i32 {
-    //     // SAFETY: we're passing a valid buffer
-    //     unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
-    // }
+    #[inline]
+    #[cfg(target_os = "macos")]
+    pub(crate) unsafe fn getdirentries(&mut self, fd: &crate::fs::FileDes, basep: *mut i64) -> i32 {
+        // SAFETY: we're passing a valid buffer
+        unsafe { crate::util::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
+    }
 
     /**
      Returns a reference to a subslice without doing bounds checking

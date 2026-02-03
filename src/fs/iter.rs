@@ -100,7 +100,7 @@ impl Drop for ReadDir {
             self.fd.is_open(),
             "We expect the file descriptor to be open before closing"
         );
-        // SAFETY:  not required
+        // SAFETY: only closing HERE
         unsafe { libc::closedir(self.dir.as_ptr()) };
     }
     // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
@@ -191,7 +191,6 @@ impl GetDents {
     #[inline]
     #[expect(
         clippy::cast_sign_loss,
-        clippy::cast_possible_truncation,
         reason = "hot function, worth some easy optimisation, not caring about 32bit target"
     )]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
@@ -250,14 +249,14 @@ impl GetDents {
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
+        use crate::fs::types::SyscallBuffer;
         let fd = dir.open()?; //getting the file descriptor
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, file_name_index) = Self::init_from_path(dir);
-        let syscall_buffer = crate::fs::types::SyscallBuffer::new();
         Ok(Self {
             fd,
-            syscall_buffer,
+            syscall_buffer: SyscallBuffer::new(),
             path_buffer,
             file_name_index,
             parent_depth: dir.depth,
@@ -290,7 +289,6 @@ impl GetDents {
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
     */
     #[inline]
-    #[allow(clippy::integer_division_remainder_used)] //debug only
     #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
         while self.offset >= self.remaining_bytes {
@@ -304,7 +302,7 @@ impl GetDents {
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
-        debug_assert!(drnt as usize % 8 == 0, "the dirent is malformed"); //not aligned to 8 bytes
+        debug_assert!(drnt.is_aligned(), "the dirent is malformed"); //not aligned to 8 bytes
         // SAFETY: dirent is not null so field access is safe
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
@@ -343,15 +341,12 @@ pub trait DirentConstructor {
         let (cstrpath, inode, file_type): (&CStr, u64, FileType) =
             unsafe { self.construct_path(drnt) };
 
-        let path: Box<CStr> = cstrpath.into();
-        let file_name_index = self.file_index();
-
         DirEntry {
-            path,
+            path: cstrpath.into(),
             file_type,
             inode,
             depth: self.parent_depth() + 1,
-            file_name_index,
+            file_name_index: self.file_index(),
             is_traversible_cache: Cell::new(None), // Lazy cache for traversal checks
         }
     }
@@ -460,24 +455,34 @@ pub trait DirentConstructor {
         // SAFETY: same as above
         let d_ino: u64 = unsafe { access_dirent!(drnt, d_ino) };
         // SAFETY: as above.
-        #[allow(unused_unsafe)]
-        // This returns dtype `DT_UNKNOWN` for systems without d_type, EG, so this call is not *unsafe* for them.
-        let dtype: u8 = unsafe { access_dirent!(drnt, d_type) }; // TODO, for systems without dtype, just always call fstat? not big priority.
         // SAFETY: Same as above^ (Add 1 to include the null terminator)
         let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[allow(clippy::wildcard_enum_match_arm)] // ANYTHING but unknown is fine.
-        let file_type: FileType = match FileType::from_dtype(dtype) {
-            FileType::Unknown => stat_syscall!(
-                fstatat,
-                self.file_descriptor().0, //borrow before mutably borrowing the path buffer
-                d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
-                AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
-                DTYPE
-            ),
-            not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
-        };
+        #[cfg(has_d_type)]
+        let file_type: FileType =
+            // SAFETY: as above.
+            match FileType::from_dtype(unsafe { access_dirent!(drnt, d_type) }) {
+                FileType::Unknown => stat_syscall!(
+                    fstatat,
+                    self.file_descriptor().0, //borrow before mutably borrowing the path buffer
+                    d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+                    AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+                    DTYPE
+                ),
+                not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
+            };
+
+        #[cfg(not(has_d_type))] // Have to make a syscall on these systems alas
+        let file_type = stat_syscall!(
+            fstatat,
+            self.file_descriptor().0, //borrow before mutably borrowing the path buffer
+            d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+            AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+            DTYPE
+        );
+
         let base_len = self.file_index();
         // Get the portion of the buffer that goes past the last slash
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
@@ -497,6 +502,186 @@ pub trait DirentConstructor {
         }; //truncate the buffer to the first null terminator of the full path
 
         (full_path, d_ino, file_type)
+    }
+}
+
+#[cfg(target_os = "macos")]
+/**
+macos directory iterator using the `getdirentries` system call.
+
+ Provides more efficient directory traversal than `readdir` for large directories
+ by performing batched reads into a kernel buffer. This reduces system call overhead
+ and improves performance when scanning directories with many entries.
+
+ Unlike some directory iteration methods, this does not implicitly call `stat`
+ on each entry unless required by unusual filesystem behaviour.
+*/
+pub struct GetDirEntries {
+    /// File descriptor of the open directory, wrapped for automatic resource management
+    pub(crate) fd: FileDes,
+    /// Kernel buffer for batch reading directory entries via system call I/O
+    /// 8192 bytes, matching macos readdir semantics) in size, optimised for typical directory traversal
+    pub(crate) syscall_buffer: crate::fs::types::SyscallBuffer,
+    /// buffer for constructing full entry paths
+    /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
+    pub(crate) path_buffer: Vec<u8>,
+    /// Length of the base directory path including the trailing slash
+    /// Used for efficient filename extraction and path construction
+    pub(crate) file_name_index: usize,
+    /// Depth of the parent directory in the directory tree hierarchy
+    /// Used to calculate depth for child entries during recursive traversal
+    pub(crate) parent_depth: u32,
+    /// Current read position within the directory entry buffer
+    /// Tracks progress through the currently loaded batch of entries
+    pub(crate) offset: usize,
+    /// Number of bytes remaining to be processed in the current buffer
+    /// Indicates when a new system call is needed to fetch more entries
+    pub(crate) remaining_bytes: usize,
+    /// A marker for when the `FileDes` can give no more entries
+    pub(crate) end_of_stream: bool,
+    /// The base pointer for the getdirentries call
+    pub(crate) base_pointer: i64,
+}
+
+#[cfg(target_os = "macos")]
+impl GetDirEntries {
+    #[inline]
+    #[allow(clippy::multiple_unsafe_ops_per_block)]
+    #[allow(clippy::cast_sign_loss)]
+    pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
+        use crate::fs::BUFFER_SIZE;
+        // Early return if we've already reached end of stream
+        if self.end_of_stream {
+            return false;
+        }
+        //SAFETY: passing a valid buffer to an open file descriptor.
+        let remaining_bytes = unsafe {
+            self.syscall_buffer
+                .getdirentries(&self.fd, &raw mut self.base_pointer)
+        };
+
+        // SAFETY: Buffer is already initialised by the kernel
+        // The kernel writes the WHOLE of the buffer passed to `getdirentries`
+        //(also it's to u8, which has no restrictions on alignment)
+        //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
+        // The last bytes-4 is set to 1 to act as a sentinel to mark EOF(this was a PAIN to find out)
+        // It always marks the end of the buffer regardless if EOF or not.
+        // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
+        // (Or at least I cant find it anywhere!)
+        self.end_of_stream =
+            // SAFETY: AS ABOVE
+            unsafe { self.syscall_buffer.as_ptr().add(BUFFER_SIZE - 4).read() == 1 };
+
+        /*
+
+        Example of syscall differences( also note the lack of fstatfs64!)
+
+
+
+            /tmp/fdf_test getdirentries !8 ❯ sudo dtruss -c fd -HI . ~ 2>&1  | tail                              ✘ 0|INT 4s alexc@alexcs-iMac 01:03:12
+
+            psynch_mutexdrop                              165
+            psynch_mutexwait                              165
+            __semwait_signal                              834
+            madvise                                      1337
+            close_nocancel                               5050
+            fstatfs64                                    5054
+            open_nocancel                                5054
+            getdirentries64                              5399
+            write                                        6267
+
+            /tmp/fdf_test getdirentries !8 ❯ sudo dtruss -c ./target/release/fdf -HI . ~ 2>&1 | tail                    47s alexc@alexcs-iMac 01:04:06
+
+            psynch_mutexdrop                               91
+            psynch_mutexwait                               91
+            stat64                                        138
+            psynch_cvsignal                               142
+            psynch_cvwait                                 153
+            write                                        2414
+            close_nocancel                               3538
+            open                                         3543
+            getdirentries64                              3545
+
+
+
+        */
+
+        const { assert!(BUFFER_SIZE >= 1024, "Invalid size EOF optimisation") };
+
+        /*
+        #define GETDIRENTRIES64_EXTENDED_BUFSIZE  1024
+
+         __options_decl(getdirentries64_flags_t, unsigned, {
+                    /* the __getdirentries64 returned all entries */
+                    GETDIRENTRIES64_EOF = 1U << 0,
+                });
+                #endif
+
+
+        */
+
+        let is_more_remaining = remaining_bytes.is_positive();
+        // Branchless check
+        self.remaining_bytes = (remaining_bytes as usize) * usize::from(is_more_remaining);
+
+        self.offset = 0;
+
+        // Return true only if we successfully read non-zero bytes
+        is_more_remaining
+    }
+    #[inline]
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+        while self.offset >= self.remaining_bytes {
+            if !self.are_more_entries_remaining() {
+                return None;
+            }
+        }
+        // We have data in buffer, get next entry
+        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
+        let drnt: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+
+        // Quick sanity checks for debug builds (alignment check+nullcheck)
+        debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
+        debug_assert!(drnt.is_aligned(), "the dirent is malformed"); //not aligned to 8 bytes
+        // SAFETY: dirent is not null so field access is safe
+        self.offset += unsafe { access_dirent!(drnt, d_reclen) };
+        // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
+        // SAFETY: dirent is not null
+        unsafe { Some(NonNull::new_unchecked(drnt)) }
+    }
+
+    #[inline]
+    pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
+        use crate::fs::types::SyscallBuffer;
+        let fd = dir.open()?; //getting the file descriptor
+        debug_assert!(fd.is_open(), "We expect it to always be open");
+
+        let (path_buffer, path_len) = Self::init_from_path(dir);
+        Ok(Self {
+            fd,
+            syscall_buffer: SyscallBuffer::new(),
+            path_buffer,
+            file_name_index: path_len,
+            parent_depth: dir.depth,
+            offset: 0,
+            remaining_bytes: 0,
+            end_of_stream: false,
+            base_pointer: 0,
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for GetDirEntries {
+    #[inline]
+    fn drop(&mut self) {
+        debug_assert!(
+            self.fd.is_open(),
+            "We expect the file descriptor to be open before closing"
+        );
+        // SAFETY: only closing HERE
+        unsafe { libc::close(self.fd.0) };
     }
 }
 
@@ -597,3 +782,11 @@ impl_iter!(GetDents);
 impl_iterator_for_dirent!(GetDents);
 #[cfg(any(target_os = "linux", target_os = "android"))]
 impl_dirent_constructor!(GetDents);
+
+// Macos only
+#[cfg(target_os = "macos")]
+impl_iter!(GetDirEntries);
+#[cfg(target_os = "macos")]
+impl_iterator_for_dirent!(GetDirEntries);
+#[cfg(target_os = "macos")]
+impl_dirent_constructor!(GetDirEntries);

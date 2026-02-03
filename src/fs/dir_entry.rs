@@ -305,7 +305,7 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
     /**
      Opens the directory and returns a file descriptor.
 
@@ -573,7 +573,7 @@ impl DirEntry {
         use crate::util::getdents;
         const BUF_SIZE: usize = 500; //pretty arbitrary.
         #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
-        const MINIMUM_DIRENT_SIZE: i64 =
+        const MINIMUM_DIRENT_SIZE: isize =
             core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8) as _;
         debug_assert!(
             self.file_type == FileType::Directory || self.file_type == FileType::Symlink,
@@ -1599,7 +1599,7 @@ impl DirEntry {
 
      # Platform Specificity
 
-     This method is only available on Linux targets due to its dependence on
+     This method is only available on Linux/Android targets due to its dependence on
      the `getdents64` system call.
 
      # Examples
@@ -1608,7 +1608,6 @@ impl DirEntry {
      use fdf::fs::DirEntry;
      use std::fs::{self, File};
      use std::io::Write;
-     use std::sync::Arc;
 
      // Create a temporary directory with test files
      let temp_dir = std::env::temp_dir().join("test_getdents");
@@ -1640,5 +1639,33 @@ impl DirEntry {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn getdents(&self) -> Result<crate::fs::GetDents> {
         crate::fs::GetDents::new(self)
+    }
+
+    /**
+    Low-level directory iterator using macOS `getdirentries` API.
+
+    This method provides a macOS-specific, high-performance streaming iterator
+    over directory entries by leveraging the platform's `getdirentries(2)`
+    family. It is analogous to the Linux `getdents` specialisation but
+    implemented for BSD-derived macOS interfaces and conventions.
+
+    It implements a specialised EOF trick to avoid an extra syscall to terminate reading
+
+
+    # Platform
+    - macOS only
+
+    # Errors
+    Returns `Err` when the directory cannot be opened or read, when the
+    target is not a directory, or when permissions prevent iteration.
+
+
+    For examples: See documentation on `readdir`
+    ```
+    */
+    #[inline]
+    #[cfg(target_os = "macos")]
+    pub fn getdentdirentries(&self) -> Result<crate::fs::iter::GetDirEntries> {
+        crate::fs::iter::GetDirEntries::new(self)
     }
 }

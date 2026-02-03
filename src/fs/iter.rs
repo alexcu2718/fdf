@@ -562,14 +562,8 @@ impl GetDirEntries {
         // It always marks the end of the buffer regardless if EOF or not.
         // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
         // (Or at least I cant find it anywhere!)
-        let is_end_of_buffer = unsafe {
-            self.syscall_buffer
-                .as_ptr()
-                .cast::<u8>()
-                .add(BUFFER_SIZE - 4)
-                .read()
-                == 1
-        };
+        let is_end_of_buffer =
+            unsafe { self.syscall_buffer.as_ptr().add(BUFFER_SIZE - 4).read() == 1 };
 
         /*
 

@@ -29,29 +29,13 @@ macro_rules! access_dirent {
     }};
      // Special case for `d_namlen` - only available on systems that have this field
     ($entry_ptr:expr, d_namlen) => {{
-        #[cfg(any(
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "aix",
-            target_os = "hurd"
-        ))]
+        #[cfg(has_d_namlen)]
         {
             // SAFETY: Caller must ensure pointer is valid
             (*$entry_ptr).d_namlen as usize
         }
 
-        #[cfg(not(any(
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "aix",
-            target_os = "hurd"
-        )))]
+        #[cfg(not(has_d_namlen))]
         {
             compile_error!("d_namlen field is not available on this platform - use d_reclen or strlen instead")
         }
@@ -68,33 +52,21 @@ macro_rules! access_dirent {
     }};
 
          ($entry_ptr:expr, d_type) => {{
-        #[cfg(any(
-        target_os = "solaris",
-        target_os = "illumos",
-        target_os = "aix",
-        target_os = "nto",
-        target_os = "haiku",
-        target_os = "vita",
-
-    ))]
+         #[cfg(not(has_d_type))]
         {
             libc::DT_UNKNOWN // Return D_TYPE unknown on these OS'es, because the struct does not hold the type!
             // https://github.com/rust-lang/rust/blob/d85276b256a8ab18e03b6394b4f7a7b246176db7/library/std/src/sys/fs/unix.rs#L314
         }
-        #[cfg(not(any(
-        target_os = "solaris",
-        target_os = "illumos",
-        target_os = "aix",
-        target_os = "nto",
-        target_os = "haiku",
-        target_os = "vita",
+        #[cfg(has_d_type)]
 
-    )))]
         {
             (*$entry_ptr).d_type
         }}};
       // Handle inode number field with aliasing for BSD systems
     ($entry_ptr:expr, d_ino) => {{
+
+
+
         #[cfg(any(
             target_os = "freebsd",
             target_os = "openbsd",

@@ -14,7 +14,6 @@ pub use iter::GetDirEntries;
 pub use iter::ReadDir;
 pub use types::{FileDes, Result};
 
-//4115==pub const BUFFER_SIZE_LOCAL: usize = crate::offset_of!(libc::dirent64, d_name) + libc::PATH_MAX as usize; //my experiments tend to prefer this. maybe entirely anecdata.
 #[cfg(all(any(target_os = "linux", target_os = "android"), not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 8 * 4096;
 
@@ -27,8 +26,7 @@ pub const BUFFER_SIZE: usize = 0x2000; //readdir calls this value for buffer siz
 /*
 /tmp/fdf_test2 getdirentries !3 ❯ sudo dtruss  fd -HI . 2>&1 | grep getdirentries | head                  ✘ INT alexc@alexcs-iMac 00:52:24
 
-.git/refs/heads/getdirentries
-.git/logs/refs/heads/getdirentries
+
 getdirentries64(0x3, 0x7FD166808A00, 0x2000)             = 896 0
 getdirentries64(0x3, 0x7FD166808A00, 0x2000)             = 408 0
 getdirentries64(0x3, 0x7FD166808A00, 0x2000)             = 288 0

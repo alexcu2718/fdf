@@ -176,20 +176,10 @@ where
 
     #[inline]
     #[cfg(target_os = "macos")]
-    #[allow(clippy::not_unsafe_ptr_arg_deref)] //shutup
-    pub fn getdirentries(&mut self, fd: &crate::fs::FileDes, basep: *mut i64) -> i32 {
+    pub(crate) unsafe fn getdirentries(&mut self, fd: &crate::fs::FileDes, basep: *mut i64) -> i32 {
         // SAFETY: we're passing a valid buffer
         unsafe { crate::util::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
     }
-
-    // TODO: Maybe delete this?
-    // #[inline] Irrelevant because of macos semantics.
-    // #[cfg(target_os = "macos")]
-    // #[allow(clippy::not_unsafe_ptr_arg_deref)] // Shut up
-    // pub fn getdirentries(&mut self, fd: &crate::FileDes, basep: *mut i64) -> i32 {
-    //     // SAFETY: we're passing a valid buffer
-    //     unsafe { crate::utils::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
-    // }
 
     /**
      Returns a reference to a subslice without doing bounds checking

@@ -692,6 +692,10 @@ impl GetDirEntries {
 
 #[cfg(target_os = "macos")]
 impl Drop for GetDirEntries {
+    /**
+      Drops the iterator, closing the file descriptor.
+      we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
+    */
     #[inline]
     fn drop(&mut self) {
         debug_assert!(
@@ -701,14 +705,13 @@ impl Drop for GetDirEntries {
         // SAFETY: only closing HERE
         #[cfg(not(debug_assertions))]
         unsafe {
-            libc::closedir(self.dir.as_ptr())
+            libc::close(self.fd.0)
         };
+        // SAFETY: As above
         #[cfg(debug_assertions)]
-        assert!(
-            // SAFETY: as above
-            unsafe { libc::closedir(self.dir.as_ptr()) } == 0,
-            "Fd was not closed in readdir!"
-        );
+        unsafe {
+            assert!(libc::close(self.fd.0) == 0, "fd was not closed in getdents")
+        }
     }
 }
 

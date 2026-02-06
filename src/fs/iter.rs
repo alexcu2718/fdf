@@ -68,7 +68,7 @@ impl ReadDir {
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
         let dir = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
-        let (path_buffer, file_name_index) = Self::init_from_path(dir_path.as_bytes());
+        let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
         // Mutate the buffer to contain the full path, then add a null terminator and record the new length
         // We use this length to index to get the filename (store full path -> index to get filename)
 
@@ -101,7 +101,16 @@ impl Drop for ReadDir {
             "We expect the file descriptor to be open before closing"
         );
         // SAFETY: only closing HERE
-        unsafe { libc::closedir(self.dir.as_ptr()) };
+        #[cfg(not(debug_assertions))]
+        unsafe {
+            libc::closedir(self.dir.as_ptr())
+        };
+        #[cfg(debug_assertions)]
+        assert!(
+            // SAFETY: as above
+            unsafe { libc::closedir(self.dir.as_ptr()) } == 0,
+            "Fd was not closed in readdir!"
+        );
     }
     // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
     // TODO! Investigate how std lib manages to not piss off FDsan
@@ -123,7 +132,7 @@ pub struct GetDents {
     /// File descriptor of the open directory, wrapped for automatic resource management
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
-    /// Approximately 4.1KB in size, optimised for typical directory traversal
+    /// Approximately 32kB in size, optimised for typical directory traversal
     pub(crate) syscall_buffer: crate::fs::types::SyscallBuffer,
     /// Buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
@@ -157,7 +166,15 @@ impl Drop for GetDents {
             "We expect the file descriptor to be open before closing"
         );
         // SAFETY: only closing HERE
-        unsafe { libc::close(self.fd.0) };
+        #[cfg(not(debug_assertions))]
+        unsafe {
+            libc::close(self.fd.0)
+        };
+        // SAFETY: As above
+        #[cfg(debug_assertions)]
+        unsafe {
+            assert!(libc::close(self.fd.0) == 0, "fd was not closed in getdents")
+        }
     }
 }
 
@@ -298,7 +315,12 @@ impl GetDents {
         }
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
-        let drnt: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+        let drnt = unsafe {
+            self.syscall_buffer
+                .as_ptr()
+                .add(self.offset)
+                .cast::<dirent64>()
+        };
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
@@ -307,7 +329,7 @@ impl GetDents {
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
         // SAFETY: dirent is not null
-        unsafe { Some(NonNull::new_unchecked(drnt)) }
+        unsafe { Some(NonNull::new_unchecked(drnt.cast_mut())) }
     }
 }
 
@@ -448,7 +470,6 @@ pub trait DirentConstructor {
     */
     #[inline]
     unsafe fn construct_path(&mut self, drnt: *const dirent64) -> (&CStr, u64, FileType) {
-        // Note to adrian, I refactored this to avoid cache misses.
         debug_assert!(!drnt.is_null(), "drnt is null in construct path!");
         // SAFETY: The `drnt` must not be null (checked before using)
         let d_name: *const u8 = unsafe { access_dirent!(drnt, d_name) };
@@ -568,11 +589,15 @@ impl GetDirEntries {
         // It always marks the end of the buffer regardless if EOF or not.
         // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
         // (Or at least I cant find it anywhere!)
+        // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
+        // As this is ~5 years old, we can safely assume that all kernels have this capability
         self.end_of_stream =
             // SAFETY: AS ABOVE
             unsafe { self.syscall_buffer.as_ptr().add(BUFFER_SIZE - 4).read() == 1 };
 
         /*
+
+
 
         Example of syscall differences( also note the lack of fstatfs64!)
 
@@ -608,18 +633,6 @@ impl GetDirEntries {
 
         const { assert!(BUFFER_SIZE >= 1024, "Invalid size EOF optimisation") };
 
-        /*
-        #define GETDIRENTRIES64_EXTENDED_BUFSIZE  1024
-
-         __options_decl(getdirentries64_flags_t, unsigned, {
-                    /* the __getdirentries64 returned all entries */
-                    GETDIRENTRIES64_EOF = 1U << 0,
-                });
-                #endif
-
-
-        */
-
         let is_more_remaining = remaining_bytes.is_positive();
         // Branchless check
         self.remaining_bytes = (remaining_bytes as usize) * usize::from(is_more_remaining);
@@ -639,7 +652,12 @@ impl GetDirEntries {
         }
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
-        let drnt: *mut dirent64 = unsafe { self.syscall_buffer.as_ptr().add(self.offset) as _ };
+        let drnt = unsafe {
+            self.syscall_buffer
+                .as_ptr()
+                .add(self.offset)
+                .cast::<dirent64>()
+        };
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
@@ -648,7 +666,7 @@ impl GetDirEntries {
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
         // SAFETY: dirent is not null
-        unsafe { Some(NonNull::new_unchecked(drnt)) }
+        unsafe { Some(NonNull::new_unchecked(drnt.cast_mut())) }
     }
 
     #[inline]
@@ -674,6 +692,10 @@ impl GetDirEntries {
 
 #[cfg(target_os = "macos")]
 impl Drop for GetDirEntries {
+    /**
+      Drops the iterator, closing the file descriptor.
+      we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
+    */
     #[inline]
     fn drop(&mut self) {
         debug_assert!(
@@ -681,7 +703,15 @@ impl Drop for GetDirEntries {
             "We expect the file descriptor to be open before closing"
         );
         // SAFETY: only closing HERE
-        unsafe { libc::close(self.fd.0) };
+        #[cfg(not(debug_assertions))]
+        unsafe {
+            libc::close(self.fd.0)
+        };
+        // SAFETY: As above
+        #[cfg(debug_assertions)]
+        unsafe {
+            assert!(libc::close(self.fd.0) == 0, "fd was not closed in getdents")
+        }
     }
 }
 

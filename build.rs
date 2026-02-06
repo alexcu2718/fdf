@@ -64,18 +64,22 @@ fn get_supported_filesystems() -> Result<Vec<String>, std::io::Error> {
 }
 
 #[allow(clippy::unwrap_used)]
-fn check_dirent_has_field(macro_name: &str, cfg_name: &str) {
+fn check_dirent_has_field(cfg_name: &str) {
     // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
     println!("cargo:rustc-check-cfg=cfg({cfg_name})");
     let out = std::env::var("OUT_DIR").unwrap();
 
-    let c_file = format!("check_{macro_name}.c");
+    let c_file = format!("check_{cfg_name}.c");
 
     let src = std::path::PathBuf::from(&out).join(&c_file);
 
     // This C source fails to compile if the struct field is not present.
     // We derive the field name from the `cfg_name`, which is of the form `has_<field>`.
     let field_name = cfg_name.strip_prefix("has_").unwrap_or(cfg_name).to_owned();
+    assert!(
+        field_name.starts_with("d_"),
+        "Field name must start with d_"
+    );
 
     let code = format!(
         // use stddef.h to get offsetof
@@ -84,7 +88,7 @@ fn check_dirent_has_field(macro_name: &str, cfg_name: &str) {
     std::fs::write(&src, code).unwrap();
 
     let mut build = cc::Build::new();
-    build.file(&src).cargo_warnings(true).cargo_output(true);
+    build.file(&src).cargo_warnings(false).cargo_output(true);
 
     if build.try_compile(&c_file).is_ok() {
         // Enable the flag
@@ -122,13 +126,11 @@ fn main() {
         }
     }
 
-    check_dirent_has_field("_DIRENT_HAVE_D_TYPE", "has_d_type");
+    check_dirent_has_field("has_d_type");
 
-    check_dirent_has_field("_DIRENT_HAVE_D_RECLEN", "has_d_reclen");
+    check_dirent_has_field("has_d_reclen");
 
-    check_dirent_has_field("_DIRENT_HAVE_D_NAMLEN", "has_d_namlen");
+    check_dirent_has_field("has_d_namlen");
 
-    check_dirent_has_field("_DIRENT_HAVE_D_INO", "has_d_ino");
-
-    //  check_dirent_has_field("_DIRENT_HAVE_D_OFF", "has_d_off");
+    check_dirent_has_field("has_d_ino");
 }

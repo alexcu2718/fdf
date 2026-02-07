@@ -260,24 +260,6 @@ impl FinderBuilder {
             None
         };
 
-        /*
-
-        pub(crate) fn new<A: AsRef<str>>(
-        pattern: Option<&A>,
-        hide_hidden: bool,
-        case_insensitive: bool,
-        keep_dirs: bool,
-        filenameonly: bool,
-        extension_match: Option<Box<[u8]>>,
-        depth: Option<NonZeroU32>,
-        follow_symlinks: bool,
-        size_filter: Option<SizeFilter>,
-        type_filter: Option<FileTypeFilter>,
-        time_filter: Option<TimeFilter>,
-        collect_errors: bool,
-        use_glob: bool,
-         */
-
         let search_config = config::SearchConfig::new(
             self.pattern.as_ref(),
             self.hide_hidden,

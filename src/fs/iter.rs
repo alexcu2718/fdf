@@ -575,10 +575,11 @@ impl GetDirEntries {
         if self.end_of_stream {
             return false;
         }
+
         //SAFETY: passing a valid buffer to an open file descriptor.
         let remaining_bytes = unsafe {
             self.syscall_buffer
-                .getdirentries(&self.fd, &raw mut self.base_pointer)
+                .getdirentries64(&self.fd, &raw mut self.base_pointer)
         };
 
         // SAFETY: Buffer is already initialised by the kernel

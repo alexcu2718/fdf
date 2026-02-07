@@ -1665,7 +1665,7 @@ impl DirEntry {
     */
     #[inline]
     #[cfg(target_os = "macos")]
-    pub fn getdentdirentries(&self) -> Result<crate::fs::iter::GetDirEntries> {
+    pub fn getdirentries(&self) -> Result<crate::fs::iter::GetDirEntries> {
         crate::fs::iter::GetDirEntries::new(self)
     }
 }

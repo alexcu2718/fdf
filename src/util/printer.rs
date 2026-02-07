@@ -103,12 +103,26 @@ where
     I: Iterator<Item = DirEntry>,
 {
     let std_out = stdout();
-    let mut writer = BufWriter::new(std_out.lock());
     let true_limit = limit.unwrap_or(usize::MAX);
 
-    let check_std_colours =
-        nocolour || std::env::var("FDF_NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
-    let use_colour = std_out.is_terminal() && !check_std_colours;
+    let is_terminal = std_out.is_terminal();
+
+    let check_std_colours = nocolour
+        || std::env::var("NO_COLOUR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"))
+        || std::env::var("NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
+    // TODO document this.
+
+    let use_colour = is_terminal && !check_std_colours;
+
+    #[cfg(not(target_os = "macos"))]
+    let mut writer = BufWriter::new(std_out);
+    #[cfg(target_os = "macos")]
+    let mut writer = if is_terminal {
+        BufWriter::new(std_out) //Decrease write syscalls if not sending to stdout. Oddly this doesnt happen on Linux?
+    //When profiling via dtruss/dtrace, I found A LOT more write syscalls when sending to non-terminal
+    } else {
+        BufWriter::with_capacity(32 * 4096, std_out)
+    };
     /*
     sorting is a very computationally expensive operation alas because it requires alot of operations!
      Included for completeness (I will probably need to rewrite all of this eventually)

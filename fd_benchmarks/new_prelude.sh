@@ -46,8 +46,12 @@ EXCLUDE='paru/clone/.*/pkg|systemd-private|fd.*\.lst$'
 
 
 if [ ! -e "$LLVM" ] && [ -e "$HOME/llvm-project" ]; then
-    echo "Found llvm-project in HOME directory, copying to $LLVM" #internal convenience trick for me, since cloning llvm is a pain in the ass.
-    cp -r "$HOME/llvm-project" "$TMP_DIR/"
+    echo "Found llvm-project in HOME directory, copying to $LLVM"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --info=progress2 --delete "$HOME/llvm-project/" "$LLVM/"
+    else
+        cp -a "$HOME/llvm-project" "$LLVM"
+    fi
 elif [ ! -e "$LLVM" ]; then
     echo "cloning llvm repo $llvm_link, this may take a while sorry!"
     git clone --depth 1 "$llvm_link" "$LLVM" >/dev/null 2>&1
@@ -61,7 +65,7 @@ if [ ! -e "$fdf_location" ]; then
 	git clone "$fdf_repo" "$fdf_location" >/dev/null
 	echo "Building fdf..."
     cd "$fdf_location" || exit 1
-    if [ -n "${BUFFER_SIZE:-}" ]; then
+    if [ -n "${BUFFER_SIZE:-}" ]; then ## Custom testing I removed that I may add in again later, TBC.
         BUFFER_SIZE=$BUFFER_SIZE cargo b -r
     else
         cargo b -r

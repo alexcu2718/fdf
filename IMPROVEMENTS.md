@@ -23,13 +23,9 @@ A potential alternative is [`fts_open`](https://blog.tempel.org/2019/04/dir-read
 
 However, this presents a rather unpleasant API that is difficult to parallelise.
 
-Also, look at this link for [`fts open`](https://github.com/dalance/fts-rs)
+Also, look at this link for [additional reading](https://github.com/dalance/fts-rs)
 
-For investigation purposes, the last commit before removing `getdirentries64` can be found at:
-
-```bash
-git checkout 27728cdadcd254a95bda48a3f10b6c8d892bea0d
-```
+EDIT: Fixed!
 
 ## 2. Filesystem Optimisations
 

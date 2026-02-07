@@ -176,7 +176,11 @@ where
 
     #[inline]
     #[cfg(target_os = "macos")]
-    pub(crate) unsafe fn getdirentries(&mut self, fd: &crate::fs::FileDes, basep: *mut i64) -> i32 {
+    pub(crate) unsafe fn getdirentries64(
+        &mut self,
+        fd: &crate::fs::FileDes,
+        basep: *mut i64,
+    ) -> isize {
         // SAFETY: we're passing a valid buffer
         unsafe { crate::util::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
     }

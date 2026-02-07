@@ -333,7 +333,7 @@ impl Finder {
         #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
         let direntries = dir.readdir();
         #[cfg(target_os = "macos")]
-        let direntries = dir.getdentdirentries();
+        let direntries = dir.getdirentries();
 
         match direntries {
             Ok(entries) => {

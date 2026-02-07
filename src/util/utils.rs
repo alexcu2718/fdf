@@ -59,16 +59,52 @@ pub unsafe fn getdirentries64<T>(
     buffer_ptr: *mut T,
     nbytes: libc::size_t,
     basep: *mut libc::off_t,
+) -> isize
+where
+    T: crate::fs::ValueType,
+{
+    // link to libc
+    // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
+    unsafe extern "C" {
+        fn __getdirentries64(
+            fd: libc::c_int,
+            buf: *mut libc::c_char,
+            nbytes: libc::size_t,
+            basep: *mut libc::off_t,
+        ) -> libc::ssize_t;
+    } // Compile error if this doesn't link.
+
+    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
+    unsafe { __getdirentries64(fd, buffer_ptr.cast(), nbytes, basep) }
+}
+
+/*
+
+pub unsafe fn getdirentries64<T>(
+    fd: libc::c_int,
+    buffer_ptr: *mut T,
+    nbytes: libc::size_t,
+    basep: *mut libc::off_t,
 ) -> i32
 where
     T: crate::fs::ValueType,
 {
     const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
+    unsafe extern "C" {
+        // The actual signature on macOS
+        pub fn getdirentries64(
+            fd: libc::c_int,
+            buf: *mut libc::c_char,
+            nbytes: libc::size_t,
+            basep: *mut libc::off_t,
+        ) -> libc::ssize_t;
+    }
     //https://phrack.org/issues/66/16
     // We verify this works via build script, we check if `getdirentries` returns >0 for tmp directory, if not, syscall is broken.
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
     unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
 }
+*/
 
 /// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.

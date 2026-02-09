@@ -206,10 +206,6 @@ impl GetDents {
     }
 
     #[inline]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "hot function, worth some easy optimisation, not caring about 32bit target"
-    )]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.end_of_stream {
@@ -221,7 +217,7 @@ impl GetDents {
 
         let has_bytes_remaining = remaining_bytes.is_positive();
         // Cast the boolean to 0/1  (because 0 * x=0, trivially), keeping only positive results(avoid branching)
-        self.remaining_bytes = usize::from(has_bytes_remaining) * (remaining_bytes as usize);
+        self.remaining_bytes = usize::from(has_bytes_remaining) * remaining_bytes.cast_unsigned();
 
         self.end_of_stream = !has_bytes_remaining;
 
@@ -283,6 +279,15 @@ impl GetDents {
         })
     }
 
+    // fn get_dirent(&self) -> *const dirent64 {
+    //     unsafe {
+    //         self.syscall_buffer
+    //             .as_ptr()
+    //             .add(self.offset)
+    //             .cast::<dirent64>()
+    //     }
+    // }
+
     /**
         Advances the iterator to the next directory entry in the buffer and returns a pointer to it.
 
@@ -328,7 +333,7 @@ impl GetDents {
         // SAFETY: dirent is not null so field access is safe
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
-        // SAFETY: dirent is not null
+        // SAFETY: dirent is not null (need to cast to mut for `NonNull` sadly.)
         unsafe { Some(NonNull::new_unchecked(drnt.cast_mut())) }
     }
 }
@@ -473,8 +478,11 @@ pub trait DirentConstructor {
         debug_assert!(!drnt.is_null(), "drnt is null in construct path!");
         // SAFETY: The `drnt` must not be null (checked before using)
         let d_name: *const u8 = unsafe { access_dirent!(drnt, d_name) };
+        #[cfg(has_d_ino)]
         // SAFETY: same as above
         let d_ino: u64 = unsafe { access_dirent!(drnt, d_ino) };
+        #[cfg(not(has_d_ino))]
+        let d_ino: u64 = 0;
         // SAFETY: as above.
         // SAFETY: Same as above^ (Add 1 to include the null terminator)
         let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
@@ -636,7 +644,7 @@ impl GetDirEntries {
 
         let is_more_remaining = remaining_bytes.is_positive();
         // Branchless check
-        self.remaining_bytes = (remaining_bytes as usize) * usize::from(is_more_remaining);
+        self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
 
         self.offset = 0;
 

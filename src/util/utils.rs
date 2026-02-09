@@ -80,6 +80,8 @@ where
 
 /*
 
+
+// Works same as above but I prefer to not rely on hardcoded syscall numbers!
 pub unsafe fn getdirentries64<T>(
     fd: libc::c_int,
     buffer_ptr: *mut T,
@@ -90,15 +92,7 @@ where
     T: crate::fs::ValueType,
 {
     const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
-    unsafe extern "C" {
-        // The actual signature on macOS
-        pub fn getdirentries64(
-            fd: libc::c_int,
-            buf: *mut libc::c_char,
-            nbytes: libc::size_t,
-            basep: *mut libc::off_t,
-        ) -> libc::ssize_t;
-    }
+
     //https://phrack.org/issues/66/16
     // We verify this works via build script, we check if `getdirentries` returns >0 for tmp directory, if not, syscall is broken.
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
@@ -293,7 +287,7 @@ On some systems
  - [Wojciech Muła ] (<http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd>)
 
 */
-#[inline]
+#[inline(never)]
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -456,5 +450,47 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         add rax, rcx
         add rax, -27
         ret
+
+*/
+
+/*
+
+// Works on 32bit too, surprisingly!
+
+// C implementation
+
+#if defined(__linux__)
+uint64_t dirent_const_time(const struct dirent *drnt) {
+#define DIRENT_HEADER_START (offsetof(struct dirent, d_name))
+
+#define MIN_DIRENT_SIZE (((DIRENT_HEADER_START) + 7) & ~7)
+#define HI_U64 0x8080808080808080ULL
+#define LO_U64 0x0101010101010101ULL
+
+#if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#define MASK 0x0000000000FFFFFFULL
+#else
+#define MASK 0xFFFFFF0000000000ULL
+#endif
+
+  const uint64_t reclen = drnt->d_reclen;
+  const uint64_t mask = MASK * (reclen == MIN_DIRENT_SIZE);
+  uint64_t last_word = *(uint64_t *)((uint8_t *)(drnt) + (reclen - 8));
+  last_word |= mask;
+
+#if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+  const uint64_t zero_bit = (last_word - LO_U64) & ~last_word & HI_U64;
+  const uint64_t byte_pos = __builtin_ctzll(zero_bit) >> 3;
+#else
+  const uint64_t zero_bit =
+      ((~last_word & ~HI_U64) + LO_U64) & (~last_word & HI_U64);
+  const uint64_t byte_pos = __builtin_clzll(zero_bit) >> 3;
+#endif
+
+  return reclen - DIRENT_HEADER_START + byte_pos - 8;
+}
+#else
+#error "dirent_const_time is only supported on linux in this simplified example (and GCC/Clang, you'll need to use different intrinsics for MSVC (irrelevant cos wont work on windows lol)"
+#endif
 
 */

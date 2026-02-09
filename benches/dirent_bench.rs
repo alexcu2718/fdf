@@ -25,25 +25,24 @@ pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usi
     */
     // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
     // and alignment is guranteed by the kernel
-    let last_word: u64 = unsafe { dirent.byte_add(reclen - 8).cast::<u64>().read() };
+    let mut last_word: u64 = unsafe { dirent.byte_add(reclen - 8).cast::<u64>().read() };
 
     const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
     let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
 
-    let candidate_pos: u64 = last_word | mask;
+    last_word |= mask;
 
     #[cfg(target_endian = "little")]
     //SAFETY: The u64 can never be all 0's post-SWAR
-    let zero_bit = unsafe {
-        NonZeroU64::new_unchecked(candidate_pos.wrapping_sub(LO_U64) & !candidate_pos & HI_U64)
-    };
+    let zero_bit =
+        unsafe { NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64) };
     //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
     #[cfg(target_endian = "big")]
     //SAFETY: The u64 can never be all 0's post-SWAR
     let zero_bit = unsafe {
         NonZeroU64::new_unchecked(
-            (!candidate_pos & !HI_U64).wrapping_add(LO_U64) & (!candidate_pos & HI_U64),
+            (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
         )
     };
     // Find the position of the null terminator

@@ -32,7 +32,9 @@ fi
 
 
 
+rm -rf ../bench_results
 
+mkdir -p ../bench_results
 
 
 if [[ "$run_benchmarks" =~ ^[Yy]$ ]]; then

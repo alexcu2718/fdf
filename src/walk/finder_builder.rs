@@ -279,11 +279,11 @@ impl FinderBuilder {
         let lambda: FilterType = |rconfig, rdir, rfilter| {
             {
                 rfilter.is_none_or(|func| func(rdir))
-                    && rconfig.matches_type(rdir)
                     && rconfig.matches_extension(&rdir.file_name())
+                    && rconfig.matches_path(rdir, !rconfig.file_name_only)
+                    && rconfig.matches_type(rdir)
                     && rconfig.matches_size(rdir)
                     && rconfig.matches_time(rdir)
-                    && rconfig.matches_path(rdir, !rconfig.file_name_only)
             }
         };
 
@@ -299,6 +299,7 @@ impl FinderBuilder {
             errors: self
                 .collect_errors
                 .then(|| Arc::new(Mutex::new(Vec::new()))),
+            thread_count: self.thread_count,
         })
     }
 

@@ -1431,10 +1431,11 @@ impl DirEntry {
         // this without lstat.
         let mut path_ref = path.as_ref().as_bytes();
         // Strip trailing slash
-        if path_ref != b"/" {
-            if let Some(stripped) = path_ref.strip_suffix(b"/") {
-                path_ref = stripped;
-            }
+
+        if path_ref != b"/"
+            && let Some(stripped) = path_ref.strip_suffix(b"/")
+        {
+            path_ref = stripped;
         }
 
         let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::NulError)?;

@@ -247,7 +247,7 @@ impl GetDents {
     */
     #[inline]
     #[must_use]
-    #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
+    #[allow(clippy::cast_possible_wrap)]
     #[cfg(target_os = "linux")] // Only available on linux to my knowledge
     pub fn readahead(&self, count: usize) -> isize {
         /*  SAFETY:

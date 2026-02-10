@@ -697,16 +697,20 @@ impl DirEntry {
     ```
     */
     #[inline]
-    pub fn file_name_cstr(&self) -> &CStr {
-        let bytes = self.path.to_bytes_with_nul();
-
-        //SAFETY:
-        // `file_name_index()` returns a valid index within `bytes` bounds
-        // The slice from this index includes the terminating null byte
-        //`bytes` contains no interior null bytes before the terminator
+    pub const fn file_name_cstr(&self) -> &CStr {
+        let path = self.path.to_bytes_with_nul();
+        let len = path.len() - self.file_name_index;
+        /*SAFETY:
+        `file_name_index` returns a valid index within `bytes` bounds
+        The slice from this index includes the terminating null byte
+        `bytes` contains no interior null bytes before the terminator*/
         #[allow(clippy::multiple_unsafe_ops_per_block)]
         unsafe {
-            CStr::from_bytes_with_nul_unchecked(bytes.get_unchecked(self.file_name_index()..))
+            CStr::from_bytes_with_nul_unchecked(core::slice::from_raw_parts(
+                path.as_ptr().add(self.file_name_index),
+                len,
+            ))
+            // Rearranged to make const compatible(identical assembly to previous version but wasnt const)
         }
     }
 
@@ -747,13 +751,21 @@ impl DirEntry {
     */
     #[inline]
     #[must_use]
-    pub fn file_name(&self) -> &[u8] {
+    pub const fn file_name(&self) -> &[u8] {
         debug_assert!(
             self.len() >= self.file_name_index(),
             "this should always be equal or below (equal only when root)"
         );
-        // SAFETY: the index is below the length of the path trivially
-        unsafe { self.get_unchecked(self.file_name_index()..) }
+
+        let path = self.path.to_bytes();
+        let len = path.len() - self.file_name_index;
+        /*SAFETY:
+        `file_name_index` returns a valid index within `bytes` bounds */
+        #[allow(clippy::multiple_unsafe_ops_per_block)]
+        unsafe {
+            core::slice::from_raw_parts(path.as_ptr().add(self.file_name_index), len)
+            // Rearranged to make const compatible(identical assembly to previous version but wasnt const)
+        }
     }
 
     /// Takes the value of the path and gives the raw representation as a boxed Cstr
@@ -1244,9 +1256,9 @@ impl DirEntry {
     #[must_use]
     #[expect(clippy::multiple_unsafe_ops_per_block, reason = "stylistic")]
     pub const fn is_hidden(&self) -> bool {
-        // SAFETY: file_name_index() is guaranteed to be within bounds
+        // SAFETY: file_name_index is guaranteed to be within bounds
         // and we're using pointer arithmetic which is const-compatible (slight const hack)
-        unsafe { *self.as_ptr().cast::<u8>().add(self.file_name_index()) == b'.' }
+        unsafe { *self.as_ptr().cast::<u8>().add(self.file_name_index) == b'.' }
     }
 
     /**

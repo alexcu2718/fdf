@@ -1,7 +1,4 @@
-#![expect(
-    clippy::cast_lossless,
-    reason = "casting a bool to a usize is trivially fine here."
-)]
+#![expect(clippy::indexing_slicing, reason = "trivially in bounds")]
 use crate::{
     SearchConfigError, TraversalError,
     fs::{DirEntry, FileType},
@@ -62,10 +59,9 @@ where
 
     for path in iter_paths {
         writer.write_all(&path)?;
-        // SAFETY: We're indexing in bounds (trivially, either 0 or 1, this should never need to be checked but im too lazy to check assembly on it)
+        // We're indexing in bounds (trivially, either 0 or 1, this should never need to be checked but im too lazy to check assembly on it)
         // If it's a directory, we access index 1, which adds a / to the end
-        // Due to this being a difficult to predict branch, it seemed prudent to get rid of.
-        writer.write_all(unsafe { terminator_array.get_unchecked(path.is_dir() as usize) })?;
+        writer.write_all(terminator_array[usize::from(path.is_dir())])?;
         // I don't append a slash for symlinks that are directories when not sending to stdout
         // This is to avoid calling stat on symlinks. It seems extremely wasteful.
     }
@@ -81,8 +77,7 @@ where
     for path in iter_paths {
         writer.write_all(extension_colour(&path))?;
         writer.write_all(&path)?;
-        // SAFETY: as above
-        writer.write_all(unsafe { NEWLINES_RESET.get_unchecked(path.is_dir() as usize) })?;
+        writer.write_all(NEWLINES_RESET[usize::from(path.is_dir())])?;
     }
     Ok(())
 }

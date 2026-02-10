@@ -91,6 +91,7 @@ impl TimeFilter {
 
      Returns `ParseTimeError::InvalidFormat` if the string cannot be parsed or is in an invalid format.
     */
+    #[allow(clippy::missing_inline_in_public_items)]
     pub fn from_string(s: &str) -> Result<Self, ParseTimeError> {
         Self::parse_args(s).ok_or(ParseTimeError::InvalidFormat)
     }
@@ -155,6 +156,7 @@ impl TimeFilter {
     }
 
     #[must_use]
+    #[inline]
     pub fn matches_time(&self, file_time: SystemTime) -> bool {
         match *self {
             Self::Before(cutoff) => {
@@ -182,7 +184,7 @@ pub struct TimeFilterParser;
 
 impl TypedValueParser for TimeFilterParser {
     type Value = TimeFilter;
-
+    #[allow(clippy::missing_inline_in_public_items)]
     fn parse_ref(
         &self,
         cmd: &Command,
@@ -245,7 +247,7 @@ impl TypedValueParser for TimeFilterParser {
             }
         }
     }
-
+    #[allow(clippy::missing_inline_in_public_items)] // wouldnt matter anyway
     fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
         Some(Box::new(
             [

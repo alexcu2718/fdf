@@ -264,6 +264,7 @@ impl FileType {
 }
 
 impl core::fmt::Display for FileType {
+    #[allow(clippy::missing_inline_in_public_items)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
             Self::BlockDevice => write!(f, "Block device"),

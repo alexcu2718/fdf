@@ -1,8 +1,8 @@
 use crate::SearchConfigError;
-use crate::filters::FileTypeFilter;
+use crate::filters::{FileTypeFilter, SizeFilter, TimeFilter};
 use crate::fs::{DirEntry, FileType};
+use crate::util::BytePath as _;
 use crate::util::glob_to_regex;
-use crate::{filters, util::BytePath as _};
 use core::num::NonZeroU32;
 use core::ops::Deref;
 use core::time::Duration;
@@ -119,7 +119,7 @@ pub struct SearchConfig {
     If `Some`, only files matching the size criteria are included.
     Supports minimum, maximum, and exact size matching.
     */
-    pub(crate) size_filter: Option<filters::SizeFilter>,
+    pub(crate) size_filter: Option<SizeFilter>,
 
     /**
     Filter based on file type
@@ -135,7 +135,7 @@ pub struct SearchConfig {
     If `Some`, only files matching the time criteria are included.
     Supports relative time ranges (e.g., "last 7 days").
     */
-    pub(crate) time_filter: Option<filters::TimeFilter>,
+    pub(crate) time_filter: Option<TimeFilter>,
 
     /**
     Whether to collect
@@ -166,9 +166,9 @@ impl SearchConfig {
         extension_match: Option<Box<[u8]>>,
         depth: Option<NonZeroU32>,
         follow_symlinks: bool,
-        size_filter: Option<filters::SizeFilter>,
+        size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,
-        time_filter: Option<filters::TimeFilter>,
+        time_filter: Option<TimeFilter>,
         collect_errors: bool,
         use_glob: bool,
     ) -> core::result::Result<Self, SearchConfigError> {
@@ -252,10 +252,6 @@ impl SearchConfig {
     */
     #[inline]
     #[must_use]
-    #[expect(
-        clippy::wildcard_enum_match_arm,
-        reason = "Only checking regular files"
-    )]
     #[allow(clippy::cast_sign_loss)] // Sign loss does not matter here
     pub fn matches_size(&self, entry: &DirEntry) -> bool {
         let Some(filter_size) = self.size_filter else {
@@ -266,11 +262,15 @@ impl SearchConfig {
             FileType::RegularFile => entry
                 .file_size()
                 .ok()
-                .is_some_and(|sz| filter_size.is_within_size(sz as _)),
-            // Resolve to full path first, this basically avoids broken symlinks
-            FileType::Symlink => entry.to_full_path_with_stat().is_ok_and(|(path, statted)| {
-                path.is_regular_file() && filter_size.is_within_size(statted.st_size as _)
-            }),
+                .is_some_and(|sz| filter_size.is_within_size(sz)),
+            //Check if it exists first, then call stat..
+            FileType::Symlink => {
+                entry.exists()
+                    && entry.get_stat().is_ok_and(|statted| {
+                        FileType::from_stat(&statted) == FileType::RegularFile
+                            && filter_size.is_within_size(statted.st_size as _)
+                    })
+            }
 
             _ => false,
         }
@@ -303,7 +303,6 @@ impl SearchConfig {
     /// Returns true if the file's modification time matches the filter criteria
     #[inline]
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
     pub fn matches_time(&self, entry: &DirEntry) -> bool {
         let Some(time_filter) = self.time_filter else {
             return true; // No filter means always match
@@ -314,7 +313,7 @@ impl SearchConfig {
             .modified_time()
             .ok()
             .and_then(|datetime| datetime.timestamp_nanos_opt())
-            .and_then(|nanos| UNIX_EPOCH.checked_add(Duration::from_nanos(nanos as _)))
+            .and_then(|nanos| UNIX_EPOCH.checked_add(Duration::from_nanos(nanos.cast_unsigned())))
             .is_some_and(|systime| time_filter.matches_time(systime))
     }
 
@@ -322,7 +321,6 @@ impl SearchConfig {
     /// If `full_path` is false, only checks the filename
     #[inline]
     #[must_use]
-    #[expect(clippy::cast_lossless, reason = "overcomplicates it")]
     #[expect(clippy::indexing_slicing, reason = "used for debug assert")]
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
         debug_assert!(
@@ -337,7 +335,7 @@ impl SearchConfig {
 
         self.regex_match.as_ref().is_none_or(|reg|
                 // Use arithmetic to avoid branching costs
-             { let index_amount=!full_path as usize * dir.file_name_index();
+             { let index_amount=usize::from(!full_path) * dir.file_name_index();
                      // SAFETY: are always indexing within bounds.
             unsafe{reg.is_match(dir.get_unchecked(index_amount..))}
             })

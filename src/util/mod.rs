@@ -28,4 +28,5 @@ pub use utils::getdents;
 #[cfg(target_os = "macos")]
 pub use utils::getdirentries64;
 
-pub(crate) use utils::{BytePath, dirent_name_length};
+pub(crate) use utils::BytePath;
+pub use utils::dirent_name_length;

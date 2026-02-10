@@ -1,3 +1,4 @@
+#![allow(clippy::missing_inline_in_public_items)]
 use crate::{
     SearchConfigError, config, filters,
     fs::DirEntry,
@@ -247,9 +248,6 @@ impl FinderBuilder {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
 
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(self.thread_count)
-            .build_global(); //Skip the error, it only errors if it's already been initialised
         //we do this to avoid passing pools to every iterator (shared access locks etc.)
 
         let starting_filesystem = if self.same_filesystem {
@@ -279,11 +277,11 @@ impl FinderBuilder {
         let lambda: FilterType = |rconfig, rdir, rfilter| {
             {
                 rfilter.is_none_or(|func| func(rdir))
-                    && rconfig.matches_type(rdir)
                     && rconfig.matches_extension(&rdir.file_name())
+                    && rconfig.matches_path(rdir, !rconfig.file_name_only)
+                    && rconfig.matches_type(rdir)
                     && rconfig.matches_size(rdir)
                     && rconfig.matches_time(rdir)
-                    && rconfig.matches_path(rdir, !rconfig.file_name_only)
             }
         };
 
@@ -299,6 +297,7 @@ impl FinderBuilder {
             errors: self
                 .collect_errors
                 .then(|| Arc::new(Mutex::new(Vec::new()))),
+            thread_count: self.thread_count,
         })
     }
 

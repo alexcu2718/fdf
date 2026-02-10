@@ -1,3 +1,4 @@
+#![allow(clippy::missing_inline_in_public_items)]
 use crate::fs::DirEntry;
 use core::fmt;
 use libc::{
@@ -130,7 +131,6 @@ where
 impl FilesystemIOError {
     /// Create a new `FilesystemIOError` from a `std::io::Error`
     #[must_use]
-    #[allow(clippy::wildcard_enum_match_arm)] // Not doing them all...
     pub fn from_io_error(error: io::Error) -> Self {
         // Map OS error codes to variants based on libc documentation
         if let Some(code) = error.raw_os_error() {

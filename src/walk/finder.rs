@@ -4,14 +4,17 @@ use crate::{
     util::write_paths_coloured,
     walk::{DirEntryFilter, FilterType, finder_builder::FinderBuilder},
 };
+use core::{
+    mem,
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+};
+use crossbeam_channel::{Receiver, SendError, Sender, bounded};
+use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use dashmap::DashSet;
-use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use std::{
     ffi::OsStr,
-    sync::{
-        Arc, Mutex,
-        mpsc::{Receiver, Sender, channel as unbounded},
-    },
+    sync::{Arc, Mutex},
+    thread,
 };
 
 /**
@@ -21,8 +24,8 @@ Its methods are exposed for building the search configuration
 The main entry point for file system search operations.
 
 `Finder` provides a high-performance, parallel file system traversal API
-with configurable filtering and search criteria. It uses Rayon for parallel
-execution and provides both synchronous and asynchronous result handling.
+with configurable filtering and search criteria. It uses a worker pool for
+parallel execution and provides both synchronous and asynchronous result handling.
 */
 #[derive(Debug)]
 pub struct Finder {
@@ -41,6 +44,122 @@ pub struct Finder {
     pub(crate) inode_cache: Option<DashSet<(u64, u64)>>,
     /// Optionally Collected errors encountered during traversal
     pub(crate) errors: Option<Arc<Mutex<Vec<TraversalError>>>>,
+    /// Maximum worker threads used for traversal
+    pub(crate) thread_count: usize,
+}
+
+/// Maximum size of a result batch before flushing to the receiver.
+const RESULT_BATCH_LIMIT: usize = 256; //TODO TEST DIFFERENT VALUES FOR THIS (256 seems to perform best?)
+/// Channel capacity multiplier for result buffering.
+const RESULT_CHANNEL_FACTOR: usize = 2;
+
+/// Wrapper that sends batches of items at once over a channel.
+struct BatchSender {
+    items: Vec<DirEntry>,
+    tx: Sender<Vec<DirEntry>>,
+    limit: usize,
+}
+
+impl BatchSender {
+    fn new(tx: Sender<Vec<DirEntry>>, limit: usize) -> Self {
+        Self {
+            items: Vec::with_capacity(limit),
+            tx,
+            limit,
+        }
+    }
+
+    fn send(&mut self, item: DirEntry) -> Result<(), SendError<Vec<DirEntry>>> {
+        self.items.push(item);
+        if self.items.len() >= self.limit {
+            let batch = mem::take(&mut self.items);
+            self.tx.send(batch)?;
+            self.items = Vec::with_capacity(self.limit);
+        }
+
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), SendError<Vec<DirEntry>>> {
+        if self.items.is_empty() {
+            return Ok(());
+        }
+
+        let batch = mem::take(&mut self.items);
+        self.tx.send(batch)?;
+        self.items = Vec::with_capacity(self.limit);
+        Ok(())
+    }
+}
+// on drop, we need to flush the buffers.
+impl Drop for BatchSender {
+    fn drop(&mut self) {
+        if self.flush().is_err() {}
+    }
+}
+
+struct PendingGuard<'guard> {
+    pending: &'guard AtomicUsize,
+    shutdown_flag: &'guard AtomicBool,
+}
+
+impl<'guard> PendingGuard<'guard> {
+    const fn new(pending: &'guard AtomicUsize, shutdown_flag: &'guard AtomicBool) -> Self {
+        Self {
+            pending,
+            shutdown_flag,
+        }
+    }
+}
+
+impl Drop for PendingGuard<'_> {
+    fn drop(&mut self) {
+        let remaining = self.pending.fetch_sub(1, Ordering::AcqRel) - 1;
+        if remaining == 0 {
+            signal_shutdown(self.shutdown_flag);
+        }
+    }
+}
+
+fn signal_shutdown(shutdown_flag: &AtomicBool) {
+    shutdown_flag.store(true, Ordering::Relaxed);
+}
+
+fn find_task(
+    local: &Worker<DirEntry>,
+    injector: &Injector<DirEntry>,
+    stealers: &[Stealer<DirEntry>],
+) -> Option<DirEntry> {
+    if let Some(task) = local.pop() {
+        return Some(task);
+    }
+
+    loop {
+        match injector.steal_batch_and_pop(local) {
+            Steal::Success(task) => return Some(task),
+            Steal::Retry => continue,
+            Steal::Empty => {}
+        }
+
+        let mut retry = false;
+        for stealer in stealers {
+            match stealer.steal() {
+                Steal::Success(task) => return Some(task),
+                Steal::Retry => retry = true,
+                Steal::Empty => {}
+            }
+        }
+
+        if !retry {
+            return None;
+        }
+    }
+}
+
+struct WorkerContext<'ctx> {
+    local: &'ctx Worker<DirEntry>,
+    pending: &'ctx AtomicUsize,
+    shutdown_flag: &'ctx AtomicBool,
 }
 
 /// The Finder struct is used to find files in your filesystem
@@ -65,8 +184,8 @@ impl Finder {
     Returns `Some(Vec<TraversalError>)` if error collection is enabled and errors occurred,
     or `None` if error collection is disabled or the lock failed
     */
-    #[inline]
     #[must_use]
+    #[allow(clippy::missing_inline_in_public_items)]
     pub fn errors(&self) -> Option<Vec<TraversalError>> {
         self.errors
             .as_ref()
@@ -85,15 +204,14 @@ impl Finder {
     }
 
     /**
-    Traverse the directory tree starting from the root and return a receiver for the found entries.
+    Traverse the directory tree starting from the root and return an iterator for the found entries.
 
-    This method initiates a parallel directory traversal using Rayon. The traversal runs in a
-    background thread and sends batches of directory entries through an unbounded channel.
+    This method initiates a parallel directory traversal using a worker pool. The traversal runs
+    in background threads and sends batches of directory entries through a bounded channel.
 
     # Returns
-    Returns a `Receiver<Iterator<Item = DirEntry>>` that will receive batches of directory entries
-    as they are found during the traversal. The receiver can be used to iterate over the
-    results as they become available.
+    Returns an iterator that yields directory entries as they are discovered by the background
+    worker threads.
 
     # Errors
     Returns `Err(SearchConfigError)` if:
@@ -103,23 +221,85 @@ impl Finder {
 
 
     # Performance Notes
-    - Uses an unbounded channel to avoid blocking the producer thread
+    - Uses a bounded channel to provide backpressure when the consumer slows down
     - Entries are sent in batches to minimise channel contention
-    - Traversal runs in parallel using Rayon's work-stealing scheduler
+    - Traversal runs in parallel using fixed worker threads
     */
     #[inline]
     pub fn traverse(
         self,
     ) -> core::result::Result<impl Iterator<Item = DirEntry>, SearchConfigError> {
-        let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = unbounded();
+        let thread_count = self.thread_count.max(1);
+        let result_buffer = thread_count.saturating_mul(RESULT_CHANNEL_FACTOR).max(1);
+        let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = bounded(result_buffer);
+        let injector = Arc::new(Injector::new());
+        let pending = Arc::new(AtomicUsize::new(1));
+        let shutdown_flag = Arc::new(AtomicBool::new(false));
+
+        let mut workers = Vec::with_capacity(thread_count);
+        let mut stealers = Vec::with_capacity(thread_count);
+        for _ in 0..thread_count {
+            let worker = Worker::new_lifo();
+            stealers.push(worker.stealer());
+            workers.push(worker);
+        }
+        let stealers_shared = Arc::new(stealers);
 
         // Construct starting entry
         let entry = DirEntry::new(self.root_dir()).map_err(SearchConfigError::TraversalError)?;
 
         if entry.is_traversible() {
-            rayon::spawn(move || {
-                self.process_directory(entry, &sender);
-            });
+            let finder = Arc::new(self);
+            injector.push(entry);
+
+            for (index, worker) in workers.into_iter().enumerate() {
+                let finder_shared = Arc::clone(&finder);
+                let sender_shared = sender.clone();
+                let pending_shared = Arc::clone(&pending);
+                let shutdown_flag_shared = Arc::clone(&shutdown_flag);
+                let injector_shared = Arc::clone(&injector);
+                let stealers_pool = Arc::clone(&stealers_shared);
+                let local = worker;
+
+                thread::spawn(move || {
+                    let mut batch_sender = BatchSender::new(sender_shared, RESULT_BATCH_LIMIT);
+                    let mut local_stealers =
+                        Vec::with_capacity(stealers_pool.len().saturating_sub(1));
+                    for (idx, stealer) in stealers_pool.iter().enumerate() {
+                        if idx != index {
+                            local_stealers.push(stealer.clone());
+                        }
+                    }
+
+                    loop {
+                        if shutdown_flag_shared.load(Ordering::Relaxed)
+                            && local.is_empty()
+                            && injector_shared.is_empty()
+                        {
+                            break;
+                        }
+
+                        let Some(dir) = find_task(&local, &injector_shared, &local_stealers) else {
+                            if shutdown_flag_shared.load(Ordering::Relaxed) {
+                                break;
+                            }
+                            thread::yield_now();
+                            continue;
+                        };
+
+                        let _pending_guard =
+                            PendingGuard::new(&pending_shared, &shutdown_flag_shared);
+
+                        let ctx = WorkerContext {
+                            local: &local,
+                            pending: &pending_shared,
+                            shutdown_flag: &shutdown_flag_shared,
+                        };
+
+                        finder_shared.process_directory(dir, &mut batch_sender, &ctx);
+                    }
+                });
+            }
 
             Ok(receiver.into_iter().flatten())
         } else {
@@ -177,10 +357,6 @@ impl Finder {
 
     /// Determines if a directory should be traversed and caches the result
     #[inline]
-    #[expect(
-        clippy::wildcard_enum_match_arm,
-        reason = "Exhaustive on traversible types"
-    )]
     fn should_traverse(&self, dir: &DirEntry) -> bool {
         match dir.file_type {
             // Regular directory - always traversible
@@ -217,7 +393,6 @@ impl Finder {
     */
     #[inline]
     #[expect(
-        clippy::wildcard_enum_match_arm,
         clippy::cast_sign_loss,
         reason = "Exhaustive on traversible types, Follows std treatment of dev devices"
     )]
@@ -278,23 +453,20 @@ impl Finder {
     }
 
     #[inline]
-    #[allow(
-        clippy::let_underscore_must_use,
-        reason = "errors only when channel is closed, not useful"
-    )]
     fn handle_depth_limit(
         &self,
         dir: &DirEntry,
         should_send: bool,
-        sender: &Sender<Vec<DirEntry>>,
+        sender: &mut BatchSender,
+        ctx: &WorkerContext<'_>,
     ) -> bool {
         if self
             .search_config
             .depth
             .is_some_and(|depth| dir.depth >= depth.get())
         {
-            if should_send {
-                let _ = sender.send(vec![dir.clone()]);
+            if should_send && sender.send(dir.clone()).is_err() {
+                signal_shutdown(ctx.shutdown_flag);
             } // Cloning costs very little here.
             return false; // Depth limit reached, stop processing
         }
@@ -304,26 +476,22 @@ impl Finder {
     /**
     Recursively processes a directory, sending found files to a channel.
 
-    This method uses a depth-first traversal with `rayon` to process directories
-    in parallel.
+    This method uses a work-queue traversal with worker threads to process
+    directories in parallel.
 
     # Arguments
     * `dir` - The `DirEntry` representing the directory to process.
     * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
     */
     #[inline]
-    #[allow(
-        clippy::let_underscore_must_use,
-        reason = "errors only when channel is closed, not useful"
-    )]
-    fn process_directory(&self, dir: DirEntry, sender: &Sender<Vec<DirEntry>>) {
+    fn process_directory(&self, dir: DirEntry, sender: &mut BatchSender, ctx: &WorkerContext<'_>) {
         if !self.directory_or_symlink_filter(&dir) {
             return; // Check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info
         }
 
         let should_send_dir_or_symlink = self.should_send_dir(&dir); // If we've gotten here, the dir must be a directory!
 
-        if !self.handle_depth_limit(&dir, should_send_dir_or_symlink, sender) {
+        if !self.handle_depth_limit(&dir, should_send_dir_or_symlink, sender, ctx) {
             return;
         }
 
@@ -344,10 +512,11 @@ impl Finder {
                     })
                     .partition(|ent| self.should_traverse(ent));
 
-                // Process directories in parallel
-                dirs.into_par_iter().for_each(|dirnt| {
-                    self.process_directory(dirnt, sender);
-                });
+                for dirnt in dirs {
+                    if !Self::enqueue_dir(dirnt, ctx) {
+                        return;
+                    }
+                }
 
                 // Checking if we should send directories
                 if should_send_dir_or_symlink {
@@ -356,8 +525,11 @@ impl Finder {
 
                 // We do batch sending to minimise contention of sending
                 // as opposed to sending one at a time, which will cause tremendous locks
-                if !files.is_empty() {
-                    let _ = sender.send(files); //Skip the error, the only errors happen when the channel is closed.
+                for entry in files {
+                    if sender.send(entry).is_err() {
+                        signal_shutdown(ctx.shutdown_flag);
+                        return;
+                    }
                 }
             }
             Err(error) => {
@@ -375,5 +547,16 @@ impl Finder {
                 }
             }
         }
+    }
+
+    fn enqueue_dir(dir: DirEntry, ctx: &WorkerContext<'_>) -> bool {
+        if ctx.shutdown_flag.load(Ordering::Relaxed) {
+            return false;
+        }
+
+        ctx.pending.fetch_add(1, Ordering::Relaxed);
+        ctx.local.push(dir);
+
+        true
     }
 }

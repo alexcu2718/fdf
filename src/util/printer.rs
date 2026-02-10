@@ -8,7 +8,7 @@ use crate::{
     util::BytePath,
 };
 use compile_time_ls_colours::file_type_colour;
-use rayon::prelude::ParallelSliceMut as _;
+
 use std::{
     io::{BufWriter, IsTerminal as _, Write, stdout},
     sync::{Arc, Mutex},
@@ -114,12 +114,11 @@ where
 
     let use_colour = is_terminal && !check_std_colours;
 
-    #[cfg(not(target_os = "macos"))]
-    let mut writer = BufWriter::new(std_out);
-    #[cfg(target_os = "macos")]
+    // #[cfg(not(target_os = "macos"))]
+    // let mut writer = BufWriter::new(std_out);
+    //#[cfg(target_os = "macos")]
     let mut writer = if is_terminal {
-        BufWriter::new(std_out) //Decrease write syscalls if not sending to stdout. Oddly this doesnt happen on Linux?
-    //When profiling via dtruss/dtrace, I found A LOT more write syscalls when sending to non-terminal
+        BufWriter::new(std_out) //Decrease write syscalls if not sending to stdout.
     } else {
         BufWriter::with_capacity(32 * 4096, std_out)
     };
@@ -130,7 +129,8 @@ where
 
     if sort {
         let mut collected: Vec<_> = path_iter.collect();
-        collected.par_sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+        collected.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+        // TODO rewrite this sorting algorithm to use parallelism(I removed rayon)
 
         let iter_paths = collected.into_iter().take(true_limit);
         // I do a lot of branch avoidance here
@@ -154,13 +154,12 @@ where
     writer.flush()?;
 
     //If errors were sent, show them.
-    if print_errors {
-        if let Some(errors_arc) = errors {
-            if let Ok(error_vec) = errors_arc.lock() {
-                for error in error_vec.iter() {
-                    eprintln!("{error}");
-                }
-            }
+    if print_errors
+        && let Some(errors_arc) = errors
+        && let Ok(error_vec) = errors_arc.lock()
+    {
+        for error in error_vec.iter() {
+            eprintln!("{error}");
         }
     }
 

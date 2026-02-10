@@ -1,4 +1,5 @@
 #![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_inline_in_public_items)]
 use clap::{
     Arg, Command, Error,
     builder::{PossibleValue, TypedValueParser},
@@ -166,6 +167,7 @@ impl SizeFilter {
 
     /// Checks if the given file size satisfies this size filter
     #[must_use]
+    #[inline]
     pub const fn is_within_size(&self, size: u64) -> bool {
         match *self {
             Self::Max(limit) => size <= limit,

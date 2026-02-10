@@ -128,7 +128,8 @@ pub use config::SearchConfig;
 #[cfg(all(
     any(target_os = "linux", target_os = "android", target_os = "macos"),
     not(miri),
-    not(debug_assertions)
+    not(debug_assertions),
+    feature = "mimalloc",
 ))]
 //miri doesnt support custom allocators
 #[global_allocator]

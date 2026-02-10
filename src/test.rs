@@ -33,7 +33,7 @@ mod tests {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use rand::rngs::StdRng;
-    use rand::{Rng, RngCore, SeedableRng, rng};
+    use rand::{Rng, RngExt, SeedableRng, rng};
 
     #[allow(dead_code)]
     #[repr(C)]
@@ -50,7 +50,7 @@ mod tests {
         string_size: usize,
         deterministic: bool,
     ) -> Vec<Vec<u8>> {
-        let mut rng: Box<dyn RngCore> = if deterministic {
+        let mut rng: Box<dyn Rng> = if deterministic {
             Box::new(StdRng::seed_from_u64(RANDOM_SEED))
         } else {
             Box::new(rng())
@@ -69,7 +69,7 @@ mod tests {
     }
 
     pub fn generate_random_u64_arrays(count: usize, deterministic: bool) -> Vec<[u8; 8]> {
-        let mut rng: Box<dyn RngCore> = if deterministic {
+        let mut rng: Box<dyn Rng> = if deterministic {
             Box::new(StdRng::seed_from_u64(RANDOM_SEED))
         } else {
             Box::new(rng())
@@ -156,7 +156,7 @@ mod tests {
         );
     }
 
-    fn dirent_reclen_for_name_len(name_len: usize) -> u16 {
+    const fn dirent_reclen_for_name_len(name_len: usize) -> u16 {
         debug_assert!(name_len <= 255);
         let header_start = core::mem::offset_of!(Dirent64, d_name);
         // +1 for the required null terminator

@@ -1,9 +1,13 @@
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "android"))]
+use crate::fs::types::SyscallBuffer;
 use crate::fs::{DirEntry, FileType};
 use crate::fs::{FileDes, Result};
+use crate::util::dirent_name_length;
 use crate::{dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
+use libc::closedir;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, fstatat};
 
 /**
@@ -103,12 +107,12 @@ impl Drop for ReadDir {
         // SAFETY: only closing HERE
         #[cfg(not(debug_assertions))]
         unsafe {
-            libc::closedir(self.dir.as_ptr())
+            closedir(self.dir.as_ptr())
         };
         #[cfg(debug_assertions)]
         assert!(
             // SAFETY: as above
-            unsafe { libc::closedir(self.dir.as_ptr()) } == 0,
+            unsafe { closedir(self.dir.as_ptr()) } == 0,
             "Fd was not closed in readdir!"
         );
     }
@@ -133,7 +137,7 @@ pub struct GetDents {
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// Approximately 32kB in size, optimised for typical directory traversal
-    pub(crate) syscall_buffer: crate::fs::types::SyscallBuffer,
+    pub(crate) syscall_buffer: SyscallBuffer,
     /// Buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     pub(crate) path_buffer: Vec<u8>,
@@ -206,10 +210,6 @@ impl GetDents {
     }
 
     #[inline]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "hot function, worth some easy optimisation, not caring about 32bit target"
-    )]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.end_of_stream {
@@ -221,7 +221,7 @@ impl GetDents {
 
         let has_bytes_remaining = remaining_bytes.is_positive();
         // Cast the boolean to 0/1  (because 0 * x=0, trivially), keeping only positive results(avoid branching)
-        self.remaining_bytes = usize::from(has_bytes_remaining) * (remaining_bytes as usize);
+        self.remaining_bytes = usize::from(has_bytes_remaining) * remaining_bytes.cast_unsigned();
 
         self.end_of_stream = !has_bytes_remaining;
 
@@ -251,7 +251,7 @@ impl GetDents {
     */
     #[inline]
     #[must_use]
-    #[expect(clippy::cast_possible_wrap, reason = "not designed for 32bit")]
+    #[allow(clippy::cast_possible_wrap)]
     #[cfg(target_os = "linux")] // Only available on linux to my knowledge
     pub fn readahead(&self, count: usize) -> isize {
         /*  SAFETY:
@@ -266,7 +266,6 @@ impl GetDents {
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
-        use crate::fs::types::SyscallBuffer;
         let fd = dir.open()?; //getting the file descriptor
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
@@ -282,6 +281,15 @@ impl GetDents {
             end_of_stream: false,
         })
     }
+
+    // fn get_dirent(&self) -> *const dirent64 {
+    //     unsafe {
+    //         self.syscall_buffer
+    //             .as_ptr()
+    //             .add(self.offset)
+    //             .cast::<dirent64>()
+    //     }
+    // }
 
     /**
         Advances the iterator to the next directory entry in the buffer and returns a pointer to it.
@@ -328,7 +336,7 @@ impl GetDents {
         // SAFETY: dirent is not null so field access is safe
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
-        // SAFETY: dirent is not null
+        // SAFETY: dirent is not null (need to cast to mut for `NonNull` sadly.)
         unsafe { Some(NonNull::new_unchecked(drnt.cast_mut())) }
     }
 }
@@ -473,14 +481,15 @@ pub trait DirentConstructor {
         debug_assert!(!drnt.is_null(), "drnt is null in construct path!");
         // SAFETY: The `drnt` must not be null (checked before using)
         let d_name: *const u8 = unsafe { access_dirent!(drnt, d_name) };
+        #[cfg(has_d_ino)]
         // SAFETY: same as above
         let d_ino: u64 = unsafe { access_dirent!(drnt, d_ino) };
-        // SAFETY: as above.
+        #[cfg(not(has_d_ino))]
+        let d_ino: u64 = 0;
         // SAFETY: Same as above^ (Add 1 to include the null terminator)
-        let name_len = unsafe { crate::util::dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
+        let name_len = unsafe { dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
-        #[allow(clippy::wildcard_enum_match_arm)] // ANYTHING but unknown is fine.
         #[cfg(has_d_type)]
         let file_type: FileType =
             // SAFETY: as above.
@@ -542,7 +551,7 @@ pub struct GetDirEntries {
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// 8192 bytes, matching macos readdir semantics) in size, optimised for typical directory traversal
-    pub(crate) syscall_buffer: crate::fs::types::SyscallBuffer,
+    pub(crate) syscall_buffer: SyscallBuffer,
     /// buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     pub(crate) path_buffer: Vec<u8>,
@@ -636,7 +645,7 @@ impl GetDirEntries {
 
         let is_more_remaining = remaining_bytes.is_positive();
         // Branchless check
-        self.remaining_bytes = (remaining_bytes as usize) * usize::from(is_more_remaining);
+        self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
 
         self.offset = 0;
 
@@ -672,7 +681,6 @@ impl GetDirEntries {
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
-        use crate::fs::types::SyscallBuffer;
         let fd = dir.open()?; //getting the file descriptor
         debug_assert!(fd.is_open(), "We expect it to always be open");
 

@@ -8,7 +8,7 @@ use crate::{
     util::BytePath,
 };
 use compile_time_ls_colours::file_type_colour;
-use rayon::prelude::ParallelSliceMut as _;
+
 use std::{
     io::{BufWriter, IsTerminal as _, Write, stdout},
     sync::{Arc, Mutex},
@@ -129,7 +129,8 @@ where
 
     if sort {
         let mut collected: Vec<_> = path_iter.collect();
-        collected.par_sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+        collected.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+        // TODO rewrite this sorting algorithm to use parallelism(I removed rayon)
 
         let iter_paths = collected.into_iter().take(true_limit);
         // I do a lot of branch avoidance here

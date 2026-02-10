@@ -1,3 +1,4 @@
+#![allow(clippy::missing_inline_in_public_items)]
 use crate::{
     SearchConfigError, config, filters,
     fs::DirEntry,
@@ -247,9 +248,6 @@ impl FinderBuilder {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
 
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(self.thread_count)
-            .build_global(); //Skip the error, it only errors if it's already been initialised
         //we do this to avoid passing pools to every iterator (shared access locks etc.)
 
         let starting_filesystem = if self.same_filesystem {

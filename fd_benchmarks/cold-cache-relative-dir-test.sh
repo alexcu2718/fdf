@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+cd  "$(realpath "$(dirname "$0")")" || exit 1
+# shellcheck disable=SC1091
+source "new_prelude.sh"
+ask_for_sudo
+
+REL_ROOT=".."
+
+echo -e "\nRunning relative directory benchmarks..."
+run_cold_benchmark "relative-dir-test" "'.' '$REL_ROOT' -HI" "'.' '$REL_ROOT' -HI" "relative"

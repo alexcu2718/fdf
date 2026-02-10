@@ -17,7 +17,8 @@
   let d_name_ptr:*const _ = access_dirent!(entry_ptr, d_name);
   let d_reclen:usize = access_dirent!(entry_ptr, d_reclen);
 
-  let d_namlen:usize = access_dirent!(entry_ptr, d_namlen); // This is a special case for BSD and MacOS, where d_namlen is available
+  let d_namlen:usize = access_dirent!(entry_ptr, d_namlen);
+  // ^This is a special case for BSD and MacOS, where d_namlen is available
   let d_ino :u64= access_dirent!(entry_ptr, d_ino); // This
   ```
 */

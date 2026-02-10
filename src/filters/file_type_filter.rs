@@ -1,3 +1,4 @@
+#![allow(clippy::missing_inline_in_public_items)]
 use clap::{
     Arg, Command, Error,
     builder::{PossibleValue, TypedValueParser},

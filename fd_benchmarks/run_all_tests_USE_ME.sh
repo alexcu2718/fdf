@@ -46,34 +46,51 @@ if [[ "$run_benchmarks" =~ ^[Yy]$ ]]; then
         fi
     done
 
-    if [[ "$(uname -s)" == "Linux" ]]; then
-        # Check if sudo exists(not available on android, well, it is, but i'm lazy and not rooting my phone!)
-        if command -v sudo &> /dev/null; then
-            echo "Running cold cache test..."
-            ./cold-cache-simple-pattern.sh
-        else
-            echo "Skipping cold cache test because sudo is not available."
-        fi
-    else
-        echo "Skipping cold cache test because it is only supported on Linux."
-    fi
-else
-    echo "Skipping benchmarks."
-fi
-
-
-
-
+echo -e "\n Running home dir benchmarks \n"
 echo -e "\n\nTHERE WILL BE A SMALL DISPARITY IN THESE TESTS DUE TO fd being located in /usr/bin (USUALLY) ((different permissions!))\n, differences are expected to be very small";
 echo -e "there will also be predictable temporary files created!\n\n"
 echo "these tests will take a while!"
-
 
 for script in ./warm*_home_dir.sh; do
     echo "Running $script"
     ./"$script"
     sleep 2
 done
+
+
+
+else
+    echo "Skipping benchmarks."
+fi
+
+
+
+if [[ "$(uname -s)" == "Linux" ]]; then
+        # Check if sudo exists(not available on android, well, it is, but i'm lazy and not rooting my phone!)
+        if command -v sudo &> /dev/null; then
+            echo "Running cold cache benchmarks..."
+            for script in ./cold-cache*.sh; do
+                if [[ "$script" != *"_home_dir"* ]]; then
+                    echo "Running $script"
+                    ."/$script"
+                    sleep 2
+                fi
+            done
+
+            echo -e "\nRunning cold cache home dir benchmarks\n"
+            for script in ./cold-cache*_home_dir.sh; do
+                echo "Running $script"
+                ."/$script"
+                sleep 2
+            done
+        else
+            echo "Skipping cold cache test because sudo is not available."
+        fi
+    else
+        echo "Skipping cold cache test because it is only supported on Linux."
+fi
+
+
 
 
 
@@ -91,7 +108,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
         echo "Skipping the syscall test."
     fi
 else
-    echo "Skipping syscall test because it is only supported on Linux."
+    echo "Skipping syscall test because it is only supported on Linux(too lazy to do it for mac currently)."
 fi
 
 ##quick hack to delete it in case people complain
@@ -116,7 +133,7 @@ fi
 
 
 
-read -rp "Do you want to run benchmarks for 3 strlen implementations? [y/n]: " confirm
+read -rp "Do you want to run benchmarks for the strlen implementations? [y/n]: " confirm
 
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
 

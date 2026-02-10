@@ -91,7 +91,7 @@ impl BatchSender {
         Ok(())
     }
 }
-
+// on drop, we need to flush the buffers.
 impl Drop for BatchSender {
     fn drop(&mut self) {
         if self.flush().is_err() {}
@@ -184,8 +184,8 @@ impl Finder {
     Returns `Some(Vec<TraversalError>)` if error collection is enabled and errors occurred,
     or `None` if error collection is disabled or the lock failed
     */
-    #[inline]
     #[must_use]
+    #[allow(clippy::missing_inline_in_public_items)]
     pub fn errors(&self) -> Option<Vec<TraversalError>> {
         self.errors
             .as_ref()
@@ -301,8 +301,6 @@ impl Finder {
                 });
             }
 
-            drop(sender);
-
             Ok(receiver.into_iter().flatten())
         } else {
             Err(SearchConfigError::NotADirectory)
@@ -359,10 +357,6 @@ impl Finder {
 
     /// Determines if a directory should be traversed and caches the result
     #[inline]
-    #[expect(
-        clippy::wildcard_enum_match_arm,
-        reason = "Exhaustive on traversible types"
-    )]
     fn should_traverse(&self, dir: &DirEntry) -> bool {
         match dir.file_type {
             // Regular directory - always traversible
@@ -399,7 +393,6 @@ impl Finder {
     */
     #[inline]
     #[expect(
-        clippy::wildcard_enum_match_arm,
         clippy::cast_sign_loss,
         reason = "Exhaustive on traversible types, Follows std treatment of dev devices"
     )]

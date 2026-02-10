@@ -1,6 +1,7 @@
 #![doc(hidden)]
 #![allow(clippy::derivable_impls)]
 #![allow(clippy::min_ident_chars)]
+#![allow(clippy::missing_inline_in_public_items)]
 #![allow(warnings)]
 //#! BIG EXPLANATION
 //#! I WANTED TO USE THIS CRATE FOR GLOB MATCHING, BUT I DIDNT WANT TO USE THE FULL DEPENDENCY. SO I REMOVED EVERY DEPENDENCY :)

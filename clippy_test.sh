@@ -10,6 +10,7 @@ cargo clippy --all -- \
   -A clippy::arithmetic_side_effects \
   -A clippy::default_numeric_fallback \
   -A clippy::as_conversions \
+  -A clippy::wildcard_enum_match_arm \
   -A clippy::question_mark_used \
   -A clippy::semicolon_if_nothing_returned \
   -A clippy::missing_trait_methods \
@@ -21,7 +22,6 @@ cargo clippy --all -- \
   -A clippy::blanket_clippy_restriction_lints \
   -A clippy::absolute_paths \
   -A clippy::arbitrary_source_item_ordering \
-  -A clippy::missing_inline_in_public_items \
   -A clippy::std_instead_of_alloc \
   -A clippy::unseparated_literal_suffix \
   -A clippy::pub_use \

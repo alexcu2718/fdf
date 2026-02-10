@@ -12,6 +12,8 @@ PLEASE NOTE: This is due to undergo a rename before a 1.0
 
 ```bash
 cargo install --git https://github.com/alexcu2718/fdf
+
+## Additionally specify  --no-default-features to remove mimalloc dependency
 ```
 
 ## Project Status
@@ -22,7 +24,7 @@ The implemented subset performs exceptionally well, surpassing fd in equivalent 
 
 While the CLI is usable, the internal library is not stable yet. Alas!
 
-## Platform Support (64-bit only)
+## Platform Support (64-bit only (32 bit maybe?))
 
 ### Fully Supported and CI Tested
 
@@ -89,35 +91,51 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 
 (I cannot test accurately on qemu due to virtualisation overhead and I do not have a mac)
 
-Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but macos has less optimisations, perhaps testing in QEMU is not ideal for mac!
+Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but macos has less optimisations, macos is a much heftier OS and I struggle to emulate it stably (I get bizarre results from SSHing into it and running dtruss)
 
 ```bash
 
 
-| Test Case                                          | fdf Mean        | fd Mean         | Speedup   | Relative        |
-| :----------                                        | :--------:      | :-------:       | :-------: | :--------:      |
-| `.' '/home/alexc' -HI -d 4`                        | 7.8 ± 0.3       | 20.1 ± 0.9      | **2.58x** | 2.57 ± 0.16     |
-| `.' '/tmp/llvm-project' -HI -d 2`                  | 2.3 ± 0.1       | 5.4 ± 0.5       | **2.35x** | 2.41 ± 0.26     |
-| `-HI --extension 'c' '' '/home/alexc`              | 95.7 ± 0.5      | 166.7 ± 1.0     | **1.74x** | 1.74 ± 0.01     |
-| `-HI --extension 'c' '' '/tmp/llvm-project`        | 15.4 ± 0.5      | 31.2 ± 0.8      | **2.03x** | 2.03 ± 0.09     |
-| `.' '/home/alexc' -HI`                             | 109.1 ± 2.2     | 189.6 ± 1.3     | **1.74x** | 1.74 ± 0.04     |
-| `.' '/tmp/llvm-project' -HI`                       | 17.2 ± 0.4      | 34.2 ± 0.7      | **1.99x** | 1.98 ± 0.06     |
-| `.' '..' -HI`                                      | 17.7 ± 0.5      | 34.9 ± 0.7      | **1.97x** | 1.96 ± 0.07     |
-| `-HI '.*[0-9].*(md\|\.c)$' '/home/alexc`           | 99.1 ± 1.9      | 154.9 ± 2.2     | **1.56x** | 1.56 ± 0.04     |
-| `-HI '.*[0-9].*(md\|\.c)$' '/tmp/llvm-project`     | 15.7 ± 0.4      | 28.3 ± 1.3      | **1.80x** | 1.80 ± 0.10     |
-| `-HI --size +1mb '' '/home/alexc`                  | 298.5 ± 4.5     | 556.7 ± 2.6     | **1.86x** | 1.87 ± 0.03     |
-| `-HI --size '+1mb' '' '/tmp/llvm-project`          | 41.7 ± 1.2      | 81.5 ± 1.1      | **1.95x** | 1.96 ± 0.06     |
-| `-HI --size -1mb '' '/home/alexc`                  | 331.9 ± 3.1     | 661.5 ± 5.2     | **1.99x** | 1.99 ± 0.02     |
-| `.' '/home/alexc' -HI --type d`                    | 106.0 ± 2.1     | 164.6 ± 1.9     | **1.55x** | 1.55 ± 0.04     |
-| `.' '/tmp/llvm-project' -HI --type d`              | 16.1 ± 0.9      | 30.2 ± 1.0      | **1.88x** | 1.88 ± 0.12     |
-| `.' '/home/alexc' -HI --type e`                    | 331.3 ± 3.2     | 448.1 ± 7.5     | **1.35x** | 1.35 ± 0.03     |
-| `.' '/tmp/llvm-project' -HI --type e`              | 47.1 ± 1.3      | 64.1 ± 1.0      | **1.36x** | 1.36 ± 0.04     |
-| `.' '/home/alexc' -HI --type x`                    | 254.0 ± 5.7     | 834.5 ± 36.0    | **3.29x** | 3.29 ± 0.16     |
-| `.' '/tmp/llvm-project' -HI --type x`              | 40.8 ± 2.2      | 67.2 ± 1.3      | **1.65x** | 1.65 ± 0.09     |
+
+| Test Case                                                              | fdf Mean        | fd Mean         | Speedup   | Relative        |
+| :----------                                                            | :--------:      | :-------:       | :-------: | :--------:      |
+| cold-cache `.' '/home/alexc' -HI -d 4`                                 | 244.1 ± 10.3    | 353.6 ± 5.1     | 1.45x     | 1.45 ± 0.06     |
+| cold-cache `.' '/tmp/llvm-project' -HI -d 2`                           | 14.0 ± 0.2      | 72.9 ± 1.1      | 5.21x     | 5.22 ± 0.12     |
+| cold-cache `-HI --extension 'c' '' '/home/alexc`                       | 5.752 ± 1.169   | 5.852 ± 1.416   | 1.02x     | 1.02 ± 0.32     |
+| cold-cache `-HI --extension 'c' '' '/tmp/llvm-project`                 | 28.6 ± 2.9      | 99.4 ± 2.8      | 3.48x     | 3.47 ± 0.36     |
+| cold-cache `.' '/home/alexc' -HI`                                      | 4.413 ± 0.031   | 4.594 ± 0.040   | 1.04x     | 1.04 ± 0.01     |
+| cold-cache `.' '/tmp/llvm-project' -HI`                                | 29.3 ± 0.6      | 100.1 ± 2.3     | 3.42x     | 3.41 ± 0.11     |
+| cold-cache `.' '..' -HI`                                               | 36.5 ± 0.8      | 117.3 ± 2.5     | 3.21x     | 3.22 ± 0.10     |
+| cold-cache `-HI '.*[0-9].*(md\|\.c)$' '/home/alexc`                    | 5.696 ± 1.386   | 7.258 ± 0.632   | 1.27x     | 1.27 ± 0.33     |
+| cold-cache `-HI '.*[0-9].*(md\|\.c)$' '/tmp/llvm-project`              | 31.4 ± 0.5      | 103.9 ± 3.5     | 3.31x     | 3.31 ± 0.13     |
+| cold-cache `-HI --size +1mb '' '/home/alexc`                           | 5.632 ± 0.015   | 5.982 ± 0.014   | 1.06x     | 1.06 ± 0.00     |
+| cold-cache `-HI --size '-1mb' '' '/tmp/llvm-project`                   | 55.0 ± 1.9      | 148.3 ± 3.4     | 2.70x     | 2.70 ± 0.11     |
+| cold-cache `-HI --size -1mb '' '/home/alexc`                           | 5.558 ± 0.007   | 6.183 ± 0.272   | 1.11x     | 1.11 ± 0.05     |
+| cold-cache `.' '/tmp/llvm-project' -HI --type d`                       | 30.1 ± 0.6      | 106.3 ± 1.4     | 3.53x     | 3.53 ± 0.08     |
+| cold-cache `.' '/tmp/llvm-project' -HI --type e`                       | 83.8 ± 5.7      | 168.7 ± 2.5     | 2.01x     | 2.01 ± 0.14     |
+| cold-cache `.' '/tmp/llvm-project' -HI --type x`                       | 67.0 ± 2.7      | 144.0 ± 1.5     | 2.15x     | 2.15 ± 0.09     |
+| warm-cache `.' '/home/alexc' -HI -d 4`                                 | 8.2 ± 0.4       | 21.0 ± 0.6      | 2.56x     | 2.57 ± 0.15     |
+| warm-cache `.' '/tmp/llvm-project' -HI -d 2`                           | 2.5 ± 0.3       | 5.7 ± 0.5       | 2.28x     | 2.25 ± 0.32     |
+| warm-cache `-HI --extension 'c' '' '/home/alexc`                       | 108.4 ± 1.2     | 191.3 ± 1.6     | 1.76x     | 1.76 ± 0.02     |
+| warm-cache `-HI --extension 'c' '' '/tmp/llvm-project`                 | 16.0 ± 0.8      | 31.4 ± 1.1      | 1.96x     | 1.96 ± 0.12     |
+| warm-cache `.' '/home/alexc' -HI`                                      | 122.9 ± 1.0     | 220.5 ± 3.4     | 1.79x     | 1.79 ± 0.03     |
+| warm-cache `.' '/tmp/llvm-project' -HI`                                | 18.2 ± 0.7      | 36.0 ± 1.4      | 1.98x     | 1.98 ± 0.10     |
+| warm-cache `.' '..' -HI`                                               | 18.7 ± 0.7      | 38.2 ± 1.8      | 2.04x     | 2.04 ± 0.12     |
+| warm-cache `-HI '.*[0-9].*(md\|\.c)$' '/home/alexc`                    | 111.9 ± 1.4     | 178.4 ± 1.1     | 1.59x     | 1.59 ± 0.02     |
+| warm-cache `-HI '.*[0-9].*(md\|\.c)$' '/tmp/llvm-project`              | 15.7 ± 0.5      | 29.4 ± 0.8      | 1.87x     | 1.87 ± 0.08     |
+| warm-cache `-HI --size +1mb '' '/home/alexc`                           | 318.8 ± 10.7    | 674.4 ± 2.6     | 2.12x     | 2.12 ± 0.07     |
+| warm-cache `-HI --size '+1mb' '' '/tmp/llvm-project`                   | 51.0 ± 3.1      | 139.7 ± 2.5     | 2.74x     | 2.74 ± 0.17     |
+| warm-cache `-HI --size -1mb '' '/home/alexc`                           | 800.4 ± 15.2    | 1707.8 ± 19.1   | 2.13x     | 2.13 ± 0.05     |
+| warm-cache `.' '/home/alexc' -HI --type d`                             | 210.0 ± 2.3     | 438.6 ± 16.1    | 2.09x     | 2.09 ± 0.08     |
+| warm-cache `.' '/tmp/llvm-project' -HI --type d`                       | 15.2 ± 0.5      | 31.1 ± 1.1      | 2.05x     | 2.05 ± 0.10     |
+| warm-cache `.' '/home/alexc' -HI --type e`                             | 885.5 ± 11.1    | 1202.9 ± 5.0    | 1.36x     | 1.36 ± 0.02     |
+| warm-cache `.' '/tmp/llvm-project' -HI --type e`                       | 49.2 ± 2.0      | 105.6 ± 3.7     | 2.15x     | 2.15 ± 0.12     |
+| warm-cache `.' '/home/alexc' -HI --type x`                             | 649.2 ± 6.1     | 869.4 ± 4.1     | 1.34x     | 1.34 ± 0.01     |
+| warm-cache `.' '/tmp/llvm-project' -HI --type x`                       | 39.3 ± 2.2      | 54.4 ± 1.2      | 1.38x     | 1.38 ± 0.08     |
 
 ```
 
-**Average speedup:** **2.01× faster**
+--*Average Speedup:  2.16x*--
 
 ## Distinctions from fd/find
 
@@ -237,8 +255,6 @@ Notably I modified it because it's quite old and has dependencies I was able to 
 (I have emailed and received approval from the author above)
 
 I've also done so for some SWAR tricks from the standard library [(see link)](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161)
-I've found a much more rigorous way of doing some bit tricks via this.
-
 I additionally emailed the author of memchr and got some nice tips, great guy, someone I respect whole heartedly!
 
 ## Future Plans

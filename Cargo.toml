@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.8.5"
+version = "0.8.6"
 rust-version = "1.90.0"
 edition = "2024"
 license = "MIT"
@@ -12,7 +12,7 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
 [build-dependencies]
-libc = { version = "0.2.178" }
+libc = { version = "0.2.181" }
 cc = "1.2.55"
 
 [dependencies]
@@ -23,21 +23,24 @@ compile_time_ls_colours = { version = "0.5.1", features = ["phf"] }
 crossbeam-deque = "0.8.6"
 crossbeam-channel = "0.5.14"
 dashmap = { version = "6.1.0", features = ["inline"] }
-libc = "0.2.175"
-
-rayon = "1.10.0"
+libc = "0.2.181"
 regex = { version = "1.12.2", features = ["perf"] }
 thread_local = "1.1.9"
 [target.'cfg(any(target_os = "linux",target_os="macos",target_os="android"))'.dependencies]
-mimalloc = { version = "0.1.48", features = [
+mimalloc = { version = "0.1.48", optional = true, features = [
   "extended",
 ] } #dont enable v3, it causes weird shit with extra syscalls.
 
+[features]
+default = ["mimalloc"]
+mimalloc = ["dep:mimalloc"]
+no-mimalloc = []
+
 
 [dev-dependencies]
-rand = "0.9.2"
+rand = "0.10.0"
 env_home = "0.1.0" #due to deprecated homedir in stdlib
-criterion = { version = "0.7.0", features = [
+criterion = { version = "0.8.2", features = [
   "cargo_bench_support",
   "real_blackbox",
   "html_reports",

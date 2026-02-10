@@ -144,7 +144,13 @@ pub struct DirEntry {
     /// This allows easy C ffi by just calling `.as_ptr()`
     //(to avoid storing the capacity, since the path is immutable once set)
     pub(crate) path: Box<CStr>, //16 bytes
-
+    //TODO rewrite CStr manually  due to this FIXME
+    /* https://doc.rust-lang.org/src/core/ffi/c_str.rs.html#103
+    // FIXME: this should not be represented with a DST slice but rather with
+    //        just a raw `c_char` along with some form of marker to make
+    //        this an unsized type. Essentially `sizeof(&CStr)` should be the
+    //        same as `sizeof(&c_char)` but `CStr` should be an unsized type.
+     */
     /// File type (file, directory, symlink, etc.).
     pub(crate) file_type: FileType, //1 byte
 
@@ -187,6 +193,7 @@ impl<'drnt> From<&'drnt DirEntry> for &'drnt CStr {
 
 impl fmt::Display for DirEntry {
     // TODO: I might need to change this to show other metadata.
+    #[allow(clippy::missing_inline_in_public_items)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string_lossy())
     }
@@ -224,6 +231,7 @@ impl AsRef<Path> for DirEntry {
 }
 
 impl fmt::Debug for DirEntry {
+    #[allow(clippy::missing_inline_in_public_items)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Dirent")
             .field("path", &self.to_string_lossy())
@@ -266,6 +274,7 @@ impl DirEntry {
       fs::remove_file(non_exe_path).unwrap();
       ```
     */
+    #[inline]
     pub fn is_executable(&self) -> bool {
         // X_OK is the execute permission, requires access call
         // SAFETY: We know the path is valid because internally it's a cstr
@@ -541,12 +550,7 @@ impl DirEntry {
     */
     #[inline]
     #[must_use]
-    #[expect(
-        clippy::wildcard_enum_match_arm,
-        reason = "We're only matching on relevant types"
-    )]
     pub fn is_empty(&self) -> bool {
-        // TODO this can be optimised for linux/android, by calling getdents directly, no need to heap allocate here
         // because calling getdents on an empty dir should only return 48 on these platforms, meaning we dont have
         // to allocate the vector in getdents, finding empty files is a good use case so even though it's niche
         // it would have appeal to people. Not too hard to implement.
@@ -692,6 +696,7 @@ impl DirEntry {
 
     ```
     */
+    #[inline]
     pub fn file_name_cstr(&self) -> &CStr {
         let bytes = self.path.to_bytes_with_nul();
 
@@ -736,7 +741,7 @@ impl DirEntry {
     // if on certain systems, root dir requires permissions, so we have to be careful (esp android)
 
     let dot_dir=DirEntry::new(".");
-    assert!(dot_dir.is_ok_and(|x| x.file_name()==b"."));
+    assert!(dot_dir.is_err() ||dot_dir.is_ok_and(|x| x.file_name()==b"."));
 
     ```
     */
@@ -903,36 +908,7 @@ impl DirEntry {
         self.as_path()
             .parent()
             .map(|path| path.as_os_str().as_bytes())
-    }
-
-    //Similar to above function but modified for internal use within size filtering.
-    // This just avoids calling stat twice basically.
-    // TODO, make this public at some point.
-    #[inline]
-    pub(crate) fn to_full_path_with_stat(&self) -> Result<(Self, stat)> {
-        debug_assert!(
-            self.is_symlink(),
-            "in this private function we expect the file type to always be symlinks!"
-        );
-        self.get_realpath(|full_path| {
-            let file_name_index = full_path.to_bytes().file_name_index();
-
-            let statted = self.get_stat()?;
-
-            let (file_type, ino) = (FileType::from_stat(&statted), access_stat!(statted, st_ino));
-
-            Ok((
-                Self {
-                    path: full_path.into(),
-                    file_type,
-                    inode: ino,
-                    depth: self.depth,
-                    file_name_index,
-                    is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)),
-                },
-                statted,
-            ))
-        })
+        // TODO rewrite this eventually
     }
 
     /**
@@ -1166,10 +1142,6 @@ impl DirEntry {
     /// Checks if the file is a directory or symlink (but internally a directory)
     #[inline]
     #[must_use]
-    #[expect(
-        clippy::wildcard_enum_match_arm,
-        reason = "This is exhaustive because only checking traversible types"
-    )]
     pub fn is_traversible(&self) -> bool {
         match self.file_type {
             FileType::Directory => true,
@@ -1270,14 +1242,11 @@ impl DirEntry {
     */
     #[inline]
     #[must_use]
-    #[allow(clippy::eq_op)] //for assert
     #[expect(clippy::multiple_unsafe_ops_per_block, reason = "stylistic")]
     pub const fn is_hidden(&self) -> bool {
-        const_assert!(b'.' == 46); //showing that the dot character is 46
-
         // SAFETY: file_name_index() is guaranteed to be within bounds
         // and we're using pointer arithmetic which is const-compatible (slight const hack)
-        unsafe { *self.as_ptr().add(self.file_name_index()) == 46 }
+        unsafe { *self.as_ptr().cast::<u8>().add(self.file_name_index()) == b'.' }
     }
 
     /**
@@ -1524,7 +1493,7 @@ impl DirEntry {
     the length of the symlink path itself, not the target file size.
     */
     #[inline]
-    #[allow(clippy::cast_sign_loss)]
+    #[expect(clippy::cast_sign_loss, reason = "Size is a u64")]
     pub fn file_size(&self) -> Result<u64> {
         //https://github.com/rust-lang/rust/blob/bbb6f68e2888eea989337d558b47372ecf110e08/library/std/src/sys/fs/unix.rs#L442
         self.get_lstat().map(|s| s.st_size as _)

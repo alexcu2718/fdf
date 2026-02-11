@@ -1,6 +1,7 @@
 #![allow(clippy::missing_inline_in_public_items)]
 use crate::{
-    SearchConfigError, config, filters,
+    SearchConfigError, config,
+    filters::{FileTypeFilter, SizeFilter, TimeFilter},
     fs::DirEntry,
     walk::{DirEntryFilter, FilterType, finder::Finder},
 };
@@ -36,9 +37,9 @@ pub struct FinderBuilder {
     pub(crate) max_depth: Option<NonZeroU32>,
     pub(crate) follow_symlinks: bool,
     pub(crate) filter: Option<DirEntryFilter>,
-    pub(crate) size_filter: Option<filters::SizeFilter>,
-    pub(crate) time_filter: Option<filters::TimeFilter>,
-    pub(crate) file_type: Option<filters::FileTypeFilter>,
+    pub(crate) size_filter: Option<SizeFilter>,
+    pub(crate) time_filter: Option<TimeFilter>,
+    pub(crate) file_type: Option<FileTypeFilter>,
     pub(crate) collect_errors: bool,
     pub(crate) use_glob: bool,
     pub(crate) canonicalise: bool,
@@ -134,7 +135,7 @@ impl FinderBuilder {
         match max_depth {
             None => self,
             Some(num) => {
-                self.max_depth = core::num::NonZeroU32::new(num);
+                self.max_depth = NonZeroU32::new(num);
                 self
             }
         }
@@ -142,14 +143,14 @@ impl FinderBuilder {
 
     /// Sets size-based filtering criteria.
     #[must_use]
-    pub const fn filter_by_size(mut self, size_of: Option<filters::SizeFilter>) -> Self {
+    pub const fn filter_by_size(mut self, size_of: Option<SizeFilter>) -> Self {
         self.size_filter = size_of;
         self
     }
 
     /// Sets time-based filtering criteria for file modification times.
     #[must_use]
-    pub const fn filter_by_time(mut self, time_of: Option<filters::TimeFilter>) -> Self {
+    pub const fn filter_by_time(mut self, time_of: Option<TimeFilter>) -> Self {
         self.time_filter = time_of;
         self
     }
@@ -172,7 +173,7 @@ impl FinderBuilder {
 
     /// Sets file type filtering.
     #[must_use]
-    pub const fn type_filter(mut self, filter: Option<filters::FileTypeFilter>) -> Self {
+    pub const fn type_filter(mut self, filter: Option<FileTypeFilter>) -> Self {
         self.file_type = filter;
         self
     }
@@ -290,8 +291,8 @@ impl FinderBuilder {
         Ok(Finder {
             root: resolved_root,
             search_config,
-            filter: self.filter,
-            custom_filter: lambda,
+            custom_filter: self.filter,
+            file_filter: lambda,
             starting_filesystem,
             inode_cache,
             errors: self

@@ -559,19 +559,24 @@ impl DirEntry {
             "checking the only entries to this are directories"
         );
 
-        let Ok(dir) = self.opendir() else {
+        let fd_result = opt_fd.map_or_else(|| self.open(), |valid_fd| self.openat(&valid_fd));
+
+        let Ok(fd) = fd_result else { return false };
+        // SAFETY: valid fd (no actual safety requirements)
+        let dir_ptr = unsafe { fdopendir(fd.0) };
+        if dir_ptr.is_null() {
             return false;
-        };
+        }
+
+        // SAFETY: dir_ptr valid from fdopendir
         #[allow(clippy::multiple_unsafe_ops_per_block)]
-        // SAFETY: dir valid to read
-        let result = unsafe {
-            readdir64(dir.as_ptr()); // Skip "."
-            readdir64(dir.as_ptr()); // Skip ".."
-            readdir64(dir.as_ptr()).is_null()
-        };
-        // SAFETY: closing a valid directory
-        unsafe { closedir(dir.as_ptr()) };
-        result
+        unsafe {
+            readdir64(dir_ptr); // skip .
+            readdir64(dir_ptr); // skip ..
+            let is_empty = readdir64(dir_ptr).is_null();
+            closedir(dir_ptr);
+            is_empty
+        }
     }
 
     #[inline]
@@ -580,12 +585,6 @@ impl DirEntry {
     pub(crate) fn is_empty_getdents(&self, opt_fd: Option<FileDes>) -> bool {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents;
-
-        /*
-
-        TODO THIS NEEDS TO BE REFACTORED IMMENSELY, THIS IS EXPERIMENTAL WORK!
-
-         */
 
         const BUF_SIZE: usize = 500; //pretty arbitrary.
         #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
@@ -597,30 +596,17 @@ impl DirEntry {
         );
 
         // Try the iterator's fd (using openat significantly helps)
-        if let Some(valid_fd) = opt_fd {
-            let Ok(good_fd) = self.openat(&valid_fd) else {
-                return false;
-            };
+        let fd_result = opt_fd.map_or_else(|| self.open(), |valid_fd| self.openat(&valid_fd));
 
-            let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
-            // SAFETY: guaranteed open, valid ptr etc.
-            let dents = unsafe { getdents(good_fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
-            // SAFETY: Closed only once confirmed open
-            unsafe { libc::close(good_fd.0) };
-            return dents <= 2 * MINIMUM_DIRENT_SIZE;
-        }
-
-        if let Ok(fd) = self.open() {
+        if let Ok(fd) = fd_result {
             let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
             // SAFETY: guaranteed open, valid ptr etc.
             let dents = unsafe { getdents(fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
-
             // SAFETY: Closed only once confirmed open
             unsafe { libc::close(fd.0) };
-            // if empty, then only 2 entries expected, . and .., this means only 48 or below (or neg if errors, who cares.)
             return dents <= 2 * MINIMUM_DIRENT_SIZE;
         }
-        false //return false is openat/open fails
+        false
     }
 
     /**

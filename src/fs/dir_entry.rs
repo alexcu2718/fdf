@@ -554,15 +554,14 @@ impl DirEntry {
         // because calling getdents on an empty dir should only return 48 on these platforms, meaning we dont have
         // to allocate the vector in getdents, finding empty files is a good use case so even though it's niche
         // it would have appeal to people. Not too hard to implement.
+        // (This code is verbose but it's an essential operation so it makes sense to optimise it)
         match self.file_type {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                let result = self.is_empty_dir();
+                let result = self.is_empty_getdents();
                 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-                let result = self
-                    .readdir()
-                    .is_ok_and(|mut entries| entries.next().is_none());
+                let result = self.is_empty_posix(); //Avoid allocating a buffer here or any other ops.
                 result
             }
             _ => false,
@@ -570,9 +569,36 @@ impl DirEntry {
     }
 
     #[inline]
+    #[must_use]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    pub(crate) fn is_empty_posix(&self) -> bool {
+        use crate::readdir64;
+        use libc::closedir;
+
+        debug_assert!(
+            self.is_dir(),
+            "checking the only entries to this are directories"
+        );
+
+        let Ok(dir) = self.opendir() else {
+            return false;
+        };
+        #[allow(clippy::multiple_unsafe_ops_per_block)]
+        // SAFETY: dir valid to read
+        let result = unsafe {
+            readdir64(dir.as_ptr()); // Skip "."
+            readdir64(dir.as_ptr()); // Skip ".."
+            readdir64(dir.as_ptr()).is_null()
+        };
+        // SAFETY: closing a valid directory
+        unsafe { closedir(dir.as_ptr()) };
+        result
+    }
+
+    #[inline]
     #[cfg(any(target_os = "linux", target_os = "android"))]
     /// Specialisation for empty checks on linux/android (avoid a heap alloc)
-    pub(crate) fn is_empty_dir(&self) -> bool {
+    pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents;
         const BUF_SIZE: usize = 500; //pretty arbitrary.

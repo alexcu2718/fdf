@@ -34,9 +34,9 @@ pub struct Finder {
     /// Configuration for search criteria and filtering options
     pub(crate) search_config: SearchConfig,
     /// Optional custom filter function for advanced entry filtering
-    pub(crate) filter: Option<DirEntryFilter>,
+    pub(crate) custom_filter: Option<DirEntryFilter>,
     /// Internal filter logic combining all filtering criteria
-    pub(crate) custom_filter: FilterType,
+    pub(crate) file_filter: FilterType,
     /// Filesystem device ID for same-filesystem constraint (optional)
     pub(crate) starting_filesystem: Option<u64>,
     /// Cache for (device, inode) pairs to prevent duplicate traversal with symlinks
@@ -382,7 +382,7 @@ impl Finder {
     /// Applies custom file filtering logic
     #[inline]
     fn file_filter(&self, dir: &DirEntry) -> bool {
-        (self.custom_filter)(&self.search_config, dir, self.filter)
+        (self.file_filter)(&self.search_config, dir, self.custom_filter)
     }
 
     /**

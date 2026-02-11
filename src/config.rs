@@ -1,8 +1,9 @@
 use crate::SearchConfigError;
 use crate::filters::{FileTypeFilter, SizeFilter, TimeFilter};
-use crate::fs::{DirEntry, FileType};
+use crate::fs::{DirEntry, FileDes, FileType};
 use crate::util::BytePath as _;
 use crate::util::glob_to_regex;
+use chrono::DateTime;
 use core::num::NonZeroU32;
 use core::ops::Deref;
 use core::time::Duration;
@@ -253,23 +254,44 @@ impl SearchConfig {
     #[inline]
     #[must_use]
     #[allow(clippy::cast_sign_loss)] // Sign loss does not matter here
-    pub fn matches_size(&self, entry: &DirEntry) -> bool {
+    #[allow(clippy::option_if_let_else)] // This makes it impossible to read...
+    pub fn matches_size(&self, entry: &DirEntry, fd: Option<i32>) -> bool {
         let Some(filter_size) = self.size_filter else {
             return true; // No filter means always match
         };
 
         match entry.file_type {
-            FileType::RegularFile => entry
-                .file_size()
-                .ok()
-                .is_some_and(|sz| filter_size.is_within_size(sz)),
+            FileType::RegularFile => {
+                if let Some(valid_fd) = fd {
+                    entry
+                        .get_lstatat(&FileDes(valid_fd))
+                        .is_ok_and(|statted| filter_size.is_within_size(statted.st_size as _))
+                } else {
+                    entry
+                        .file_size()
+                        .ok()
+                        .is_some_and(|sz| filter_size.is_within_size(sz))
+                }
+            }
             //Check if it exists first, then call stat..
             FileType::Symlink => {
-                entry.exists()
-                    && entry.get_stat().is_ok_and(|statted| {
-                        FileType::from_stat(&statted) == FileType::RegularFile
-                            && filter_size.is_within_size(statted.st_size as _)
-                    })
+                if let Some(valid_fd) = fd {
+                    // SAFETY: the filename is guaranteed null terminated
+                    let exists = unsafe {
+                        libc::faccessat(valid_fd, entry.file_name_ptr(), libc::F_OK, 0) == 0
+                    };
+
+                    exists
+                        && entry
+                            .get_lstatat(&FileDes(valid_fd))
+                            .is_ok_and(|statted| filter_size.is_within_size(statted.st_size as _))
+                } else {
+                    entry.exists()
+                        && entry.get_stat().is_ok_and(|statted| {
+                            FileType::from_stat(&statted) == FileType::RegularFile
+                                && filter_size.is_within_size(statted.st_size as _)
+                        })
+                }
             }
 
             _ => false,
@@ -280,7 +302,7 @@ impl SearchConfig {
     /// Supports common file types: file, dir, symlink, device, pipe, etc
     #[inline]
     #[must_use]
-    pub fn matches_type(&self, entry: &DirEntry) -> bool {
+    pub fn matches_type(&self, entry: &DirEntry, fd: Option<i32>) -> bool {
         let Some(type_filter) = self.type_filter else {
             return true;
         };
@@ -294,8 +316,8 @@ impl SearchConfig {
             FileTypeFilter::BlockDevice => entry.is_block_device(),
             FileTypeFilter::Socket => entry.is_socket(),
             FileTypeFilter::Unknown => entry.is_unknown(),
-            FileTypeFilter::Executable => entry.is_executable(),
-            FileTypeFilter::Empty => entry.is_empty(),
+            FileTypeFilter::Executable => entry.is_executable_with_fd(fd),
+            FileTypeFilter::Empty => entry.is_empty_with_fd(fd),
         }
     }
 
@@ -303,18 +325,41 @@ impl SearchConfig {
     /// Returns true if the file's modification time matches the filter criteria
     #[inline]
     #[must_use]
-    pub fn matches_time(&self, entry: &DirEntry) -> bool {
+    #[allow(clippy::option_if_let_else)] // makes it unreadable
+    #[expect(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        reason = "needs to be in u32 for chrono"
+    )]
+    pub fn matches_time(&self, entry: &DirEntry, fd: Option<i32>) -> bool {
         let Some(time_filter) = self.time_filter else {
             return true; // No filter means always match
         };
 
         // Get the modification time from the file and convert to SystemTime
-        entry
-            .modified_time()
-            .ok()
-            .and_then(|datetime| datetime.timestamp_nanos_opt())
-            .and_then(|nanos| UNIX_EPOCH.checked_add(Duration::from_nanos(nanos.cast_unsigned())))
-            .is_some_and(|systime| time_filter.matches_time(systime))
+
+        if let Some(valid_fd) = fd {
+            entry.get_lstatat(&FileDes(valid_fd)).is_ok_and(|statted| {
+                DateTime::from_timestamp(
+                    access_stat!(statted, st_mtime),
+                    access_stat!(statted, st_mtimensec),
+                )
+                .and_then(|datetime| datetime.timestamp_nanos_opt())
+                .and_then(|nanos| {
+                    UNIX_EPOCH.checked_add(Duration::from_nanos(nanos.cast_unsigned()))
+                })
+                .is_some_and(|systime| time_filter.matches_time(systime))
+            })
+        } else {
+            entry
+                .modified_time()
+                .ok()
+                .and_then(|datetime| datetime.timestamp_nanos_opt())
+                .and_then(|nanos| {
+                    UNIX_EPOCH.checked_add(Duration::from_nanos(nanos.cast_unsigned()))
+                })
+                .is_some_and(|systime| time_filter.matches_time(systime))
+        }
     }
 
     /// Checks if the path or file name matches the regex filter

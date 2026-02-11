@@ -161,7 +161,7 @@ pub struct DirEntry {
 
     /// Offset in the path buffer where the file name starts.
     ///
-    /// This helps quickly extract the file name from the full path.
+    /// This helps _quickly extract the file name from the full path.
     pub(crate) file_name_index: usize, //8 bytes
     ///
     /// `None` means not computed yet, `Some(bool)` means cached result.
@@ -281,6 +281,23 @@ impl DirEntry {
         self.is_regular_file() && unsafe { access(self.as_ptr(), X_OK) == 0 }
     }
 
+    #[inline]
+    pub(crate) fn is_executable_with_fd(&self, fd: Option<i32>) -> bool {
+        if !self.is_regular_file() {
+            return false;
+        }
+
+        if let Some(valid_fd) = fd {
+            // SAFETY: Passing a valid file descriptor+null terminated filename
+            return unsafe {
+                libc::faccessat(valid_fd, self.file_name_cstr().as_ptr(), X_OK, 0) == 0
+            };
+        }
+
+        // SAFETY: We know the path is valid because internally it's a cstr
+        unsafe { access(self.as_ptr(), X_OK) == 0 }
+    }
+
     /**
      Returns a raw pointer to the underlying C string.
 
@@ -336,85 +353,19 @@ impl DirEntry {
         Ok(FileDes(fd))
     }
 
-    /*
-    Commented out temporarily while I work on API
-    /**
-     Opens the directory relative to a directory file descriptor and returns a file descriptor.
-
-     This function uses the `openat` system call to open a directory relative to an already open
-     directory file descriptor. This is useful for avoiding race conditions that can occur when
-     using absolute paths, as it ensures the operation is performed relative to a specific directory.
-
-     The directory is opened with the following flags:
-     - `O_CLOEXEC`: Close the file descriptor on exec
-     - `O_DIRECTORY`: Fail if not a directory
-     - `O_NONBLOCK`: Open in non-blocking mode
-
-     # Examples
-
-     ## Basic usage
-
-     ```
-     use fdf::{DirEntry, FileDes, Result};
-     use std::fs;
-     use std::env::temp_dir;
-
-     # fn main() -> Result<()> {
-     // Create a temporary directory for testing
-     let temp_dir = temp_dir().join("fdf_openat_test");
-     let _ = fs::remove_dir_all(&temp_dir);
-     fs::create_dir_all(&temp_dir)?;
-
-     // Create a subdirectory inside the temp directory
-     let subdir_path = temp_dir.join("test_subdir");
-     fs::create_dir(&subdir_path)?;
-
-     // Open the temporary directory
-     let temp_dir_entry = DirEntry::new(&temp_dir)?;
-     let temp_fd = temp_dir_entry.open()?;
-
-     // Use openat to open the subdirectory relative to the temp directory
-     let subdir_entry = DirEntry::new(&subdir_path)?;
-     let subdir_fd = subdir_entry.openat(&temp_fd)?;
-
-     // Clean up
-     let _ = fs::remove_dir_all(&temp_dir);
-     # Ok(())
-     # }
-     ```
-     # Platform-specific behavior
-
-     - On Linux, this uses the `openat` system call directly
-     - The behavior may vary on other Unix-like systems, but the interface is standardized in POSIX
-
-     # Errors
-
-     Returns an error if:
-     - The directory doesn't exist or can't be opened
-     - The path doesn't point to a directory (fails due to `O_DIRECTORY` flag)
-     - Permission is denied for the directory
-     - The parent file descriptor (`dir_fd`) is invalid or not open
-     - The path contains null bytes
-     - System resources are exhausted (too many open file descriptors)
-
-     # See also
-
-     - [openat(2) - Linux man page](https://man7.org/linux/man-pages/man2/openat.2.html)
-     - [`DirEntry::open`] for opening directories with absolute paths
-    */
     #[inline]
-    pub fn openat(&self, fd: &FileDes) -> Result<FileDes> {
+    pub(crate) fn openat(&self, fd: &FileDes) -> Result<FileDes> {
         // Opens the file and returns a file descriptor.
         // This is a low-level operation that may fail if the file does not exist or cannot be opened.
-        const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
+        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
         // SAFETY: the pointer is null terminated
-        let filedes = unsafe { openat(fd.0, self.file_name_cstr().as_ptr(), FLAGS) };
+        let filedes = unsafe { libc::openat(fd.0, self.file_name_ptr(), FLAGS) };
 
         if filedes < 0 {
             return_os_error!()
         }
         Ok(FileDes(filedes))
-    }*/
+    }
 
     /**  Opens a directory stream for reading directory entries.
 
@@ -559,9 +510,37 @@ impl DirEntry {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                let result = self.is_empty_getdents();
+                let result = self.is_empty_getdents(None);
                 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-                let result = self.is_empty_posix(); //Avoid allocating a buffer here or any other ops.
+                let result = self.is_empty_posix(None); //Avoid allocating a buffer here or any other ops.
+                result
+            }
+            _ => false,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    #[allow(clippy::option_if_let_else)] // MAKES IT UNREADABLE
+    pub(crate) fn is_empty_with_fd(&self, fd: Option<i32>) -> bool {
+        // because calling getdents on an empty dir should only return 48 on these platforms, meaning we dont have
+        // to allocate the vector in getdents, finding empty files is a good use case so even though it's niche
+        // it would have appeal to people. Not too hard to implement.
+        // (This code is verbose but it's an essential operation so it makes sense to optimise it)
+        match self.file_type {
+            FileType::RegularFile => {
+                if let Some(valid_fd) = fd {
+                    self.get_lstatat(&FileDes(valid_fd))
+                        .is_ok_and(|statted| statted.st_size == 0)
+                } else {
+                    self.file_size().is_ok_and(|size| size == 0)
+                }
+            }
+            FileType::Directory => {
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                let result = self.is_empty_getdents(fd.map(FileDes));
+                #[cfg(not(any(target_os = "linux", target_os = "android")))]
+                let result = self.is_empty_posix(fd.map(FileDes)); //Avoid allocating a buffer here or any other ops.
                 result
             }
             _ => false,
@@ -571,9 +550,9 @@ impl DirEntry {
     #[inline]
     #[must_use]
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    pub(crate) fn is_empty_posix(&self) -> bool {
+    pub(crate) fn is_empty_posix(&self, opt_fd: Option<FileDes>) -> bool {
         use crate::readdir64;
-        use libc::closedir;
+        use libc::{closedir, fdopendir};
 
         debug_assert!(
             self.is_dir(),
@@ -598,9 +577,16 @@ impl DirEntry {
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "android"))]
     /// Specialisation for empty checks on linux/android (avoid a heap alloc)
-    pub(crate) fn is_empty_getdents(&self) -> bool {
+    pub(crate) fn is_empty_getdents(&self, opt_fd: Option<FileDes>) -> bool {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents;
+
+        /*
+
+        TODO THIS NEEDS TO BE REFACTORED IMMENSELY, THIS IS EXPERIMENTAL WORK!
+
+         */
+
         const BUF_SIZE: usize = 500; //pretty arbitrary.
         #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
         const MINIMUM_DIRENT_SIZE: isize =
@@ -609,8 +595,22 @@ impl DirEntry {
             self.file_type == FileType::Directory || self.file_type == FileType::Symlink,
             " Only expect dirs/symlinks to pass through this private func"
         );
-        let dirfd = self.open();
-        if let Ok(fd) = dirfd {
+
+        // Try the iterator's fd (using openat significantly helps)
+        if let Some(valid_fd) = opt_fd {
+            let Ok(good_fd) = self.openat(&valid_fd) else {
+                return false;
+            };
+
+            let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
+            // SAFETY: guaranteed open, valid ptr etc.
+            let dents = unsafe { getdents(good_fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
+            // SAFETY: Closed only once confirmed open
+            unsafe { libc::close(good_fd.0) };
+            return dents <= 2 * MINIMUM_DIRENT_SIZE;
+        }
+
+        if let Ok(fd) = self.open() {
             let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
             // SAFETY: guaranteed open, valid ptr etc.
             let dents = unsafe { getdents(fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
@@ -620,7 +620,7 @@ impl DirEntry {
             // if empty, then only 2 entries expected, . and .., this means only 48 or below (or neg if errors, who cares.)
             return dents <= 2 * MINIMUM_DIRENT_SIZE;
         }
-        false //return false is open fails
+        false //return false is openat/open fails
     }
 
     /**
@@ -738,6 +738,13 @@ impl DirEntry {
             ))
             // Rearranged to make const compatible(identical assembly to previous version but wasnt const)
         }
+    }
+
+    #[inline]
+    /// Returns a (null terminated) pointer to the filename (the part after the slash, or just b"/0" if root.)
+    pub const fn file_name_ptr(&self) -> *const c_char {
+        // SAFETY: Always within bounds
+        unsafe { self.as_ptr().add(self.file_name_index) }
     }
 
     /**
@@ -1015,12 +1022,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(
-            fstatat,
-            fd.0,
-            self.file_name_cstr().as_ptr(),
-            AT_SYMLINK_NOFOLLOW
-        )
+        stat_syscall!(fstatat, fd.0, self.file_name_ptr(), AT_SYMLINK_NOFOLLOW)
     }
 
     /**
@@ -1096,12 +1098,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(
-            fstatat,
-            fd.0,
-            self.file_name_cstr().as_ptr(),
-            AT_SYMLINK_FOLLOW
-        )
+        stat_syscall!(fstatat, fd.0, self.file_name_ptr(), AT_SYMLINK_FOLLOW)
     }
 
     /// Cost free conversion to bytes (because it is already is bytes)

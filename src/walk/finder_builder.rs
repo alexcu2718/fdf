@@ -275,14 +275,14 @@ impl FinderBuilder {
             self.use_glob,
         )?;
 
-        let lambda: FilterType = |rconfig, rdir, rfilter| {
+        let lambda: FilterType = |rconfig, rdir, rfilter, dirfd| {
             {
                 rfilter.is_none_or(|func| func(rdir))
                     && rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_path(rdir, !rconfig.file_name_only)
-                    && rconfig.matches_type(rdir)
-                    && rconfig.matches_size(rdir)
-                    && rconfig.matches_time(rdir)
+                    && rconfig.matches_type(rdir, dirfd)
+                    && rconfig.matches_size(rdir, dirfd)
+                    && rconfig.matches_time(rdir, dirfd)
             }
         };
 

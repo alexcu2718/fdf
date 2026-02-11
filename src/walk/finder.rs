@@ -351,7 +351,7 @@ impl Finder {
     /// Determines if a directory should be sent through the channel
     #[inline]
     fn should_send_dir(&self, dir: &DirEntry) -> bool {
-        self.search_config.keep_dirs && dir.depth() != 0 && self.file_filter(dir)
+        self.search_config.keep_dirs && dir.depth() != 0 && self.file_filter(dir, None)
         // Don't send root
     }
 
@@ -381,8 +381,8 @@ impl Finder {
 
     /// Applies custom file filtering logic
     #[inline]
-    fn file_filter(&self, dir: &DirEntry) -> bool {
-        (self.file_filter)(&self.search_config, dir, self.custom_filter)
+    fn file_filter(&self, dir: &DirEntry, fd: Option<i32>) -> bool {
+        (self.file_filter)(&self.search_config, dir, self.custom_filter, fd)
     }
 
     /**
@@ -505,10 +505,12 @@ impl Finder {
 
         match direntries {
             Ok(entries) => {
+                let dirfd = entries.dirfd().0;
+                // To overcome an issue with API, create a dirfd as an integer and treat it as a literal file descriptor (C style)
                 let (dirs, mut files): (Vec<_>, Vec<_>) = entries
                     .filter(|entry| {
                         self.keep_hidden(entry)
-                            && (self.should_traverse(entry) || self.file_filter(entry))
+                            && (self.should_traverse(entry) || self.file_filter(entry, Some(dirfd)))
                     })
                     .partition(|ent| self.should_traverse(ent));
 
@@ -551,6 +553,7 @@ impl Finder {
 
     fn enqueue_dir(dir: DirEntry, ctx: &WorkerContext<'_>) -> bool {
         if ctx.shutdown_flag.load(Ordering::Relaxed) {
+            //No constraint on ordering for shutdown
             return false;
         }
 

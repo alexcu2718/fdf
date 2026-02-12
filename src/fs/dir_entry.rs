@@ -741,6 +741,46 @@ impl DirEntry {
     }
 
     /**
+     Returns a raw pointer to the file name within the internal C string.
+
+     The pointer is valid for the lifetime of the `DirEntry` and points to
+     the start of the file name (not the full path). It is null-terminated.
+
+     # Examples
+
+     ```
+     use fdf::fs::DirEntry;
+     use std::ffi::CStr;
+     use std::fs::File;
+
+     let tmp = std::env::temp_dir().join("file_name_ptr_test.txt");
+     File::create(&tmp).unwrap();
+
+     let entry = DirEntry::new(&tmp).unwrap();
+
+     // SAFETY: pointer is valid for the lifetime of `entry`.
+     let name = entry.file_name_ptr();
+     assert_eq!(unsafe{CStr::from_ptr(name)}, c"file_name_ptr_test.txt");
+
+     let root=DirEntry::new("/");
+
+     if let Ok(root_name)=root{
+
+      assert_eq!(unsafe{CStr::from_ptr(root_name.file_name_ptr())}, c"/");
+        }
+
+
+
+     std::fs::remove_file(tmp).unwrap();
+     ```
+    */
+    #[inline]
+    pub const fn file_name_ptr(&self) -> *const c_char {
+        // SAFETY: file name index is always within bounds.
+        unsafe { self.as_ptr().add(self.file_name_index) }
+    }
+
+    /**
     Returns the name of the file (as bytes, no null terminator)
     ( Returns `/` or `.` when they are the entry)
 
@@ -1015,12 +1055,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(
-            fstatat,
-            fd.0,
-            self.file_name_cstr().as_ptr(),
-            AT_SYMLINK_NOFOLLOW
-        )
+        stat_syscall!(fstatat, fd.0, self.file_name_ptr(), AT_SYMLINK_NOFOLLOW)
     }
 
     /**
@@ -1096,12 +1131,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(
-            fstatat,
-            fd.0,
-            self.file_name_cstr().as_ptr(),
-            AT_SYMLINK_FOLLOW
-        )
+        stat_syscall!(fstatat, fd.0, self.file_name_ptr(), AT_SYMLINK_FOLLOW)
     }
 
     /// Cost free conversion to bytes (because it is already is bytes)

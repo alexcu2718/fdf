@@ -14,6 +14,7 @@ repos:
         name: cargo fmt
         description: Format Rust code with rustfmt
         always_run: true
+        pass_filenames: false
       - id: test
         name: cargo test
         description: Run Rust tests

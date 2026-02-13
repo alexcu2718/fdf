@@ -2,7 +2,7 @@
  A high-performance, parallel directory traversal and file search library.
 
  This library provides efficient file system traversal with features including:
- - Parallel directory processing using Rayon
+ - Parallel directory processing using A custom work stealing algorithm (crossbeam)
  - Low-level system calls for optimal performance on supported platforms
  - Flexible filtering by name, size, type, and custom criteria
  - Symbolic link handling with cycle detection
@@ -1314,7 +1314,7 @@ impl DirEntry {
     pub const fn is_hidden(&self) -> bool {
         // SAFETY: file_name_index is guaranteed to be within bounds
         // and we're using pointer arithmetic which is const-compatible (slight const hack)
-        unsafe { *self.as_ptr().cast::<u8>().add(self.file_name_index) == b'.' }
+        unsafe { self.as_ptr().cast::<u8>().add(self.file_name_index).read() == b'.' }
     }
 
     /**
@@ -1351,7 +1351,7 @@ impl DirEntry {
             "Indexing should always be within bounds"
         );
 
-        if self.as_bytes() == b"/" {
+        if self.len() == 1 && self.as_bytes() == b"/" {
             return b"/";
         }
 
@@ -1703,7 +1703,7 @@ impl DirEntry {
     */
     #[inline]
     #[cfg(target_os = "macos")]
-    pub fn getdirentries(&self) -> Result<crate::fs::iter::GetDirEntries> {
-        crate::fs::iter::GetDirEntries::new(self)
+    pub fn getdirentries(&self) -> Result<crate::fs::GetDirEntries> {
+        crate::fs::GetDirEntries::new(self)
     }
 }

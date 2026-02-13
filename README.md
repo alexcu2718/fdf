@@ -155,7 +155,7 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 
 - **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of getdents system calls**
 
-- **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L563)**
+- **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L581)**
 
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
 

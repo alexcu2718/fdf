@@ -6,6 +6,7 @@ use crate::{
 };
 use core::{
     mem,
+    num::NonZeroUsize,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use crossbeam_channel::{Receiver, SendError, Sender, bounded};
@@ -45,7 +46,7 @@ pub struct Finder {
     /// Optionally Collected errors encountered during traversal
     pub(crate) errors: Option<Arc<Mutex<Vec<TraversalError>>>>,
     /// Maximum worker threads used for traversal
-    pub(crate) thread_count: usize,
+    pub(crate) thread_count: NonZeroUsize,
 }
 
 /// Maximum size of a result batch before flushing to the receiver.
@@ -229,7 +230,7 @@ impl Finder {
     pub fn traverse(
         self,
     ) -> core::result::Result<impl Iterator<Item = DirEntry>, SearchConfigError> {
-        let thread_count = self.thread_count.max(1);
+        let thread_count = self.thread_count.get();
         let result_buffer = thread_count.saturating_mul(RESULT_CHANNEL_FACTOR).max(1);
         let (sender, receiver): (_, Receiver<Vec<DirEntry>>) = bounded(result_buffer);
         let injector = Arc::new(Injector::new());
@@ -259,7 +260,6 @@ impl Finder {
                 let shutdown_flag_shared = Arc::clone(&shutdown_flag);
                 let injector_shared = Arc::clone(&injector);
                 let stealers_pool = Arc::clone(&stealers_shared);
-                let local = worker;
 
                 thread::spawn(move || {
                     let mut batch_sender = BatchSender::new(sender_shared, RESULT_BATCH_LIMIT);
@@ -273,13 +273,14 @@ impl Finder {
 
                     loop {
                         if shutdown_flag_shared.load(Ordering::Relaxed)
-                            && local.is_empty()
+                            && worker.is_empty()
                             && injector_shared.is_empty()
                         {
                             break;
                         }
 
-                        let Some(dir) = find_task(&local, &injector_shared, &local_stealers) else {
+                        let Some(dir) = find_task(&worker, &injector_shared, &local_stealers)
+                        else {
                             if shutdown_flag_shared.load(Ordering::Relaxed) {
                                 break;
                             }
@@ -291,7 +292,7 @@ impl Finder {
                             PendingGuard::new(&pending_shared, &shutdown_flag_shared);
 
                         let ctx = WorkerContext {
-                            local: &local,
+                            local: &worker,
                             pending: &pending_shared,
                             shutdown_flag: &shutdown_flag_shared,
                         };

@@ -579,7 +579,6 @@ impl GetDirEntries {
     #[allow(clippy::multiple_unsafe_ops_per_block)]
     #[allow(clippy::cast_sign_loss)]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
-        use crate::fs::BUFFER_SIZE;
         // Early return if we've already reached end of stream
         if self.end_of_stream {
             return false;
@@ -590,22 +589,34 @@ impl GetDirEntries {
             self.syscall_buffer
                 .getdirentries64(&self.fd, &raw mut self.base_pointer)
         };
+        let is_more_remaining = remaining_bytes.is_positive();
+        #[cfg(has_eof_trick)] // Check at build time for the optimisation
+        {
+            use crate::fs::BUFFER_SIZE;
 
-        // SAFETY: Buffer is already initialised by the kernel
-        // The kernel writes the WHOLE of the buffer passed to `getdirentries`
-        //(also it's to u8, which has no restrictions on alignment)
-        //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
-        // The last bytes-4 is set to 1 to act as a sentinel to mark EOF(this was a PAIN to find out)
-        // It always marks the end of the buffer regardless if EOF or not.
-        // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
-        // (Or at least I cant find it anywhere!)
-        // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
-        // As this is ~5 years old, we can safely assume that all kernels have this capability
-        self.end_of_stream =
+            // SAFETY: Buffer is already initialised by the kernel
+            // The kernel writes the WHOLE of the buffer passed to `getdirentries`
+            //(also it's to u8, which has no restrictions on alignment)
+            //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
+            // The last bytes-4 is set to 1 to act as a sentinel to mark EOF(this was a PAIN to find out)
+            // It always marks the end of the buffer regardless if EOF or not.
+            // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
+            // (Or at least I cant find it anywhere!)
+            // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
+            // As this is ~5 years old, we can safely assume that all kernels have this capability
+
+            self.end_of_stream =
             // SAFETY: AS ABOVE
             unsafe { self.syscall_buffer.as_ptr().add(BUFFER_SIZE - 4).read() == 1 };
+            const { assert!(BUFFER_SIZE >= 1024, "Invalid size EOF optimisation") }
+        }
+        #[cfg(not(has_eof_trick))]
+        {
+            self.end_of_stream = !is_more_remaining // returned bytes=0
+        }
 
         /*
+
 
 
 
@@ -641,9 +652,6 @@ impl GetDirEntries {
 
         */
 
-        const { assert!(BUFFER_SIZE >= 1024, "Invalid size EOF optimisation") };
-
-        let is_more_remaining = remaining_bytes.is_positive();
         // Branchless check
         self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
 

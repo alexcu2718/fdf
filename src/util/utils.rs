@@ -442,7 +442,6 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
      assembly output: x86_64 with BMI/other optimisations
 
         movzx eax, word ptr [rdi + 16]
-        movzx eax, word ptr [rdi + 16]
         xor ecx, ecx
         cmp rax, 24
         mov edx, 16777215

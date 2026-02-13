@@ -6,6 +6,7 @@ use crate::{
     walk::{DirEntryFilter, FilterType, finder::Finder},
 };
 use core::num::NonZeroU32;
+use core::num::NonZeroUsize;
 use dashmap::DashSet;
 use std::{
     ffi::{OsStr, OsString},
@@ -44,7 +45,7 @@ pub struct FinderBuilder {
     pub(crate) use_glob: bool,
     pub(crate) canonicalise: bool,
     pub(crate) same_filesystem: bool,
-    pub(crate) thread_count: usize,
+    pub(crate) thread_count: NonZeroUsize,
 }
 
 impl FinderBuilder {
@@ -55,9 +56,8 @@ impl FinderBuilder {
       `root` - The root directory to search
     */
     pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
-        const MIN_THREADS: usize = 1;
-        let num_threads =
-            std::thread::available_parallelism().map_or(MIN_THREADS, core::num::NonZeroUsize::get);
+        const MIN_THREADS: NonZeroUsize = NonZeroUsize::MIN;
+        let num_threads = std::thread::available_parallelism().unwrap_or(MIN_THREADS);
         Self {
             root: root.as_ref().to_owned(),
             pattern: None,
@@ -208,9 +208,9 @@ impl FinderBuilder {
         self
     }
 
-    /// Set how many threads rayon is to use, defaults to max
+    /// Set how many threads to use, defaults to max
     #[must_use]
-    pub const fn thread_count(mut self, threads: Option<usize>) -> Self {
+    pub const fn thread_count(mut self, threads: Option<NonZeroUsize>) -> Self {
         match threads {
             Some(num) => self.thread_count = num,
             None => return self,

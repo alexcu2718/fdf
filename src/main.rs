@@ -1,5 +1,6 @@
 use clap::{ArgAction, CommandFactory as _, Parser, ValueHint, value_parser};
 use clap_complete::aot::{Shell, generate};
+use core::num::NonZeroUsize;
 use fdf::filters::{FileTypeFilterParser, SizeFilterParser, TimeFilterParser};
 use fdf::walk::Finder;
 use fdf::{SearchConfigError, filters};
@@ -54,7 +55,7 @@ struct Args {
         long = "threads",
         help = "Number of threads to use, defaults to available threads available on your computer"
     )]
-    thread_num: Option<usize>,
+    thread_num: Option<NonZeroUsize>,
     #[arg(
         short = 'a',
         long = "absolute-path",
@@ -293,27 +294,6 @@ fn main() -> Result<(), SearchConfigError> {
         args.print0,
         args.show_errors,
     );
-
-    // #[cfg(has_d_type)]
-    // println!("has_my_dtype: enabled");
-
-    // #[cfg(not(has_d_type))]
-    // println!("has_my_dtype: not enabled");
-
-    // #[cfg(not(has_d_namlen))]
-    // println!("has_namlen not enabled");
-
-    // #[cfg(has_d_namlen)]
-    // println!("has_namlen  enabled");
-
-    // #[cfg(has_d_reclen)]
-    // println!("has_reclen enabled");
-
-    // #[cfg(not(has_d_reclen))]
-    // println!("has_reclen not enabled");
-
-    // #[cfg(has_d_ino)]
-    // println!("has d_ino enabled");
 
     Ok(())
 }

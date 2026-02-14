@@ -1,6 +1,4 @@
 use crate::dirent64;
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
-use crate::fs::ValueType;
 use crate::util::memchr_derivations::memrchr;
 use core::ops::Deref;
 
@@ -28,7 +26,7 @@ use core::ops::Deref;
 #[expect(clippy::cast_possible_truncation, reason = "clong is isize on Linux")]
 pub unsafe fn getdents64<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
 where
-    T: ValueType, //i8/u8
+    T: crate::fs::ValueType, //i8/u8
 {
     //You can additionally link it like this.
     // unsafe extern "C" {
@@ -70,7 +68,7 @@ pub unsafe fn getdirentries64<T>(
     basep: *mut i64,
 ) -> isize
 where
-    T: ValueType,
+    T: crate::fs::ValueType, //i8/u8
 {
     use libc::{c_char, c_int, off_t, size_t, ssize_t};
     // link to libc

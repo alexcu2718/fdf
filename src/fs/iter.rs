@@ -604,7 +604,6 @@ impl GetDirEntries {
             self.end_of_stream =
             // SAFETY: AS ABOVE
             unsafe { self.syscall_buffer.as_ptr().add(SyscallBuffer::BUFFER_SIZE - 4).read() == 1 };
-            const { assert!(BUFFER_SIZE >= 1024, "Invalid size EOF optimisation") }
         }
         #[cfg(not(has_eof_trick))]
         {

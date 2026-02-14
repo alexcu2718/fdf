@@ -24,13 +24,14 @@ The implemented subset performs exceptionally well, surpassing fd in equivalent 
 
 While the CLI is usable, the internal library is not stable yet. Alas!
 
-## Platform Support (64-bit only (32 bit maybe?))
+## Platform Support (64-bit only (32 bit maybe one day?))
 
 ### Fully Supported and CI Tested
 
 - Linux (x86_64, s390x (Big endian), Alpine( MUSL libc))
 - macOS (Intel and Apple Silicon)
 - FreeBSD (x86_64)
+- Solaris(x86_64)
 
 ### Compiles with Limited Testing
 
@@ -38,7 +39,7 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 
 - OpenBSD, NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
 - Android (tested on my phone)
-- Illumos and Solaris (x86_64, verified with QEMU)
+- Illumos (Solaris works, illumos is essentially identical, I'll test it eventually)
 
 - I have removed aarch64 Linux and riscv Linux from Github actions due to *VERY UNRELIABLE RUNNERS*
 

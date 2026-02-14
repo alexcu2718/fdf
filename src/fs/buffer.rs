@@ -175,7 +175,7 @@ where
     }
 
     #[inline]
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     pub(crate) unsafe fn getdirentries64(
         &mut self,
         fd: &crate::fs::FileDes,

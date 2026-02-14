@@ -39,7 +39,7 @@ where
     //unsafe { getdents64(fd, buffer_ptr.cast(), buffer_size) }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[inline]
 /**
   Wrapper for direct getdirentries64 syscalls
@@ -73,6 +73,7 @@ where
     use libc::{c_char, c_int, off_t, size_t, ssize_t};
     // link to libc
     // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
+    #[cfg(target_os = "macos")]
     unsafe extern "C" {
         fn __getdirentries64(
             fd: c_int,
@@ -82,8 +83,24 @@ where
         ) -> ssize_t;
     } // Compile error if this doesn't link.
 
+    // Link for FreeBSD too, not sure what OpenBSD/NetBSD/DragonflyBSD use, OpenBSD uses getdents from my system call tracing
+    // But I was unable to even build rust due to a broken package manager, sigh. NetBSD is another pain, doesn't seem to support rust 2024 at all.
+    #[cfg(target_os = "freebsd")]
+    unsafe extern "C" {
+        fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t)
+        -> ssize_t;
+    } // as above
+
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
-    unsafe { __getdirentries64(fd, buffer_ptr.cast(), nbytes, basep) }
+    #[cfg(target_os = "macos")]
+    unsafe {
+        __getdirentries64(fd, buffer_ptr.cast(), nbytes, basep)
+    }
+    #[cfg(target_os = "freebsd")]
+    // SAFETY: as above
+    unsafe {
+        getdirentries(fd, buffer_ptr.cast(), nbytes, basep)
+    }
 }
 
 /*

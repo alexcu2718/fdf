@@ -5,8 +5,13 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
 
 /// A buffer used to  hold the bytes sent from the OS for `getdents` calls
 /// We only use a buffer for syscalls on linux/android because of stable ABI(because we don't need to use a buffer for `ReadDir`)
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, { BUFFER_SIZE }>;
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd"
+))]
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
 
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]
@@ -65,6 +70,9 @@ getdents64(3, 0x557e625c37a0 /* 0 entries */, 32768) = 0
 
 #[cfg(all(any(target_os = "linux", target_os = "android"), debug_assertions))]
 pub const BUFFER_SIZE: usize = 4096; // Crashes during testing due to parallel processes taking up too much stack
+
+#[cfg(target_os = "freebsd")]
+pub const BUFFER_SIZE: usize = 4096; // bsd's buffer size
 
 #[cfg(all(target_os = "macos", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 0x2000; //readdir calls this value for buffer size, look at syscall tracing below (8192)

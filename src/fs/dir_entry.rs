@@ -314,7 +314,12 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     /**
      Opens the directory and returns a file descriptor.
 
@@ -1675,18 +1680,17 @@ impl DirEntry {
     }
 
     /**
-    Low-level directory iterator using macOS `getdirentries` API.
+    Low-level directory iterator using macOS/FreeBSD `getdirentries64`/`GetDirEntries` API.
 
-    This method provides a macOS-specific, high-performance streaming iterator
+    This method provides a macOS/BSD-specific, high-performance streaming iterator
     over directory entries by leveraging the platform's `getdirentries(2)`
-    family. It is analogous to the Linux `getdents` specialisation but
-    implemented for BSD-derived macOS interfaces and conventions.
+    family. It is analogous to the Linux `getdents` specialisation
 
-    It implements a specialised EOF trick to avoid an extra syscall to terminate reading
+    It implements a specialised EOF trick to avoid an extra syscall to terminate reading on macOS
 
 
     # Platform
-    - macOS only
+    - macOS only/FreeBSD only
 
     # Errors
     Returns `Err` when the directory cannot be opened or read, when the
@@ -1697,7 +1701,7 @@ impl DirEntry {
     ```
     */
     #[inline]
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     pub fn getdirentries(&self) -> Result<crate::fs::GetDirEntries> {
         crate::fs::GetDirEntries::new(self)
     }

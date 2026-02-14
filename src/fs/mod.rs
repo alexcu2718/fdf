@@ -9,7 +9,7 @@ pub use dir_entry::DirEntry;
 pub use file_type::FileType;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub use iter::GetDents;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 pub use iter::GetDirEntries;
 pub use iter::ReadDir;
 pub use types::{FileDes, Result};

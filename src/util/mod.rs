@@ -24,7 +24,7 @@ pub use memchr_derivations::{find_char_in_word, find_last_char_in_word, memrchr}
 pub use utils::dirent_const_time_strlen;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub use utils::getdents64;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 pub use utils::getdirentries64;
 
 pub(crate) use utils::BytePath;

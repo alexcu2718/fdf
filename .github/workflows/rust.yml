@@ -126,7 +126,7 @@ jobs:
           mem: 2048
           release: "11.4-gcc-14"
           prepare: |
-            curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/psumbera/rustup/refs/heads/solaris-rustup/rustup-init.sh | sh
+            curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/psumbera/rustup/refs/heads/solaris-rustup/rustup-init.sh | sh -s -- -y
             echo '. ~/.cargo/env' >> ~/.profile
           run: |
             . ~/.cargo/env

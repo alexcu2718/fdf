@@ -203,7 +203,6 @@ macro_rules! const_assert {
 macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]
-        #[allow(clippy::multiple_unsafe_ops_per_block)]
         /*
         SAFETY: when calling this macro, the pointer has already been ensured to be non-null
         This is internal only because it relies on internal heuristics/guarantees

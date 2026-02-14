@@ -1,5 +1,5 @@
-#![allow(clippy::multiple_unsafe_ops_per_block)] //annoying convention
-
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+use crate::fs::FileDes;
 use core::marker::Copy;
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
@@ -169,18 +169,14 @@ where
     /// Executes the getdents64 system call using <unistd.h>/direct `libc` syscalls
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> isize {
+    pub fn getdents(&mut self, fd: &FileDes) -> isize {
         // SAFETY: we're passing a valid buffer
         unsafe { crate::util::getdents64(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
     #[inline]
     #[cfg(target_os = "macos")]
-    pub(crate) unsafe fn getdirentries64(
-        &mut self,
-        fd: &crate::fs::FileDes,
-        basep: *mut i64,
-    ) -> isize {
+    pub(crate) unsafe fn getdirentries64(&mut self, fd: &FileDes, basep: *mut i64) -> isize {
         // SAFETY: we're passing a valid buffer
         unsafe { crate::util::getdirentries64(fd.0, self.as_mut_ptr(), SIZE, basep) }
     }

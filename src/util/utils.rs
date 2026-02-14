@@ -322,7 +322,6 @@ On some systems
 ))]
 #[allow(
     clippy::as_conversions,
-    clippy::multiple_unsafe_ops_per_block,
     clippy::host_endian_bytes,
     clippy::cast_ptr_alignment
 )] //we're aligned (compiler can't see it though and we're doing fancy operations)

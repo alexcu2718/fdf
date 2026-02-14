@@ -27,6 +27,7 @@ cargo clippy --all -- \
   -A clippy::pub_use \
   -A clippy::field_scoped_visibility_modifiers \
   -A clippy::pub_with_shorthand \
+  -A clippy::multiple-unsafe-ops-per-block \
   -A clippy::allow_attributes \
   -A clippy::allow_attributes_without_reason \
   -A clippy::single_call_fn \

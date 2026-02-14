@@ -583,7 +583,6 @@ impl DirEntry {
         let Ok(dir) = self.opendir() else {
             return false;
         };
-        #[allow(clippy::multiple_unsafe_ops_per_block)]
         // SAFETY: dir valid to read
         let result = unsafe {
             readdir64(dir.as_ptr()); // Skip "."
@@ -730,7 +729,6 @@ impl DirEntry {
         `file_name_index` returns a valid index within `bytes` bounds
         The slice from this index includes the terminating null byte
         `bytes` contains no interior null bytes before the terminator*/
-        #[allow(clippy::multiple_unsafe_ops_per_block)]
         unsafe {
             CStr::from_bytes_with_nul_unchecked(core::slice::from_raw_parts(
                 path.as_ptr().add(self.file_name_index),
@@ -827,7 +825,6 @@ impl DirEntry {
         let len = path.len() - self.file_name_index;
         /*SAFETY:
         `file_name_index` returns a valid index within `bytes` bounds */
-        #[allow(clippy::multiple_unsafe_ops_per_block)]
         unsafe {
             core::slice::from_raw_parts(path.as_ptr().add(self.file_name_index), len)
             // Rearranged to make const compatible(identical assembly to previous version but wasnt const)
@@ -842,7 +839,6 @@ impl DirEntry {
 
     /// Private function  because it invokes a closure (to avoid doubly allocating unnecessary)
     #[inline]
-    #[allow(clippy::multiple_unsafe_ops_per_block)] //annoying
     pub(crate) fn get_realpath<F, T>(&self, f: F) -> Result<T>
     where
         F: Fn(&CStr) -> Result<T>,
@@ -1310,7 +1306,6 @@ impl DirEntry {
     */
     #[inline]
     #[must_use]
-    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "stylistic")]
     pub const fn is_hidden(&self) -> bool {
         // SAFETY: file_name_index is guaranteed to be within bounds
         // and we're using pointer arithmetic which is const-compatible (slight const hack)

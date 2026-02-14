@@ -460,7 +460,6 @@ pub trait DirentConstructor {
         This allows no dynamic resizing during iteration, which is costly!
          */
 
-        #[allow(clippy::multiple_unsafe_ops_per_block)] //dumb
         // SAFETY: write is within buffer bounds
         unsafe {
             *path_buffer.as_mut_ptr().add(base_len) = b'/' //this doesnt matter for non directories, since we're overwriting it anyway
@@ -523,7 +522,6 @@ pub trait DirentConstructor {
         // - `name_len` is within `buffer` bounds
         // Copy the name into the final portion
         unsafe { d_name.copy_to_nonoverlapping(buffer.as_mut_ptr(), name_len) };
-        #[allow(clippy::multiple_unsafe_ops_per_block)]
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         let full_path = unsafe {
             CStr::from_bytes_with_nul_unchecked(
@@ -576,7 +574,6 @@ pub struct GetDirEntries {
 #[cfg(target_os = "macos")]
 impl GetDirEntries {
     #[inline]
-    #[allow(clippy::multiple_unsafe_ops_per_block)]
     #[allow(clippy::cast_sign_loss)]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream

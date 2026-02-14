@@ -1,5 +1,4 @@
 #![allow(clippy::host_endian_bytes)]
-#![allow(clippy::multiple_unsafe_ops_per_block)]
 
 // I was reading through the std library for random silly things and I found this , https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161
 // this essentially provides a more rigorous foundation to my SWAR technique.

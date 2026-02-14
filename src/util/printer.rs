@@ -1,4 +1,5 @@
 #![expect(clippy::indexing_slicing, reason = "trivially in bounds")]
+#![allow(clippy::missing_inline_in_public_items)]
 use crate::{
     SearchConfigError, TraversalError,
     fs::{DirEntry, FileType},
@@ -23,6 +24,154 @@ const NEWLINES_PLAIN: [&[u8]; 2] = [NEWLINE, NEWLINE_CRLF];
 const NULL_TERMINATED_PLAIN: [&[u8]; 2] = [NULL_TERMINATED_NEWLINE, NULL_TERMINATED_CRLF];
 
 const RESET: &[u8] = b"\x1b[0m";
+
+#[allow(clippy::struct_excessive_bools)]
+pub struct PrinterBuilder<I>
+where
+    I: Iterator<Item = DirEntry>,
+{
+    limit: usize,
+    nocolour: bool,
+    sort: bool,
+    print_errors: bool,
+    null_terminated: bool,
+    errors: Option<Arc<Mutex<Vec<TraversalError>>>>,
+    paths: I,
+}
+
+impl<I> PrinterBuilder<I>
+where
+    I: Iterator<Item = DirEntry>,
+{
+    #[inline]
+    pub(crate) const fn new(paths: I) -> Self {
+        Self {
+            limit: usize::MAX,
+            nocolour: false,
+            sort: false,
+            print_errors: false,
+            null_terminated: false,
+            errors: None,
+            paths,
+        }
+    }
+
+    #[must_use]
+    /// Limit the values to print to `limit`
+    pub const fn limit(mut self, limit: Option<usize>) -> Self {
+        self.limit = match limit {
+            Some(lim) => lim,
+            None => usize::MAX,
+        };
+        self
+    }
+
+    #[must_use]
+    /// Print with no colour if enabled (always disabled with "`NO_COLOUR`" or "`NO_COLOR`" environment variables)
+    pub const fn nocolour(mut self, nocolour: bool) -> Self {
+        self.nocolour = nocolour;
+        self
+    }
+
+    #[must_use]
+    /// Sort results lexicographically
+    pub const fn sort(mut self, sort: bool) -> Self {
+        self.sort = sort;
+        self
+    }
+
+    #[must_use]
+    /// Print errors(if errors were requested to be collected)
+    pub const fn print_errors(mut self, print_errors: bool) -> Self {
+        self.print_errors = print_errors;
+        self
+    }
+
+    #[must_use]
+    /// Print results being null terminated(useful for xargs)
+    pub const fn null_terminated(mut self, null_terminated: bool) -> Self {
+        self.null_terminated = null_terminated;
+        self
+    }
+
+    #[must_use]
+    pub(crate) fn errors(mut self, errors: Option<Arc<Mutex<Vec<TraversalError>>>>) -> Self {
+        self.errors = errors;
+        self
+    }
+
+    #[inline]
+    #[allow(clippy::print_stderr)] //only enabled if requested
+    #[allow(clippy::missing_errors_doc)] //write up docs l ater
+    /// Print the results
+    pub fn print(self) -> Result<(), SearchConfigError> {
+        let std_out = stdout();
+        let is_terminal = std_out.is_terminal();
+        let use_colour = is_terminal && !Self::colour_disabled(self.nocolour);
+
+        let mut writer = if is_terminal {
+            BufWriter::new(std_out)
+        } else {
+            BufWriter::with_capacity(32 * 4096, std_out) //TODO play with these values?
+        };
+
+        if self.sort {
+            let mut collected: Vec<_> = self.paths.collect();
+            collected.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+            Self::write_iter(
+                &mut writer,
+                collected.into_iter().take(self.limit),
+                use_colour,
+                self.null_terminated,
+            )?;
+        } else {
+            Self::write_iter(
+                &mut writer,
+                self.paths.take(self.limit),
+                use_colour,
+                self.null_terminated,
+            )?;
+        }
+
+        writer.flush()?;
+
+        if self.print_errors
+            && let Some(errors_arc) = self.errors.as_ref()
+            && let Ok(error_vec) = errors_arc.lock()
+        {
+            for error in error_vec.iter() {
+                eprintln!("{error}");
+            }
+        }
+
+        Ok(())
+    }
+
+    fn colour_disabled(nocolour: bool) -> bool {
+        nocolour
+            || std::env::var("NO_COLOUR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"))
+            || std::env::var("NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"))
+    }
+
+    #[inline]
+    fn write_iter<W, J>(
+        writer: &mut W,
+        iter_paths: J,
+        use_colour: bool,
+        null_terminated: bool,
+    ) -> std::io::Result<()>
+    where
+        W: Write,
+        J: IntoIterator<Item = DirEntry>,
+    {
+        if use_colour {
+            write_coloured(writer, iter_paths)
+        } else {
+            write_nocolour(writer, iter_paths, null_terminated)
+        }
+    }
+}
+
 #[inline]
 fn extension_colour(entry: &DirEntry) -> &[u8] {
     match entry.file_type {
@@ -44,7 +193,6 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 
 /// A convenient function to print results
 #[inline]
-#[allow(clippy::fn_params_excessive_bools)] //convenience
 fn write_nocolour<W, I>(writer: &mut W, iter_paths: I, null_terminated: bool) -> std::io::Result<()>
 where
     W: Write,
@@ -79,84 +227,5 @@ where
         writer.write_all(&path)?;
         writer.write_all(NEWLINES_RESET[usize::from(path.is_dir())])?;
     }
-    Ok(())
-}
-
-#[inline]
-#[allow(clippy::print_stderr, reason = "only enabled if requested")]
-#[allow(clippy::fn_params_excessive_bools)] //convenience
-pub fn write_paths_coloured<I>(
-    path_iter: I,
-    limit: Option<usize>,
-    nocolour: bool,
-    sort: bool,
-    print_errors: bool,
-    null_terminated: bool,
-    errors: Option<&Arc<Mutex<Vec<TraversalError>>>>,
-) -> Result<(), SearchConfigError>
-where
-    I: Iterator<Item = DirEntry>,
-{
-    let std_out = stdout();
-    let true_limit = limit.unwrap_or(usize::MAX);
-
-    let is_terminal = std_out.is_terminal();
-
-    let check_std_colours = nocolour
-        || std::env::var("NO_COLOUR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"))
-        || std::env::var("NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"));
-    // TODO document this.
-
-    let use_colour = is_terminal && !check_std_colours;
-
-    // #[cfg(not(target_os = "macos"))]
-    // let mut writer = BufWriter::new(std_out);
-    //#[cfg(target_os = "macos")]
-    let mut writer = if is_terminal {
-        BufWriter::new(std_out) //Decrease write syscalls if not sending to stdout.
-    } else {
-        BufWriter::with_capacity(32 * 4096, std_out)
-    };
-    /*
-    sorting is a very computationally expensive operation alas because it requires alot of operations!
-     Included for completeness (I will probably need to rewrite all of this eventually)
-     */
-
-    if sort {
-        let mut collected: Vec<_> = path_iter.collect();
-        collected.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
-        // TODO rewrite this sorting algorithm to use parallelism(I removed rayon)
-
-        let iter_paths = collected.into_iter().take(true_limit);
-        // I do a lot of branch avoidance here
-        // this code could definitely be a lot more concise, sorry!
-
-        if use_colour {
-            write_coloured(&mut writer, iter_paths)?
-        } else {
-            write_nocolour(&mut writer, iter_paths, null_terminated)?;
-        }
-    } else {
-        let iter_paths = path_iter.take(true_limit);
-
-        if use_colour {
-            write_coloured(&mut writer, iter_paths)?
-        } else {
-            write_nocolour(&mut writer, iter_paths, null_terminated)?;
-        }
-    }
-
-    writer.flush()?;
-
-    //If errors were sent, show them.
-    if print_errors
-        && let Some(errors_arc) = errors
-        && let Ok(error_vec) = errors_arc.lock()
-    {
-        for error in error_vec.iter() {
-            eprintln!("{error}");
-        }
-    }
-
     Ok(())
 }

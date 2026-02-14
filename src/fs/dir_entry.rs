@@ -600,7 +600,7 @@ impl DirEntry {
     /// Specialisation for empty checks on linux/android (avoid a heap alloc)
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
-        use crate::util::getdents;
+        use crate::util::getdents64;
         const BUF_SIZE: usize = 500; //pretty arbitrary.
         #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
         const MINIMUM_DIRENT_SIZE: isize =
@@ -613,7 +613,7 @@ impl DirEntry {
         if let Ok(fd) = dirfd {
             let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
             // SAFETY: guaranteed open, valid ptr etc.
-            let dents = unsafe { getdents(fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
+            let dents = unsafe { getdents64(fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
 
             // SAFETY: Closed only once confirmed open
             unsafe { libc::close(fd.0) };

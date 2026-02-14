@@ -9,7 +9,7 @@
 
  ## Features
 
- - **Parallel Processing**: Utilises Rayon's work-stealing scheduler for concurrent
+ - **Parallel Processing**: Utilises a custom work-stealing scheduler for concurrent
    directory traversal
  - **Platform Optimisations**: Linux/Android specific `getdents` system calls for optimal
    performance, with fallbacks for other platforms
@@ -27,17 +27,16 @@
 
  ## Performance Characteristics
 
- - Uses mimalloc as global allocator on supported platforms for improved
+ - Uses mimalloc as global allocator on supported platforms for improved (disabled with --no-default-features)
    memory allocation performance
  - Batched result delivery to minimise channel contention
  - Zero-copy path handling where possible
  - Avoids unnecessary `stat` calls through careful API design
- - Makes up to 50% less `getdents` syscalls on linux/android, check the source code)
 
  ## Platform Support
 
- - **Linux/Android**: Optimised with direct `getdents` system calls
- - **BSD's/macOS**: Standard `readdir` with potential for future changes like `fts_open` (unlikely probably)
+ - **Linux/Android**: Optimised with direct `getdents64` system calls
+ - **macOS**: Support for `__getdirentries64` (to be allowed to be disabled in a future update)
  - **Other Unix-like**: Fallback to standard library functions
  - **Windows**: Not currently supported (PRs welcome!)
 
@@ -113,6 +112,8 @@ pub(crate) use libc::{dirent as dirent64, readdir as readdir64};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) use libc::{dirent64, readdir64};
+
+pub use std::os::raw::c_char;
 
 mod test;
 

@@ -1,7 +1,7 @@
 use crate::{
     DirEntryError, FilesystemIOError, SearchConfig, SearchConfigError, TraversalError,
     fs::{DirEntry, FileType},
-    util::write_paths_coloured,
+    util::PrinterBuilder,
     walk::{DirEntryFilter, FilterType, finder_builder::FinderBuilder},
 };
 use core::{
@@ -309,44 +309,26 @@ impl Finder {
     }
 
     /**
-    Prints search results to stdout with optional colouring and count limiting.
+    Build a [`PrinterBuilder`] from this finder.
 
-    This is a convenience method that handles the entire search, result collection,
-    and formatted output in a single call.
+    This is a convenience method that starts traversal and returns a configured printer
+    builder containing:
+    - the traversal result iterator
+    - collected error storage (when enabled in the finder configuration)
 
-    # Arguments
-    * `use_colours` - Enable ANSI colour output for better readability(if supported/going to a TTY)
-    * `result_count` - Optional limit on the number of results to display
-    * `sort` - Enable sorting of the final results (has significant computational cost)
-    * `null_terminated` Enable a NUL as the terminator for non TTY output (for xargs compatibility with -0 flag)
-    * `print_errors` - Print any errors collected (if errors were collected during traversal via the builder)
+    Use the returned builder to configure output behaviour (limit, sorting, colour,
+    null-terminated output, and error printing) and then call `.print()`.
 
     # Errors
-    Returns [`SearchConfigError::IOError`] if the search operation fails
+    Returns a [`SearchConfigError`] if traversal setup fails.
     */
-    //TODO! reformulate this into a builder when I feel like it
-    // I also want to add additional settings like printing info like 'ls -al', eventually anyway.
     #[inline]
-    #[allow(clippy::fn_params_excessive_bools)] //convenience
-    pub fn print_results(
+    pub fn build_printer(
         self,
-        use_colours: bool,
-        result_count: Option<usize>,
-        sort: bool,
-        null_terminated: bool,
-        print_errors: bool,
-    ) -> core::result::Result<(), SearchConfigError> {
+    ) -> core::result::Result<PrinterBuilder<impl Iterator<Item = DirEntry>>, SearchConfigError>
+    {
         let errors = self.errors.clone();
-        let iter = self.traverse()?;
-        write_paths_coloured(
-            iter,
-            result_count,
-            use_colours,
-            sort,
-            print_errors,
-            null_terminated,
-            errors.as_ref(),
-        )
+        Ok(PrinterBuilder::new(self.traverse()?).errors(errors))
     }
 
     /// Determines if a directory should be sent through the channel
@@ -549,9 +531,10 @@ impl Finder {
             }
         }
     }
-
+    #[inline]
     fn enqueue_dir(dir: DirEntry, ctx: &WorkerContext<'_>) -> bool {
         if ctx.shutdown_flag.load(Ordering::Relaxed) {
+            // Release the shutdown as soon as possible.
             return false;
         }
 

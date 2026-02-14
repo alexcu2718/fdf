@@ -49,13 +49,7 @@ pub struct FinderBuilder {
 }
 
 impl FinderBuilder {
-    /**
-      Creates a new `FinderBuilder` with required fields.
-
-      # Arguments
-      `root` - The root directory to search
-    */
-    pub fn new<A: AsRef<OsStr>>(root: A) -> Self {
+    pub(crate) fn new<A: AsRef<OsStr>>(root: A) -> Self {
         const MIN_THREADS: NonZeroUsize = NonZeroUsize::MIN;
         let num_threads = std::thread::available_parallelism().unwrap_or(MIN_THREADS);
         Self {
@@ -244,12 +238,9 @@ impl FinderBuilder {
     - The search pattern cannot be compiled to a valid regular expression
     - File system metadata cannot be retrieved (for same-filesystem tracking)
     */
-    #[allow(clippy::let_underscore_must_use)]
     pub fn build(self) -> core::result::Result<Finder, SearchConfigError> {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
-
-        //we do this to avoid passing pools to every iterator (shared access locks etc.)
 
         let starting_filesystem = if self.same_filesystem {
             // Get the filesystem ID of the root directory directly
@@ -288,6 +279,10 @@ impl FinderBuilder {
 
         let inode_cache: Option<DashSet<(u64, u64)>> = self.follow_symlinks.then(DashSet::new);
 
+        let errors = self
+            .collect_errors
+            .then(|| Arc::new(Mutex::new(Vec::new())));
+
         Ok(Finder {
             root: resolved_root,
             search_config,
@@ -295,9 +290,7 @@ impl FinderBuilder {
             file_filter: lambda,
             starting_filesystem,
             inode_cache,
-            errors: self
-                .collect_errors
-                .then(|| Arc::new(Mutex::new(Vec::new()))),
+            errors,
             thread_count: self.thread_count,
         })
     }

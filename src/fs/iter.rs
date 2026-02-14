@@ -321,6 +321,7 @@ impl GetDents {
                 return None;
             }
         }
+
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
         let drnt = unsafe {
@@ -589,8 +590,6 @@ impl GetDirEntries {
         let is_more_remaining = remaining_bytes.is_positive();
         #[cfg(has_eof_trick)] // Check at build time for the optimisation
         {
-            use crate::fs::BUFFER_SIZE;
-
             // SAFETY: Buffer is already initialised by the kernel
             // The kernel writes the WHOLE of the buffer passed to `getdirentries`
             //(also it's to u8, which has no restrictions on alignment)
@@ -604,8 +603,7 @@ impl GetDirEntries {
 
             self.end_of_stream =
             // SAFETY: AS ABOVE
-            unsafe { self.syscall_buffer.as_ptr().add(BUFFER_SIZE - 4).read() == 1 };
-            const { assert!(BUFFER_SIZE >= 1024, "Invalid size EOF optimisation") }
+            unsafe { self.syscall_buffer.as_ptr().add(SyscallBuffer::BUFFER_SIZE - 4).read() == 1 };
         }
         #[cfg(not(has_eof_trick))]
         {

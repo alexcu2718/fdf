@@ -268,12 +268,13 @@ impl FinderBuilder {
 
         let lambda: FilterType = |rconfig, rdir, rfilter| {
             {
-                rfilter.is_none_or(|func| func(rdir))
-                    && rconfig.matches_extension(&rdir.file_name())
+                // arrange the filters by order of costliness
+                rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_path(rdir, !rconfig.file_name_only)
                     && rconfig.matches_type(rdir)
                     && rconfig.matches_size(rdir)
                     && rconfig.matches_time(rdir)
+                    && rfilter.is_none_or(|func| func(rdir)) // put the custom filter last because it's almost always unlikely
             }
         };
 

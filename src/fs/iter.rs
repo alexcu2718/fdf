@@ -593,7 +593,7 @@ impl GetDirEntries {
                 .getdirentries64(&self.fd, &raw mut self.base_pointer)
         };
         let is_more_remaining = remaining_bytes.is_positive();
-        #[cfg(all(has_eof_trick, target_os = "macos"))] // Check at build time for the optimisation
+        #[cfg(has_eof_trick)] // Check at build time for the optimisation
         {
             // SAFETY: Buffer is already initialised by the kernel
             // The kernel writes the WHOLE of the buffer passed to `getdirentries`

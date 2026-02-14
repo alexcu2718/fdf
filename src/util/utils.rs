@@ -83,11 +83,13 @@ where
         ) -> ssize_t;
     } // Compile error if this doesn't link.
 
+    // Link for FreeBSD too, not sure what OpenBSD/NetBSD/DragonflyBSD use, OpenBSD uses getdents from my system call tracing
+    // But I was unable to even build rust due to a broken package manager, sigh. NetBSD is another pain, doesn't seem to support rust 2024 at all.
     #[cfg(target_os = "freebsd")]
     unsafe extern "C" {
         fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t)
         -> ssize_t;
-    } // C
+    } // as above
 
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
     #[cfg(target_os = "macos")]

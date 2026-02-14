@@ -6,7 +6,6 @@ mod utils;
 pub use glob::{Error, glob_to_regex};
 pub use memchr_derivations::{find_char_in_word, find_last_char_in_word, memrchr};
 
-pub(crate) use printer::write_paths_coloured;
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -24,9 +23,11 @@ pub(crate) use printer::write_paths_coloured;
 ))]
 pub use utils::dirent_const_time_strlen;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub use utils::getdents;
+pub use utils::getdents64;
 #[cfg(target_os = "macos")]
 pub use utils::getdirentries64;
 
 pub(crate) use utils::BytePath;
 pub use utils::dirent_name_length;
+
+pub use printer::PrinterBuilder;

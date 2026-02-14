@@ -1,4 +1,6 @@
 use crate::dirent64;
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+use crate::fs::ValueType;
 use crate::util::memchr_derivations::memrchr;
 use core::ops::Deref;
 
@@ -24,9 +26,9 @@ use core::ops::Deref;
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[expect(clippy::cast_possible_truncation, reason = "clong is isize on Linux")]
-pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
+pub unsafe fn getdents64<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
 where
-    T: crate::fs::ValueType, //i8/u8
+    T: ValueType, //i8/u8
 {
     //You can additionally link it like this.
     // unsafe extern "C" {
@@ -62,23 +64,24 @@ where
  - Negative: Error code (check errno)
 */
 pub unsafe fn getdirentries64<T>(
-    fd: libc::c_int,
+    fd: i32,
     buffer_ptr: *mut T,
-    nbytes: libc::size_t,
-    basep: *mut libc::off_t,
+    nbytes: usize,
+    basep: *mut i64,
 ) -> isize
 where
-    T: crate::fs::ValueType,
+    T: ValueType,
 {
+    use libc::{c_char, c_int, off_t, size_t, ssize_t};
     // link to libc
     // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
     unsafe extern "C" {
         fn __getdirentries64(
-            fd: libc::c_int,
-            buf: *mut libc::c_char,
-            nbytes: libc::size_t,
-            basep: *mut libc::off_t,
-        ) -> libc::ssize_t;
+            fd: c_int,
+            buf: *mut c_char,
+            nbytes: size_t,
+            basep: *mut off_t,
+        ) -> ssize_t;
     } // Compile error if this doesn't link.
 
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
@@ -398,15 +401,18 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         #[cfg(target_endian = "little")]
         //SAFETY: The u64 can never be all 0's post-SWAR
-        let zero_bit = unsafe {
+        let masked_word = unsafe {
             NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
         };
         //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
         // ^ Reference for the BE algorithm
         // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
+        // This is overly precautious, mostly because we can't use the typical `HASZERO` due to the possible
+        // present of 0x01 bytes in a filename, given POSIX paths are raw bytes
+        // and the POSIX standard only dictates 1. a filename cannot contain a slash and 2. cannot be empty.
         #[cfg(target_endian = "big")]
         //SAFETY: The u64 can never be all 0's post-SWAR
-        let zero_bit = unsafe {
+        let masked_word = unsafe {
             NonZeroU64::new_unchecked(
                 (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
             )
@@ -414,9 +420,9 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         // Find the position of the null terminator
         #[cfg(target_endian = "little")]
-        let byte_pos = (zero_bit.trailing_zeros() >> 3) as usize;
+        let byte_pos = (masked_word.trailing_zeros() >> 3) as usize;
         #[cfg(target_endian = "big")]
-        let byte_pos = (zero_bit.leading_zeros() >> 3) as usize;
+        let byte_pos = (masked_word.leading_zeros() >> 3) as usize;
 
         //check final calculation
         debug_assert!(
@@ -447,10 +453,10 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         mov edx, 16777215
         cmovne rdx, rcx  <--- conditional move, no branch
         or rdx, qword ptr [rdi + rax - 8]
-        movabs rcx, -72340172838076673
+        movabs rcx, -72340172838076673 // Loading this constant with be amortised due to inlining (havent checked for stack spillage, eh, unavoidable if so anyways.)
         add rcx, rdx
         andn rcx, rdx, rcx
-        movabs rdx, -9187201950435737472
+        movabs rdx, -9187201950435737472 // as above.
         and rdx, rcx
         tzcnt rcx, rdx
         shr ecx, 3
@@ -487,6 +493,13 @@ Without BMI
 
 // C implementation (so people can understand it better)
 
+
+
+
+#include <stdint.h>
+#include <stddef.h>
+#include <dirent.h>
+
 #if defined(__linux__)
 uint64_t dirent_const_time(const struct dirent *drnt) {
 #define DIRENT_HEADER_START (offsetof(struct dirent, d_name))
@@ -502,17 +515,19 @@ uint64_t dirent_const_time(const struct dirent *drnt) {
 #endif
 
   const uint64_t reclen = drnt->d_reclen;
-  const uint64_t mask = MASK * (reclen == MIN_DIRENT_SIZE);
+  const uint64_t mask = MASK * (uint64_t)(reclen == MIN_DIRENT_SIZE);
   uint64_t last_word = *(uint64_t *)((uint8_t *)(drnt) + (reclen - 8));
   last_word |= mask;
 
 #if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
   const uint64_t zero_bit = (last_word - LO_U64) & ~last_word & HI_U64;
-  const uint64_t byte_pos = __builtin_ctzll(zero_bit) >> 3;
+  const uint64_t byte_pos =  (uint64_t)__builtin_ctz(zero_bit) >> 3;
+                            // For some reason we need to cast here to avoid the 'cdqe' instruction (convert double to quadword with zero extension)
+                            // I'm not a C guru, annoying!
 #else
   const uint64_t zero_bit =
       ((~last_word & ~HI_U64) + LO_U64) & (~last_word & HI_U64);
-  const uint64_t byte_pos = __builtin_clzll(zero_bit) >> 3;
+  const uint64_t byte_pos = (uint64_t)__builtin_clzll(zero_bit) >> 3;
 #endif
 
   return reclen - DIRENT_HEADER_START + byte_pos - 8;
@@ -520,5 +535,28 @@ uint64_t dirent_const_time(const struct dirent *drnt) {
 #else
 #error "dirent_const_time is only supported on linux in this simplified example (and GCC/Clang, you'll need to use different intrinsics for MSVC (irrelevant cos wont work on windows lol)"
 #endif
+*/
+
+/*
+C version
+https://godbolt.org/z/GP1P51zrx
+
+dirent_const_time:
+        movzx   ecx, WORD PTR [rdi+16]
+        xor     edx, edx
+        mov     eax, 16777215
+        cmp     rcx, 24
+        cmove   rdx, rax
+        or      rdx, QWORD PTR [rdi-8+rcx]
+        movabs  rax, -72340172838076673
+        add     rax, rdx
+        not     rdx
+        and     rax, rdx
+        movabs  rdx, -9187201950435737472
+        and     rax, rdx
+        rep bsf eax, eax
+        shr     rax, 3
+        lea     rax, [rcx-27+rax]
+        ret
 
 */

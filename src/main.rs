@@ -287,13 +287,13 @@ fn main() -> Result<(), SearchConfigError> {
         .thread_count(args.thread_num)
         .build()?;
 
-    let _ = finder.print_results(
-        args.no_colour,
-        args.top_n,
-        args.sort,
-        args.print0,
-        args.show_errors,
-    );
+    finder
+        .build_printer()?
+        .limit(args.top_n)
+        .null_terminated(args.print0)
+        .nocolour(args.no_colour)
+        .print_errors(args.show_errors)
+        .print()?;
 
     Ok(())
 }

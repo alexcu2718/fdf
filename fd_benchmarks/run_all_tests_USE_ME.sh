@@ -66,13 +66,16 @@ fi
 
 
 if [[ "$(uname -s)" == "Linux" ]]; then
+    read -rp "Do you want to run cold cache benchmarks? [y/n] " response_cold_cache
+
+    if [[ "$response_cold_cache" =~ ^[Yy]$ ]]; then
         # Check if sudo exists(not available on android, well, it is, but i'm lazy and not rooting my phone!)
         if command -v sudo &> /dev/null; then
             echo "Running cold cache benchmarks..."
             for script in ./cold-cache*.sh; do
                 if [[ "$script" != *"_home_dir"* ]]; then
                     echo "Running $script"
-                    ."/$script"
+                    ./"$script"
                     sleep 2
                 fi
             done
@@ -80,14 +83,17 @@ if [[ "$(uname -s)" == "Linux" ]]; then
             echo -e "\nRunning cold cache home dir benchmarks\n"
             for script in ./cold-cache*_home_dir.sh; do
                 echo "Running $script"
-                ."/$script"
+                ./"$script"
                 sleep 2
             done
         else
             echo "Skipping cold cache test because sudo is not available."
         fi
     else
-        echo "Skipping cold cache test because it is only supported on Linux."
+        echo "Skipping cold cache benchmarks."
+    fi
+else
+    echo "Skipping cold cache test because it is only supported on Linux."
 fi
 
 

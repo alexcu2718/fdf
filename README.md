@@ -69,15 +69,15 @@ Note: Miri validation (Rust's undefined behaviour detector) cannot be used due t
 
 TMP_DIR="${TMP:-/tmp}"
 git clone --depth 1 https://github.com/alexcu2718/fdf "$TMP_DIR/fdf_test"
-cd "$TMP_DIR/fdf_test/fd_benchmarks"
+cd "$TMP_DIR/fdf_test"
 
 
 # If on Android, ensure the script is executable
 if [[ "$(uname -o)" == "Android" ]]; then
-    chmod +x run_all_tests_USE_ME.sh
+    chmod +x ./scripts/run_benchmarks.sh
 fi
 
-./run_all_tests_USE_ME.sh
+./scripts/run_benchmarks.sh
 ```
 
 This executes a comprehensive suite of internal library tests, CLI tests, and benchmarks.

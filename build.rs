@@ -80,7 +80,8 @@ fn test_eof() {
     if has_eof {
         println!("cargo:rustc-cfg=has_eof_trick")
     }
-
+    // SAFETY: trivial.
+    unsafe { libc::close(get_fd) };
     let _ = std::fs::remove_dir_all(&empty);
 }
 

@@ -1,4 +1,9 @@
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "android"))]
+#[cfg(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd"
+))]
 use crate::fs::types::SyscallBuffer;
 use crate::fs::{DirEntry, FileType};
 use crate::fs::{FileDes, Result};
@@ -534,7 +539,7 @@ pub trait DirentConstructor {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 /**
 macos directory iterator using the `getdirentries` system call.
 
@@ -572,7 +577,7 @@ pub struct GetDirEntries {
     pub(crate) base_pointer: i64,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl GetDirEntries {
     #[inline]
     #[allow(clippy::cast_sign_loss)]
@@ -588,7 +593,7 @@ impl GetDirEntries {
                 .getdirentries64(&self.fd, &raw mut self.base_pointer)
         };
         let is_more_remaining = remaining_bytes.is_positive();
-        #[cfg(has_eof_trick)] // Check at build time for the optimisation
+        #[cfg(all(has_eof_trick, target_os = "macos"))] // Check at build time for the optimisation
         {
             // SAFETY: Buffer is already initialised by the kernel
             // The kernel writes the WHOLE of the buffer passed to `getdirentries`
@@ -702,7 +707,7 @@ impl GetDirEntries {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl Drop for GetDirEntries {
     /**
       Drops the iterator, closing the file descriptor.
@@ -825,10 +830,10 @@ impl_iterator_for_dirent!(GetDents);
 #[cfg(any(target_os = "linux", target_os = "android"))]
 impl_dirent_constructor!(GetDents);
 
-// Macos only
-#[cfg(target_os = "macos")]
+// Macos/BSD's only
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl_iter!(GetDirEntries);
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl_iterator_for_dirent!(GetDirEntries);
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl_dirent_constructor!(GetDirEntries);

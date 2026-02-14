@@ -32,7 +32,6 @@ fn test_eof() {
      */
 
     // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
-    println!("cargo:rustc-check-cfg=cfg(has_eof_trick)");
 
     // link to libc (as done it in main crate)
     unsafe extern "C" {
@@ -143,6 +142,8 @@ fn check_dirent_has_field(cfg_name: &str) {
 }
 
 fn main() {
+    // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
+    println!("cargo:rustc-check-cfg=cfg(has_eof_trick)");
     // Re-run build script if filesystem list changes
 
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };

@@ -314,7 +314,12 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     /**
      Opens the directory and returns a file descriptor.
 
@@ -1697,7 +1702,7 @@ impl DirEntry {
     ```
     */
     #[inline]
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     pub fn getdirentries(&self) -> Result<crate::fs::GetDirEntries> {
         crate::fs::GetDirEntries::new(self)
     }

@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -86,7 +86,7 @@ jobs:
 
       - name: Test on Linux s390x (big-endian)
         if: matrix.os == 'linux' && matrix.arch == 's390x'
-        uses: uraimo/run-on-arch-action@v2
+        uses: uraimo/run-on-arch-action@v3
         with:
           arch: s390x
           distro: ubuntu22.04
@@ -101,7 +101,6 @@ jobs:
             cargo build --verbose
             cargo test --verbose
             cargo doc --verbose
-
 
       - name: Test on Alpine in Docker
         if: matrix.os == 'alpine' && matrix.arch == 'x86_64'

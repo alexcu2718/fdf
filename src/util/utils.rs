@@ -527,7 +527,7 @@ uint64_t dirent_const_time(const struct dirent *drnt) {
 #else
   const uint64_t zero_bit =
       ((~last_word & ~HI_U64) + LO_U64) & (~last_word & HI_U64);
-  const uint64_t byte_pos = (uint64_t)__builtin_clzll(zero_bit) >> 3;
+  const uint64_t byte_pos = (uint64_t)__builtin_clz(zero_bit) >> 3;
 #endif
 
   return reclen - DIRENT_HEADER_START + byte_pos - 8;

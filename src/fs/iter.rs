@@ -3,7 +3,8 @@
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
+    target_os = "netbsd"
 ))]
 use crate::fs::types::SyscallBuffer;
 use crate::fs::{DirEntry, FileType};
@@ -128,16 +129,19 @@ impl Drop for ReadDir {
 }
 
 /**
-Linux/Android-specific directory iterator using the `getdents` system call.
+Linux/Android/BSDspecific directory iterator using the `getdents` system call.
 
 Provides more efficient directory traversal than `readdir` for large directories
-by performing batched reads into a kernel buffer. This reduces system call overhead
-and improves performance when scanning directories with many entries.
 
 Unlike some directory iteration methods, this does not implicitly call `stat`
 on each entry unless required by unusual filesystem behaviour.
 */
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 pub struct GetDents {
     /// File descriptor of the open directory, wrapped for automatic resource management
     pub(crate) fd: FileDes,
@@ -163,7 +167,12 @@ pub struct GetDents {
     pub(crate) end_of_stream: bool,
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 impl Drop for GetDents {
     /**
       Drops the iterator, closing the file descriptor.
@@ -188,7 +197,12 @@ impl Drop for GetDents {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 impl GetDents {
     /**
     Returns the number of unprocessed bytes remaining in the current kernel buffer.
@@ -815,11 +829,26 @@ impl_iterator_for_dirent!(ReadDir);
 impl_dirent_constructor!(ReadDir);
 
 // Linux/Android specific
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 impl_iter!(GetDents);
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 impl_iterator_for_dirent!(GetDents);
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 impl_dirent_constructor!(GetDents);
 
 // Macos/BSD's only

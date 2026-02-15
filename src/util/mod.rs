@@ -22,7 +22,12 @@ pub use memchr_derivations::{find_char_in_word, find_last_char_in_word, memrchr}
     target_os = "hurd"
 ))]
 pub use utils::dirent_const_time_strlen;
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 pub use utils::getdents;
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 pub use utils::getdirentries64;

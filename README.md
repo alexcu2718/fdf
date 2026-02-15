@@ -155,7 +155,7 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 
 ### Key Optimisations
 
-- **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD directory reading by significantly reducing the number of stat/statx/fstatat system calls**
+- **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD/NetBSD directory reading by significantly reducing the number of stat/statx/fstatat system calls**
 
 - **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L581)**
 

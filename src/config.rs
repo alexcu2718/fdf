@@ -136,14 +136,6 @@ pub struct SearchConfig {
     Supports relative time ranges (e.g., "last 7 days").
     */
     pub(crate) time_filter: Option<TimeFilter>,
-
-    /**
-    Whether to collect
-
-    If true, errors like permission denials are shown to the user via `Finder`'s .errors method
-    If false, errors are silently skipped.
-    */
-    pub(crate) collect_errors: bool,
 }
 impl SearchConfig {
     /**
@@ -169,7 +161,6 @@ impl SearchConfig {
         size_filter: Option<SizeFilter>,
         type_filter: Option<FileTypeFilter>,
         time_filter: Option<TimeFilter>,
-        collect_errors: bool,
         use_glob: bool,
     ) -> core::result::Result<Self, SearchConfigError> {
         let (file_name_only, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
@@ -218,7 +209,6 @@ impl SearchConfig {
             size_filter,
             type_filter,
             time_filter,
-            collect_errors,
         })
     }
 

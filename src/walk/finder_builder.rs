@@ -262,7 +262,6 @@ impl FinderBuilder {
             self.size_filter,
             self.file_type,
             self.time_filter,
-            self.collect_errors,
             self.use_glob,
         )?;
 

@@ -477,32 +477,11 @@ impl Finder {
         if !self.handle_depth_limit(&dir, should_send_dir_or_symlink, sender, ctx) {
             return;
         }
-
-        // Systems that support getdents
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "illumos",
-            target_os = "solaris"
-        ))]
-        let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive.
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "illumos",
-            target_os = "solaris"
-        )))]
-        let direntries = dir.readdir();
-        #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-        let direntries = dir.getdirentries();
-
-        match direntries {
+        // a macro to select the best implementation for your device (simplifying the code here)
+        // On Linux/Android/Solaris/Illumos/etc, use getdents
+        // on MacOS/FreeBSD, use getdirentries(64)
+        // Otherwise use readdir
+        match read_direntries!(dir) {
             Ok(entries) => {
                 let (dirs, mut files): (Vec<_>, Vec<_>) = entries
                     .filter(|entry| {
@@ -533,10 +512,6 @@ impl Finder {
             }
             Err(error) => {
                 if let Some(errors_arc) = self.errors.as_ref() {
-                    debug_assert!(
-                        self.search_config.collect_errors,
-                        "Sanity check, only collect errors when enabled"
-                    );
                     // This will only show errors if collect errors is enabled
                     // Generally I don't like this approach due to the locking it can cause
                     // However, errors are VERY small typically hence this create negligible issues.

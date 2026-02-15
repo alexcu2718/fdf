@@ -41,7 +41,7 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 *Note: GitHub Actions does not yet provide Rust 2024 support for some(most of these) platforms. Additional checks will be added when available.*
 
 - OpenBSD (Specifically tested recently on a VM)
-- NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
+- NetBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
 - Android (tested on my phone)
 - Illumos (Solaris works, illumos is essentially identical)
 
@@ -51,7 +51,9 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 
 - **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/). The plan is this to work on this after a 1.0.
 
-### Non supported filesystems
+-**DragonflyBSD**: Not supporting Rust 2024 (but will in future)
+
+### Non supported filesystems(Linux)
 
 This tool doesn't support reiserfs in any form, due to it's extremely long filename length, every other file system is supported, it's not worth sacrificing
 the performance improvements to support an extremely niche fs that is used by 0.001% of people(if that...).

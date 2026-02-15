@@ -318,7 +318,8 @@ impl DirEntry {
         target_os = "linux",
         target_os = "android",
         target_os = "macos",
-        target_os = "freebsd"
+        target_os = "freebsd",
+        target_os = "openbsd"
     ))]
     /**
      Opens the directory and returns a file descriptor.
@@ -604,7 +605,7 @@ impl DirEntry {
     /// Specialisation for empty checks on linux/android (avoid a heap alloc)
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
-        use crate::util::getdents64;
+        use crate::util::getdents;
         const BUF_SIZE: usize = 500; //pretty arbitrary.
         #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
         const MINIMUM_DIRENT_SIZE: isize =
@@ -617,7 +618,7 @@ impl DirEntry {
         if let Ok(fd) = dirfd {
             let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
             // SAFETY: guaranteed open, valid ptr etc.
-            let dents = unsafe { getdents64(fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
+            let dents = unsafe { getdents(fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
 
             // SAFETY: Closed only once confirmed open
             unsafe { libc::close(fd.0) };
@@ -1620,10 +1621,10 @@ impl DirEntry {
     }
 
     /**
-     Low-level directory iterator using the `getdents64` system call.
+     Low-level directory iterator using the `getdents(64)` system call.
 
      This method provides high-performance directory scanning by using a large buffer
-     (typically ~4.1KB) to minimise system calls. It's Linux-specific and generally
+     (typically ~32.1KB) to minimise system calls. It's Linux-specific and generally
      faster than `readdir` for bulk directory operations.
 
      # Errors
@@ -1637,7 +1638,7 @@ impl DirEntry {
 
      # Platform Specificity
 
-     This method is only available on Linux/Android targets due to its dependence on
+     This method is only available on Linux/Android/OpenBSD targets due to its dependence on
      the `getdents64` system call.
 
      # Examples
@@ -1674,13 +1675,13 @@ impl DirEntry {
     ```
     */
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
     pub fn getdents(&self) -> Result<crate::fs::GetDents> {
         crate::fs::GetDents::new(self)
     }
 
     /**
-    Low-level directory iterator using macOS/FreeBSD `getdirentries64`/`GetDirEntries` API.
+    Low-level directory iterator using macOS/FreeBSD `getdirentries64`/`getdirentries` system calls.
 
     This method provides a macOS/BSD-specific, high-performance streaming iterator
     over directory entries by leveraging the platform's `getdirentries(2)`
@@ -1690,7 +1691,7 @@ impl DirEntry {
 
 
     # Platform
-    - macOS only/FreeBSD only
+    - macOS only/FreeBSD only (future plans to expand to NetBSD/DragonFlyBSD)
 
     # Errors
     Returns `Err` when the directory cannot be opened or read, when the

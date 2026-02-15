@@ -479,13 +479,14 @@ impl Finder {
         }
 
         // linux with getdents (only linux/android allow direct syscalls)
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
         let direntries = dir.getdents(); // additionally, readdir internally calls stat on each file, which is expensive.
         #[cfg(not(any(
             target_os = "linux",
             target_os = "android",
             target_os = "macos",
-            target_os = "freebsd"
+            target_os = "freebsd",
+            target_os = "openbsd"
         )))]
         let direntries = dir.readdir();
         #[cfg(any(target_os = "macos", target_os = "freebsd"))]

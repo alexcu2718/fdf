@@ -37,7 +37,8 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 
 *Note: GitHub Actions does not yet provide Rust 2024 support for some(most of these) platforms. Additional checks will be added when available.*
 
-- OpenBSD, NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
+- OpenBSD (Specifically tested recently on a VM)
+- NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
 - Android (tested on my phone)
 - Illumos (Solaris works, illumos is essentially identical, I'll test it eventually)
 
@@ -92,7 +93,7 @@ The benchmarks are fully repeatable using the testing code above and cover file 
 
 (I cannot test accurately on qemu due to virtualisation overhead and I do not have a mac)
 
-Rough tests indicate a significant 50%+ speedup on BSD's/Illumos/Solaris but macos has less optimisations, macos is a much heftier OS and I struggle to emulate it stably (I get bizarre results from SSHing into it and running dtruss)
+Rough tests indicate a significant 75%+ speedup on BSD's/Illumos/Solaris but macos has less optimisations, macos is a much heftier OS and I struggle to emulate it stably (I get bizarre results from SSHing into it and running dtruss)
 
 ```bash
 
@@ -154,7 +155,7 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 
 ### Key Optimisations
 
-- **getdents64: Optimised the Linux/Android-specific directory reading by significantly reducing the number of stat/statx/fstatat system calls**
+- **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD directory reading by significantly reducing the number of stat/statx/fstatat system calls**
 
 - **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L581)**
 
@@ -163,6 +164,8 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
 
 - **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)
+
+- **A custom written crossbeam workstealing parallel traversal algorithm**
 
 ### Constant-Time Directory Entry Processing
 
@@ -489,9 +492,9 @@ Options:
   - Conflicts with the project’s minimal-dependency design.
   - Linux-only feature, making it a low-priority and high-effort addition.  **I will likely NOT do this**
 
-#### 2. Native Threading Implementation
+#### 2. Optimisations for the BSD family
 
-- Part done.
+- Part done. Need to implement getdirentries/getdents for NetBSD/DragonFlyBSD (after this done, NO MORE platform specific code!)
 
 #### 3. Allocation-Optimised Iterator Adaptor
 

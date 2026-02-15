@@ -3,13 +3,13 @@ use crate::DirEntryError;
 ///Generic result type for directory entry operations
 pub type Result<T> = core::result::Result<T, DirEntryError>;
 
-/// A buffer used to  hold the bytes sent from the OS for `getdents` calls
-/// We only use a buffer for syscalls on linux/android because of stable ABI(because we don't need to use a buffer for `ReadDir`)
+/// A buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
     target_os = "macos",
-    target_os = "freebsd"
+    target_os = "freebsd",
+    target_os = "openbsd"
 ))]
 pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
 
@@ -72,8 +72,27 @@ getdents64(3, 0x557e625c37a0 /* 0 entries */, 32768) = 0
 pub const BUFFER_SIZE: usize = 4096; // Crashes during testing due to parallel processes taking up too much stack
 
 #[cfg(target_os = "freebsd")]
-pub const BUFFER_SIZE: usize = 4096; // bsd's buffer size
+pub const BUFFER_SIZE: usize = 4096; // freebsd's buffer size (verified)
 
+#[cfg(all(target_os = "openbsd", not(debug_assertions)))]
+pub const BUFFER_SIZE: usize = 0x10000;
+
+#[cfg(all(target_os = "openbsd", debug_assertions))]
+pub const BUFFER_SIZE: usize = 4096; //avoid stack overflow during parallelised tests
+/*.
+foo#  ktrace fd -H . / > /dev/null 2>&1; kdump | grep getdents | head
+ 57610 fd       CALL  getdents(3,0xad7363e0000,0x10000)
+ 57610 fd       RET   getdents 688/0x2b0
+ 57610 fd       CALL  getdents(3,0xad7363e0000,0x10000)
+ 57610 fd       RET   getdents 0
+ 57610 fd       CALL  getdents(3,0xad7363e0000,0x10000)
+ 57610 fd       RET   getdents 2680/0xa78
+ 57610 fd       CALL  getdents(3,0xad7363e0000,0x10000)
+ 57610 fd       RET   getdents 0
+ 57610 fd       CALL  getdents(3,0xad7363e0000,0x10000)
+ 57610 fd       RET   getdents 856/0x358
+
+*/
 #[cfg(all(target_os = "macos", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 0x2000; //readdir calls this value for buffer size, look at syscall tracing below (8192)
 
@@ -98,5 +117,3 @@ getdirentries64(0x3, 0x7FEE86013C00, 0x2000)             = 112 0
 getdirentries64(0x3, 0x7FEE86013C00, 0x2000)             = 344 0
 
 */
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
-const_assert!(BUFFER_SIZE >= 4096, "Buffer size too small!");

@@ -14,7 +14,6 @@ use core::ops::Deref;
  # Safety
  - Requires valid open directory descriptor
  - Buffer must be valid for writes of `buffer_size` bytes
- - No type checking on generic pointer(T  must be i8/u8)
 
  # Returns
  - Positive: Number of bytes read
@@ -22,27 +21,34 @@ use core::ops::Deref;
  - Negative: Error code (check errno)
 */
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
-#[expect(clippy::cast_possible_truncation, reason = "clong is isize on Linux")]
-pub unsafe fn getdents64<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
 where
     T: crate::fs::ValueType, //i8/u8
 {
-    //You can additionally link it like this.
-    // unsafe extern "C" {
+    #[cfg(target_os = "openbsd")] //Link the function, we can't use the direct syscall because BSD's dont allow it.
+    unsafe extern "C" {
 
-    //     fn getdents64(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
-    // }
+        fn getdents(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
+    }
 
-    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
-    unsafe { libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _ }
-    //unsafe { getdents64(fd, buffer_ptr.cast(), buffer_size) }
+    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[expect(clippy::cast_possible_truncation, reason = "clong is isize on Unix")]
+    unsafe {
+        libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _
+    } // We can do similar linking for getdents64 but prefer not to use the indirection if can be avoided.
+
+    #[cfg(target_os = "openbsd")] //TODO add dragonfly/netbsd here if they allow the syscall.
+    unsafe {
+        getdents(fd, buffer_ptr.cast(), buffer_size)
+    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[inline]
 /**
-  Wrapper for direct getdirentries64 syscalls
+  Wrapper for direct getdirentries(64) syscalls
 
  # Arguments
  - `fd`: Open directory file descriptor
@@ -83,8 +89,7 @@ where
         ) -> ssize_t;
     } // Compile error if this doesn't link.
 
-    // Link for FreeBSD too, not sure what OpenBSD/NetBSD/DragonflyBSD use, OpenBSD uses getdents from my system call tracing
-    // But I was unable to even build rust due to a broken package manager, sigh. NetBSD is another pain, doesn't seem to support rust 2024 at all.
+    // Link for FreeBSD/OpenBSD too, not sure what NetBSD/DragonflyBSD use, TODO find out!
     #[cfg(target_os = "freebsd")]
     unsafe extern "C" {
         fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t)

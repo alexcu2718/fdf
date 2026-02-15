@@ -166,17 +166,19 @@ where
         unsafe { &mut *self.data.as_mut_ptr() }
     }
 
-    /// Executes the getdents64 system call using <unistd.h>/direct `libc` syscalls
+    /// Executes the getdents(64) system call using <unistd.h>/direct `libc` syscalls (Only supported on Linux/Android)
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
     pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> isize {
         // SAFETY: we're passing a valid buffer
-        unsafe { crate::util::getdents64(fd.0, self.as_mut_ptr(), SIZE) }
+        unsafe { crate::util::getdents(fd.0, self.as_mut_ptr(), SIZE) }
     }
 
     #[inline]
     #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    /// Executes the getdirentries(64) syscall
     pub(crate) unsafe fn getdirentries64(
+        //TODO improve the safety of this wrapper eventually
         &mut self,
         fd: &crate::fs::FileDes,
         basep: *mut i64,

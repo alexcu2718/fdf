@@ -2,7 +2,8 @@
     target_os = "macos",
     target_os = "linux",
     target_os = "android",
-    target_os = "freebsd"
+    target_os = "freebsd",
+    target_os = "openbsd"
 ))]
 use crate::fs::types::SyscallBuffer;
 use crate::fs::{DirEntry, FileType};
@@ -136,7 +137,7 @@ and improves performance when scanning directories with many entries.
 Unlike some directory iteration methods, this does not implicitly call `stat`
 on each entry unless required by unusual filesystem behaviour.
 */
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 pub struct GetDents {
     /// File descriptor of the open directory, wrapped for automatic resource management
     pub(crate) fd: FileDes,
@@ -162,7 +163,7 @@ pub struct GetDents {
     pub(crate) end_of_stream: bool,
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 impl Drop for GetDents {
     /**
       Drops the iterator, closing the file descriptor.
@@ -187,13 +188,13 @@ impl Drop for GetDents {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 impl GetDents {
     /**
     Returns the number of unprocessed bytes remaining in the current kernel buffer.
 
     This indicates how much data is still available to be processed before needing
-    to perform another `getdents64` system call. When this returns 0, the buffer
+    to perform another `getdents(64)` system call. When this returns 0, the buffer
     has been exhausted.
 
     # Examples
@@ -286,15 +287,6 @@ impl GetDents {
             end_of_stream: false,
         })
     }
-
-    // fn get_dirent(&self) -> *const dirent64 {
-    //     unsafe {
-    //         self.syscall_buffer
-    //             .as_ptr()
-    //             .add(self.offset)
-    //             .cast::<dirent64>()
-    //     }
-    // }
 
     /**
         Advances the iterator to the next directory entry in the buffer and returns a pointer to it.
@@ -471,7 +463,8 @@ pub trait DirentConstructor {
             *path_buffer.as_mut_ptr().add(base_len) = b'/' //this doesnt matter for non directories, since we're overwriting it anyway
         };
 
-        base_len += needs_slash; // update length if slash added (we're tracking the baselen, we dont care about the slash on the end because we're truncating it anyway)
+        base_len += needs_slash;
+        // update length if slash added(we're tracking the baselen, we dont care about the slash on the end because we're truncating it anyway)
 
         (path_buffer, base_len)
     }
@@ -541,11 +534,9 @@ pub trait DirentConstructor {
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 /**
-macos directory iterator using the `getdirentries` system call.
+macOS/freeBSD directory iterator using the `getdirentries` system call.
 
  Provides more efficient directory traversal than `readdir` for large directories
- by performing batched reads into a kernel buffer. This reduces system call overhead
- and improves performance when scanning directories with many entries.
 
  Unlike some directory iteration methods, this does not implicitly call `stat`
  on each entry unless required by unusual filesystem behaviour.
@@ -593,6 +584,7 @@ impl GetDirEntries {
                 .getdirentries64(&self.fd, &raw mut self.base_pointer)
         };
         let is_more_remaining = remaining_bytes.is_positive();
+        // Only macOS has this optimisation, the other BSD's do not
         #[cfg(has_eof_trick)] // Check at build time for the optimisation
         {
             // SAFETY: Buffer is already initialised by the kernel
@@ -823,11 +815,11 @@ impl_iterator_for_dirent!(ReadDir);
 impl_dirent_constructor!(ReadDir);
 
 // Linux/Android specific
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 impl_iter!(GetDents);
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 impl_iterator_for_dirent!(GetDents);
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 impl_dirent_constructor!(GetDents);
 
 // Macos/BSD's only

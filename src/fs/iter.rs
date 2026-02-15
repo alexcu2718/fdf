@@ -756,6 +756,14 @@ macro_rules! impl_iter {
             }
 
             #[inline]
+            /// Returns whether this opened file descriptor has a gitignore file
+            pub fn has_gitignore(&self) -> bool {
+                const IGNORE: &core::ffi::CStr = c".gitignore";
+                // SAFETY: trivial(always passing a null terminated string)
+                unsafe { libc::faccessat(self.dirfd().0, IGNORE.as_ptr(), libc::F_OK, 0) == 0 }
+            }
+
+            #[inline]
             /**
              Constructs a `DirEntry` from a directory entry pointer.
 

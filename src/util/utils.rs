@@ -39,7 +39,7 @@ where
 
     #[cfg(target_os = "netbsd")] //Link the function, we can't use the direct syscall because BSD's dont allow it.
     unsafe extern "C" {
-
+        // linkage is stable (symbol has changed in 20 years...+)
         fn __getdents30(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
     }
 

@@ -320,7 +320,9 @@ impl DirEntry {
         target_os = "macos",
         target_os = "freebsd",
         target_os = "openbsd",
-        target_os = "netbsd"
+        target_os = "netbsd",
+        target_os = "illumos",
+        target_os = "solaris"
     ))]
     /**
      Opens the directory and returns a file descriptor.
@@ -1638,7 +1640,7 @@ impl DirEntry {
 
      # Platform Specificity
 
-     This method is only available on Linux/Android/OpenBSD/NetBSD.
+     This method is only available on Linux/Android/OpenBSD/NetBSD/Illumos/Solaris.
 
      # Examples
 
@@ -1678,7 +1680,9 @@ impl DirEntry {
         target_os = "linux",
         target_os = "android",
         target_os = "openbsd",
-        target_os = "netbsd"
+        target_os = "netbsd",
+        target_os = "illumos",
+        target_os = "solaris"
     ))]
     pub fn getdents(&self) -> Result<crate::fs::GetDents> {
         crate::fs::GetDents::new(self)

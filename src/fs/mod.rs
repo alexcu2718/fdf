@@ -11,7 +11,9 @@ pub use file_type::FileType;
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 pub use iter::GetDents;
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]

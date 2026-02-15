@@ -173,7 +173,9 @@ where
         target_os = "linux",
         target_os = "android",
         target_os = "openbsd",
-        target_os = "netbsd"
+        target_os = "netbsd",
+        target_os = "solaris",
+        target_os = "illumos"
     ))]
     pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> isize {
         // SAFETY: we're passing a valid buffer

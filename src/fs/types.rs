@@ -10,7 +10,9 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
     target_os = "macos",
     target_os = "freebsd",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "solaris",
+    target_os = "illumos"
 ))]
 pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
 
@@ -62,6 +64,8 @@ pub const BUFFER_SIZE: usize = 8 * 4096;
 [pid 18327] getdents64(4 <unfinished ...>
 
 
+
+
 λ  sudo strace -f ls / 2>&1 | grep getdents | head
 getdents64(3, 0x557e625c37a0 /* 21 entries */, 32768) = 520
 getdents64(3, 0x557e625c37a0 /* 0 entries */, 32768) = 0
@@ -69,6 +73,22 @@ getdents64(3, 0x557e625c37a0 /* 0 entries */, 32768) = 0
 
 */
 
+#[cfg(all(
+    any(target_os = "illumos", target_os = "solaris"),
+    not(debug_assertions)
+))]
+pub const BUFFER_SIZE: usize = 8192;
+
+#[cfg(all(any(target_os = "illumos", target_os = "solaris"), debug_assertions))]
+pub const BUFFER_SIZE: usize = 4096;
+// Same buffer sizes for illumos/solaris(essentially identical)
+/*
+alexc@omnios:~% sudo truss -f ls . 2>&1 | grep -Eiv '^/' | grep getdents
+6890:      getdents64(3, 0xFEC64000, 8192)                 = 616
+6890:   getdents64(3, 0xFEC64000, 8192)                 = 0
+alexc@omnios:~%
+
+*/
 #[cfg(target_os = "netbsd")]
 pub const BUFFER_SIZE: usize = 0x1000;
 

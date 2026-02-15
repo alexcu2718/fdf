@@ -40,7 +40,7 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 - OpenBSD (Specifically tested recently on a VM)
 - NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
 - Android (tested on my phone)
-- Illumos (Solaris works, illumos is essentially identical, I'll test it eventually)
+- Illumos (Solaris works, illumos is essentially identical)
 
 - I have removed aarch64 Linux and riscv Linux from Github actions due to *VERY UNRELIABLE RUNNERS*
 
@@ -155,7 +155,7 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 
 ### Key Optimisations
 
-- **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD/NetBSD directory reading by significantly reducing the number of stat/statx/fstatat system calls**
+- **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD/NetBSD/Illumos/Solaris directory reading by significantly reducing the number of stat/statx/fstatat system calls**
 
 - **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L581)**
 
@@ -494,7 +494,7 @@ Options:
 
 #### 2. Optimisations for the BSD family
 
-- Part done. Need to implement getdirentries/getdents for NetBSD/DragonFlyBSD (after this done, NO MORE platform specific code!)
+- Part done. Need to implement getdirentries/getdents for DragonflyBSD then I'm done.
 
 #### 3. Allocation-Optimised Iterator Adaptor
 

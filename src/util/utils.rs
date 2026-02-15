@@ -19,19 +19,23 @@ use core::ops::Deref;
  - Positive: Number of bytes read
  - 0: End of directory
  - Negative: Error code (check errno)
+
+   This function is only available on Linux/Android/OpenBSD/NetBSD/Illumos/Solaris.
 */
 #[inline]
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
 where
     T: crate::fs::ValueType, //i8/u8
 {
-    #[cfg(target_os = "openbsd")] //Link the function, we can't use the direct syscall because BSD's dont allow it.
+    #[cfg(any(target_os = "openbsd", target_os = "solaris", target_os = "illumos"))] //Link the function, we can't use the direct syscall because BSD's dont allow it.
     unsafe extern "C" {
 
         fn getdents(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
@@ -50,7 +54,8 @@ where
         libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _
     } // We can do similar linking for getdents64 but prefer not to use the indirection if can be avoided.
 
-    #[cfg(target_os = "openbsd")] //TODO add dragonfly/netbsd here if they allow the syscall.
+    //TODO add dragonfly here if they allow the syscall.(it's being a PAIN to install, qemu doesnt work well with it!)
+    #[cfg(any(target_os = "openbsd", target_os = "solaris", target_os = "illumos"))]
     unsafe {
         getdents(fd, buffer_ptr.cast(), buffer_size)
     }

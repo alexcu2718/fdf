@@ -319,7 +319,8 @@ impl DirEntry {
         target_os = "android",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_os = "netbsd"
     ))]
     /**
      Opens the directory and returns a file descriptor.
@@ -1624,8 +1625,7 @@ impl DirEntry {
      Low-level directory iterator using the `getdents(64)` system call.
 
      This method provides high-performance directory scanning by using a large buffer
-     (typically ~32.1KB) to minimise system calls. It's Linux-specific and generally
-     faster than `readdir` for bulk directory operations.
+     generally faster than `readdir` for bulk directory operations due to lack of needing to call stat.
 
      # Errors
 
@@ -1638,8 +1638,7 @@ impl DirEntry {
 
      # Platform Specificity
 
-     This method is only available on Linux/Android/OpenBSD targets due to its dependence on
-     the `getdents64` system call.
+     This method is only available on Linux/Android/OpenBSD/NetBSD.
 
      # Examples
 
@@ -1675,7 +1674,12 @@ impl DirEntry {
     ```
     */
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
     pub fn getdents(&self) -> Result<crate::fs::GetDents> {
         crate::fs::GetDents::new(self)
     }

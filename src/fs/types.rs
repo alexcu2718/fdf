@@ -9,7 +9,8 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
     target_os = "android",
     target_os = "macos",
     target_os = "freebsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
+    target_os = "netbsd"
 ))]
 pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
 
@@ -66,6 +67,20 @@ getdents64(3, 0x557e625c37a0 /* 21 entries */, 32768) = 520
 getdents64(3, 0x557e625c37a0 /* 0 entries */, 32768) = 0
 
 
+*/
+
+#[cfg(target_os = "netbsd")]
+pub const BUFFER_SIZE: usize = 0x1000;
+
+/*
+
+# kdump | grep getdents | head
+ 27582  16284 fdfind   CALL  __getdents30(3,0x71a95f64c000,0x1000)
+ 27582  16284 fdfind   RET   __getdents30 608/0x260
+ 27582  16284 fdfind   CALL  __getdents30(3,0x71a95f64c000,0x1000)
+ 27582  16284 fdfind   RET   __getdents30 0
+ 27582  16284 fdfind   CALL  __getdents30(3,0x71a95f64c000,0x1000)
+ 27582  16284 fdfind   RET   __getdents30 56/0x38
 */
 
 #[cfg(all(any(target_os = "linux", target_os = "android"), debug_assertions))]

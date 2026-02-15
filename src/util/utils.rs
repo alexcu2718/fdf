@@ -21,7 +21,12 @@ use core::ops::Deref;
  - Negative: Error code (check errno)
 */
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
 where
     T: crate::fs::ValueType, //i8/u8
@@ -30,6 +35,12 @@ where
     unsafe extern "C" {
 
         fn getdents(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
+    }
+
+    #[cfg(target_os = "netbsd")] //Link the function, we can't use the direct syscall because BSD's dont allow it.
+    unsafe extern "C" {
+
+        fn __getdents30(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
     }
 
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
@@ -43,6 +54,11 @@ where
     unsafe {
         getdents(fd, buffer_ptr.cast(), buffer_size)
     }
+    #[cfg(target_os = "netbsd")]
+    // SAFETY: same as above
+    unsafe {
+        __getdents30(fd, buffer_ptr.cast(), buffer_size)
+    } //it's...almost like they didn't want me to do this?
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]

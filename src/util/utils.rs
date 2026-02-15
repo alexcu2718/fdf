@@ -56,6 +56,7 @@ where
 
     //TODO add dragonfly here if they allow the syscall.(it's being a PAIN to install, qemu doesnt work well with it!)
     #[cfg(any(target_os = "openbsd", target_os = "solaris", target_os = "illumos"))]
+    // SAFETY: same as above
     unsafe {
         getdents(fd, buffer_ptr.cast(), buffer_size)
     }

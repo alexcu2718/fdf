@@ -26,7 +26,9 @@ pub use utils::dirent_const_time_strlen;
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 pub use utils::getdents;
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]

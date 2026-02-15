@@ -4,7 +4,9 @@
     target_os = "android",
     target_os = "freebsd",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 use crate::fs::types::SyscallBuffer;
 use crate::fs::{DirEntry, FileType};
@@ -140,7 +142,9 @@ on each entry unless required by unusual filesystem behaviour.
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 pub struct GetDents {
     /// File descriptor of the open directory, wrapped for automatic resource management
@@ -171,7 +175,9 @@ pub struct GetDents {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 impl Drop for GetDents {
     /**
@@ -201,7 +207,9 @@ impl Drop for GetDents {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 impl GetDents {
     /**
@@ -836,30 +844,37 @@ impl_iter!(ReadDir);
 impl_iterator_for_dirent!(ReadDir);
 impl_dirent_constructor!(ReadDir);
 
-// Linux/Android specific
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 impl_iter!(GetDents);
+
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 impl_iterator_for_dirent!(GetDents);
+
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 impl_dirent_constructor!(GetDents);
 
-// Macos/BSD's only
+// Macos/FreeBSD's only(?)
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl_iter!(GetDirEntries);
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]

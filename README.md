@@ -20,7 +20,10 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 This is primarily a learning and performance exploration project. Whilst already useful and performant, it remains under active development towards a stable 1.0 release. The name 'fdf' is a temporary placeholder.
 
-The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers broader functionality. This project focuses on exploring hardware-specific code optimisation rather than replicating fd's complete feature set.
+The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers broader functionality. This project focuses on creating the best possible tool.
+
+Development can be a bit slow because ideas take a while to develop,
+Sometimes I don't feel like doing something until I know I have a *good* way to implement something
 
 While the CLI is usable, the internal library is not stable yet. Alas!
 
@@ -40,7 +43,7 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 - OpenBSD (Specifically tested recently on a VM)
 - NetBSD, DragonflyBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
 - Android (tested on my phone)
-- Illumos (Solaris works, illumos is essentially identical, I'll test it eventually)
+- Illumos (Solaris works, illumos is essentially identical)
 
 - I have removed aarch64 Linux and riscv Linux from Github actions due to *VERY UNRELIABLE RUNNERS*
 
@@ -155,7 +158,7 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 
 ### Key Optimisations
 
-- **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD/NetBSD directory reading by significantly reducing the number of stat/statx/fstatat system calls**
+- **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD/NetBSD/Illumos/Solaris directory reading by significantly reducing the number of stat/statx/fstatat system calls**
 
 - **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L581)**
 
@@ -494,7 +497,7 @@ Options:
 
 #### 2. Optimisations for the BSD family
 
-- Part done. Need to implement getdirentries/getdents for NetBSD/DragonFlyBSD (after this done, NO MORE platform specific code!)
+- Part done. Need to implement getdirentries/getdents for DragonflyBSD then I'm done.
 
 #### 3. Allocation-Optimised Iterator Adaptor
 
@@ -502,3 +505,11 @@ Options:
 - Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.
 - Although the cost of allocations doesn't seem too bad, I will look at this again at some point.
 - Maybe achieved via a lending iterator type approach? See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)
+
+#### 4. Implement an --ignore pattern and gitignore type system
+
+Implementing this feature will require careful consideration. As the iterators discover directories, we may need to create a dynamic buffer of regex patterns—converted from globs using a function such as `glob_to_regex`. The challenge lies in sharing these regexes across threads, because the work-stealing scheduler can distribute directory entries to different threads. I have already done some preliminary work in this area: I currently use `thread_local` storage for my primary regex filtering. A similar approach could be employed here, maintaining a dynamic thread-local buffer of regexes to reduce contention. Although the regex objects themselves are thread-safe (read-only), the scratch space they use can suffer from heavy contention under concurrent access.
+
+Given this complexity, I am not rushing to implement it immediately.
+
+As for the ignore flag itself, a simple version is straightforward. The main decision is how to specify patterns: perhaps `--ignore` for regex-based patterns and `--ignoreg` for glob-based patterns? This would offer flexibility, but the exact interface needs to be decided.

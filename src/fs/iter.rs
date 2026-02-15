@@ -746,8 +746,8 @@ impl Drop for GetDirEntries {
     }
 }
 
-// Cheap macro to avoid duplicate code maintenance.
-macro_rules! impl_iter {
+// Cheap macro to avoid duplicate code maintenance. (Keep the documentation continuous)
+macro_rules! impl_iterator_public_methods {
     ($struct:ty) => {
         impl $struct {
             /**
@@ -765,10 +765,39 @@ macro_rules! impl_iter {
 
             #[inline]
             /// Returns whether this opened file descriptor has a gitignore file
-            pub fn has_gitignore(&self) -> bool {
+            /// If so, return the size of the file in bytes(so we can allocate appropriate memory)
+            #[allow(clippy::cast_sign_loss)]
+            #[allow(clippy::cast_possible_truncation)]
+            pub fn has_gitignore(&self) -> Option<core::num::NonZeroUsize> {
                 const IGNORE: &core::ffi::CStr = c".gitignore";
+                let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
                 // SAFETY: trivial(always passing a null terminated string)
-                unsafe { libc::faccessat(self.dirfd().0, IGNORE.as_ptr(), libc::F_OK, 0) == 0 }
+                let statted = unsafe {
+                    libc::fstatat(
+                        self.dirfd().0,
+                        IGNORE.as_ptr(),
+                        stat_buf.as_mut_ptr(),
+                        libc::AT_SYMLINK_NOFOLLOW,
+                    ) == 0
+                };
+                if !statted {
+                    return None;
+                }
+
+                // SAFETY: `fstatat` succeeded, so `stat_buf` is initialised.
+                let stat = unsafe { stat_buf.assume_init() };
+                let mode = stat.st_mode;
+                let is_regular = (mode & libc::S_IFMT) == libc::S_IFREG;
+                let is_user_readable = (mode & libc::S_IRUSR) != 0;
+
+                if !(is_regular && is_user_readable) {
+                    return None;
+                }
+                // Return some only if the file is not empty, no point parsing an empty gitignore!
+                // `st_size` is i64/u64/whatever depending on platform, it will NEVER be negative
+                // so casting it is fine.
+
+                core::num::NonZeroUsize::new(stat.st_size as _)
             }
 
             #[inline]
@@ -840,7 +869,7 @@ macro_rules! impl_iterator_for_dirent {
 }
 
 // Common to all platforms
-impl_iter!(ReadDir);
+impl_iterator_public_methods!(ReadDir);
 impl_iterator_for_dirent!(ReadDir);
 impl_dirent_constructor!(ReadDir);
 
@@ -852,7 +881,7 @@ impl_dirent_constructor!(ReadDir);
     target_os = "illumos",
     target_os = "solaris"
 ))]
-impl_iter!(GetDents);
+impl_iterator_public_methods!(GetDents);
 
 #[cfg(any(
     target_os = "linux",
@@ -876,7 +905,7 @@ impl_dirent_constructor!(GetDents);
 
 // Macos/FreeBSD's only(?)
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-impl_iter!(GetDirEntries);
+impl_iterator_public_methods!(GetDirEntries);
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl_iterator_for_dirent!(GetDirEntries);
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]

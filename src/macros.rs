@@ -145,6 +145,48 @@ macro_rules! access_stat {
     // Fallback for other fields
     ($stat_struct:expr, $field:ident) => {{ $stat_struct.$field as _ }};
 }
+/*
+ Selects the optimal directory reading syscall per target OS.
+
+ - Linux/Android/OpenBSD/NetBSD/Illumos/Solaris: `getdents`
+ - macOS/FreeBSD: `getdirentries`
+ - Other supported Unix targets: `readdir`
+*/
+macro_rules! read_direntries {
+    ($dir:expr) => {{
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "illumos",
+            target_os = "solaris"
+        ))]
+        {
+            // additionally, readdir internally calls stat on each file, which is expensive.
+            $dir.getdents()
+        }
+
+        #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+        {
+            $dir.getdirentries()
+        }
+
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "macos",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "illumos",
+            target_os = "solaris"
+        )))]
+        {
+            $dir.readdir()
+        }
+    }};
+}
 
 /**
 A compile time assert, mirroring `static_assert` from C++
@@ -183,15 +225,6 @@ macro_rules! const_assert {
  entries present in every directory. The approach reduces unnecessary work during
  directory traversal and improves CPU branch prediction behaviour.
 
- Optimisation Strategy:
- 1. TYPE FILTERING:
-    Since "." and ".." are always directories (or occasionally unknown on unusual
-    filesystems), the macro checks `d_type` or `d_namlen` first. This takes advantage
-    of the fact that only about ten percent of filesystem entries are directories.
-    Consequently:
-    - The branch is easier for the CPU to predict
-    - Expensive string length or comparison operations are avoided for roughly ninety percent of entries
-
 
  Why this matters( a lot of complexity!)
  - These checks are performed for EVERY entry during traversal.
@@ -208,94 +241,59 @@ macro_rules! skip_dot_or_dot_dot_entries {
         This is internal only because it relies on internal heuristics/guarantees
         */
         unsafe {
-            #[cfg(any(
-                target_os = "macos",
-                target_os = "freebsd",
-                target_os = "openbsd",
-                target_os = "netbsd",
-                target_os = "dragonfly",
-                target_os="aix",
-                target_os="hurd" //even tho i dont plan to support hurd, just better practice.
-
-            ))]
+            #[cfg(has_d_namlen)]
             {
-                // BSD/macOS optimisation: check d_namlen first as primary filter
+                // d_namlen fast path
                 let namelen = access_dirent!($entry, d_namlen);
                 if namelen <= 2 {
-                    // Only check d_type for potential "." or ".." entries
-                    match access_dirent!($entry, d_type) {
-                        libc::DT_DIR | libc::DT_UNKNOWN => {
-                            // first 2 bytes, see explanation below
-                            let f2b: [u8; 2] = *access_dirent!($entry, d_name);
-                            // Combined check using pattern
-                            match (namelen, f2b) {
-                                (1, [b'.', _]) | (2, [b'.', b'.'])  => $action,
-                                _ => (),
-                            }
+                    let f2b: [u8; 2] = *access_dirent!($entry, d_name);
+                    if f2b[0] == b'.' {
+                        match (namelen, f2b[1]) {
+                            (1, _) | (2, b'.') => $action,
+                            _ => (),
                         }
-                        _ => (),
                     }
                 }
-                // If namelen > 2, skip all checks entirely (covers ~99% of entries)
             }
 
-            #[cfg(any(
+            #[cfg(all(not(has_d_namlen),any(
                 target_os = "linux",
                 target_os = "android",
                 target_os="fuchsia",
                 target_os="redox",
-            ))]
+            )))]
             {
-                // Linux/Solaris/Illumos/etc optimisation: check d_type first
                 const MINIMUM_DIRENT_SIZE: usize =
                     core::mem::offset_of!($crate::dirent64, d_name).next_multiple_of(8);
-                $crate::const_assert!(
-                    MINIMUM_DIRENT_SIZE == 24,
-                    "The minimum dirent size should be 24 on these platforms"
-                );
 
-                match access_dirent!($entry, d_type) {
-                    libc::DT_DIR | libc::DT_UNKNOWN => {
-                        if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
-                            // f3b=first 3 bytes, the d_name is guaranteed to be 5 or more bytes long (from point 19 to 24)
-                            // this is because the pointer is padded up to 24, its filled with junk after the first null terminator however.
-                            let f3b: [u8; 3] = *access_dirent!($entry, d_name);
+                if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
+                    // f3b=first 3 bytes, the d_name is guaranteed to be 5 or more bytes long (from point 19 to 24)
+                    // this is because the pointer is padded up to 24, its filled with junk after the first null terminator however.
+                    let f3b: [u8; 3] = *access_dirent!($entry, d_name);
 
-                            match f3b {
-                                [b'.', 0, _] | [b'.', b'.', 0] => $action, //similar to above
-                                _ => (),
-                            }
+                    if f3b[0] == b'.' {
+                        match f3b[1..] {
+                            [0, _] | [b'.', 0] => $action, //similar to above
+                            _ => (),
                         }
                     }
-                    _ => (),
                 }
             }
 
-            #[cfg(not(any(
+            #[cfg(all(not(has_d_namlen),not(any(
                 target_os = "linux",
-                target_os = "macos",
-                target_os = "freebsd",
-                target_os = "openbsd",
-                target_os = "dragonfly",
-                target_os = "netbsd",
                 target_os = "android",
-                target_os = "aix",
-                target_os="hurd",
                 target_os="fuchsia",
-                target_os="redox"
-            )))]
+                target_os="redox",
+            ))))]
             {
-                // Fallback for other systems: check d_type first
-                match access_dirent!($entry, d_type) {
-                    libc::DT_DIR | libc::DT_UNKNOWN => {
-                        // check above explanation.
-                        let f3b: [u8; 3] = *access_dirent!($entry, d_name);
-                        match f3b {
-                                [b'.', 0, _] | [b'.', b'.', 0] => $action, //similar to above
-                                _ => (),
-                            }
+                // Generic fallback: inspect name bytes only.
+                let f3b: [u8; 3] = *access_dirent!($entry, d_name);
+                if f3b[0] == b'.' {
+                    match f3b[1..] {
+                        [0, _] | [b'.', 0] => $action,
+                        _ => (),
                     }
-                    _ => (),
                 }
             }
         }

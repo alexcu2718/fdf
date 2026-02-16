@@ -185,9 +185,11 @@ Check source code for further explanation [in utils.rs](./src/util/utils.rs#L195
 // Used mostly on Linux type systems
 // SIMD within a register, so no architecture dependence
 //http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm
+ #[cfg(any(target_os = "linux",target_os = "android",target_os = "emscripten",
+        target_os = "redox", target_os = "hermit", target_os = "fuchsia"))]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
-    use core::mem::offset_of;
     use core::num::NonZeroU64;
+    use core::mem::offset_of;
     /*The only unsafe action is dereferencing the pointer; This MUST be validated beforehand */
     const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
     const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
@@ -202,30 +204,30 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     last_word |= mask; //Mask out the false nulls when d_name is short (when reclen==24)
     //The idea is to convert each 0-byte to 0x80, and each nonzero byte to 0x00
     #[cfg(target_endian = "little")]
-    //SAFETY: The u64 can never be all 0's post-mask
-    let masked_word =
-        unsafe { NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64) };
+    //SAFETY: The u64 can never be all 0's post-SWAR
+    let zero_bit = unsafe {
+            NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
+        };
     //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
     // ^ Reference for the BE algorithm
     // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
     #[cfg(target_endian = "big")]
-    //SAFETY: The u64 can never be all 0's post-mask
-    let masked_word = unsafe {
-        NonZeroU64::new_unchecked(
-            (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
-        )
-    };
+    //SAFETY: The u64 can never be all 0's post-SWAR
+    let zero_bit = unsafe {
+            NonZeroU64::new_unchecked(
+                (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
+            )
+        };
 
     // Find the position of the null terminator
     #[cfg(target_endian = "little")]
-    let byte_pos = (masked_word.trailing_zeros() >> 3) as usize;
+    let byte_pos = (zero_bit.trailing_zeros() >> 3) as usize;
     #[cfg(target_endian = "big")]
-    let byte_pos = (masked_word.leading_zeros() >> 3) as usize;
+    let byte_pos = (zero_bit.leading_zeros() >> 3) as usize;
     // reclen-DIRENT_HEADER start is the maximum size of the string
     // we then use the position of the `true` null terminator and subtract the 8, it's junk.
     reclen - DIRENT_HEADER_START + byte_pos - 8
 }
-
 ```
 
 ## Why?

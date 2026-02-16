@@ -1,10 +1,13 @@
 #![allow(clippy::missing_inline_in_public_items)]
 use crate::{
-    SearchConfigError, config,
+    SearchConfigError,
+    config,
     filters::{FileTypeFilter, SizeFilter, TimeFilter},
     fs::DirEntry,
+    //  util::IgnoreMatcher,
     walk::{DirEntryFilter, FilterType, finder::Finder},
 };
+
 use core::num::NonZeroU32;
 use core::num::NonZeroUsize;
 use dashmap::DashSet;
@@ -52,6 +55,13 @@ impl FinderBuilder {
     pub(crate) fn new<A: AsRef<OsStr>>(root: A) -> Self {
         const MIN_THREADS: NonZeroUsize = NonZeroUsize::MIN;
         let num_threads = std::thread::available_parallelism().unwrap_or(MIN_THREADS);
+        // if let Some(valid) = IgnoreMatcher::from_current_dir(root.as_ref()).gitconfig_contents() {
+        //     eprintln!(
+        //         "{}\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+        //         String::from_utf8_lossy(&valid)
+        //     )
+        // }
+
         Self {
             root: root.as_ref().to_owned(),
             pattern: None,

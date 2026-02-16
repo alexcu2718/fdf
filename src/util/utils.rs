@@ -346,7 +346,7 @@ On some systems
  - [Wojciech Muła ] (<http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd>)
 
 */
-#[inline]
+#[inline(never)]
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -445,6 +445,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         let masked_word = unsafe {
             NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
         };
+
         //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
         // ^ Reference for the BE algorithm
         // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
@@ -481,7 +482,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         Example: If null is at position 2 in the last word, we only count those 2 bytes
         from that word toward the total string length.
         */
-        reclen - DIRENT_HEADER_START + byte_pos - 8
+        reclen + byte_pos - DIRENT_HEADER_START - 8
     }
 }
 
@@ -534,15 +535,10 @@ Without BMI
 
 // C implementation (so people can understand it better)
 
+https://godbolt.org/z/9YM4xqx5s
 
-
-
-#include <stdint.h>
-#include <stddef.h>
-#include <dirent.h>
-
-#if defined(__linux__)
-uint64_t dirent_const_time(const struct dirent *drnt) {
+#if defined(__linux__) && defined(__LP64__)
+uint32_t dirent_const_time(const struct dirent *drnt) {
 #define DIRENT_HEADER_START (offsetof(struct dirent, d_name))
 
 #define MIN_DIRENT_SIZE (((DIRENT_HEADER_START) + 7) & ~7)
@@ -555,20 +551,19 @@ uint64_t dirent_const_time(const struct dirent *drnt) {
 #define MASK 0xFFFFFF0000000000ULL
 #endif
 
-  const uint64_t reclen = drnt->d_reclen;
+  const uint32_t reclen = drnt->d_reclen;
   const uint64_t mask = MASK * (uint64_t)(reclen == MIN_DIRENT_SIZE);
   uint64_t last_word = *(uint64_t *)((uint8_t *)(drnt) + (reclen - 8));
   last_word |= mask;
 
 #if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-  const uint64_t zero_bit = (last_word - LO_U64) & ~last_word & HI_U64;
-  const uint64_t byte_pos =  (uint64_t)__builtin_ctz(zero_bit) >> 3;
-                            // For some reason we need to cast here to avoid the 'cdqe' instruction (convert double to quadword with zero extension)
-                            // I'm not a C guru, annoying!
+  const uint64_t masked_lasked_word =
+      (last_word - LO_U64) & ~last_word & HI_U64;
+  const uint32_t byte_pos = __builtin_ctzll(masked_lasked_word) >> 3;
 #else
-  const uint64_t zero_bit =
+  const uint64_t masked_lasked_word =
       ((~last_word & ~HI_U64) + LO_U64) & (~last_word & HI_U64);
-  const uint64_t byte_pos = (uint64_t)__builtin_clz(zero_bit) >> 3;
+  const uint byte_pos = __builtin_clzll(masked_lasked_word) >> 3;
 #endif
 
   return reclen - DIRENT_HEADER_START + byte_pos - 8;
@@ -579,8 +574,9 @@ uint64_t dirent_const_time(const struct dirent *drnt) {
 */
 
 /*
-C version
-https://godbolt.org/z/GP1P51zrx
+C version assembly
+(Only distinction is we don't use LEA because we need to explicitly cast to usize in rust (for indexing))
+
 
 dirent_const_time:
         movzx   ecx, WORD PTR [rdi+16]

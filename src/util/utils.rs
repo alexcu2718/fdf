@@ -346,7 +346,7 @@ On some systems
  - [Wojciech Muła ] (<http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd>)
 
 */
-#[inline(never)]
+#[inline]
 #[cfg(any(
     target_os = "linux",
     target_os = "android",

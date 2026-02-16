@@ -1,11 +1,11 @@
 mod glob;
-mod ignore;
 mod memchr_derivations;
 mod printer;
 mod utils;
 pub use glob::{Error, glob_to_regex};
-#[allow(unused)]
-pub(crate) use ignore::IgnoreMatcher;
+// #[allow(unused)]
+// mod ignore;
+// pub(crate) use ignore::IgnoreMatcher;
 pub use memchr_derivations::{find_char_in_word, find_last_char_in_word, memrchr};
 
 #[cfg(any(

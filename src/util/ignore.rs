@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+// TODO, gonna be a pain to rewrite for Windows as it is...
 use std::env::{current_dir, home_dir, var_os};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;

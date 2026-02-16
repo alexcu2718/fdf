@@ -52,9 +52,20 @@ impl FileDes {
     }
 }
 
-#[cfg(all(any(target_os = "linux", target_os = "android"), not(debug_assertions)))]
+#[cfg(all(target_os = "android", not(debug_assertions)))]
+pub const BUFFER_SIZE: usize = 4200;
+
+/*
+// straced on android
+strace -f ls -R ~ 2>&1 | grep getdents | head
+   getdents64(3, 0xb400007d5b602840 /* 25 entries /, 4200) = 808                                                getdents64(3, 0xb400007d5b602840 / 0 entries /, 4200) = 0                                                   getdents64(3, 0xb400007d5b602840 / 27 entries /, 4200) = 880                                                getdents64(3, 0xb400007d5b602840 / 0 entries /, 4200) = 0                                                   getdents64(3, 0xb400007d5b602840 / 15 entries /, 4200) = 616                                                getdents64(3, 0xb400007d5b602840 / 0 entries /, 4200) = 0                                                   getdents64(3, 0xb400007d5b602840 / 4 entries */, 4200) = 128
+
+*/
+
+#[cfg(all(target_os = "linux", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 8 * 4096;
 /*
+//straced on linux
 λ  sudo strace -f fd NOMATCHLOL / -HI 2>&1 | grep getdents | head
 [pid 18321] getdents64(3, 0x7ff8e4000cb0 /* 21 entries */, 32768) = 520
 [pid 18321] getdents64(3, 0x7ff8e4000cb0 /* 0 entries */, 32768) = 0

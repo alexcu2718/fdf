@@ -34,18 +34,16 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 - Linux (x86_64, s390x (Big endian), Alpine( MUSL libc))
 - macOS (Intel and Apple Silicon)
 - FreeBSD (x86_64)
+- NetBSD (x86_64)
+- OpenBSD (x86_64)
 - Solaris(x86_64)
 
 ### Compiles with Limited Testing
 
 *Note: GitHub Actions does not yet provide Rust 2024 support for some(most of these) platforms. Additional checks will be added when available.*
 
-- OpenBSD (Specifically tested recently on a VM)
-- NetBSD (tested occasionally, minor fixes expected if issues arise, tested on QEMU occasionally)
 - Android (tested on my phone)
-- Illumos (Solaris works, illumos is essentially identical)
-
-- I have removed aarch64 Linux and riscv Linux from Github actions due to *VERY UNRELIABLE RUNNERS*
+- Illumos (Solaris works, illumos is essentially identical, TODO)
 
 ### Not Yet Supported
 

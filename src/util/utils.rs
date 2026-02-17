@@ -35,16 +35,16 @@ pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> is
 where
     T: crate::fs::ValueType, //i8/u8
 {
-    #[cfg(any(target_os = "openbsd", target_os = "solaris", target_os = "illumos"))] //Link the function, we can't use the direct syscall because BSD's dont allow it.
+    #[cfg(any(
+        target_os = "openbsd",
+        target_os = "solaris",
+        target_os = "illumos",
+        target_os = "netbsd"
+    ))] //Link the function, we can't use the direct syscall because BSD's dont allow it.
     unsafe extern "C" {
 
+        #[cfg_attr(target_os = "netbsd", link_name = "__getdents30")] //special case for NetBSD
         fn getdents(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
-    }
-
-    #[cfg(target_os = "netbsd")] //Link the function, we can't use the direct syscall because BSD's dont allow it.
-    unsafe extern "C" {
-        // linkage is stable (symbol has changed in 20 years...+)
-        fn __getdents30(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
     }
 
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
@@ -54,17 +54,17 @@ where
         libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _
     } // We can do similar linking for getdents64 but prefer not to use the indirection if can be avoided.
 
-    //TODO add dragonfly here if they allow the syscall.(it's being a PAIN to install, qemu doesnt work well with it!)
-    #[cfg(any(target_os = "openbsd", target_os = "solaris", target_os = "illumos"))]
+    //TODO add dragonfly here(?) TODO once they support Rust 2024
+    #[cfg(any(
+        target_os = "openbsd",
+        target_os = "solaris",
+        target_os = "illumos",
+        target_os = "netbsd"
+    ))]
     // SAFETY: same as above
     unsafe {
         getdents(fd, buffer_ptr.cast(), buffer_size)
     }
-    #[cfg(target_os = "netbsd")]
-    // SAFETY: same as above
-    unsafe {
-        __getdents30(fd, buffer_ptr.cast(), buffer_size)
-    } //it's...almost like they didn't want me to do this?
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
@@ -100,34 +100,15 @@ where
 {
     use libc::{c_char, c_int, off_t, size_t, ssize_t};
     // link to libc
-    // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
-    #[cfg(target_os = "macos")]
     unsafe extern "C" {
-        fn __getdirentries64(
-            fd: c_int,
-            buf: *mut c_char,
-            nbytes: size_t,
-            basep: *mut off_t,
-        ) -> ssize_t;
-    } // Compile error if this doesn't link.
-
-    // Link for FreeBSD/OpenBSD too, not sure what NetBSD/DragonflyBSD use, TODO find out!
-    #[cfg(target_os = "freebsd")]
-    unsafe extern "C" {
+        #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
+        // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
         fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t)
         -> ssize_t;
     } // as above
 
-    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
-    #[cfg(target_os = "macos")]
-    unsafe {
-        __getdirentries64(fd, buffer_ptr.cast(), nbytes, basep)
-    }
-    #[cfg(target_os = "freebsd")]
-    // SAFETY: as above
-    unsafe {
-        getdirentries(fd, buffer_ptr.cast(), nbytes, basep)
-    }
+    // SAFETY: As specified above
+    unsafe { getdirentries(fd, buffer_ptr.cast(), nbytes, basep) }
 }
 
 /*

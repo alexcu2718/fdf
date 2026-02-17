@@ -28,6 +28,9 @@ jobs:
           - os: freebsd
             arch: x86_64
             runner: ubuntu-latest
+          - os: netbsd
+            arch: x86_64
+            runner: ubuntu-latest
           - os: linux
             arch: s390x
             runner: ubuntu-latest
@@ -83,6 +86,22 @@ jobs:
             echo '. ~/.cargo/env' >> ~/.profile
           run: |
             . ~/.cargo/env
+            cargo build --verbose
+            cargo test --verbose
+            cargo doc --verbose
+
+      - name: Test in NetBSD
+        if: matrix.os == 'netbsd'
+        id: test
+        uses: vmactions/netbsd-vm@v1
+        with:
+          usesh: true
+          mem: 2048
+          prepare: |
+            /usr/sbin/pkg_add curl
+            /usr/sbin/pkg_add rust
+
+          run: |
             cargo build --verbose
             cargo test --verbose
             cargo doc --verbose

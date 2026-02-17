@@ -25,10 +25,13 @@ jobs:
           - os: macos
             arch: aarch64
             runner: macos-14
+          - os: netbsd
+            arch: x86_64
+            runner: ubuntu-latest
           - os: freebsd
             arch: x86_64
             runner: ubuntu-latest
-          - os: netbsd
+          - os: openbsd
             arch: x86_64
             runner: ubuntu-latest
           - os: linux
@@ -82,17 +85,14 @@ jobs:
           mem: 2048
           prepare: |
             pkg_add curl
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            echo '. ~/.cargo/env' >> ~/.profile
+            pkg_add rust
           run: |
-            . ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
             cargo doc --verbose
 
       - name: Test in NetBSD
         if: matrix.os == 'netbsd'
-        id: test
         uses: vmactions/netbsd-vm@v1
         with:
           usesh: true
@@ -112,7 +112,6 @@ jobs:
         with:
           arch: s390x
           distro: ubuntu22.04
-          githubToken: ${{ github.token }}
           install: |
             apt-get update -q -y
             apt-get install -q -y curl build-essential

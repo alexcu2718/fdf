@@ -31,7 +31,7 @@ jobs:
           - os: freebsd
             arch: x86_64
             runner: ubuntu-latest
-          - os: netbsd
+          - os: openbsd
             arch: x86_64
             runner: ubuntu-latest
           - os: linux

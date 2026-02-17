@@ -567,9 +567,21 @@ impl DirEntry {
         match self.file_type {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(any(
+                    target_os = "linux",
+                    target_os = "android",
+                    target_os = "netbsd",
+                    target_os = "solaris",
+                    target_os = "illumos"
+                ))]
                 let result = self.is_empty_getdents();
-                #[cfg(not(any(target_os = "linux", target_os = "android")))]
+                #[cfg(not(any(
+                    target_os = "linux",
+                    target_os = "android",
+                    target_os = "netbsd",
+                    target_os = "solaris",
+                    target_os = "illumos"
+                )))]
                 let result = self.is_empty_posix(); //Avoid allocating a buffer here or any other ops.
                 result
             }
@@ -579,8 +591,15 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd",
+        target_os = "solaris",
+        target_os = "illumos"
+    )))]
     pub(crate) fn is_empty_posix(&self) -> bool {
+        //avoid a heapalloc
         use crate::readdir64;
         use libc::closedir;
 
@@ -604,8 +623,14 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    /// Specialisation for empty checks on linux/android (avoid a heap alloc)
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))]
+    /// Specialisation for empty checks on linux/android/netbsd (avoid a heap alloc)
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents;

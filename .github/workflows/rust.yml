@@ -85,10 +85,8 @@ jobs:
           mem: 2048
           prepare: |
             pkg_add curl
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            echo '. ~/.cargo/env' >> ~/.profile
+            pkg_add rust
           run: |
-            . ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
             cargo doc --verbose

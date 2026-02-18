@@ -84,30 +84,6 @@ fn test_eof() {
     let _ = std::fs::remove_dir_all(&empty);
 }
 
-#[cfg(target_os = "linux")]
-fn get_supported_filesystems() {
-    use std::io::BufRead as _;
-    #[cfg(target_os = "linux")]
-    println!("cargo:rerun-if-changed=/proc/filesystems");
-    let Ok(file) = std::fs::File::open("/proc/filesystems") else {
-        println!("cargo:warning=Failed to read /proc/filesystems");
-        return;
-    };
-    let reader = std::io::BufReader::new(file);
-    let mut filesystems: Vec<String> = Vec::new();
-
-    for line in reader.lines().map_while(Result::ok) {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if let Some(fs_name) = parts.last() {
-            filesystems.push((*fs_name).to_owned());
-        }
-    }
-
-    let has_reiser = filesystems.iter().any(|fs| fs.starts_with("reiser"));
-    // Crash on reiser support
-    assert!(!has_reiser, "reiser file systems not supported");
-}
-
 #[allow(clippy::unwrap_used)]
 fn check_dirent_has_field(cfg_name: &str) {
     // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
@@ -148,10 +124,6 @@ fn main() {
 
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     println!("cargo:rustc-env=FDF_PAGE_SIZE={page_size}");
-
-    // Check for reiser and stop building if so
-    #[cfg(target_os = "linux")]
-    get_supported_filesystems();
 
     #[cfg(target_os = "macos")]
     test_eof();

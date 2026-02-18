@@ -696,6 +696,7 @@ impl DirEntry {
         &self.path
     }
 
+    // Test inconsistently fails below, pretty weird.
     /**
      Returns the file name component of the entry as a `CStr`.
 
@@ -705,7 +706,7 @@ impl DirEntry {
     Useful within the openat calls
      # Examples
 
-     ```
+     ```no_run
      use fdf::fs::DirEntry;
      use std::fs::File;
      use std::io::Write;

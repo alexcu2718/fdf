@@ -115,15 +115,13 @@ impl<'guard> PendingGuard<'guard> {
 
 impl Drop for PendingGuard<'_> {
     fn drop(&mut self) {
+        //the thread that performs the final decrement will see the up‑to‑date value
+        // (thanks to the acquire half) and can then safely signal shutdown.
         let remaining = self.pending.fetch_sub(1, Ordering::AcqRel) - 1;
         if remaining == 0 {
-            signal_shutdown(self.shutdown_flag);
+            self.shutdown_flag.store(true, Ordering::Relaxed)
         }
     }
-}
-
-fn signal_shutdown(shutdown_flag: &AtomicBool) {
-    shutdown_flag.store(true, Ordering::Relaxed);
 }
 
 fn find_task(
@@ -156,7 +154,6 @@ fn find_task(
         }
     }
 }
-
 struct WorkerContext<'ctx> {
     local: &'ctx Worker<DirEntry>,
     pending: &'ctx AtomicUsize,
@@ -449,13 +446,12 @@ impl Finder {
             .is_some_and(|depth| dir.depth >= depth.get())
         {
             if should_send && sender.send(dir.clone()).is_err() {
-                signal_shutdown(ctx.shutdown_flag);
+                ctx.shutdown_flag.store(true, Ordering::Relaxed)
             } // Cloning costs very little here.
             return false; // Depth limit reached, stop processing
         }
         true // Continue processing
     }
-
     /**
     Recursively processes a directory, sending found files to a channel.
 
@@ -505,7 +501,7 @@ impl Finder {
                 // as opposed to sending one at a time, which will cause tremendous locks
                 for entry in files {
                     if sender.send(entry).is_err() {
-                        signal_shutdown(ctx.shutdown_flag);
+                        ctx.shutdown_flag.store(true, Ordering::Relaxed);
                         return;
                     }
                 }
@@ -528,7 +524,8 @@ impl Finder {
             // Release the shutdown as soon as possible.
             return false;
         }
-
+        //atomicity itself ensures that all threads see a consistent modification order for pending,
+        // so the final count will be correct even if increments are reordered among themselves.
         ctx.pending.fetch_add(1, Ordering::Relaxed);
         ctx.local.push(dir);
 

@@ -748,8 +748,22 @@ impl Drop for GetDirEntries {
 
 // Cheap macro to avoid duplicate code maintenance. (Keep the documentation continuous)
 macro_rules! impl_iterator_public_methods {
-    ($struct:ty) => {
-        impl $struct {
+    ($type:ty) => {
+        impl Iterator for $type {
+            type Item = $crate::fs::DirEntry;
+
+            #[inline]
+            fn next(&mut self) -> Option<Self::Item> {
+                while let Some(drnt) = self.get_next_entry() {
+                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
+                    // this just skips dot entries in a really efficient manner(avoids strlen) by checking dtype first on most OS'es
+                    return Some(self.construct_direntry(drnt));
+                }
+                None // signal end
+            }
+        }
+
+        impl $type {
             /**
             Returns the file descriptor for this directory.
 
@@ -823,7 +837,7 @@ macro_rules! impl_iterator_public_methods {
     };
 }
 
-// Simple repetition avoider
+// Simple repetition avoider for private trait
 macro_rules! impl_dirent_constructor {
     ($type:ty) => {
         impl DirentConstructor for $type {
@@ -850,27 +864,8 @@ macro_rules! impl_dirent_constructor {
     };
 }
 
-macro_rules! impl_iterator_for_dirent {
-    ($type:ty) => {
-        impl Iterator for $type {
-            type Item = $crate::fs::DirEntry;
-
-            #[inline]
-            fn next(&mut self) -> Option<Self::Item> {
-                while let Some(drnt) = self.get_next_entry() {
-                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
-                    // this just skips dot entries in a really efficient manner(avoids strlen) by checking dtype first on most OS'es
-                    return Some(self.construct_direntry(drnt));
-                }
-                None // signal end
-            }
-        }
-    };
-}
-
 // Common to all platforms
 impl_iterator_public_methods!(ReadDir);
-impl_iterator_for_dirent!(ReadDir);
 impl_dirent_constructor!(ReadDir);
 
 #[cfg(any(
@@ -882,17 +877,6 @@ impl_dirent_constructor!(ReadDir);
     target_os = "solaris"
 ))]
 impl_iterator_public_methods!(GetDents);
-
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
-impl_iterator_for_dirent!(GetDents);
-
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -906,7 +890,5 @@ impl_dirent_constructor!(GetDents);
 // Macos/FreeBSD's only(?)
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl_iterator_public_methods!(GetDirEntries);
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-impl_iterator_for_dirent!(GetDirEntries);
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl_dirent_constructor!(GetDirEntries);

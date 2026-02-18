@@ -81,7 +81,6 @@ where
  # Safety
  - Requires valid open directory descriptor
  - Buffer must be valid for writes of `nbytes` bytes
- - No type checking on generic pointer (T must be i8/u8)
  - basep must point to valid memory for `libc::off_t`
 
  # Returns
@@ -128,7 +127,6 @@ where
 
     //https://phrack.org/issues/66/16
     // We verify this works via build script, we check if `getdirentries` returns >0 for tmp directory, if not, syscall is broken.
-    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity
     unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
 }
 */
@@ -176,6 +174,7 @@ where
     /// Returns 0 for length 1 byte paths
     #[inline]
     fn file_name_index(&self) -> usize {
+        // (every file path going in here has at least a '/' inside it), this is a special case for root/'.'
         if self.len() == 1 {
             return 0;
         }
@@ -238,8 +237,10 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     )))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { libc::strlen(access_dirent!(drnt, d_name)) }
+        unsafe { libc::strlen((&raw const (*drnt).d_name).cast()) }
         // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cast (it's essentially just reinterpreting)
+        //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
+        // EG for NTFS it can be up to 512 bytes
     }
 }
 
@@ -253,8 +254,8 @@ My Cat Diavolo is cute.
 
 */
 // TODO! this only fails on solaris/illumos when going from root, WHY???? that makes no sense. I had to remove solaris/illumos support for this function. I am being too lazy to debug it
-// I never came across the issue simply because I never tried searching from root on my VM, until today.... what a fucking weird bug JFC, I should investigate this if i feel like it.
-// REALLY REALLY WEIRD. Pull out GDB, hackers delight and an ASCII table...
+// I never came across the issue simply because I never tried searching from root on my VM, until today.... what a  weird bug JFC, I should investigate this if i feel like it.
+// REALLY REALLY WEIRD
 // nvm FOUND OUT WHY: d_reclen is 32 in /proc for illumos/solaris? WHY? this will never work on these systems due to this reason
 // such a weird weird anomaly...
 
@@ -358,13 +359,12 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     #[cfg(not(has_d_namlen))]
     // On these systems where we need a bit of 'black magic' (no d_namlen field)
     {
-        use core::mem::offset_of;
         use core::num::NonZeroU64;
         // Offset from the start of the struct to the beginning of d_name.
-        const DIRENT_HEADER_START: usize = offset_of!(dirent64, d_name);
+        const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
         // Access the last field and then round up to find the minimum struct size
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
-        // Compile time assert
+        // Compile time assert to immediately cancel the build if invalidated
         const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
 
         const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
@@ -385,6 +385,10 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
         /* When the record length is 24/`MIN_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 16/17/18  the d_name starts at 19, so anything before is invalid anyway.
+        The index 16/17 will contauin the reclen, eg, for 24 it will simply be [24,0]
+        the index 18 will contain the d_type, if it's unknown, then it'll be 0
+
+
 
 
         Mask them out to avoid false detection of a terminator.
@@ -451,8 +455,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         debug_assert!(
             reclen - DIRENT_HEADER_START +byte_pos -8
                 //SAFETY: should never matter because debug assert checks pointer validity above.
-                    == unsafe{core::ffi::CStr::from_ptr((core::ptr::addr_of!((*drnt).d_name)).cast()).count_bytes() },
-            // Use `addr_of` because the `d_name` isn't guaranteed to be [c_char;256] (variable length array)
+                    == unsafe{core::ffi::CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() },
+            // Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length array)
             "const swar dirent length calculation failed!"
         );
         /*
@@ -544,7 +548,7 @@ uint32_t dirent_const_time(const struct dirent *drnt) {
 #else
   const uint64_t masked_lasked_word =
       ((~last_word & ~HI_U64) + LO_U64) & (~last_word & HI_U64);
-  const uint byte_pos = __builtin_clzll(masked_lasked_word) >> 3;
+  const uint32_t byte_pos = __builtin_clzll(masked_lasked_word) >> 3;
 #endif
 
   return reclen - DIRENT_HEADER_START + byte_pos - 8;

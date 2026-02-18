@@ -51,13 +51,6 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 
 -**DragonflyBSD**: Not supporting Rust 2024 (but will in future)
 
-### Non supported filesystems(Linux)
-
-This tool doesn't support reiserfs in any form, due to it's extremely long filename length, every other file system is supported, it's not worth sacrificing
-the performance improvements to support an extremely niche fs that is used by 0.001% of people(if that...).
-
-It's deliberately got a build script to stop building on reiser.
-
 ## Testing
 
 The project includes comprehensive testing with 90+ Rust tests and 15+ correctness benchmarks comparing against fd.

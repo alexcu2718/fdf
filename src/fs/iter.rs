@@ -405,54 +405,19 @@ pub trait DirentConstructor {
     fn init_from_path(path: &[u8]) -> (Vec<u8>, usize) {
         let mut base_len = path.len(); // get length of directory path
 
-        let is_root = path == b"/";
+        // Quicker shortcircuit
+        let is_root = base_len == 1 && path == b"/";
 
         let needs_slash = usize::from(!is_root);
 
-        /*
-        https://en.wikipedia.org/wiki/Comparison_of_file_systems#Limits
-
-        File System	Maximum Filename Length
-        AdvFS	255 characters
-        APFS	255 UTF-8 characters
-        bcachefs	255 bytes
-        BeeGFS	255 bytes
-        Btrfs	255 bytes
-        EROFS	255 bytes
-        ext2	255 bytes
-        ext3	255 bytes
-        ext4	255 bytes
-        F2FS	255 bytes
-        FFS	255 bytes
-        GFS	255 bytes
-        GFS2	255 bytes
-        GPFS	255 UTF-8 codepoints
-        HFS Plus	255 UTF-16 code units /510  bytes
-        JFS	255 bytes
-        JFS1	255 bytes
-        Lustre	255 bytes
-        NILFS	255 bytes
-        NOVA	255 bytes
-        OCFS	255 bytes
-        OCFS2	255 bytes
-        QFS	255 bytes
-        ReiserFS	255 characters // 4032 bytes //not supporting this!
-        Reiser4	3976 bytes  //not supporting this!
-        UFS1	255 bytes
-        UFS2	255 bytes
-        VxFS	255 bytes
-        XFS	255 bytes
-        ZFS	1023 bytes
-        NTFS 255 UTF-16 / 510 bytes
-
-        */
-
-        // Max dirent length determined at build time based on supported filesystems
-        //Set to to ZFS max (1023) +NUL (this will also support HAMMER/HAMMER2 on dragonflyBSD)
-        const MAX_SIZED_DIRENT_LENGTH: usize = 1023 + 1;
+        // Fast-path filename capacity (+NUL is included in `name_len` during append).
+        // Longer names take the cold slow-path reserve in `construct_path`.
+        // Most filepaths will never be longer than this. In the odd-case they are, it's really rare
+        // with no negligible affect otherwise
+        const FAST_PATH_DIRENT_LENGTH: usize = 256;
 
         //  Allocate exact size and copy in one operation
-        let total_capacity = base_len + needs_slash + MAX_SIZED_DIRENT_LENGTH;
+        let total_capacity = base_len + needs_slash + FAST_PATH_DIRENT_LENGTH;
         let mut path_buffer: Vec<u8> = Vec::with_capacity(total_capacity);
 
         /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
@@ -533,10 +498,27 @@ pub trait DirentConstructor {
             DTYPE
         );
 
+        #[cold]
+        #[inline(never)]
+        fn reserve_for_long_name(path_buffer: &mut Vec<u8>, required_len: usize) {
+            let current_len = path_buffer.len();
+            path_buffer.reserve_exact(required_len - current_len);
+            // SAFETY: we reserved enough capacity and bytes in the extended range
+            // are immediately written by `copy_to_nonoverlapping`.
+            unsafe { path_buffer.set_len(required_len) };
+        }
+
         let base_len = self.file_index();
+        let required_len = base_len + name_len;
+
+        let path_buffer = self.path_buffer();
+        if required_len > path_buffer.len() {
+            reserve_for_long_name(path_buffer, required_len);
+        }
+
         // Get the portion of the buffer that goes past the last slash
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
-        let buffer: &mut [u8] = unsafe { self.path_buffer().get_unchecked_mut(base_len..) };
+        let buffer: &mut [u8] = unsafe { path_buffer.get_unchecked_mut(base_len..) };
 
         // SAFETY: `d_name` and `buffer` don't overlap (different memory regions)
         // - Both pointers are properly aligned for byte copying
@@ -545,9 +527,7 @@ pub trait DirentConstructor {
         unsafe { d_name.copy_to_nonoverlapping(buffer.as_mut_ptr(), name_len) };
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         let full_path = unsafe {
-            CStr::from_bytes_with_nul_unchecked(
-                self.path_buffer().get_unchecked(..base_len + name_len),
-            )
+            CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..required_len))
         }; //truncate the buffer to the first null terminator of the full path
 
         (full_path, d_ino, file_type)

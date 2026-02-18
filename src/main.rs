@@ -8,6 +8,16 @@ use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
 
+#[cfg(all(
+    any(target_os = "linux", target_os = "android", target_os = "macos"),
+    not(miri),
+    not(debug_assertions),
+    feature = "mimalloc",
+))]
+//miri doesnt support custom allocators
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc; //Please note, don't  use v3 it has weird bugs. I might try snmalloc in future.
+
 #[derive(Parser)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[allow(clippy::struct_excessive_bools)]

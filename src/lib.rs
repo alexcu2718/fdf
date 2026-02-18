@@ -126,15 +126,6 @@ pub use config::SearchConfig;
 //this allocator is more efficient than jemalloc through my testing(still better than system allocator)
 //miri doesnt support custom allocators
 //not sure which platforms support this, BSD doesnt from testing
-#[cfg(all(
-    any(target_os = "linux", target_os = "android", target_os = "macos"),
-    not(miri),
-    not(debug_assertions),
-    feature = "mimalloc",
-))]
-//miri doesnt support custom allocators
-#[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc; //Please note, don't  use v3 it has weird bugs. I might try snmalloc in future.
 
 pub mod filters;
 pub mod fs;

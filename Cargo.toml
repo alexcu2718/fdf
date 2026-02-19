@@ -25,7 +25,7 @@ crossbeam-channel = "0.5.14"
 dashmap = { version = "6.1.0", features = ["inline"] }
 libc = "0.2.181"
 regex = { version = "1.12.2", features = ["perf"] }
-ignore = "0.4.24"
+ignore = { version = "0.4.24", features = ["simd-accel"] }
 thread_local = "1.1.9"
 [target.'cfg(any(target_os = "linux",target_os="macos",target_os="android"))'.dependencies]
 mimalloc = { version = "0.1.48", optional = true, features = [

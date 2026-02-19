@@ -145,8 +145,6 @@ whereas my implementation prevents hangs. It may, however, return more results t
 
 To avoid issues, use --same-file-system when traversing symlinks. Both fd and find also handle them poorly without such flags. My approach ensures the program always terminates safely, even in complex directories like ~/.steam, ~/.wine, /sys, and /proc.
 
-The flag -I includes directories in output(as opposed to ignore files), I will change this in future.
-
 ## Technical Highlights
 
 ### Key Optimisations
@@ -332,9 +330,6 @@ Options:
   -a, --absolute-path
           Starts with the directory entered being resolved to full
 
-  -I, --include-dirs
-          Include directories, defaults to off
-
   -L, --follow
           Include symlinks in traversal,defaults to false
 
@@ -351,7 +346,12 @@ Options:
           Retrieves only traverse to x depth
 
       --generate <GENERATE>
-          Generate shell completions
+
+              Generate shell completions for bash/zsh/fish/powershell
+              To use: eval "$(fdf --generate SHELL)"
+              Example:
+              # Add to shell config for permanent use
+              echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc
 
           [possible values: bash, elvish, fish, powershell, zsh]
 
@@ -369,6 +369,9 @@ Options:
 
   -0, --print0
           Makes all output null terminated as opposed to newline terminated, only applies to non-coloured output and redirected(useful for xargs)
+
+  -I, --no-ignore
+          Do not respect .gitignore rules during traversal
 
       --size <SIZE>
           Filter by file size
@@ -443,17 +446,7 @@ Options:
           - 1d..2h: modified between 1 day and 2 hours ago
 
   -t, --type <TYPE_OF>
-          Filter by file type:
-            d, dir, directory    - Directory
-            u, unknown           - Unknown type
-            l, symlink, link     - Symbolic link
-            f, file, regular     - Regular file
-            p, pipe, fifo        - Pipe/FIFO
-            c, char, chardev     - Character device
-            b, block, blockdev   - Block device
-            s, socket            - Socket
-            e, empty             - Empty file
-            x, exec, executable  - Executable file
+          Filter by file type
 
           Possible values:
           - d: Directory
@@ -498,9 +491,5 @@ Options:
 - Maybe achieved via a lending iterator type approach? See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)
 
 #### 4. Implement an --ignore pattern and gitignore type system
-
-Implementing this feature will require careful consideration. As the iterators discover directories, we may need to create a dynamic buffer of regex patterns—converted from globs using a function such as `glob_to_regex`. The challenge lies in sharing these regexes across threads, because the work-stealing scheduler can distribute directory entries to different threads. I have already done some preliminary work in this area: I currently use `thread_local` storage for my primary regex filtering. A similar approach could be employed here, maintaining a dynamic thread-local buffer of regexes to reduce contention. Although the regex objects themselves are thread-safe (read-only), the scratch space they use can suffer from heavy contention under concurrent access.
-
-Given this complexity, I am not rushing to implement it immediately.
 
 As for the ignore flag itself, a simple version is straightforward. The main decision is how to specify patterns: perhaps `--ignore` for regex-based patterns and `--ignoreg` for glob-based patterns? This would offer flexibility, but the exact interface needs to be decided.

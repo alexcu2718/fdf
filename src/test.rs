@@ -1216,7 +1216,6 @@ mod tests {
         let finder = Finder::init(OsString::from(&start_path))
             .pattern(&pattern)
             .keep_hidden(true)
-            .keep_dirs(true)
             .build()
             .unwrap();
 
@@ -1240,7 +1239,6 @@ mod tests {
         let finder = Finder::init(OsString::from(&start_path))
             .pattern(&pattern)
             .keep_hidden(true)
-            .keep_dirs(true)
             .follow_symlinks(true)
             .build()
             .unwrap();
@@ -1265,7 +1263,6 @@ mod tests {
             let finder = Finder::init(hd.as_os_str())
                 .pattern(pattern)
                 .keep_hidden(true)
-                .keep_dirs(true)
                 .build()
                 .unwrap();
 
@@ -1286,7 +1283,6 @@ mod tests {
                 .pattern(pattern)
                 .extension("c")
                 .keep_hidden(true)
-                .keep_dirs(true)
                 .build()
                 .unwrap();
 
@@ -1308,7 +1304,6 @@ mod tests {
                 .follow_symlinks(true)
                 .extension("c")
                 .keep_hidden(true)
-                .keep_dirs(true)
                 .build()
                 .unwrap();
 
@@ -1329,7 +1324,6 @@ mod tests {
                 .pattern(pattern)
                 .keep_hidden(true)
                 .follow_symlinks(true)
-                .keep_dirs(true)
                 .build()
                 .unwrap();
 
@@ -1350,7 +1344,6 @@ mod tests {
             let finder = Finder::init(hd.as_os_str())
                 .pattern(pattern)
                 .keep_hidden(false)
-                .keep_dirs(true)
                 .build()
                 .unwrap();
 

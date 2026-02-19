@@ -50,7 +50,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         .pattern("*.txt")
         .keep_hidden(false)
         .case_insensitive(true)
-        .keep_dirs(true)
         .max_depth(Some(5))
         .follow_symlinks(false)
         .filter_by_size(Some(SizeFilter::Min(1024)))

@@ -74,14 +74,6 @@ struct Args {
     absolute_path: bool,
 
     #[arg(
-        short = 'I',
-        long = "include-dirs",
-        default_value_t = false,
-        help = "Include directories, defaults to off"
-    )]
-    keep_dirs: bool,
-
-    #[arg(
         short = 'L',
         long = "follow",
         default_value_t = false,
@@ -118,11 +110,17 @@ struct Args {
     )]
     depth: Option<u32>,
     #[arg(
-        long = "generate",
-        action = ArgAction::Set,
-        value_parser = value_parser!(Shell),
-        help = "Generate shell completions"
-    )]
+    long = "generate",
+    action = ArgAction::Set,
+    value_parser = value_parser!(Shell),
+    help = "Generate shell completions",
+    long_help = "
+    Generate shell completions for bash/zsh/fish/powershell
+    To use: eval \"$(fdf --generate SHELL)\"
+    Example:
+    # Add to shell config for permanent use
+    echo 'eval \"$(fdf --generate zsh)\"' >> ~/.zshrc"
+)]
     generate: Option<Shell>,
 
     #[arg(
@@ -168,6 +166,13 @@ struct Args {
         help = "Makes all output null terminated as opposed to newline terminated, only applies to non-coloured output and redirected(useful for xargs)"
     )]
     print0: bool,
+    #[arg(
+        short = 'I',
+        long = "no-ignore",
+        default_value_t = false,
+        help = "Do not respect .gitignore rules during traversal"
+    )]
+    no_ignore: bool,
     /// Filter by file size
     ///
     /// PREFIXES:
@@ -234,35 +239,19 @@ struct Args {
     verbatim_doc_comment
 )]
     time: Option<filters::TimeFilter>,
-    /// Filter by file type, eg -d (directory) -f (regular file)
-    ///
-    /// Available options are:
-    /// d: Directory
-    /// u: Unknown
-    /// l: Symlink
-    /// f: Regular File
-    /// p: Pipe
-    /// c: Char Device
-    /// b: Block Device
-    /// s: Socket
-    /// e: Empty
-    /// x: Executable
-    /// Filter by file type, eg -d (directory) -f (regular file)
+
     #[arg(
     short = 't',
     long = "type",
     required = false,
     value_parser = FileTypeFilterParser,
     help = "Filter by file type",
-    long_help = "Filter by file type:\n  d, dir, directory    - Directory\n  u, unknown           - Unknown type\n  l, symlink, link     - Symbolic link\n  f, file, regular     - Regular file\n  p, pipe, fifo        - Pipe/FIFO\n  c, char, chardev     - Character device\n  b, block, blockdev   - Block device\n  s, socket            - Socket\n  e, empty             - Empty file\n  x, exec, executable  - Executable file",
-    verbatim_doc_comment
+    //long_help = "Filter by file type:\n  d, dir, directory    - Directory\n  u, unknown           - Unknown type\n  l, symlink, link     - Symbolic link\n  f, file, regular     - Regular file\n  p, pipe, fifo        - Pipe/FIFO\n  c, char, chardev     - Character device\n  b, block, blockdev   - Block device\n  s, socket            - Socket\n  e, empty             - Empty file\n  x, exec, executable  - Executable file",
+
 )]
     type_of: Option<filters::FileTypeFilter>,
 }
-#[allow(
-    clippy::let_underscore_must_use,
-    reason = "errors only when channel is closed, not useful"
-)]
+
 fn main() -> Result<(), SearchConfigError> {
     let args = Args::parse();
 
@@ -281,7 +270,6 @@ fn main() -> Result<(), SearchConfigError> {
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
-        .keep_dirs(args.keep_dirs)
         .fixed_string(args.fixed_string)
         .canonicalise_root(args.absolute_path)
         .file_name_only(!args.full_path)
@@ -294,6 +282,7 @@ fn main() -> Result<(), SearchConfigError> {
         .collect_errors(args.show_errors)
         .use_glob(args.glob)
         .same_filesystem(args.same_file_system)
+        .respect_gitignore(!args.no_ignore)
         .thread_count(args.thread_num)
         .build()?;
 

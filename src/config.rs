@@ -74,14 +74,6 @@ pub struct SearchConfig {
     pub(crate) hide_hidden: bool,
 
     /**
-    Whether to include directories in search results
-
-    If true, directories are included in the output.
-    If false, only regular files and other non-directory entries are returned.
-    */
-    pub(crate) keep_dirs: bool,
-
-    /**
     File extension to filter by (case-insensitive)
 
     If `Some`, only files with this extension are matched.
@@ -136,6 +128,13 @@ pub struct SearchConfig {
     Supports relative time ranges (e.g., "last 7 days").
     */
     pub(crate) time_filter: Option<TimeFilter>,
+
+    /**
+    Whether to respect `.gitignore` files during traversal.
+
+    When true, entries ignored by inherited `.gitignore` rules are skipped.
+    */
+    pub(crate) respect_gitignore: bool,
 }
 impl SearchConfig {
     /**
@@ -153,7 +152,6 @@ impl SearchConfig {
         pattern: Option<&ToStr>, // ultimately this is CLI internal only
         hide_hidden: bool,
         case_insensitive: bool,
-        keep_dirs: bool,
         filenameonly: bool,
         extension_match: Option<Box<[u8]>>,
         depth: Option<NonZeroU32>,
@@ -162,6 +160,7 @@ impl SearchConfig {
         type_filter: Option<FileTypeFilter>,
         time_filter: Option<TimeFilter>,
         use_glob: bool,
+        respect_gitignore: bool,
     ) -> core::result::Result<Self, SearchConfigError> {
         let (file_name_only, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
             let patt = patt_ref.as_ref();
@@ -201,7 +200,6 @@ impl SearchConfig {
         Ok(Self {
             regex_match,
             hide_hidden,
-            keep_dirs,
             extension_match,
             file_name_only,
             depth,
@@ -209,6 +207,7 @@ impl SearchConfig {
             size_filter,
             type_filter,
             time_filter,
+            respect_gitignore,
         })
     }
 

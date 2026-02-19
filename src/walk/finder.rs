@@ -12,8 +12,10 @@ use core::{
 use crossbeam_channel::{Receiver, SendError, Sender, bounded};
 use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use dashmap::DashSet;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use std::{
     ffi::OsStr,
+    path::Path,
     sync::{Arc, Mutex},
     thread,
 };
@@ -124,11 +126,41 @@ impl Drop for PendingGuard<'_> {
     }
 }
 
+#[derive(Clone)]
+struct WorkItem {
+    dir: DirEntry,
+    ignore_ctx: Arc<IgnoreContext>,
+}
+
+struct IgnoreContext {
+    parent: Option<Arc<IgnoreContext>>,
+    matcher: Option<Arc<Gitignore>>,
+    repo_active: bool,
+}
+
+impl IgnoreContext {
+    fn empty() -> Arc<Self> {
+        Arc::new(Self {
+            parent: None,
+            matcher: None,
+            repo_active: false,
+        })
+    }
+
+    fn child(parent: Arc<Self>, matcher: Option<Arc<Gitignore>>, repo_active: bool) -> Arc<Self> {
+        Arc::new(Self {
+            parent: Some(parent),
+            matcher,
+            repo_active,
+        })
+    }
+}
+
 fn find_task(
-    local: &Worker<DirEntry>,
-    injector: &Injector<DirEntry>,
-    stealers: &[Stealer<DirEntry>],
-) -> Option<DirEntry> {
+    local: &Worker<WorkItem>,
+    injector: &Injector<WorkItem>,
+    stealers: &[Stealer<WorkItem>],
+) -> Option<WorkItem> {
     if let Some(task) = local.pop() {
         return Some(task);
     }
@@ -155,7 +187,7 @@ fn find_task(
     }
 }
 struct WorkerContext<'ctx> {
-    local: &'ctx Worker<DirEntry>,
+    local: &'ctx Worker<WorkItem>,
     pending: &'ctx AtomicUsize,
     shutdown_flag: &'ctx AtomicBool,
 }
@@ -248,7 +280,10 @@ impl Finder {
 
         if entry.is_traversible() {
             let finder = Arc::new(self);
-            injector.push(entry);
+            injector.push(WorkItem {
+                dir: entry,
+                ignore_ctx: IgnoreContext::empty(),
+            });
 
             for (index, worker) in workers.into_iter().enumerate() {
                 let finder_shared = Arc::clone(&finder);
@@ -276,7 +311,7 @@ impl Finder {
                             break;
                         }
 
-                        let Some(dir) = find_task(&worker, &injector_shared, &local_stealers)
+                        let Some(work_item) = find_task(&worker, &injector_shared, &local_stealers)
                         else {
                             if shutdown_flag_shared.load(Ordering::Relaxed) {
                                 break;
@@ -294,7 +329,7 @@ impl Finder {
                             shutdown_flag: &shutdown_flag_shared,
                         };
 
-                        finder_shared.process_directory(dir, &mut batch_sender, &ctx);
+                        finder_shared.process_directory(work_item, &mut batch_sender, &ctx);
                     }
                 });
             }
@@ -331,7 +366,7 @@ impl Finder {
     /// Determines if a directory should be sent through the channel
     #[inline]
     fn should_send_dir(&self, dir: &DirEntry) -> bool {
-        self.search_config.keep_dirs && dir.depth() != 0 && self.file_filter(dir)
+        dir.depth() != 0 && self.file_filter(dir)
         // Don't send root
     }
 
@@ -363,6 +398,75 @@ impl Finder {
     #[inline]
     fn file_filter(&self, dir: &DirEntry) -> bool {
         (self.file_filter)(&self.search_config, dir, self.custom_filter)
+    }
+
+    #[inline]
+    fn parse_gitignore_file(base_dir: &Path) -> Option<Arc<Gitignore>> {
+        let ignore_file = base_dir.join(".gitignore");
+        if !ignore_file.is_file() {
+            return None;
+        }
+
+        let mut builder = GitignoreBuilder::new(base_dir);
+        let _ = builder.add(ignore_file);
+
+        builder.build().ok().map(Arc::new)
+    }
+
+    #[inline]
+    fn build_ignore_context(
+        &self,
+        dir: &DirEntry,
+        parent: Arc<IgnoreContext>,
+    ) -> Arc<IgnoreContext> {
+        debug_assert!(
+            dir.is_traversible(),
+            "we expect this entry to be traversible"
+        );
+        if !self.search_config.respect_gitignore {
+            return parent;
+        }
+
+        let repo_active = parent.repo_active
+            || dir
+                .as_path()
+                .join(".git")
+                .symlink_metadata()
+                .is_ok_and(|x| x.is_dir());
+        let local_matcher = if repo_active {
+            Self::parse_gitignore_file(dir.as_path())
+        } else {
+            None
+        };
+
+        IgnoreContext::child(parent, local_matcher, repo_active)
+    }
+
+    #[inline]
+    fn is_gitignored(&self, dir: &DirEntry, ctx: &Arc<IgnoreContext>) -> bool {
+        if !self.search_config.respect_gitignore || !ctx.repo_active {
+            return false;
+        }
+
+        let mut current = Some(Arc::clone(ctx));
+        let is_dir = self.should_traverse(dir);
+
+        while let Some(node) = current.as_ref() {
+            if let Some(matcher) = node.matcher.as_ref() {
+                let matched = matcher.matched(dir.as_path(), is_dir);
+                if matched.is_whitelist() {
+                    return false;
+                }
+                if matched.is_ignore() {
+                    return true;
+                }
+            }
+
+            let next_parent = node.parent.clone();
+            current.clone_from(&next_parent);
+        }
+
+        false
     }
 
     /**
@@ -458,15 +562,28 @@ impl Finder {
     This method uses a work-queue traversal with worker threads to process
     directories in parallel.
 
-    # Arguments
-    * `dir` - The `DirEntry` representing the directory to process.
-    * `sender` - A channel `Sender` to send batches of found `DirEntry`s.
     */
     #[inline]
-    fn process_directory(&self, dir: DirEntry, sender: &mut BatchSender, ctx: &WorkerContext<'_>) {
+    fn process_directory(
+        &self,
+        work_item: WorkItem,
+        sender: &mut BatchSender,
+        ctx: &WorkerContext<'_>,
+    ) {
+        let WorkItem {
+            dir,
+            ignore_ctx: parent_ignore_ctx,
+        } = work_item;
+
+        if self.is_gitignored(&dir, &parent_ignore_ctx) {
+            return;
+        }
+
         if !self.directory_or_symlink_filter(&dir) {
             return; // Check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info
         }
+
+        let current_ignore_ctx = self.build_ignore_context(&dir, parent_ignore_ctx);
 
         let should_send_dir_or_symlink = self.should_send_dir(&dir); // If we've gotten here, the dir must be a directory!
 
@@ -482,12 +599,13 @@ impl Finder {
                 let (dirs, mut files): (Vec<_>, Vec<_>) = entries
                     .filter(|entry| {
                         self.keep_hidden(entry)
+                            && !self.is_gitignored(entry, &current_ignore_ctx)
                             && (self.should_traverse(entry) || self.file_filter(entry))
                     })
                     .partition(|ent| self.should_traverse(ent));
 
                 for dirnt in dirs {
-                    if !Self::enqueue_dir(dirnt, ctx) {
+                    if !Self::enqueue_dir(dirnt, Arc::clone(&current_ignore_ctx), ctx) {
                         return;
                     }
                 }
@@ -519,7 +637,7 @@ impl Finder {
         }
     }
     #[inline]
-    fn enqueue_dir(dir: DirEntry, ctx: &WorkerContext<'_>) -> bool {
+    fn enqueue_dir(dir: DirEntry, ignore_ctx: Arc<IgnoreContext>, ctx: &WorkerContext<'_>) -> bool {
         if ctx.shutdown_flag.load(Ordering::Relaxed) {
             // Release the shutdown as soon as possible.
             return false;
@@ -527,7 +645,7 @@ impl Finder {
         //atomicity itself ensures that all threads see a consistent modification order for pending,
         // so the final count will be correct even if increments are reordered among themselves.
         ctx.pending.fetch_add(1, Ordering::Relaxed);
-        ctx.local.push(dir);
+        ctx.local.push(WorkItem { dir, ignore_ctx });
 
         true
     }

@@ -343,16 +343,6 @@ Options:
   -d, --depth <DEPTH>
           Retrieves only traverse to x depth
 
-      --generate <GENERATE>
-
-              Generate shell completions for bash/zsh/fish/powershell
-              To use: eval "$(fdf --generate SHELL)"
-              Example:
-              # Add to shell config for permanent use
-              echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc
-
-          [possible values: bash, elvish, fish, powershell, zsh]
-
   -p, --full-path
           Use a full path for regex matching, default to false
 
@@ -366,16 +356,16 @@ Options:
           Only traverse the same filesystem as the starting directory
 
   -0, --print0
-          Makes all output null terminated as opposed to newline terminated, only applies to non-coloured output and redirected(useful for xargs)
+
 
   -I, --no-ignore
           Do not respect .gitignore rules during traversal
 
-          --ignore <PATTERN>
-                  Ignore paths that match this regex pattern (repeatable)
+      --ignore <PATTERN>
+          Ignore paths that match this regex pattern (repeatable)
 
-          --ignoreg <GLOB>
-                  Ignore paths that match this glob pattern (repeatable)
+      --ignoreg <GLOB>
+          Ignore paths that match this glob pattern (repeatable)
 
       --size <SIZE>
           Filter by file size
@@ -416,7 +406,7 @@ Options:
           - -10mb: smaller than 10MB
           - -1gib: smaller than 1GiB
 
-  -T, --time <TIME>
+  -T, --time-modified <TIME>
           Filter by file modification time
 
           PREFIXES:
@@ -464,12 +454,21 @@ Options:
           - e: Empty file
           - x: Executable file
 
+      --generate <GENERATE>
+
+              Generate shell completions for bash/zsh/fish/powershell
+              To use: eval "$(fdf --generate SHELL)"
+              Example:
+              # Add to shell config for permanent use
+              echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc && source ~/.zshrc
+
+          [possible values: bash, elvish, fish, powershell, zsh]
+
   -h, --help
           Print help (see a summary with '-h')
 
   -V, --version
           Print version
-
 ```
 
 ### Potential Future Enhancements

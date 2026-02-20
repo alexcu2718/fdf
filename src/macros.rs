@@ -89,7 +89,7 @@ macro_rules! access_dirent {
         )),has_d_ino))]
         {
             // SAFETY: Caller must ensure pointer is valid
-             (*$entry_ptr).d_ino
+             (*$entry_ptr).d_ino as _
         }
 
         #[cfg(not(has_d_ino))]
@@ -138,7 +138,7 @@ macro_rules! access_stat {
             target_os = "dragonfly"
         )))]
         {
-            $stat_struct.st_ino
+            $stat_struct.st_ino as _
         }
     }};
 

@@ -283,10 +283,10 @@ On some systems
  ```
 
  #[cfg(any(target_os = "linux", target_os = "android"))]
- use libc::dirent64;
+ use libc::{dirent64,readdir64};
 
  #[cfg(not(any(target_os = "linux", target_os = "android")))]
- use libc::dirent as dirent64;
+ use libc::{readdir as readdir64,dirent as dirent64};
 
 
  use std::env::temp_dir;
@@ -306,7 +306,7 @@ On some systems
  let path_cstr = std::ffi::CString::new(target_path.as_os_str().as_bytes()).unwrap();
  let dir_fd = unsafe { libc::opendir(path_cstr.as_ptr()) };
  if !dir_fd.is_null() {
-    let mut entry = unsafe { libc::readdir(dir_fd) };
+    let mut entry = unsafe { readdir64(dir_fd) };
     while !entry.is_null() {
         let name_len = unsafe {
             dirent_const_time_strlen(entry as *const dirent64)
@@ -315,8 +315,8 @@ On some systems
         let actual_len = unsafe {
             libc::strlen((&raw const (*entry).d_name).cast())
         };
-        assert_eq!(name_len, actual_len, "Const-time strlen matches libc strlen");
-        entry = unsafe { libc::readdir(dir_fd) };
+        assert_eq!(name_len, actual_len, "Const-time strlen matches libc strlen {name_len} {actual_len}");
+        entry = unsafe { readdir64(dir_fd) };
     }
     unsafe { libc::closedir(dir_fd) };
  }

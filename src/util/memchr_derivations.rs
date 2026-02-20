@@ -16,7 +16,6 @@ memrchr is significantly changed from stdlib implementation to use a more effici
 
 */
 
-use core::num::NonZeroU64;
 use core::num::NonZeroUsize;
 #[inline]
 const fn repeat_u8(x: u8) -> usize {
@@ -25,10 +24,6 @@ const fn repeat_u8(x: u8) -> usize {
 
 const LO_USIZE: usize = repeat_u8(0x01);
 const HI_USIZE: usize = repeat_u8(0x80);
-
-const LO_U64: u64 = repeat_u64(0x01);
-
-const HI_U64: u64 = repeat_u64(0x80);
 
 const USIZE_BYTES: usize = size_of::<usize>();
 
@@ -50,155 +45,6 @@ macro_rules! find_last_NUL {
             (USIZE_BYTES - 1 - (($num.leading_zeros()) >> 3) as usize)
         }
     }};
-}
-
-macro_rules! find_first_NUL {
-    // SWAR
-    ($num:expr) => {{
-        #[cfg(target_endian = "big")]
-        {
-            ($num.leading_zeros() >> 3) as usize
-        }
-        #[cfg(target_endian = "little")]
-        {
-            ($num.trailing_zeros() >> 3) as usize
-        }
-    }};
-}
-
-#[inline]
-const fn repeat_u64(byte: u8) -> u64 {
-    u64::from_ne_bytes([byte; size_of::<u64>()])
-}
-
-/**
- Finds the first occurrence of a byte in a 64-bit word.
-
- This uses a bitwise technique to locate the first instance of
- the target byte `c` in the 64-bit value `str`. The operation works by:
-
- (use `unwrap_unchecked` for truly branchless if you know it contains the character you're after)
-
- # Examples
-```
-use fdf::util::find_char_in_word;
-
-// Helper function to create byte arrays from strings
-fn create_byte_array(s: &str) -> [u8; 8] {
-let mut bytes = [0u8; 8];
-let s_bytes = s.as_bytes();
-let len = s_bytes.len().min(8);
-bytes[..len].copy_from_slice(&s_bytes[..len]);
-bytes
-}
-
-// Basic usage
- let bytes = create_byte_array("hello");
-assert_eq!(find_char_in_word(b'h', bytes), Some(0),"hello is predicted wrong!");
-
-// Edge cases
-assert_eq!(find_char_in_word(b'A', create_byte_array("AAAAAAAA")), Some(0)); // first position
-assert_eq!(find_char_in_word(b'A', create_byte_array("")), None); // not found
-assert_eq!(find_char_in_word(0, create_byte_array("\x01\x02\x03\0\x05\x06\x07\x08")), Some(3)); // null byte
-
-// Multiple occurrences (returns first)
-let bytes = create_byte_array("hello");
-assert_eq!(find_char_in_word(b'l', bytes), Some(2)); // first 'l'
-```
-
-# Parameters
-- `c`: The byte to search for (0-255)
-- `bytestr`: The word ( a `[u8; 8]` ) to search in (64 bit specific)
-
-# Returns
-- `Some(usize)`: Index (0-7) of the first occurrence
-- `None`: If the byte is not found
-*/
-#[inline]
-#[must_use]
-pub const fn find_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
-    let xor_result = u64::from_ne_bytes(bytestr) ^ repeat_u64(c);
-    #[cfg(target_endian = "little")]
-    let swarred = NonZeroU64::new(xor_result.wrapping_sub(LO_U64) & !xor_result & HI_U64);
-
-    // Avoid borrow issues on BE
-    #[cfg(target_endian = "big")]
-    let swarred =
-        NonZeroU64::new((!xor_result & !HI_U64).wrapping_add(LO_U64) & (!xor_result & HI_U64));
-    /*
-    If you're asking why `NonZeroU64`, check `dirent_const_time_strlen` for more info.
-    https://doc.rust-lang.org/src/core/num/nonzero.rs.html#599
-    https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
-    https://doc.rust-lang.org/beta/std/intrinsics/fn.cttz_nonzero.html
-    */
-
-    match swarred {
-        Some(valid) => Some(find_first_NUL!(valid)),
-        None => None,
-    }
-}
-
-/**
- Finds the last occurrence of a byte in a 64-bit word.
-
- This uses a bitwise technique to locate the last instance of
- the target byte `c` in the 64-bit array `str`
-
- (use `unwrap_unchecked` for truly branchless if you know it contains the character you're after)
-
-```
-use fdf::util::find_last_char_in_word;
-
-// Helper function to create byte arrays from strings
-fn create_byte_array(s: &str) -> [u8; 8] {
-let mut bytes = [0u8; 8];
-let s_bytes = s.as_bytes();
-let len = s_bytes.len().min(8);
-bytes[..len].copy_from_slice(&s_bytes[..len]);
-bytes
-}
-
-// Basic usage
- let bytes = create_byte_array("hello");
-assert_eq!(find_last_char_in_word(b'h', bytes), Some(0),"hello is predicted wrong!");
-
-// Edge cases
-assert_eq!(find_last_char_in_word(b'A', create_byte_array("AAAAAAAA")), Some(7)); // last position
-assert_eq!(find_last_char_in_word(b'A', create_byte_array("")), None); // not found
-assert_eq!(find_last_char_in_word(0, create_byte_array("\x01\x02\x03\0\x05\x06\x07\x08")), Some(3)); // null byte
-
-// Multiple occurrences (returns last )
-let bytes = create_byte_array("hello");
-assert_eq!(find_last_char_in_word(b'l', bytes), Some(3)); // last 'l'
-
-let new_bytes = create_byte_array("he..eop");
-assert_eq!(find_last_char_in_word(b'e', new_bytes), Some(4)); // last 'e'
-```
-
-# Parameters
-- `c`: The byte to search for (0-255)
-- `bytestr`: The word ( a `[u8; 8]` ) to search in (64 bit specific)
-
-# Returns
-- `Some(usize)`: Index (0-7) of the last occurrence
-- `None`: If the byte is not found
-*/
-#[inline]
-#[must_use]
-pub const fn find_last_char_in_word(c: u8, bytestr: [u8; 8]) -> Option<usize> {
-    //http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm
-    // https://github.com/gituser12981u2/memchr_stuff/blob/big_endian_fix/src/memchr_new.rs
-    // I am too lazy to type this out again. Check the line containing `The position of the rightmost 0-byte is given by t`
-    let x = u64::from_ne_bytes(bytestr) ^ repeat_u64(c);
-    #[cfg(target_endian = "little")]
-    let swarred = (!x & !HI_U64).wrapping_add(LO_U64) & (!x & HI_U64);
-    #[cfg(target_endian = "big")]
-    let swarred = x.wrapping_sub(LO_U64) & !x & HI_U64;
-
-    match NonZeroU64::new(swarred) {
-        Some(num) => Some(find_last_NUL!(num)),
-        None => None,
-    }
 }
 
 /// Returns the last index matching the byte `x` in `text`.

@@ -1,14 +1,6 @@
+use crate::c_char;
 use crate::dirent64;
 use crate::util::memchr_derivations::memrchr;
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
-use core::ffi::c_char;
 use core::ops::Deref;
 
 /**

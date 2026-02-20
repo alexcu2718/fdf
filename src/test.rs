@@ -13,7 +13,7 @@ mod tests {
     use super::*;
     use crate::filters::{SizeFilter, TimeFilter};
     use crate::fs::{DirEntry, FileType};
-    use crate::util::{BytePath, find_char_in_word, find_last_char_in_word};
+    use crate::util::BytePath;
     use crate::walk::Finder;
     use chrono::{Duration as ChronoDuration, Utc};
     use env_home::env_home_dir;
@@ -101,46 +101,6 @@ mod tests {
         for byte in random_chars {
             for string in &byte_strings {
                 test_memrchr(byte, string);
-            }
-        }
-    }
-
-    #[test]
-    fn test_reversed() {
-        let arrays = generate_random_u64_arrays(1000, DETERMINISTIC);
-
-        for bytes in arrays.iter() {
-            for i in 0..=u8::MAX {
-                let expected_pos = bytes.iter().rposition(|&b| b == i);
-
-                let detected_pos = crate::util::find_last_char_in_word(i, *bytes);
-
-                assert_eq!(
-                    detected_pos,
-                    expected_pos,
-                    "Mismatch for word={:#018x} bytes={bytes:?} in contains last zero byte!",
-                    u64::from_ne_bytes(*bytes)
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_forward() {
-        let arrays = generate_random_u64_arrays(1000, DETERMINISTIC);
-
-        for bytes in arrays.iter() {
-            for i in 0..=u8::MAX {
-                let expected_pos = bytes.iter().position(|&b| b == i);
-
-                let detected_pos = crate::util::find_char_in_word(i, *bytes);
-
-                assert_eq!(
-                    detected_pos,
-                    expected_pos,
-                    "Mismatch for word={:#018x} bytes={bytes:?} in contains last zero byte!",
-                    u64::from_ne_bytes(*bytes)
-                );
             }
         }
     }

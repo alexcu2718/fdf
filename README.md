@@ -27,7 +27,7 @@ Sometimes I don't feel like doing something until I know I have a *good* way to 
 
 While the CLI is usable, the internal library is not stable yet. Alas!
 
-## Platform Support (64-bit only (32 bit maybe one day?))
+## Platform Support
 
 ### Fully Supported and CI Tested
 
@@ -43,6 +43,8 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 *Note: GitHub Actions does not yet provide Rust 2024 support for some(most of these) platforms. Additional checks will be added when available.*
 
 - Android (tested on my phone)
+
+- 32 Bit Linux (tested, Can't find a way to set it up on github actions without extensive work.)
 
 Other Operating systems eg: AIX, untested. (Too many POSIX systems to test!)
 

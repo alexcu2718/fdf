@@ -1,6 +1,9 @@
 # fdf - High-Performance POSIX File Finder
 
-[![Rust CI](https://github.com/alexcu2718/fdf/workflows/Rust/badge.svg)](https://github.com/alexcu2718/fdf/actions)
+[![CI (main)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml?query=branch%3Amain)
+[![PR checks](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml/badge.svg?event=pull_request)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml?query=event%3Apull_request)
+
+CI details: [Workflow page](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml) · [Recent runs](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml)
 
 fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
 

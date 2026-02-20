@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.8.7"
+version = "0.8.8"
 rust-version = "1.90.0"
 edition = "2024"
 license = "MIT"
@@ -13,7 +13,7 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 [build-dependencies]
 libc = { version = "0.2.182" }
-cc = "1.2.55"
+cc = "1.2.56"
 
 [dependencies]
 chrono = { version = "0.4.42", default-features = false, features = ["std"] }

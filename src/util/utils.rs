@@ -1,5 +1,14 @@
 use crate::dirent64;
 use crate::util::memchr_derivations::memrchr;
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+use core::ffi::c_char;
 use core::ops::Deref;
 
 /**
@@ -31,10 +40,7 @@ use core::ops::Deref;
     target_os = "illumos",
     target_os = "solaris"
 ))]
-pub unsafe fn getdents<T>(fd: i32, buffer_ptr: *mut T, buffer_size: usize) -> isize
-where
-    T: crate::fs::ValueType, //i8/u8
-{
+pub unsafe fn getdents(fd: i32, buffer_ptr: *mut c_char, buffer_size: usize) -> isize {
     #[cfg(any(
         target_os = "openbsd",
         target_os = "solaris",
@@ -44,7 +50,7 @@ where
     unsafe extern "C" {
 
         #[cfg_attr(target_os = "netbsd", link_name = "__getdents30")] //special case for NetBSD
-        fn getdents(fd: i32, dirp: *mut libc::c_char, count: usize) -> isize;
+        fn getdents(fd: i32, dirp: *mut c_char, count: usize) -> isize;
     }
 
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
@@ -63,7 +69,7 @@ where
     ))]
     // SAFETY: same as above
     unsafe {
-        getdents(fd, buffer_ptr.cast(), buffer_size)
+        getdents(fd, buffer_ptr, buffer_size)
     }
 }
 
@@ -87,27 +93,26 @@ where
  - Positive: Number of bytes read
  - 0: End of directory
  - Negative: Error code (check errno)
+
+
+ This function is only available on macOS/FreeBSD
 */
-pub unsafe fn getdirentries64<T>(
+pub unsafe fn getdirentries64(
     fd: i32,
-    buffer_ptr: *mut T,
+    buffer_ptr: *mut c_char,
     nbytes: usize,
     basep: *mut i64,
-) -> isize
-where
-    T: crate::fs::ValueType, //i8/u8
-{
-    use libc::{c_char, c_int, off_t, size_t, ssize_t};
+) -> isize {
+    use libc::{off_t, size_t, ssize_t};
     // link to libc
     unsafe extern "C" {
         #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
         // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
-        fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t)
-        -> ssize_t;
+        fn getdirentries(fd: i32, buf: *mut c_char, nbytes: size_t, basep: *mut off_t) -> ssize_t;
     } // as above
 
     // SAFETY: As specified above
-    unsafe { getdirentries(fd, buffer_ptr.cast(), nbytes, basep) }
+    unsafe { getdirentries(fd, buffer_ptr, nbytes, basep) }
 }
 
 /*
@@ -152,7 +157,8 @@ where
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
         debug_assert!(!self.is_empty(), "should never be empty");
-        // filepaths entering this will always have a slash in them, guaranteed.
+        debug_assert!(!self.ends_with(b"/"), "file path ends with a slash!");
+        // filepaths entering this will always have a slash in them, guaranteed, no trailing slashes!!!
         // The edge cases to watch our for are ./ and /, these are handled
         // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
         memrchr(b'.', unsafe {
@@ -180,6 +186,9 @@ where
         if self.len() == 1 {
             return 0;
         }
+
+        debug_assert!(!self.is_empty(), "should never be empty");
+        debug_assert!(!self.ends_with(b"/"), "file path ends with a slash!");
         debug_assert!(!self.is_empty(), "should never be empty");
         memrchr(b'/', self).map_or(1, |pos| pos + 1)
     }
@@ -324,6 +333,8 @@ On some systems
  fs::remove_dir_all(&target_path).ok();
  ```
 
+ Notes: If using this on 32 bit, use `readdir64`/`getdents64`
+
  # References
  - [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
  - [find crate `dirent.rs`](https://github.com/Soveu/find/blob/master/src/dirent.rs)
@@ -424,7 +435,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
         https://doc.rust-lang.org/beta/std/intrinsics/fn.cttz_nonzero.html
 
-        This allows us to skip a 0 check which then allows us to use tzcnt/lzcnt on most cpu's
+        This allows us to skip a 0 check which then allows us to use tzcnt/lzcnt on most cpu's (well x86_64, not knowledgeable on ARM/etc)
          */
 
         #[cfg(target_endian = "little")]

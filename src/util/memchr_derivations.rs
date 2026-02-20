@@ -32,19 +32,18 @@ const USIZE_BYTES: usize = size_of::<usize>();
 // Once done, I'll add it to the stdlib as a PR potentially
 // https://github.com/gituser12981u2/memchr_stuff/blob/big_endian_fix/src/memchr_new.rs
 
-// simplifying macro
-macro_rules! find_last_NUL {
-    // SWAR
-    ($num:expr) => {{
-        #[cfg(target_endian = "big")]
-        {
-            (USIZE_BYTES - 1 - (($num.trailing_zeros()) >> 3) as usize)
-        }
-        #[cfg(target_endian = "little")]
-        {
-            (USIZE_BYTES - 1 - (($num.leading_zeros()) >> 3) as usize)
-        }
-    }};
+// simplifying functioon
+#[inline]
+const fn find_last_nul(num: NonZeroUsize) -> usize {
+    #[cfg(target_endian = "big")]
+    {
+        USIZE_BYTES - 1 - ((num.trailing_zeros()) >> 3) as usize
+    }
+
+    #[cfg(target_endian = "little")]
+    {
+        USIZE_BYTES - 1 - ((num.leading_zeros()) >> 3) as usize
+    }
 }
 
 /// Returns the last index matching the byte `x` in `text`.
@@ -82,7 +81,7 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
     // Classic SWAR: may contain false positives due to cross-byte borrow.
     // However considering that we want to check *as quickly* as possible, this is ideal.
 
-    let mut classic = input.wrapping_sub(LO_USIZE) & (!input) & HI_USIZE;
+    let mut classic = input.wrapping_sub(LO_USIZE) & !input & HI_USIZE;
     if classic == 0 {
         return None;
     }
@@ -204,7 +203,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
         let maybe_match_upper = contains_zero_byte_borrow_fix(upper ^ repeated_x);
 
         if let Some(num) = maybe_match_upper {
-            let zero_byte_pos = find_last_NUL!(num);
+            let zero_byte_pos = find_last_nul(num);
 
             return Some(offset - USIZE_BYTES + zero_byte_pos);
         }
@@ -216,7 +215,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
         if let Some(num) = maybe_match_lower {
             // replace this function
-            let zero_byte_pos = find_last_NUL!(num);
+            let zero_byte_pos = find_last_nul(num);
 
             return Some(offset - 2 * USIZE_BYTES + zero_byte_pos);
         }

@@ -646,7 +646,7 @@ impl DirEntry {
         if let Ok(fd) = dirfd {
             let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
             // SAFETY: guaranteed open, valid ptr etc.
-            let dents = unsafe { getdents(fd.0, syscall_buffer.as_mut_ptr(), BUF_SIZE) };
+            let dents = unsafe { getdents(fd.0, syscall_buffer.as_mut_ptr().cast(), BUF_SIZE) };
 
             // SAFETY: Closed only once confirmed open
             unsafe { libc::close(fd.0) };

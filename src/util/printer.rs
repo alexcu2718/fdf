@@ -112,11 +112,13 @@ where
         let mut writer = if is_terminal {
             BufWriter::new(std_out)
         } else {
-            BufWriter::with_capacity(32 * 4096, std_out) //TODO play with these values?
+            BufWriter::with_capacity(16 * 4096, std_out) //TODO play with these values?
         };
 
         if self.sort {
             let mut collected: Vec<_> = self.paths.collect();
+            // TODO, this algorithm is extremely slow for large collections...
+            // I need to parallelise but it's a lot of work for one function, sign.
             collected.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
             Self::write_iter(
                 &mut writer,
@@ -151,6 +153,7 @@ where
         nocolour
             || std::env::var("NO_COLOUR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"))
             || std::env::var("NO_COLOR").is_ok_and(|x| x.eq_ignore_ascii_case("TRUE"))
+        // BECAUSE IM BRITISH
     }
 
     #[inline]

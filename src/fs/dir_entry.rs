@@ -30,10 +30,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for entry in entries {
         file_count += 1;
-        println!("Found: {:?}", entry);
+        println!("Found: {}", String::from_utf8_lossy(&entry));
     }
 
-    println!("Discovered {} files", file_count);
+    println!("Discovered {file_count} files");
 
     Ok(())
 }
@@ -51,25 +51,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         .keep_hidden(false)
         .case_insensitive(true)
         .max_depth(Some(5))
+        .respect_gitignore(false)
         .follow_symlinks(false)
         .filter_by_size(Some(SizeFilter::Min(1024)))
         .type_filter(Some(FileTypeFilter::File))
         .collect_errors(true) // Gather the errors from iteration, this has some performance cost.
         .build()
-        .map_err(|e| format!("Failed to build finder: {}", e))?;
+        .map_err(|e| format!("Failed to build finder: {e}"))?;
 
     let entries = finder
         .traverse()
-        .map_err(|e| format!("Failed to start traversal: {}", e))?;
+        .map_err(|e| format!("Failed to start traversal: {e}"))?;
 
     let mut file_count = 0;
 
     for entry in entries {
         file_count += 1;
-        println!("{:?}", entry);
+        println!("{}",String::from_utf8_lossy(&entry));
     }
 
-    println!("Search completed! Found {} files", file_count);
+    println!("Search completed! Found {file_count} files");
 
     Ok(())
 }

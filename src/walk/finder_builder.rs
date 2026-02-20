@@ -49,6 +49,8 @@ pub struct FinderBuilder {
     pub(crate) same_filesystem: bool,
     pub(crate) thread_count: NonZeroUsize,
     pub(crate) respect_gitignore: bool,
+    pub(crate) ignore_patterns: Vec<String>,
+    pub(crate) ignore_glob_patterns: Vec<String>,
 }
 
 impl FinderBuilder {
@@ -74,6 +76,8 @@ impl FinderBuilder {
             same_filesystem: false,
             thread_count: num_threads,
             respect_gitignore: true,
+            ignore_patterns: Vec::new(),
+            ignore_glob_patterns: Vec::new(),
         }
     }
 
@@ -223,6 +227,20 @@ impl FinderBuilder {
         self
     }
 
+    /// Set regex patterns that should be ignored during traversal.
+    #[must_use]
+    pub fn ignore_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.ignore_patterns = patterns;
+        self
+    }
+
+    /// Set glob patterns that should be ignored during traversal.
+    #[must_use]
+    pub fn ignore_glob_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.ignore_glob_patterns = patterns;
+        self
+    }
+
     /**
     Builds a [`Finder`] instance with the configured options.
 
@@ -266,6 +284,8 @@ impl FinderBuilder {
             self.time_filter,
             self.use_glob,
             self.respect_gitignore,
+            self.ignore_patterns,
+            self.ignore_glob_patterns,
         )?;
 
         let lambda: FilterType = |rconfig, rdir, rfilter| {

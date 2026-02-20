@@ -135,6 +135,9 @@ pub struct SearchConfig {
     When true, entries ignored by inherited `.gitignore` rules are skipped.
     */
     pub(crate) respect_gitignore: bool,
+
+    /// Compiled ignore matcher (`--ignore` + `--ignoreg`) backed by thread-local regex clones.
+    pub(crate) ignore_match: Option<TLSRegex>,
 }
 impl SearchConfig {
     /**
@@ -161,6 +164,8 @@ impl SearchConfig {
         time_filter: Option<TimeFilter>,
         use_glob: bool,
         respect_gitignore: bool,
+        ignore_patterns: Vec<String>,
+        ignore_glob_patterns: Vec<String>,
     ) -> core::result::Result<Self, SearchConfigError> {
         let (file_name_only, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
             let patt = patt_ref.as_ref();
@@ -197,6 +202,33 @@ impl SearchConfig {
                 reg.ok().map(TLSRegex::new)
             };
 
+        let mut ignore_patterns_merged =
+            Vec::with_capacity(ignore_patterns.len() + ignore_glob_patterns.len());
+        ignore_patterns_merged.extend(ignore_patterns);
+
+        for glob_pattern in ignore_glob_patterns {
+            let regex_pattern =
+                glob_to_regex(&glob_pattern).map_err(SearchConfigError::GlobToRegexError)?;
+            ignore_patterns_merged.push(regex_pattern);
+        }
+
+        let ignore_match = if ignore_patterns_merged.is_empty() {
+            None
+        } else {
+            let combined = ignore_patterns_merged
+                .iter()
+                .map(|patt| format!("(?:{patt})"))
+                .collect::<Vec<_>>()
+                .join("|");
+
+            let reg = RegexBuilder::new(&combined)
+                .case_insensitive(case_insensitive)
+                .dot_matches_new_line(false)
+                .build()
+                .map_err(SearchConfigError::RegexError)?;
+            Some(TLSRegex::new(reg))
+        };
+
         Ok(Self {
             regex_match,
             hide_hidden,
@@ -208,7 +240,17 @@ impl SearchConfig {
             type_filter,
             time_filter,
             respect_gitignore,
+            ignore_match,
         })
+    }
+
+    /// Returns true when the provided path should be ignored by configured ignore patterns.
+    #[inline]
+    #[must_use]
+    pub fn matches_ignore_path(&self, path: &[u8]) -> bool {
+        self.ignore_match
+            .as_ref()
+            .is_some_and(|reg| reg.is_match(path))
     }
 
     /// Evaluates a custom predicate function against a path
@@ -310,21 +352,12 @@ impl SearchConfig {
     /// If `full_path` is false, only checks the filename
     #[inline]
     #[must_use]
-    #[expect(clippy::indexing_slicing, reason = "used for debug assert")]
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
-        debug_assert!(
-            !dir.file_name().contains(&b'/'),
-            "file_name contains a directory separator some arithmetic has gone wrong!"
-        );
-
-        debug_assert!(
-            &dir.as_bytes()[dir.file_name_index()..] == dir.file_name(),
-            "showing the below works"
-        );
-
         self.regex_match.as_ref().is_none_or(|reg|
                 // Use arithmetic to avoid branching costs
              { let index_amount=usize::from(!full_path) * dir.file_name_index();
+
+
                      // SAFETY: are always indexing within bounds.
             unsafe{reg.is_match(dir.get_unchecked(index_amount..))}
             })

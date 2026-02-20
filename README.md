@@ -259,8 +259,6 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 
 ### Feature Enhancements (Planned)
 
-More elaborate improvements/fixes discussed [at this link]( ./IMPROVEMENTS.md   )
-
 **API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 
 **POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris/Android (the other ones are embedded mostly, correct me if i'm wrong!), I have tentative work for other OS'es, but ultimately it is hard to even emulate these! Such as l4re,horizon etc.
@@ -372,6 +370,12 @@ Options:
 
   -I, --no-ignore
           Do not respect .gitignore rules during traversal
+
+          --ignore <PATTERN>
+                  Ignore paths that match this regex pattern (repeatable)
+
+          --ignoreg <GLOB>
+                  Ignore paths that match this glob pattern (repeatable)
 
       --size <SIZE>
           Filter by file size
@@ -489,7 +493,3 @@ Options:
 - Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.
 - Although the cost of allocations doesn't seem too bad, I will look at this again at some point.
 - Maybe achieved via a lending iterator type approach? See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)
-
-#### 4. Implement an --ignore pattern and gitignore type system
-
-As for the ignore flag itself, a simple version is straightforward. The main decision is how to specify patterns: perhaps `--ignore` for regex-based patterns and `--ignoreg` for glob-based patterns? This would offer flexibility, but the exact interface needs to be decided.

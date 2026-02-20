@@ -124,7 +124,7 @@ where
             data: MaybeUninit::uninit(),
         }
     }
-
+    /// Returns the size of which this buffer was created by.
     pub const BUFFER_SIZE: usize = SIZE;
 
     /// Returns a mutable pointer to the buffer's data

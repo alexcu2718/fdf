@@ -861,12 +861,10 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&test_dir);
 
-        // verify operations succeed
         std::fs::create_dir_all(file_path.parent().unwrap())
             .expect("Failed to create parent directory");
         std::fs::write(&file_path, "test").expect("Failed to create test file");
 
-        // check the file was actually created
         assert!(file_path.exists(), "Test file was not created");
         assert!(file_path.is_file(), "Test path is not a file");
 
@@ -874,7 +872,6 @@ mod tests {
         let entry = DirEntry::new(file_path.as_os_str()).expect("Failed to create DirEntry");
         assert_eq!(entry.dirname(), b"parent", "Incorrect directory name");
 
-        // verify removal
         std::fs::remove_dir_all(&test_dir).expect("Failed to clean up test directory");
 
         assert!(!test_dir.exists(), "Test directory was not removed");
@@ -1644,5 +1641,134 @@ mod tests {
             filter.matches_time(very_old),
             "Very old file should match +1y filter"
         );
+    }
+
+    #[test]
+    fn test_ignore_regex_integration_with_finder() {
+        let temp_dir = temp_dir().join("ignore_regex_integration_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join("skip_dir")).unwrap();
+
+        fs::write(temp_dir.join("keep.txt"), "keep").unwrap();
+        fs::write(temp_dir.join("skip.log"), "ignore by regex").unwrap();
+        fs::write(
+            temp_dir.join("skip_dir").join("nested.txt"),
+            "ignore by regex",
+        )
+        .unwrap();
+
+        let finder = Finder::init(&temp_dir)
+            .ignore_patterns(vec![String::from("skip")])
+            .build()
+            .unwrap();
+
+        let mut file_names: Vec<Vec<u8>> = finder
+            .traverse()
+            .unwrap()
+            .filter(|entry| entry.is_regular_file())
+            .map(|entry| entry.file_name().to_vec())
+            .collect();
+        file_names.sort();
+
+        assert_eq!(file_names, vec![b"keep.txt".to_vec()]);
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_ignore_glob_integration_with_finder() {
+        let temp_dir = temp_dir().join("ignore_glob_integration_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join("nested")).unwrap();
+
+        fs::write(temp_dir.join("keep.rs"), "keep").unwrap();
+        fs::write(temp_dir.join("drop.tmp"), "ignore by glob").unwrap();
+        fs::write(temp_dir.join("nested").join("drop2.tmp"), "ignore by glob").unwrap();
+
+        let finder = Finder::init(&temp_dir)
+            .ignore_glob_patterns(vec![String::from("**/*.tmp")])
+            .build()
+            .unwrap();
+
+        let mut file_names: Vec<Vec<u8>> = finder
+            .traverse()
+            .unwrap()
+            .filter(|entry| entry.is_regular_file())
+            .map(|entry| entry.file_name().to_vec())
+            .collect();
+        file_names.sort();
+
+        assert_eq!(file_names, vec![b"keep.rs".to_vec()]);
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_ignore_regex_and_glob_combined_integration() {
+        let temp_dir = temp_dir().join("ignore_combined_integration_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join("nested")).unwrap();
+
+        fs::write(temp_dir.join("keep.txt"), "keep").unwrap();
+        fs::write(temp_dir.join("remove_me.txt"), "ignore by regex").unwrap();
+        fs::write(
+            temp_dir.join("nested").join("artifact.cache"),
+            "ignore by glob",
+        )
+        .unwrap();
+
+        let finder = Finder::init(&temp_dir)
+            .ignore_patterns(vec![String::from("remove_me")])
+            .ignore_glob_patterns(vec![String::from("**/*.cache")])
+            .build()
+            .unwrap();
+
+        let mut file_names: Vec<Vec<u8>> = finder
+            .traverse()
+            .unwrap()
+            .filter(|entry| entry.is_regular_file())
+            .map(|entry| entry.file_name().to_vec())
+            .collect();
+        file_names.sort();
+
+        assert_eq!(file_names, vec![b"keep.txt".to_vec()]);
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_ignore_invalid_regex_returns_error() {
+        let temp_dir = temp_dir().join("ignore_invalid_regex_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let result = Finder::init(&temp_dir)
+            .ignore_patterns(vec![String::from("(")])
+            .build();
+
+        assert!(matches!(
+            result,
+            Err(crate::SearchConfigError::RegexError(_))
+        ));
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_ignore_invalid_glob_returns_error() {
+        let temp_dir = temp_dir().join("ignore_invalid_glob_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let result = Finder::init(&temp_dir)
+            .ignore_glob_patterns(vec![String::from("[")])
+            .build();
+
+        assert!(matches!(
+            result,
+            Err(crate::SearchConfigError::GlobToRegexError(_))
+        ));
+
+        fs::remove_dir_all(&temp_dir).unwrap();
     }
 }

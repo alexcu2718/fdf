@@ -403,10 +403,6 @@ impl Finder {
     #[inline]
     fn parse_gitignore_file(base_dir: &Path) -> Option<Arc<Gitignore>> {
         let ignore_file = base_dir.join(".gitignore");
-        if !ignore_file.is_file() {
-            return None;
-        }
-
         let mut builder = GitignoreBuilder::new(base_dir);
         let _ = builder.add(ignore_file);
 
@@ -537,6 +533,11 @@ impl Finder {
     }
 
     #[inline]
+    fn matches_ignore_path(&self, dir: &DirEntry) -> bool {
+        self.search_config.matches_ignore_path(dir.as_bytes())
+    }
+
+    #[inline]
     fn handle_depth_limit(
         &self,
         dir: &DirEntry,
@@ -575,7 +576,9 @@ impl Finder {
             ignore_ctx: parent_ignore_ctx,
         } = work_item;
 
-        if self.is_gitignored(&dir, &parent_ignore_ctx) {
+        if self.search_config.matches_ignore_path(dir.as_bytes())
+            || self.is_gitignored(&dir, &parent_ignore_ctx)
+        {
             return;
         }
 
@@ -597,8 +600,10 @@ impl Finder {
         match read_direntries!(dir) {
             Ok(entries) => {
                 let (dirs, mut files): (Vec<_>, Vec<_>) = entries
+                    // I'm not too happy with this method. need to revisit my approach.
                     .filter(|entry| {
                         self.keep_hidden(entry)
+                            && !self.matches_ignore_path(entry)
                             && !self.is_gitignored(entry, &current_ignore_ctx)
                             && (self.should_traverse(entry) || self.file_filter(entry))
                     })

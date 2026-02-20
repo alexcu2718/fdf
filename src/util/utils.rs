@@ -152,6 +152,8 @@ where
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
         debug_assert!(!self.is_empty(), "should never be empty");
+        // filepaths entering this will always have a slash in them, guaranteed.
+        // The edge cases to watch our for are ./ and /, these are handled
         // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
         memrchr(b'.', unsafe {
             self.get_unchecked(..self.len().saturating_sub(1))
@@ -467,7 +469,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         Example: If null is at position 2 in the last word, we only count those 2 bytes
         from that word toward the total string length.
         */
-        reclen + byte_pos - DIRENT_HEADER_START - 8
+        reclen - DIRENT_HEADER_START + byte_pos - 8
     }
 }
 

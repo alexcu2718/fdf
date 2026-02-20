@@ -84,15 +84,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Matched: {}", entry.as_path().display());
     }
 
-    println!("Found {} log files", count);
+    println!("Found {count} log files");
     Ok(())
 }
 ```
 */
-#[cfg(any(target_os = "vita", target_os = "hurd", target_os = "nuttx"))]
-compile_error!(
-    "This application is not supported on PlayStation Vita/hurd/nuttx, It may be if I'm ever bothered!"
-);
 
 #[cfg(target_pointer_width = "32")]
 compile_error!("Not supported on 32bit, I may do if a PR is sent!");
@@ -122,11 +118,6 @@ pub use error::{DirEntryError, FilesystemIOError, SearchConfigError, TraversalEr
 
 mod config;
 pub use config::SearchConfig;
-
-//this allocator is more efficient than jemalloc through my testing(still better than system allocator)
-//miri doesnt support custom allocators
-//not sure which platforms support this, BSD doesnt from testing
-
 pub mod filters;
 pub mod fs;
 pub mod util;

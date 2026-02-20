@@ -42,7 +42,8 @@ if [[ "$run_benchmarks" =~ ^[Yy]$ ]]; then
         if [[ "$script" != *"_home_dir"* ]]; then
             echo "Running $script"
             ./"$script"
-            sleep 2
+            sync
+
         fi
     done
 
@@ -54,7 +55,7 @@ echo "these tests will take a while!"
 for script in ./warm*_home_dir.sh; do
     echo "Running $script"
     ./"$script"
-    sleep 2
+    sync
 done
 
 
@@ -76,7 +77,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
                 if [[ "$script" != *"_home_dir"* ]]; then
                     echo "Running $script"
                     ./"$script"
-                    sleep 2
+                    sync
                 fi
             done
 
@@ -84,7 +85,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
             for script in ./cold-cache*_home_dir.sh; do
                 echo "Running $script"
                 ./"$script"
-                sleep 2
+                sync
             done
         else
             echo "Skipping cold cache test because sudo is not available."
@@ -105,8 +106,11 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
         if command -v strace &> /dev/null; then
-            echo "Running the syscall test..."
+            echo -e "Running the syscall test...\n\n"
             ./syscalltest.sh
+
+            echo -e "\n\n\n Running the syscall test with ignore matcher\n\n\n"
+            ./syscalltest_ignore.sh
         else
             echo "Error: strace is not installed. Please install it to run this test."
         fi

@@ -3,7 +3,10 @@ use clap_complete::aot::{Shell, generate};
 use core::num::NonZeroUsize;
 use fdf::filters::{FileTypeFilterParser, SizeFilterParser, TimeFilterParser};
 use fdf::walk::Finder;
-use fdf::{SearchConfigError, filters};
+use fdf::{
+    SearchConfigError,
+    filters::{FileTypeFilter, SizeFilter, TimeFilter},
+};
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
@@ -74,14 +77,6 @@ struct Args {
     absolute_path: bool,
 
     #[arg(
-        short = 'I',
-        long = "include-dirs",
-        default_value_t = false,
-        help = "Include directories, defaults to off"
-    )]
-    keep_dirs: bool,
-
-    #[arg(
         short = 'L',
         long = "follow",
         default_value_t = false,
@@ -117,13 +112,6 @@ struct Args {
         help = "Retrieves only traverse to x depth"
     )]
     depth: Option<u32>,
-    #[arg(
-        long = "generate",
-        action = ArgAction::Set,
-        value_parser = value_parser!(Shell),
-        help = "Generate shell completions"
-    )]
-    generate: Option<Shell>,
 
     #[arg(
         short = 'p',
@@ -165,9 +153,31 @@ struct Args {
         alias = "null-terminated",
         required = false,
         default_value_t = false,
-        help = "Makes all output null terminated as opposed to newline terminated, only applies to non-coloured output and redirected(useful for xargs)"
+        help = "Makes all output null terminated as opposed to newline terminated only applies to non-coloured output and redirected(useful for xargs)",
+        long_help = ""
     )]
     print0: bool,
+    #[arg(
+        short = 'I',
+        long = "no-ignore",
+        default_value_t = false,
+        help = "Do not respect .gitignore rules during traversal"
+    )]
+    no_ignore: bool,
+    #[arg(
+        long = "ignore",
+        value_name = "PATTERN",
+        action = ArgAction::Append,
+        help = "Ignore paths that match this regex pattern (repeatable)"
+    )]
+    ignore: Vec<String>,
+    #[arg(
+        long = "ignoreg",
+        value_name = "GLOB",
+        action = ArgAction::Append,
+        help = "Ignore paths that match this glob pattern (repeatable)"
+    )]
+    ignoreg: Vec<String>,
     /// Filter by file size
     ///
     /// PREFIXES:
@@ -200,7 +210,7 @@ struct Args {
     help = "Filter by file size (supports custom sizes with +/- prefixes)",
     verbatim_doc_comment
 )]
-    size: Option<filters::SizeFilter>,
+    size: Option<SizeFilter>,
     /// Filter by file modification time
     ///
     /// PREFIXES:
@@ -225,7 +235,7 @@ struct Args {
     ///   --time 1d..2h     Files modified between 1 day and 2 hours ago
     ///   --time -30m       Files modified within the last 30 minutes
     #[arg(
-    long = "time",
+    long = "time-modified",
     short = 'T',
     allow_hyphen_values = true,
     value_name = "TIME",
@@ -233,36 +243,32 @@ struct Args {
     help = "Filter by file modification time (supports relative times with +/- prefixes)",
     verbatim_doc_comment
 )]
-    time: Option<filters::TimeFilter>,
-    /// Filter by file type, eg -d (directory) -f (regular file)
-    ///
-    /// Available options are:
-    /// d: Directory
-    /// u: Unknown
-    /// l: Symlink
-    /// f: Regular File
-    /// p: Pipe
-    /// c: Char Device
-    /// b: Block Device
-    /// s: Socket
-    /// e: Empty
-    /// x: Executable
-    /// Filter by file type, eg -d (directory) -f (regular file)
+    time: Option<TimeFilter>,
+
     #[arg(
     short = 't',
     long = "type",
     required = false,
     value_parser = FileTypeFilterParser,
     help = "Filter by file type",
-    long_help = "Filter by file type:\n  d, dir, directory    - Directory\n  u, unknown           - Unknown type\n  l, symlink, link     - Symbolic link\n  f, file, regular     - Regular file\n  p, pipe, fifo        - Pipe/FIFO\n  c, char, chardev     - Character device\n  b, block, blockdev   - Block device\n  s, socket            - Socket\n  e, empty             - Empty file\n  x, exec, executable  - Executable file",
-    verbatim_doc_comment
+
 )]
-    type_of: Option<filters::FileTypeFilter>,
+    type_of: Option<FileTypeFilter>,
+    #[arg(
+    long = "generate",
+    action = ArgAction::Set,
+    value_parser = value_parser!(Shell),
+    help = "Generate shell completions",
+    long_help = "
+    Generate shell completions for bash/zsh/fish/powershell
+    To use: eval \"$(fdf --generate SHELL)\"
+    Example:
+    # Add to shell config for permanent use
+    echo 'eval \"$(fdf --generate zsh)\"' >> ~/.zshrc && source ~/.zshrc "
+)]
+    generate: Option<Shell>,
 }
-#[allow(
-    clippy::let_underscore_must_use,
-    reason = "errors only when channel is closed, not useful"
-)]
+
 fn main() -> Result<(), SearchConfigError> {
     let args = Args::parse();
 
@@ -281,7 +287,6 @@ fn main() -> Result<(), SearchConfigError> {
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
-        .keep_dirs(args.keep_dirs)
         .fixed_string(args.fixed_string)
         .canonicalise_root(args.absolute_path)
         .file_name_only(!args.full_path)
@@ -294,6 +299,9 @@ fn main() -> Result<(), SearchConfigError> {
         .collect_errors(args.show_errors)
         .use_glob(args.glob)
         .same_filesystem(args.same_file_system)
+        .respect_gitignore(!args.no_ignore)
+        .ignore_patterns(args.ignore)
+        .ignore_glob_patterns(args.ignoreg)
         .thread_count(args.thread_num)
         .build()?;
 

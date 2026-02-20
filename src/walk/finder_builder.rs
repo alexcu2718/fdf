@@ -23,7 +23,7 @@ use std::{
  A builder for creating a `Finder` instance with customisable options.
 
  This builder allows you to set various options such as hiding hidden files, case sensitivity,
- keeping directories in results, matching file extensions, setting maximum search depth,
+ matching file extensions, setting maximum search depth,
  following symlinks, and applying a custom filter function.
 */
 #[expect(
@@ -35,7 +35,6 @@ pub struct FinderBuilder {
     pub(crate) pattern: Option<String>,
     pub(crate) hide_hidden: bool,
     pub(crate) case_insensitive: bool,
-    pub(crate) keep_dirs: bool,
     pub(crate) file_name_only: bool,
     pub(crate) extension_match: Option<Box<[u8]>>,
     pub(crate) max_depth: Option<NonZeroU32>,
@@ -49,25 +48,20 @@ pub struct FinderBuilder {
     pub(crate) canonicalise: bool,
     pub(crate) same_filesystem: bool,
     pub(crate) thread_count: NonZeroUsize,
+    pub(crate) respect_gitignore: bool,
+    pub(crate) ignore_patterns: Vec<String>,
+    pub(crate) ignore_glob_patterns: Vec<String>,
 }
 
 impl FinderBuilder {
     pub(crate) fn new<A: AsRef<OsStr>>(root: A) -> Self {
         const MIN_THREADS: NonZeroUsize = NonZeroUsize::MIN;
         let num_threads = std::thread::available_parallelism().unwrap_or(MIN_THREADS);
-        // if let Some(valid) = IgnoreMatcher::from_current_dir(root.as_ref()).gitconfig_contents() {
-        //     eprintln!(
-        //         "{}\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
-        //         String::from_utf8_lossy(&valid)
-        //     )
-        // }
-
         Self {
             root: root.as_ref().to_owned(),
             pattern: None,
             hide_hidden: true,
             case_insensitive: true,
-            keep_dirs: false,
             file_name_only: true,
             extension_match: None,
             max_depth: None,
@@ -81,6 +75,9 @@ impl FinderBuilder {
             canonicalise: false,
             same_filesystem: false,
             thread_count: num_threads,
+            respect_gitignore: true,
+            ignore_patterns: Vec::new(),
+            ignore_glob_patterns: Vec::new(),
         }
     }
 
@@ -101,13 +98,6 @@ impl FinderBuilder {
     #[must_use]
     pub const fn case_insensitive(mut self, case_insensitive: bool) -> Self {
         self.case_insensitive = case_insensitive;
-        self
-    }
-
-    /// Set whether to keep directories in results,defaults to false
-    #[must_use]
-    pub const fn keep_dirs(mut self, keep_dirs: bool) -> Self {
-        self.keep_dirs = keep_dirs;
         self
     }
 
@@ -230,6 +220,27 @@ impl FinderBuilder {
         self
     }
 
+    /// Set whether to respect `.gitignore` rules, defaults to true
+    #[must_use]
+    pub const fn respect_gitignore(mut self, yesorno: bool) -> Self {
+        self.respect_gitignore = yesorno;
+        self
+    }
+
+    /// Set regex patterns that should be ignored during traversal.
+    #[must_use]
+    pub fn ignore_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.ignore_patterns = patterns;
+        self
+    }
+
+    /// Set glob patterns that should be ignored during traversal.
+    #[must_use]
+    pub fn ignore_glob_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.ignore_glob_patterns = patterns;
+        self
+    }
+
     /**
     Builds a [`Finder`] instance with the configured options.
 
@@ -264,7 +275,6 @@ impl FinderBuilder {
             self.pattern.as_ref(),
             self.hide_hidden,
             self.case_insensitive,
-            self.keep_dirs,
             self.file_name_only,
             self.extension_match,
             self.max_depth,
@@ -273,6 +283,9 @@ impl FinderBuilder {
             self.file_type,
             self.time_filter,
             self.use_glob,
+            self.respect_gitignore,
+            self.ignore_patterns,
+            self.ignore_glob_patterns,
         )?;
 
         let lambda: FilterType = |rconfig, rdir, rfilter| {

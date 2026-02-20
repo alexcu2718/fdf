@@ -20,7 +20,7 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 This is primarily a learning and performance exploration project. Whilst already useful and performant, it remains under active development towards a stable 1.0 release. The name 'fdf' is a temporary placeholder.
 
-The implemented subset performs exceptionally well, surpassing fd in equivalent feature sets, though fd offers broader functionality. This project focuses on creating the best possible tool.
+The implemented subset performs exceptionally well. This project focuses on creating the best possible tool.
 
 Development can be a bit slow because ideas take a while to develop,
 Sometimes I don't feel like doing something until I know I have a *good* way to implement something
@@ -36,14 +36,15 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 - FreeBSD (x86_64)
 - NetBSD (x86_64)
 - OpenBSD (x86_64)
-- Solaris(x86_64)
+- Solaris/Illumos(x86_64)
 
 ### Compiles with Limited Testing
 
 *Note: GitHub Actions does not yet provide Rust 2024 support for some(most of these) platforms. Additional checks will be added when available.*
 
 - Android (tested on my phone)
-- Illumos (Solaris works, illumos is essentially identical, TODO)
+
+Other Operating systems eg: AIX, untested. (Too many POSIX systems to test!)
 
 ### Not Yet Supported
 
@@ -130,10 +131,16 @@ Rough tests indicate a significant 75%+ speedup on BSD's/Illumos/Solaris but mac
 | warm-cache `.' '/tmp/llvm-project' -HI --type e`                       | 49.2 ± 2.0      | 105.6 ± 3.7     | 2.15x     | 2.15 ± 0.12     |
 | warm-cache `.' '/home/alexc' -HI --type x`                             | 649.2 ± 6.1     | 869.4 ± 4.1     | 1.34x     | 1.34 ± 0.01     |
 | warm-cache `.' '/tmp/llvm-project' -HI --type x`                       | 39.3 ± 2.2      | 54.4 ± 1.2      | 1.38x     | 1.38 ± 0.08     |
+| warm-cache-ignore `-H --extension 'c' '' '/home/alexc'`                | 293.0 ± 20.7    | 604.6 ± 19.1    | 2.06x     | 2.06 ± 0.16     |
+| warm-cache-ignore `.' '/home/alexc' -H`                                | 739.8 ± 183.8   | 1.453 ± 0.045   | 1.96x     | 1.96 ± 0.49     |
+| warm-cache-ignore `.' '/tmp/llvm-project' -H`                          | 137.6 ± 6.5     | 230.4 ± 10.1    | 1.67x     | 1.67 ± 0.11     |
+| warm-cache-ignore `-H '.*[0-9].*(md\|\.c)$' '/home/alexc'`             | 696.4 ± 47.3    | 1.305 ± 0.057   | 1.87x     | 1.87 ± 0.15     |
+| warm-cache-ignore `-H --size +1mb '' '/home/alexc'`                    | 1.244 ± 0.076   | 2.505 ± 0.135   | 2.01x     | 2.01 ± 0.16     |
+| warm-cache-ignore `.' '/tmp/llvm-project' -H --type e`                 | 230.1 ± 10.4    | 324.0 ± 24.3    | 1.41x     | 1.41 ± 0.12     |
 
 ```
 
---*Average Speedup:  2.16x*--
+--*Average Speedup:  2.11x*--
 
 ## Distinctions from fd/find
 
@@ -144,8 +151,6 @@ When following symlinks, behaviour will vary slightly. For example, fd can enter
 whereas my implementation prevents hangs. It may, however, return more results than expected.
 
 To avoid issues, use --same-file-system when traversing symlinks. Both fd and find also handle them poorly without such flags. My approach ensures the program always terminates safely, even in complex directories like ~/.steam, ~/.wine, /sys, and /proc.
-
-The flag -I includes directories in output(as opposed to ignore files), I will change this in future.
 
 ## Technical Highlights
 
@@ -158,6 +163,8 @@ The flag -I includes directories in output(as opposed to ignore files), I will c
 -**Also has an optimised path for `FreeBSD` using `getdirentries`**
 
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
+
+- ** An optimised gitignore parser with 5x fewer stat64/statx calls.
 
 - **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)
 
@@ -261,8 +268,6 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 
 ### Feature Enhancements (Planned)
 
-More elaborate improvements/fixes discussed [at this link]( ./IMPROVEMENTS.md   )
-
 **API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 
 **POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris/Android (the other ones are embedded mostly, correct me if i'm wrong!), I have tentative work for other OS'es, but ultimately it is hard to even emulate these! Such as l4re,horizon etc.
@@ -332,9 +337,6 @@ Options:
   -a, --absolute-path
           Starts with the directory entered being resolved to full
 
-  -I, --include-dirs
-          Include directories, defaults to off
-
   -L, --follow
           Include symlinks in traversal,defaults to false
 
@@ -350,11 +352,6 @@ Options:
   -d, --depth <DEPTH>
           Retrieves only traverse to x depth
 
-      --generate <GENERATE>
-          Generate shell completions
-
-          [possible values: bash, elvish, fish, powershell, zsh]
-
   -p, --full-path
           Use a full path for regex matching, default to false
 
@@ -368,7 +365,16 @@ Options:
           Only traverse the same filesystem as the starting directory
 
   -0, --print0
-          Makes all output null terminated as opposed to newline terminated, only applies to non-coloured output and redirected(useful for xargs)
+
+
+  -I, --no-ignore
+          Do not respect .gitignore rules during traversal
+
+      --ignore <PATTERN>
+          Ignore paths that match this regex pattern (repeatable)
+
+      --ignoreg <GLOB>
+          Ignore paths that match this glob pattern (repeatable)
 
       --size <SIZE>
           Filter by file size
@@ -409,7 +415,7 @@ Options:
           - -10mb: smaller than 10MB
           - -1gib: smaller than 1GiB
 
-  -T, --time <TIME>
+  -T, --time-modified <TIME>
           Filter by file modification time
 
           PREFIXES:
@@ -443,17 +449,7 @@ Options:
           - 1d..2h: modified between 1 day and 2 hours ago
 
   -t, --type <TYPE_OF>
-          Filter by file type:
-            d, dir, directory    - Directory
-            u, unknown           - Unknown type
-            l, symlink, link     - Symbolic link
-            f, file, regular     - Regular file
-            p, pipe, fifo        - Pipe/FIFO
-            c, char, chardev     - Character device
-            b, block, blockdev   - Block device
-            s, socket            - Socket
-            e, empty             - Empty file
-            x, exec, executable  - Executable file
+          Filter by file type
 
           Possible values:
           - d: Directory
@@ -467,12 +463,21 @@ Options:
           - e: Empty file
           - x: Executable file
 
+      --generate <GENERATE>
+
+              Generate shell completions for bash/zsh/fish/powershell
+              To use: eval "$(fdf --generate SHELL)"
+              Example:
+              # Add to shell config for permanent use
+              echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc && source ~/.zshrc
+
+          [possible values: bash, elvish, fish, powershell, zsh]
+
   -h, --help
           Print help (see a summary with '-h')
 
   -V, --version
           Print version
-
 ```
 
 ### Potential Future Enhancements
@@ -496,11 +501,3 @@ Options:
 - Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.
 - Although the cost of allocations doesn't seem too bad, I will look at this again at some point.
 - Maybe achieved via a lending iterator type approach? See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)
-
-#### 4. Implement an --ignore pattern and gitignore type system
-
-Implementing this feature will require careful consideration. As the iterators discover directories, we may need to create a dynamic buffer of regex patterns—converted from globs using a function such as `glob_to_regex`. The challenge lies in sharing these regexes across threads, because the work-stealing scheduler can distribute directory entries to different threads. I have already done some preliminary work in this area: I currently use `thread_local` storage for my primary regex filtering. A similar approach could be employed here, maintaining a dynamic thread-local buffer of regexes to reduce contention. Although the regex objects themselves are thread-safe (read-only), the scratch space they use can suffer from heavy contention under concurrent access.
-
-Given this complexity, I am not rushing to implement it immediately.
-
-As for the ignore flag itself, a simple version is straightforward. The main decision is how to specify patterns: perhaps `--ignore` for regex-based patterns and `--ignoreg` for glob-based patterns? This would offer flexibility, but the exact interface needs to be decided.

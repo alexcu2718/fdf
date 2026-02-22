@@ -314,6 +314,7 @@ echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc
 echo 'eval "$(fdf --generate bash)"' >> ~/.bashrc
 
 ## Options
+
 Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
 Arguments:
@@ -370,10 +371,13 @@ Options:
           Only traverse the same filesystem as the starting directory
 
   -0, --print0
-
+          Makes all output null terminated as opposed to newline terminated only applies to non-coloured output and redirected(useful for xargs)
 
   -I, --no-ignore
           Do not respect .gitignore rules during traversal
+
+      --strip-cwd-prefix
+          Strip the leading './' from results when searching the current directory
 
       --ignore <PATTERN>
           Ignore paths that match this regex pattern (repeatable)

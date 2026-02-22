@@ -10,6 +10,7 @@ use fdf::{
 use std::env;
 use std::ffi::OsString;
 use std::io::stdout;
+use std::os::unix::ffi::OsStrExt as _;
 
 #[cfg(all(
     any(target_os = "linux", target_os = "android", target_os = "macos"),
@@ -153,8 +154,8 @@ struct Args {
         alias = "null-terminated",
         required = false,
         default_value_t = false,
-        help = "Makes all output null terminated as opposed to newline terminated only applies to non-coloured output and redirected(useful for xargs)",
-        long_help = ""
+        help = "Makes all output null terminated",
+        long_help = "Makes all output null terminated as opposed to newline terminated only applies to non-coloured output and redirected(useful for xargs)"
     )]
     print0: bool,
     #[arg(
@@ -164,6 +165,12 @@ struct Args {
         help = "Do not respect .gitignore rules during traversal"
     )]
     no_ignore: bool,
+    #[arg(
+        long = "strip-cwd-prefix",
+        default_value_t = false,
+        help = "Strip the leading './' from results when searching the current directory"
+    )]
+    strip_cwd_prefix: bool,
     #[arg(
         long = "ignore",
         value_name = "PATTERN",
@@ -282,6 +289,10 @@ fn main() -> Result<(), SearchConfigError> {
     }
 
     let path: OsString = args.directory.unwrap_or_else(|| ".".into());
+    // Only strip `./` when the root is actually `.` or `./`; that is the only case
+    // where every emitted path is guaranteed to carry that prefix (safety invariant).
+    let root_is_cwd = matches!(path.as_bytes(), b"." | b"./");
+    let strip_cwd_prefix = args.strip_cwd_prefix && root_is_cwd;
 
     let finder = Finder::init(&path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
@@ -310,6 +321,7 @@ fn main() -> Result<(), SearchConfigError> {
         .limit(args.top_n)
         .null_terminated(args.print0)
         .nocolour(args.no_colour)
+        .strip_leading_dot_slash(strip_cwd_prefix)
         .print_errors(args.show_errors)
         .print()?;
 

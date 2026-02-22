@@ -35,6 +35,7 @@ where
     sort: bool,
     print_errors: bool,
     null_terminated: bool,
+    strip_leading_dot_slash: bool,
     errors: Option<Arc<Mutex<Vec<TraversalError>>>>,
     paths: I,
 }
@@ -51,6 +52,7 @@ where
             sort: false,
             print_errors: false,
             null_terminated: false,
+            strip_leading_dot_slash: false,
             errors: None,
             paths,
         }
@@ -95,6 +97,13 @@ where
     }
 
     #[must_use]
+    /// Strip the leading `./` from results when the search root is the current directory
+    pub const fn strip_leading_dot_slash(mut self, strip: bool) -> Self {
+        self.strip_leading_dot_slash = strip;
+        self
+    }
+
+    #[must_use]
     pub(crate) fn errors(mut self, errors: Option<Arc<Mutex<Vec<TraversalError>>>>) -> Self {
         self.errors = errors;
         self
@@ -125,6 +134,7 @@ where
                 collected.into_iter().take(self.limit),
                 use_colour,
                 self.null_terminated,
+                self.strip_leading_dot_slash,
             )?;
         } else {
             Self::write_iter(
@@ -132,6 +142,7 @@ where
                 self.paths.take(self.limit),
                 use_colour,
                 self.null_terminated,
+                self.strip_leading_dot_slash,
             )?;
         }
 
@@ -162,15 +173,16 @@ where
         iter_paths: J,
         use_colour: bool,
         null_terminated: bool,
+        strip_leading_dot_slash: bool,
     ) -> std::io::Result<()>
     where
         W: Write,
         J: IntoIterator<Item = DirEntry>,
     {
         if use_colour {
-            write_coloured(writer, iter_paths)
+            write_coloured(writer, iter_paths, strip_leading_dot_slash)
         } else {
-            write_nocolour(writer, iter_paths, null_terminated)
+            write_nocolour(writer, iter_paths, null_terminated, strip_leading_dot_slash)
         }
     }
 }
@@ -196,7 +208,12 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 
 /// A convenient function to print results
 #[inline]
-fn write_nocolour<W, I>(writer: &mut W, iter_paths: I, null_terminated: bool) -> std::io::Result<()>
+fn write_nocolour<W, I>(
+    writer: &mut W,
+    iter_paths: I,
+    null_terminated: bool,
+    strip_leading_dot_slash: bool,
+) -> std::io::Result<()>
 where
     W: Write,
     I: IntoIterator<Item = DirEntry>,
@@ -207,9 +224,16 @@ where
     } else {
         NEWLINES_PLAIN
     };
+    // Branchless offset: 2 when stripping `./`, 0 otherwise.
+    // Every path is guaranteed to start with `./` when the root was `./`.
+    let start = usize::from(strip_leading_dot_slash) * 2;
 
     for path in iter_paths {
-        writer.write_all(&path)?;
+        // SAFETY: when strip_leading_dot_slash is true the root was `./`, so every
+        // emitted path is guaranteed to start with `./` (len >= 2). When false,
+        // start == 0 so we just take the full slice, which is always valid.
+        let bytes = unsafe { path.get_unchecked(start..) };
+        writer.write_all(bytes)?;
         // We're indexing in bounds (trivially, either 0 or 1, this should never need to be checked but im too lazy to check assembly on it)
         // If it's a directory, we access index 1, which adds a / to the end
         writer.write_all(terminator_array[usize::from(path.is_dir())])?;
@@ -220,14 +244,22 @@ where
 }
 
 #[inline]
-fn write_coloured<W, I>(writer: &mut W, iter_paths: I) -> std::io::Result<()>
+fn write_coloured<W, I>(
+    writer: &mut W,
+    iter_paths: I,
+    strip_leading_dot_slash: bool,
+) -> std::io::Result<()>
 where
     W: Write,
     I: IntoIterator<Item = DirEntry>,
 {
+    // as aove.
+    let start = usize::from(strip_leading_dot_slash) * 2;
     for path in iter_paths {
+        // SAFETY: same guarantee as write_nocolour — root was `./` so len >= 2.
+        let bytes = unsafe { path.get_unchecked(start..) };
         writer.write_all(extension_colour(&path))?;
-        writer.write_all(&path)?;
+        writer.write_all(bytes)?;
         writer.write_all(NEWLINES_RESET[usize::from(path.is_dir())])?;
     }
     Ok(())

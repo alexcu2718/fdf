@@ -576,9 +576,7 @@ impl Finder {
             ignore_ctx: parent_ignore_ctx,
         } = work_item;
 
-        if self.search_config.matches_ignore_path(dir.as_bytes())
-            || self.is_gitignored(&dir, &parent_ignore_ctx)
-        {
+        if self.matches_ignore_path(&dir) || self.is_gitignored(&dir, &parent_ignore_ctx) {
             return;
         }
 

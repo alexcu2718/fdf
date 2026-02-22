@@ -80,13 +80,13 @@ impl ReadDir {
 
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        let dir = dir_path.opendir()?; //read the directory and get the pointer to the DIR structure.
+        let fd = dir_path.open()?;
         let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
         // Mutate the buffer to contain the full path, then add a null terminator and record the new length
         // We use this length to index to get the filename (store full path -> index to get filename)
 
-        // SAFETY: dir is a non null pointer,the pointer is guaranteed to be valid
-        let fd = unsafe { FileDes(libc::dirfd(dir.as_ptr())) };
+        // SAFETY: fd is a valid,the pointer is guaranteed to be non null (opened with O_DIRECTORY)
+        let dir = unsafe { NonNull::new_unchecked(libc::fdopendir(fd.0)) };
         debug_assert!(fd.is_open(), "We expect it to be open");
 
         Ok(Self {

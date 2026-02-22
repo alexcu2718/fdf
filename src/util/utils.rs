@@ -181,7 +181,6 @@ where
 
         debug_assert!(!self.is_empty(), "should never be empty");
         debug_assert!(!self.ends_with(b"/"), "file path ends with a slash!");
-        debug_assert!(!self.is_empty(), "should never be empty");
         memrchr(b'/', self).map_or(1, |pos| pos + 1)
     }
 }

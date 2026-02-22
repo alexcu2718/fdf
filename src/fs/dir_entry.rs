@@ -86,7 +86,6 @@ use core::cell::Cell;
 use core::ffi::CStr;
 use core::ffi::c_char;
 use core::fmt;
-use core::ptr::NonNull;
 
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, fstatat, lstat,
@@ -314,16 +313,6 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "illumos",
-        target_os = "solaris"
-    ))]
     /**
      Opens the directory and returns a file descriptor.
 
@@ -425,35 +414,6 @@ impl DirEntry {
         Ok(FileDes(filedes))
     }*/
 
-    /**  Opens a directory stream for reading directory entries.
-
-    This function returns a `NonNull<DIR>` pointer to the directory stream,
-    which can be used with `readdir` to iterate over directory entries.
-
-
-    # Errors
-
-    Returns an error if:
-    - The directory doesn't exist or can't be opened
-    - The path doesn't point to a directory
-    - Permission is denied
-    - System resources are exhausted
-    */
-    #[inline]
-    pub(crate) fn opendir(&self) -> Result<NonNull<libc::DIR>> {
-        // SAFETY: we are passing a null terminated directory to opendir
-
-        let dir = unsafe { libc::opendir(self.as_ptr()) };
-        // This function reads the directory entries and populates the iterator.
-        // It is called when the iterator is created or when it needs to be reset.
-        if dir.is_null() {
-            return_os_error!()
-        }
-        // SAFETY: know it's non-null
-        Ok(unsafe { NonNull::new_unchecked(dir) }) // Return a pointer to the start `DIR` stream
-    }
-
-    // Converts to a lossy string for ease of use
     #[inline]
     #[must_use]
     pub fn to_string_lossy(&self) -> std::borrow::Cow<'_, str> {
@@ -635,9 +595,7 @@ impl DirEntry {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents;
         const BUF_SIZE: usize = 500; //pretty arbitrary.
-        #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
-        const MINIMUM_DIRENT_SIZE: isize =
-            core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8) as _;
+        const MINIMUM_DIRENT_SIZE: isize = 32;
         debug_assert!(
             self.file_type == FileType::Directory || self.file_type == FileType::Symlink,
             " Only expect dirs/symlinks to pass through this private func"

@@ -109,12 +109,17 @@ impl FinderBuilder {
         self
     }
 
-    /// Set extension to match, defaults to no extension
+    /// Set extension to match, defaults to no extension.
+    /// `-e rs` and `-e .rs` both match `*.rs`, and `-e '.'` matches files
+    /// whose name ends with a dot (empty extension after the dot).
     #[must_use]
     pub fn extension<C: AsRef<str>>(mut self, extension: C) -> Self {
-        let ext = extension.as_ref().as_bytes();
+        let input = extension.as_ref().as_bytes();
+        // Strip one leading dot so that `-e rs` and `-e .rs` are equivalent,
+        // and `-e '.'` stores Some(b"") which matches filenames ending in '.'.
+        let ext = input.strip_prefix(b".").unwrap_or(input);
 
-        if ext.is_empty() {
+        if input.is_empty() {
             self.extension_match = None;
         } else {
             self.extension_match = Some(ext.into());

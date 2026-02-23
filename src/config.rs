@@ -1,7 +1,6 @@
 use crate::SearchConfigError;
 use crate::filters::{FileTypeFilter, SizeFilter, TimeFilter};
 use crate::fs::{DirEntry, FileType};
-use crate::util::BytePath as _;
 use crate::util::glob_to_regex;
 use core::num::NonZeroU32;
 use core::ops::Deref;
@@ -260,7 +259,8 @@ impl SearchConfig {
         predicate(path)
     }
 
-    /// Checks for extension match via memchr
+    /// Checks for extension match, branchlessly.
+    /// The entry is guaranteed to be a filename (no slashes) of length >= 1.
     #[inline]
     pub fn matches_extension<S>(&self, entry: &S) -> bool
     where
@@ -269,10 +269,28 @@ impl SearchConfig {
         debug_assert!(
             !entry.contains(&b'/'),
             "the filename contains a slash, some arithmetic has gone wrong somewhere!"
-        ); // Ensure that the entry is a file name and not a path
-        self.extension_match
-            .as_ref()
-            .is_none_or(|ext| entry.matches_extension(ext))
+        ); // Ensure that the entry is a file name and not a path (internal invariant for my own arithmetic)
+
+        debug_assert!(
+            entry.len() >= 1,
+            "internal invariant should always have length>=1 in matches extension"
+        );
+
+        self.extension_match.as_deref().is_none_or(|ext| {
+            let name_len = entry.len(); // guaranteed >= 1
+            // Saturating arithmetic keeps both indices in-bounds with no branches.
+            // When name_len < ext_len + 1 the suffix slice will be shorter than ext,
+            // so eq_ignore_ascii_case returns false without any explicit length guard
+            let suffix_start = name_len.saturating_sub(ext.len());
+            let dot_idx = suffix_start.saturating_sub(1);
+            // SAFETY:
+            // - `suffix_start` is in  [0, name_len], so `name[suffix_start..]` is a valid subslice.
+            // - `dot_idx` saturates to 0 when suffix_start == 0; name_len >= 1 guarantees index 0 is valid.
+            let suffix = unsafe { entry.get_unchecked(suffix_start..) };
+            // SAFETY: as above
+            let dot_byte = unsafe { *entry.get_unchecked(dot_idx) };
+            dot_byte == b'.' && suffix.eq_ignore_ascii_case(ext)
+        })
     }
 
     /**

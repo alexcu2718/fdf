@@ -135,8 +135,6 @@ where
     T: Deref<Target = [u8]>,
 {
     fn extension(&self) -> Option<&[u8]>;
-    /// Checks if file extension matches given bytes (case-insensitive)
-    fn matches_extension(&self, ext: &[u8]) -> bool;
 
     /// Gets index of filename component start
     fn file_name_index(&self) -> usize;
@@ -164,12 +162,6 @@ where
         .map(|pos| unsafe { self.get_unchecked(pos + 1..) })
     }
 
-    #[inline]
-    fn matches_extension(&self, ext: &[u8]) -> bool {
-        self.extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
-    }
-
     /// Get the length of the basename of a path (up to and including the last '/')
     /// Returns 0 for length 1 byte paths
     #[inline]
@@ -181,7 +173,6 @@ where
 
         debug_assert!(!self.is_empty(), "should never be empty");
         debug_assert!(!self.ends_with(b"/"), "file path ends with a slash!");
-        debug_assert!(!self.is_empty(), "should never be empty");
         memrchr(b'/', self).map_or(1, |pos| pos + 1)
     }
 }

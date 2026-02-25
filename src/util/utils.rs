@@ -250,7 +250,8 @@ My Cat Diavolo is cute.
 // TODO! this only fails on solaris/illumos when going from root, WHY???? that makes no sense. I had to remove solaris/illumos support for this function. I am being too lazy to debug it
 // I never came across the issue simply because I never tried searching from root on my VM, until today.... what a  weird bug JFC, I should investigate this if i feel like it.
 // REALLY REALLY WEIRD
-// nvm FOUND OUT WHY: d_reclen is 32 in /proc for illumos/solaris? WHY? this will never work on these systems due to this reason
+// nvm FOUND OUT WHY: d_reclen is 32 in /proc for illumos/solaris for small files. WHY? this will never work on these systems due to this reason
+// leaving this here as a warning to all, don't assume too much, test!
 // such a weird weird anomaly...
 
 //cargo-asm --lib fdf::util::utils::dirent_const_time_strlen (put to inline(never) to display)

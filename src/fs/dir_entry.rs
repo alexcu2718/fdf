@@ -635,9 +635,9 @@ impl DirEntry {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents;
         const BUF_SIZE: usize = 500; //pretty arbitrary.
-        #[allow(clippy::cast_possible_wrap)] // need to match i64 semantics(doesnt matter)
-        const MINIMUM_DIRENT_SIZE: isize =
-            core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8) as _;
+        // On Linux it's 24, on solaris it's 24/32
+        // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
+        const MINIMUM_DIRENT_SIZE: isize = 32;
         debug_assert!(
             self.file_type == FileType::Directory || self.file_type == FileType::Symlink,
             " Only expect dirs/symlinks to pass through this private func"
@@ -650,7 +650,7 @@ impl DirEntry {
 
             // SAFETY: Closed only once confirmed open
             unsafe { libc::close(fd.0) };
-            // if empty, then only 2 entries expected, . and .., this means only 48 or below (or neg if errors, who cares.)
+            // if empty, then only 2 entries expected, . and .., this means only 64 or below (or neg if errors, who cares.)
             return dents <= 2 * MINIMUM_DIRENT_SIZE;
         }
         false //return false is open fails

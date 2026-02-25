@@ -572,17 +572,21 @@ impl DirEntry {
             "checking the only entries to this are directories"
         );
 
-        let Ok(dir) = self.opendir() else {
+        // SAFETY: guaranteed null terminated path
+        let dir = unsafe { libc::opendir(self.as_ptr()) };
+
+        if dir.is_null() {
             return false;
-        };
+        }
+
         // SAFETY: dir valid to read
         let result = unsafe {
-            readdir64(dir.as_ptr()); // Skip "."
-            readdir64(dir.as_ptr()); // Skip ".."
-            readdir64(dir.as_ptr()).is_null()
+            readdir64(dir); // Skip "."
+            readdir64(dir); // Skip ".."
+            readdir64(dir).is_null()
         };
         // SAFETY: closing a valid directory
-        unsafe { closedir(dir.as_ptr()) };
+        unsafe { closedir(dir) };
         result
     }
 

@@ -163,3 +163,23 @@ getdirentries64(0x3, 0x7FEE86013C00, 0x2000)             = 112 0
 getdirentries64(0x3, 0x7FEE86013C00, 0x2000)             = 344 0
 
 */
+
+//TODO, use this info for dragonflybsd when I add support
+
+/*
+
+root@:~ # kdump | grep getdirentries | head
+ 1036:4    fd       CALL  getdirentries(0x5,0x8015b8000,0x4000,0x7fdfe0402178)
+ 1036:4    fd       RET   getdirentries 496/0x1f0
+ 1036:4    fd       CALL  getdirentries(0x5,0x8015b8000,0x4000,0x7fdfe0402178)
+ 1036:4    fd       RET   getdirentries 0
+ 1036:4    fd       CALL  getdirentries(0x5,0x8015b8000,0x4000,0x7fdfe0402178)
+ 1036:4    fd       RET   getdirentries 2776/0xad8
+ 1036:6    fd       CALL  getdirentries(0x8,0x802910000,0x4000,0x7fdfe0804178)
+ 1036:4    fd       CALL  getdirentries(0x5,0x8015b8000,0x4000,0x7fdfe0402178)
+ 1036:6    fd       RET   getdirentries 216/0xd8
+ 1036:6    fd       CALL  getdirentries(0x8,0x802910000,0x4000,0x7fdfe0804178)
+root@:~ # uname -a
+DragonFly  6.4-RELEASE DragonFly v6.4.2-RELEASE #11: Fri May  9 14:08:53 EDT 2025     root@www.shiningsilence.com:/usr/obj/home/justin/release/6_4/sys/X86_64_GENERIC  x86_64
+
+*/

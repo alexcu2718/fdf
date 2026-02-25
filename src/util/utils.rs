@@ -32,7 +32,7 @@ use core::ops::Deref;
     target_os = "illumos",
     target_os = "solaris"
 ))]
-pub unsafe fn getdents(fd: i32, buffer_ptr: *mut c_char, buffer_size: usize) -> isize {
+pub unsafe fn getdents64(fd: i32, buffer_ptr: *mut c_char, buffer_size: usize) -> isize {
     #[cfg(any(
         target_os = "openbsd",
         target_os = "solaris",
@@ -53,6 +53,7 @@ pub unsafe fn getdents(fd: i32, buffer_ptr: *mut c_char, buffer_size: usize) -> 
     } // We can do similar linking for getdents64 but prefer not to use the indirection if can be avoided.
 
     //TODO add dragonfly here(?) TODO once they support Rust 2024
+    // NVM it seems dragonfly uses getdirentries, yay...
     #[cfg(any(
         target_os = "openbsd",
         target_os = "solaris",
@@ -155,7 +156,8 @@ where
             self.get_unchecked(..self.len().saturating_sub(1))
         }) //exclude cases where the . is the final character
         // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
-        // The slice `..self.len() - 1` is a subslice of `self`.
+        // Due to an internal invariant, filepaths going down here always are length >=2
+        // (I should really be less hacky in this approach.)
         // Therefore, `pos` is a valid index into `self`.
         // `pos + 1` is also guaranteed to be a valid index.
         // We do this to avoid any runtime checks

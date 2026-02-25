@@ -3,8 +3,6 @@ mod memchr_derivations;
 mod printer;
 mod utils;
 pub use glob::{Error, glob_to_regex};
-// #[allow(unused)]
-// mod ignore;
 pub use memchr_derivations::memrchr;
 
 #[cfg(any(
@@ -31,7 +29,7 @@ pub use utils::dirent_const_time_strlen;
     target_os = "illumos",
     target_os = "solaris"
 ))]
-pub use utils::getdents;
+pub use utils::getdents64;
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 pub use utils::getdirentries64;
 

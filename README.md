@@ -59,7 +59,7 @@ Other Operating systems eg: AIX, untested. (Too many POSIX systems to test!)
 
 ## Testing
 
-The project includes comprehensive testing with 90+ Rust tests and 15+ correctness benchmarks comparing against fd.
+The project includes comprehensive testing with 100+ Rust tests and 15+ correctness benchmarks comparing against fd.
 
 Note: Miri validation (Rust's undefined behaviour detector) cannot be used due to the extensive libc calls. Intensive testing and valgrind validation are used instead. See the [valgrind script here](./scripts/valgrind-test.sh)
 

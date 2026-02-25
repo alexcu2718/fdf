@@ -179,7 +179,7 @@ where
     ))]
     pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> isize {
         // SAFETY: we're passing a valid buffer
-        unsafe { crate::util::getdents(fd.0, self.as_mut_ptr().cast(), SIZE) }
+        unsafe { crate::util::getdents64(fd.0, self.as_mut_ptr().cast(), SIZE) }
     }
 
     #[inline]

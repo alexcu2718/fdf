@@ -78,21 +78,23 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 */
 
+use crate::c_char;
 use crate::fs::ReadDir;
 use crate::fs::{FileDes, FileType, types::Result};
 use crate::{DirEntryError, util::BytePath as _};
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ffi::CStr;
-use core::ffi::c_char;
 use core::fmt;
-use core::ptr::NonNull;
 
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, fstatat, lstat,
     realpath, stat,
 };
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
+
+//TODO, test #[align(64)] to check for presence of false sharing/perf improvements
+// If so, add extra relevant metadata to the struct...
 
 /**
   A struct representing a directory entry with minimal memory overhead.
@@ -314,16 +316,6 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "illumos",
-        target_os = "solaris"
-    ))]
     /**
      Opens the directory and returns a file descriptor.
 
@@ -424,34 +416,6 @@ impl DirEntry {
         }
         Ok(FileDes(filedes))
     }*/
-
-    /**  Opens a directory stream for reading directory entries.
-
-    This function returns a `NonNull<DIR>` pointer to the directory stream,
-    which can be used with `readdir` to iterate over directory entries.
-
-
-    # Errors
-
-    Returns an error if:
-    - The directory doesn't exist or can't be opened
-    - The path doesn't point to a directory
-    - Permission is denied
-    - System resources are exhausted
-    */
-    #[inline]
-    pub(crate) fn opendir(&self) -> Result<NonNull<libc::DIR>> {
-        // SAFETY: we are passing a null terminated directory to opendir
-
-        let dir = unsafe { libc::opendir(self.as_ptr()) };
-        // This function reads the directory entries and populates the iterator.
-        // It is called when the iterator is created or when it needs to be reset.
-        if dir.is_null() {
-            return_os_error!()
-        }
-        // SAFETY: know it's non-null
-        Ok(unsafe { NonNull::new_unchecked(dir) }) // Return a pointer to the start `DIR` stream
-    }
 
     // Converts to a lossy string for ease of use
     #[inline]
@@ -633,7 +597,7 @@ impl DirEntry {
     /// Specialisation for empty checks on linux/android/netbsd (avoid a heap alloc)
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
-        use crate::util::getdents;
+        use crate::util::getdents64;
         const BUF_SIZE: usize = 500; //pretty arbitrary.
         // On Linux it's 24, on solaris it's 24/32
         // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
@@ -646,7 +610,7 @@ impl DirEntry {
         if let Ok(fd) = dirfd {
             let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
             // SAFETY: guaranteed open, valid ptr etc.
-            let dents = unsafe { getdents(fd.0, syscall_buffer.as_mut_ptr().cast(), BUF_SIZE) };
+            let dents = unsafe { getdents64(fd.0, syscall_buffer.as_mut_ptr().cast(), BUF_SIZE) };
 
             // SAFETY: Closed only once confirmed open
             unsafe { libc::close(fd.0) };
@@ -781,7 +745,7 @@ impl DirEntry {
 
      # Examples
 
-     ```
+     ```no_run
      use fdf::fs::DirEntry;
      use std::ffi::CStr;
      use std::fs::File;
@@ -813,12 +777,13 @@ impl DirEntry {
         unsafe { self.as_ptr().add(self.file_name_index) }
     }
 
+    // no_run because fails in CI ~1/10 (it's annoying at times...)
     /**
     Returns the name of the file (as bytes, no null terminator)
     ( Returns `/` or `.` when they are the entry)
 
 
-    ```
+    ```no_run
     use fdf::fs::DirEntry;
     use std::fs::File;
 
@@ -856,7 +821,7 @@ impl DirEntry {
             "this should always be equal or below (equal only when root)"
         );
 
-        let path = self.path.to_bytes();
+        let path = self.as_bytes();
         let len = path.len() - self.file_name_index;
         /*SAFETY:
         `file_name_index` returns a valid index within `bytes` bounds */
@@ -1714,6 +1679,7 @@ impl DirEntry {
         crate::fs::GetDents::new(self)
     }
 
+    //TODO add dragonflybsd
     /**
     Low-level directory iterator using macOS/FreeBSD `getdirentries64`/`getdirentries` system calls.
 

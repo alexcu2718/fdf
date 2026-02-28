@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.8.8"
+version = "0.8.9"
 rust-version = "1.90.0"
 edition = "2024"
 license = "MIT"
@@ -24,7 +24,7 @@ crossbeam-deque = "0.8.6"
 crossbeam-channel = "0.5.14"
 dashmap = { version = "6.1.0", features = ["inline"] }
 libc = "0.2.181"
-regex = { version = "1.12.2", features = ["perf"] }
+regex = { version = "1.12.2", features = ["perf", "perf-dfa-full"] }
 ignore = { version = "0.4.24", features = ["simd-accel"] }
 thread_local = "1.1.9"
 [target.'cfg(any(target_os = "linux",target_os="macos",target_os="android"))'.dependencies]

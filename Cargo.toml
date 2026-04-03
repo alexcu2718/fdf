@@ -12,13 +12,13 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
 [build-dependencies]
-libc = { version = "0.2.182" }
-cc = "1.2.56"
+libc = { version = "0.2.184" }
+cc = "1.2.59"
 
 [dependencies]
-chrono = { version = "0.4.42", default-features = false, features = ["std"] }
+chrono = { version = "0.4.44", default-features = false, features = ["std"] }
 clap = { version = "4.5.60", features = ["derive"] }
-clap_complete = "4.5.66"
+clap_complete = "4.6.0"
 compile_time_ls_colours = { version = "0.5.1", features = ["phf"] }
 crossbeam-deque = "0.8.6"
 crossbeam-channel = "0.5.14"

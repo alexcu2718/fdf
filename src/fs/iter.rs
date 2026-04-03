@@ -126,8 +126,9 @@ impl Drop for ReadDir {
         );
     }
     // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
-    // TODO! Investigate how std lib manages to not piss off FDsan
-    //( i want to pass ownership to the FileDes BUT android complains, even though it works. weird.)
+    // This is because it's UB to close via file descriptor according to GNU docs, if that file descriptor
+    // was obtained from the `dirfd()`
+    //( i want to pass ownership to the FileDes BUT due to above limitations, I ned a different approach.
 }
 
 /**
@@ -513,7 +514,11 @@ pub trait DirentConstructor {
         // - Both pointers are properly aligned for byte copying
         // - `name_len` is within `buffer` bounds
         // Copy the name into the final portion
-        unsafe { d_name.copy_to_nonoverlapping(buffer.as_mut_ptr().cast(), name_len) };
+        unsafe {
+            d_name
+                .cast::<u8>()
+                .copy_to_nonoverlapping(buffer.as_mut_ptr(), name_len)
+        };
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         let full_path = unsafe {
             CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..required_len))

@@ -17,7 +17,7 @@ Edited slightly, essentially providing a type safe wrapper to inforce internal i
 //!
 //! Look at the [`Unique` definition](crate::fdf) for more info.
 #![allow(clippy::missing_inline_in_public_items)]
-use crate::dirent64;
+use crate::{c_char, dirent64};
 use core::convert::From;
 use core::fmt;
 use core::marker::PhantomData;
@@ -98,12 +98,13 @@ impl<T: ?Sized> Unique<T> {
     /// Creates a new `Unique` if `ptr` is non-null.
     #[inline]
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub const fn new(ptr: *mut T) -> Option<Self> {
-        if ptr.is_null() {
-            None
-        } else {
+    pub const fn new(ptr: *const T) -> Option<Self> {
+        #[expect(clippy::if_not_else, reason = "prefer to take this branch")]
+        if !ptr.is_null() {
             // SAFETY: The pointer has already been checked and is not null.
             Some(unsafe { Self::new_unchecked(ptr) })
+        } else {
+            None
         }
     }
 
@@ -112,12 +113,6 @@ impl<T: ?Sized> Unique<T> {
     #[must_use]
     pub const fn as_ptr(self) -> *const T {
         self.0.as_ptr().cast_const()
-    }
-
-    #[inline]
-    #[must_use]
-    pub const fn as_mut_ptr(self) -> *mut T {
-        self.0.as_ptr()
     }
 
     /// Dereferences the content.
@@ -182,7 +177,7 @@ impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
         unique.0
     }
 }
-
+// TODO, documentation, just being lazy.
 impl Unique<dirent64> {
     #[inline]
     #[must_use]
@@ -200,7 +195,7 @@ impl Unique<dirent64> {
 
     #[inline]
     #[must_use]
-    pub const fn d_name(&self) -> *const crate::c_char {
+    pub const fn d_name(&self) -> *const c_char {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { access_dirent!(self.0.as_ptr(), d_name) }
     }

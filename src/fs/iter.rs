@@ -150,7 +150,6 @@ pub struct GetDents {
     /// File descriptor of the open directory, wrapped for automatic resource management
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
-    /// Approximately 32kB in size, optimised for typical directory traversal
     pub(crate) syscall_buffer: SyscallBuffer,
     /// Buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
@@ -322,7 +321,7 @@ impl GetDents {
         Filtering of these entries should be handled by the caller if desired.
 
         # Returns
-        - `Some(NonNull<dirent64>)` when a valid directory entry is available
+        - `Some(Unique<dirent64>)` when a valid directory entry is available
         - `None` when the buffer is exhausted and no more entries can be read
 
         # Behavior
@@ -356,8 +355,8 @@ impl GetDents {
         // SAFETY: dirent is not null so field access is safe
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
-        // SAFETY: dirent is not null (need to cast to mut for `NonNull` sadly.)
-        unsafe { Some(Unique::new_unchecked(drnt.cast_mut())) }
+        // SAFETY: dirent is not null (
+        unsafe { Some(Unique::new_unchecked(drnt)) }
     }
 }
 
@@ -668,7 +667,7 @@ impl GetDirEntries {
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
         // SAFETY: dirent is not null
-        unsafe { Some(Unique::new_unchecked(drnt.cast_mut())) }
+        unsafe { Some(Unique::new_unchecked(drnt)) }
     }
 
     #[inline]

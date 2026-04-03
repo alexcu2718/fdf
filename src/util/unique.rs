@@ -2,11 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+/*
+
+ source taken from https://docs.rs/unique/latest/src/unique/lib.rs.html#47
+
+Edited slightly, essentially providing a type safe wrapper to inforce internal invariants rather than rely on `faith`
+
+
+
+ */
 //! This crate provides an [`Unique`] implementation
 //! without using any unstable code that would require
 //! nightly.
 //!
-//! Look at the [`Unique` definition](crate::Unique) for more info.
+//! Look at the [`Unique` definition](crate::fdf) for more info.
 #![allow(clippy::missing_inline_in_public_items)]
 use crate::dirent64;
 use core::convert::From;
@@ -14,8 +23,8 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-/// A wrapper around a raw non-null `*mut T` that indicates that the possessor
-/// of this wrapper owns the referent. Useful for building abstractions like
+/// A wrapper around a raw non-null `*const T` that indicates that the possessor
+/// of this wrapper owns the referent. Usefor building abstractions like
 /// `Box<T>`, `Vec<T>`, `String`, and `HashMap<K, V>`.
 ///
 /// Unlike `*mut T`, `Unique<T>` behaves "as if" it were an instance of `T`.
@@ -81,9 +90,9 @@ impl<T: ?Sized> Unique<T> {
     ///
     /// `ptr` must be non-null.
     #[inline]
-    pub const unsafe fn new_unchecked(ptr: *mut T) -> Self {
+    pub const unsafe fn new_unchecked(ptr: *const T) -> Self {
         // SAFETY: the caller must guarantee that `ptr` is non-null.
-        unsafe { Self(NonNull::new_unchecked(ptr), PhantomData) }
+        unsafe { Self(NonNull::new_unchecked(ptr.cast_mut()), PhantomData) }
     }
 
     /// Creates a new `Unique` if `ptr` is non-null.
@@ -134,7 +143,7 @@ impl<T: ?Sized> Unique<T> {
         // SAFETY: Unique::new_unchecked() creates a new unique and needs
         // the given pointer to not be null.
         // Since we are passing self as a pointer, it cannot be null.
-        unsafe { Unique::<U>::new_unchecked(self.as_ptr() as _) }
+        unsafe { Unique::new_unchecked(self.as_ptr().cast()) }
     }
 }
 

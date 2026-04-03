@@ -1,9 +1,11 @@
 mod glob;
 mod memchr_derivations;
 mod printer;
+mod unique;
 mod utils;
 pub use glob::{Error, glob_to_regex};
 pub use memchr_derivations::memrchr;
+pub use unique::Unique;
 
 #[cfg(any(
     target_os = "linux",

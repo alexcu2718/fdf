@@ -384,7 +384,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
         /* When the record length is 24/`MIN_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 16/17/18  the d_name starts at 19, so anything before is invalid anyway.
-        The index 16/17 will contauin the reclen, eg, for 24 it will simply be [24,0]
+        The index 16/17 will contain the reclen, eg, for 24 it will simply be [24,0]
         the index 18 will contain the d_type, if it's unknown, then it'll be 0
 
 

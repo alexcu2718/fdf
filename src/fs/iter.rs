@@ -1,3 +1,4 @@
+use crate::Unique;
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",
@@ -11,14 +12,13 @@
 use crate::fs::types::SyscallBuffer;
 use crate::fs::{DirEntry, FileType};
 use crate::fs::{FileDes, Result};
-use crate::util::dirent_name_length;
 use crate::{dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
 use libc::closedir;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, fstatat};
-
+//use crate::util::
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -70,12 +70,12 @@ impl ReadDir {
       the traditional `readdir` semantics
     */
     #[inline]
-    pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+    pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
         let dirent_ptr = unsafe { readdir64(self.dir.as_ptr()) };
 
         // readdir returns null at end of directory or on error
-        NonNull::new(dirent_ptr)
+        Unique::new(dirent_ptr)
     }
 
     #[inline]
@@ -334,7 +334,7 @@ impl GetDents {
     */
     #[inline]
     #[allow(clippy::cast_ptr_alignment)]
-    pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+    pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         while self.offset >= self.remaining_bytes {
             if !self.are_more_entries_remaining() {
                 return None;
@@ -357,7 +357,7 @@ impl GetDents {
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
         // SAFETY: dirent is not null (need to cast to mut for `NonNull` sadly.)
-        unsafe { Some(NonNull::new_unchecked(drnt.cast_mut())) }
+        unsafe { Some(Unique::new_unchecked(drnt.cast_mut())) }
     }
 }
 
@@ -385,11 +385,8 @@ pub trait DirentConstructor {
 
     #[inline]
     /// Constructs a `DirEntry` from a raw directory entry pointer
-    unsafe fn construct_entry(&mut self, drnt: *const dirent64) -> DirEntry {
-        debug_assert!(!drnt.is_null(), "drnt should never be null!");
-        // SAFETY: The `drnt` must not be null(by precondition)
-        let (cstrpath, inode, file_type): (&CStr, u64, FileType) =
-            unsafe { self.construct_path(drnt) };
+    fn construct_entry(&mut self, drnt: Unique<dirent64>) -> DirEntry {
+        let (cstrpath, inode, file_type): (&CStr, u64, FileType) = self.construct_path(drnt);
 
         DirEntry {
             path: cstrpath.into(),
@@ -462,32 +459,25 @@ pub trait DirentConstructor {
     returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
     #[inline]
-    unsafe fn construct_path(&mut self, drnt: *const dirent64) -> (&CStr, u64, FileType) {
-        debug_assert!(!drnt.is_null(), "drnt is null in construct path!");
-        // SAFETY: The `drnt` must not be null (checked before using)
-        let d_name: *const u8 = unsafe { access_dirent!(drnt, d_name) };
-        #[cfg(has_d_ino)]
-        // SAFETY: same as above
-        let d_ino: u64 = unsafe { access_dirent!(drnt, d_ino) };
-        #[cfg(not(has_d_ino))]
-        let d_ino: u64 = 0;
-        // SAFETY: Same as above^ (Add 1 to include the null terminator)
-        let name_len = unsafe { dirent_name_length(drnt) + 1 }; //technically should be a u16 but we need it for indexing :(
+    fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
+        let d_name = drnt.d_name();
+        let d_ino = drnt.d_ino(); // Returns 0 if d_ino isn't defined on your system
+
+        // Add 1 to include the null terminator
+        let name_len = drnt.name_length() + 1; //technically should be a u16 but we need it for indexing :(
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
-        let file_type: FileType =
-            // SAFETY: as above.
-            match FileType::from_dtype(unsafe { access_dirent!(drnt, d_type) }) {
-                FileType::Unknown => stat_syscall!(
-                    fstatat,
-                    self.file_descriptor().0, //borrow before mutably borrowing the path buffer
-                    d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
-                    AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
-                    DTYPE
-                ),
-                not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
-            };
+        let file_type: FileType = match FileType::from_dtype(drnt.d_type()) {
+            FileType::Unknown => stat_syscall!(
+                fstatat,
+                self.file_descriptor().0, //borrow before mutably borrowing the path buffer
+                d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+                AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+                DTYPE
+            ),
+            not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
+        };
 
         #[cfg(not(has_d_type))] // Have to make a syscall on these systems alas
         let file_type = stat_syscall!(
@@ -524,7 +514,7 @@ pub trait DirentConstructor {
         // - Both pointers are properly aligned for byte copying
         // - `name_len` is within `buffer` bounds
         // Copy the name into the final portion
-        unsafe { d_name.copy_to_nonoverlapping(buffer.as_mut_ptr(), name_len) };
+        unsafe { d_name.copy_to_nonoverlapping(buffer.as_mut_ptr().cast(), name_len) };
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         let full_path = unsafe {
             CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..required_len))
@@ -656,7 +646,7 @@ impl GetDirEntries {
     }
     #[inline]
     #[allow(clippy::cast_ptr_alignment)]
-    pub fn get_next_entry(&mut self) -> Option<NonNull<dirent64>> {
+    pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         while self.offset >= self.remaining_bytes {
             if !self.are_more_entries_remaining() {
                 return None;
@@ -678,7 +668,7 @@ impl GetDirEntries {
         self.offset += unsafe { access_dirent!(drnt, d_reclen) };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
         // SAFETY: dirent is not null
-        unsafe { Some(NonNull::new_unchecked(drnt.cast_mut())) }
+        unsafe { Some(Unique::new_unchecked(drnt.cast_mut())) }
     }
 
     #[inline]
@@ -758,43 +748,6 @@ macro_rules! impl_iterator_public_methods {
             }
 
             #[inline]
-            /// Returns whether this opened file descriptor has a gitignore file
-            /// If so, return the size of the file in bytes(so we can allocate appropriate memory)
-            #[allow(clippy::cast_sign_loss)]
-            #[allow(clippy::cast_possible_truncation)]
-            pub fn has_gitignore(&self) -> Option<core::num::NonZeroUsize> {
-                const IGNORE: &core::ffi::CStr = c".gitignore";
-                let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
-                // SAFETY: trivial(always passing a null terminated string)
-                let statted = unsafe {
-                    libc::fstatat(
-                        self.dirfd().0,
-                        IGNORE.as_ptr(),
-                        stat_buf.as_mut_ptr(),
-                        libc::AT_SYMLINK_NOFOLLOW,
-                    ) == 0
-                };
-                if !statted {
-                    return None;
-                }
-
-                // SAFETY: `fstatat` succeeded, so `stat_buf` is initialised.
-                let stat = unsafe { stat_buf.assume_init() };
-                let mode = stat.st_mode;
-                let is_regular = (mode & libc::S_IFMT) == libc::S_IFREG;
-                let is_user_readable = (mode & libc::S_IRUSR) != 0;
-
-                if !(is_regular && is_user_readable) {
-                    return None;
-                }
-                // Return some only if the file is not empty, no point parsing an empty gitignore!
-                // `st_size` is i64/u64/whatever depending on platform, it will NEVER be negative
-                // so casting it is fine.
-
-                core::num::NonZeroUsize::new(stat.st_size as _)
-            }
-
-            #[inline]
             /**
              Constructs a `DirEntry` from a directory entry pointer.
 
@@ -808,10 +761,9 @@ macro_rules! impl_iterator_public_methods {
             */
             pub fn construct_direntry(
                 &mut self,
-                drnt: core::ptr::NonNull<$crate::dirent64>,
+                drnt: $crate::Unique<$crate::dirent64>,
             ) -> $crate::fs::DirEntry {
-                // SAFETY:  Because the pointer is already checked to not be null before it can be used here safely
-                unsafe { self.construct_entry(drnt.as_ptr()) }
+                self.construct_entry(drnt)
             }
         }
     };

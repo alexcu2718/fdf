@@ -19,6 +19,7 @@ Edited slightly, essentially providing a type safe wrapper to inforce internal i
 #![allow(clippy::missing_inline_in_public_items)]
 use crate::{c_char, dirent64};
 use core::convert::From;
+use core::ffi::CStr;
 use core::fmt;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
@@ -201,8 +202,29 @@ impl Unique<dirent64> {
         unsafe { access_dirent!(self.0.as_ptr(), d_namlen) }
     }
 
+    #[must_use]
+    #[inline]
+    /// Returns a slice reference to the `d_name`, not including null terminator.
+    pub fn d_name_slice<'pointer>(&self) -> &'pointer [u8] {
+        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+        unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length()) }
+    }
+
+    #[must_use]
+    #[inline]
+    /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
+    pub fn d_name_slice_c_str<'pointer>(&self) -> &'pointer CStr {
+        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+        let as_slice =
+            unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length() + 1) };
+        // SAFETY:  has it's null terminator included, and no interior nulls..
+        unsafe { CStr::from_bytes_with_nul_unchecked(as_slice) }
+    }
+
     #[inline]
     #[must_use]
+    /// Access the pointer to `d_name`, note that `d-name` is not a [`c_char:255`] array, it can be greater,
+    /// So careful attention has to be paid
     pub const fn d_name(&self) -> *const c_char {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { access_dirent!(self.0.as_ptr(), d_name) }
@@ -210,6 +232,7 @@ impl Unique<dirent64> {
 
     #[inline]
     #[must_use]
+    /// Returns the length of the `d_name` but, like strlen, it doesn't include the null terminator.
     pub fn name_length(&self) -> usize {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { crate::util::dirent_name_length(self.as_ptr()) }

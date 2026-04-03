@@ -58,7 +58,7 @@ impl ReadDir {
     Filtering of these entries should be handled by the caller if desired.
 
     # Returns
-    - `Some(NonNull<dirent64>)` when a directory entry is successfully read
+    - `Some(Unique<dirent64>)` when a directory entry is successfully read
     - `None` when the end of directory is reached or if an error occurs
 
 

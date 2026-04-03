@@ -193,6 +193,14 @@ impl Unique<dirent64> {
         unsafe { access_dirent!(self.0.as_ptr(), d_type) }
     }
 
+    #[must_use]
+    #[inline]
+    #[cfg(has_d_namlen)]
+    pub const fn d_namlen(&self) -> usize {
+        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+        unsafe { access_dirent!(self.0.as_ptr(), d_namlen) }
+    }
+
     #[inline]
     #[must_use]
     pub const fn d_name(&self) -> *const c_char {

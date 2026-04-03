@@ -128,7 +128,8 @@ impl Drop for ReadDir {
     // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
     // This is because it's UB to close via file descriptor according to GNU docs, if that file descriptor
     // was obtained from the `dirfd()`
-    //( i want to pass ownership to the FileDes BUT due to above limitations, I ned a different approach.
+    //( i want to pass ownership to the FileDes BUT due to above limitations, I need a different approach
+    // TODO!
 }
 
 /**

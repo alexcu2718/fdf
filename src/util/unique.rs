@@ -46,6 +46,7 @@ use core::ptr::NonNull;
 /// use fdf::Unique;
 /// assert_eq!(size_of::<Unique<u8>>(), size_of::<Option<Unique<u8>>>());
 /// assert_eq!(size_of::<Unique<u8>>(), size_of::<*const u8>());
+/// assert_eq!(size_of::<Unique<usize>>(), size_of::<usize>());
 /// ```
 ///
 /// Unlike `*mut T`, `Unique<T>` is covariant over `T`. This should always be correct
@@ -182,14 +183,14 @@ impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
 impl Unique<dirent64> {
     #[inline]
     #[must_use]
-    pub const fn d_ino(&self) -> u64 {
+    pub const fn d_ino(self) -> u64 {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { access_dirent!(self.0.as_ptr(), d_ino) }
     }
 
     #[inline]
     #[must_use]
-    pub const fn d_type(&self) -> u8 {
+    pub const fn d_type(self) -> u8 {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { access_dirent!(self.0.as_ptr(), d_type) }
     }
@@ -197,7 +198,7 @@ impl Unique<dirent64> {
     #[must_use]
     #[inline]
     #[cfg(has_d_namlen)]
-    pub const fn d_namlen(&self) -> usize {
+    pub const fn d_namlen(self) -> usize {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { access_dirent!(self.0.as_ptr(), d_namlen) }
     }
@@ -205,7 +206,7 @@ impl Unique<dirent64> {
     #[must_use]
     #[inline]
     /// Returns a slice reference to the `d_name`, not including null terminator.
-    pub fn d_name_slice<'pointer>(&self) -> &'pointer [u8] {
+    pub fn d_name_slice<'pointer>(self) -> &'pointer [u8] {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length()) }
     }
@@ -213,7 +214,7 @@ impl Unique<dirent64> {
     #[must_use]
     #[inline]
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
-    pub fn d_name_slice_c_str<'pointer>(&self) -> &'pointer CStr {
+    pub fn d_name_slice_c_str<'pointer>(self) -> &'pointer CStr {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         let as_slice =
             unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length() + 1) };
@@ -225,7 +226,7 @@ impl Unique<dirent64> {
     #[must_use]
     /// Access the pointer to `d_name`, note that `d-name` is not a [`c_char:255`] array, it can be greater,
     /// So careful attention has to be paid
-    pub const fn d_name(&self) -> *const c_char {
+    pub const fn d_name(self) -> *const c_char {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { access_dirent!(self.0.as_ptr(), d_name) }
     }
@@ -233,7 +234,7 @@ impl Unique<dirent64> {
     #[inline]
     #[must_use]
     /// Returns the length of the `d_name` but, like strlen, it doesn't include the null terminator.
-    pub fn name_length(&self) -> usize {
+    pub fn name_length(self) -> usize {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { crate::util::dirent_name_length(self.as_ptr()) }
     }

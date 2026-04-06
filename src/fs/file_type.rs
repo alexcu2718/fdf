@@ -68,18 +68,32 @@ impl FileType {
     */
     #[must_use]
     #[inline]
+    #[expect(clippy::indexing_slicing, reason = "All slicing is trivially in range")]
     pub const fn from_dtype(d_type: u8) -> Self {
-        match d_type {
-            DT_REG => Self::RegularFile,
-            DT_DIR => Self::Directory,
-            DT_BLK => Self::BlockDevice,
-            DT_CHR => Self::CharDevice,
-            DT_FIFO => Self::Pipe,
-            DT_LNK => Self::Symlink,
-            DT_SOCK => Self::Socket,
-            _ /*DT_UNKNOWN */=> Self::Unknown,
-        }
+        use FileType as FT;
+
+        // Create a small lookup table, shaving 12 instructions and a lot of branches.
+        // mapping is exhaustive so no panic branches, statically guaranteed by compiler.
+        const LUT: [FT; 0xFF + 1] = {
+            // 0xFF=u8::MAX etc.
+            let mut t = [FT::Unknown; 0xFF + 1];
+            t[DT_FIFO as usize] = FT::Pipe;
+            t[DT_CHR as usize] = FT::CharDevice;
+            t[DT_DIR as usize] = FT::Directory;
+            t[DT_BLK as usize] = FT::BlockDevice;
+            t[DT_REG as usize] = FT::RegularFile;
+            t[DT_LNK as usize] = FT::Symlink;
+            t[DT_SOCK as usize] = FT::Socket;
+            t
+        };
+
+        LUT[d_type as usize]
     }
+
+    /*
+
+
+    */
 
     /**
     Determines the file type from a file descriptor and filename without following symlinks

@@ -117,6 +117,12 @@ impl<T: ?Sized> Unique<T> {
         self.0.as_ptr().cast_const()
     }
 
+    #[inline]
+    #[must_use]
+    pub const fn as_non_null_ptr(self) -> NonNull<T> {
+        self.0
+    }
+
     /// Dereferences the content.
     ///
     /// The resulting lifetime is bound to self so this behaves "as if"
@@ -183,6 +189,7 @@ impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
 impl Unique<dirent64> {
     #[inline]
     #[must_use]
+    /// Returns the inode of the `dirent64`, returns 0 if `d_ino` is not a struct member on your OS.
     pub const fn d_ino(self) -> u64 {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { access_dirent!(self.0.as_ptr(), d_ino) }
@@ -190,9 +197,18 @@ impl Unique<dirent64> {
 
     #[inline]
     #[must_use]
+    /// Returns the libc equivalent of the type as eg `DT_BLK`  from libc
+    /// Follow the link  for [GNU documentation ](<https://ftp.gnu.org/old-gnu/Manuals/glibc-2.2.3/html_node/libc_260.html>)
+    ///
+    /// Returns `DT_UNKNOWN` for systems without `d_type` (eg Solaris/Illumos)
     pub const fn d_type(self) -> u8 {
+        #[cfg(has_d_type)]
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        unsafe { access_dirent!(self.0.as_ptr(), d_type) }
+        unsafe {
+            access_dirent!(self.0.as_ptr(), d_type)
+        }
+        #[cfg(not(has_d_type))]
+        libc::DT_UNKNOWN
     }
 
     #[must_use]
@@ -224,7 +240,7 @@ impl Unique<dirent64> {
 
     #[inline]
     #[must_use]
-    /// Access the pointer to `d_name`, note that `d-name` is not a [`c_char:255`] array, it can be greater,
+    /// Access the pointer to `d_name`, note that `d-name` is not a [ u8/i8;255] array, it can be greater,
     /// So careful attention has to be paid
     pub const fn d_name(self) -> *const c_char {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION

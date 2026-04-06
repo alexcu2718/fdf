@@ -599,6 +599,7 @@ impl GetDirEntries {
             // SAFETY: AS ABOVE
             unsafe { self.syscall_buffer.as_ptr().add(SyscallBuffer::BUFFER_SIZE - 4).read() == 1 };
         }
+
         #[cfg(not(has_eof_trick))]
         {
             self.end_of_stream = !is_more_remaining // returned bytes=0
@@ -649,6 +650,29 @@ impl GetDirEntries {
         // Return true only if we successfully read non-zero bytes
         is_more_remaining
     }
+
+    /**
+        Advances the iterator to the next directory entry in the buffer and returns a pointer to it.
+
+        This function processes the internal buffer filled by `getdirentries(64)` system calls, interpreting
+        the data at the current offset as a `dirent64` structure. After reading an entry, the internal
+        offset is advanced by the entry's record length (`d_reclen`), positioning the iterator for
+        the next subsequent call.
+
+        IMPORTANT: This function returns ALL directory entries, including "." and ".." entries.
+        Filtering of these entries should be handled by the caller if desired.
+
+        # Returns
+        - `Some(Unique<dirent64>)` when a valid directory entry is available
+        - `None` when the buffer is exhausted and no more entries can be read
+
+        # Behavior
+        The function performs the following steps:
+        1. Checks if unread data remains in the internal buffer
+        2. Casts the current buffer position to a `dirent64` pointer
+        3. Extracts the entry's record length to advance the internal offset
+        4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
+    */
     #[inline]
     #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
@@ -761,7 +785,7 @@ macro_rules! impl_iterator_public_methods {
              path information stored in the path buffer.
 
              # Arguments
-             * `drnt` - Non-null pointer to a valid `dirent64` structure
+             * `drnt` - A `Unique` pointer to a valid `dirent64` structure
 
             */
             pub fn construct_direntry(

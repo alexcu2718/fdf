@@ -273,7 +273,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
 
                     if f3b[0] == b'.' {
                         match f3b[1..] {
-                            [0, _] | [b'.', 0] => $action, //similar to above
+                            [b'\0', _] | [b'.', b'\0'] => $action, //similar to above
                             _ => (),
                         }
                     }
@@ -291,7 +291,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 let f3b: [u8; 3] = *access_dirent!($entry, d_name);
                 if f3b[0] == b'.' {
                     match f3b[1..] {
-                        [0, _] | [b'.', 0] => $action,
+                        [b'\0', _] | [b'.', b'\0'] => $action,
                         _ => (),
                     }
                 }
@@ -337,6 +337,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
 macro_rules! const_from_env {
     ($(#[$meta:meta])* $name:ident: $t:ty = $env:expr, $default:expr) => {
         $(#[$meta])*
+        #[doc(hidden)]
         pub const $name: $t = {
             #[allow(clippy::single_call_fn)]
             #[allow(clippy::cast_possible_truncation)] // bad const eval machinery

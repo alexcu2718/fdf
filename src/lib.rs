@@ -111,8 +111,8 @@ pub use std::os::raw::c_char;
 mod test;
 
 mod error;
+pub use crate::util::Unique;
 pub use error::{DirEntryError, FilesystemIOError, SearchConfigError, TraversalError};
-
 mod config;
 pub use config::SearchConfig;
 pub mod filters;

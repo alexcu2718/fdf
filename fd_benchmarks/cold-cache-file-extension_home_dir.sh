@@ -6,5 +6,5 @@ source "new_prelude.sh"
 ask_for_sudo
 
 EXT="c"
-echo "running extension test"
+echo "running    extension test"
 run_cold_benchmark "file-extension_home_dir" "-HI --extension '$EXT' '' '$HOME'" "-HI --extension '$EXT' '' '$HOME'" "extension_home_dir"

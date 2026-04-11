@@ -64,6 +64,11 @@ pub struct SearchConfig {
     */
     pub(crate) regex_match: Option<TLSRegex>,
 
+    /// Additional required matchers added via `--and`.
+    ///
+    /// All compiled matchers in this list must match for a path to be accepted.
+    pub(crate) and_match: Vec<TLSRegex>,
+
     /**
     Whether to exclude hidden files and directories
 
@@ -162,11 +167,12 @@ impl SearchConfig {
         type_filter: Option<FileTypeFilter>,
         time_filter: Option<TimeFilter>,
         use_glob: bool,
+        and_patterns: Vec<String>,
         respect_gitignore: bool,
         ignore_patterns: Vec<String>,
         ignore_glob_patterns: Vec<String>,
     ) -> core::result::Result<Self, SearchConfigError> {
-        let (file_name_only, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
+        let (file_nm, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
             let patt = patt_ref.as_ref();
             let file_name_only = if patt.contains('/') {
                 false // Over ride because if it's got a slash, it's gotta be a full path
@@ -201,6 +207,31 @@ impl SearchConfig {
                 reg.ok().map(TLSRegex::new)
             };
 
+        let mut and_match = Vec::with_capacity(and_patterns.len());
+        let mut file_name_only = file_nm;
+        for patt in and_patterns {
+            if patt.contains('/') {
+                file_name_only = false;
+            }
+
+            let f_pattern = if use_glob {
+                glob_to_regex(&patt).map_err(SearchConfigError::GlobToRegexError)?
+            } else {
+                patt
+            };
+
+            if f_pattern == "." || f_pattern == ".*" || f_pattern.is_empty() {
+                continue;
+            }
+
+            let reg = RegexBuilder::new(&f_pattern)
+                .case_insensitive(case_insensitive)
+                .dot_matches_new_line(false)
+                .build()
+                .map_err(SearchConfigError::RegexError)?;
+            and_match.push(TLSRegex::new(reg));
+        }
+
         let mut ignore_patterns_merged =
             Vec::with_capacity(ignore_patterns.len() + ignore_glob_patterns.len());
         ignore_patterns_merged.extend(ignore_patterns);
@@ -230,6 +261,7 @@ impl SearchConfig {
 
         Ok(Self {
             regex_match,
+            and_match,
             hide_hidden,
             extension_match,
             file_name_only,
@@ -371,13 +403,15 @@ impl SearchConfig {
     #[inline]
     #[must_use]
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
-        self.regex_match.as_ref().is_none_or(|reg|
-                // Use arithmetic to avoid branching costs
-             { let index_amount=usize::from(!full_path) * dir.file_name_index();
+        // Use arithmetic to avoid branching costs.
+        let index_amount = usize::from(!full_path) * dir.file_name_index();
 
+        // SAFETY: we are always indexing within bounds.
+        let candidate = unsafe { dir.get_unchecked(index_amount..) };
 
-                     // SAFETY: are always indexing within bounds.
-            unsafe{reg.is_match(dir.get_unchecked(index_amount..))}
-            })
+        self.regex_match
+            .as_ref()
+            .is_none_or(|reg| reg.is_match(candidate))
+            && self.and_match.iter().all(|reg| reg.is_match(candidate))
     }
 }

@@ -385,6 +385,12 @@ Options:
       --ignoreg <GLOB>
           Ignore paths that match this glob pattern (repeatable)
 
+          --ignore-file <path>
+                  Add a custom ignore-file in '.gitignore' format. These files have a low precedence.
+
+          --and <pattern>
+                  Add additional required search patterns, all of which must be matched. Multiple additional patterns can be specified. The patterns are regular expressions, unless '--glob' or '--fixed-strings' is used.
+
       --size <SIZE>
           Filter by file size
 

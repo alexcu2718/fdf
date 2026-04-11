@@ -185,6 +185,21 @@ struct Args {
         help = "Ignore paths that match this glob pattern (repeatable)"
     )]
     ignoreg: Vec<String>,
+    #[arg(
+        long = "ignore-file",
+        value_name = "path",
+        action = ArgAction::Append,
+        value_hint = ValueHint::FilePath,
+        help = "Add a custom ignore-file in '.gitignore' format. These files have a low precedence."
+    )]
+    ignore_file: Vec<OsString>,
+    #[arg(
+        long = "and",
+        value_name = "pattern",
+        action = ArgAction::Append,
+        help = "Add additional required search patterns, all of which must be matched. Multiple additional patterns can be specified. The patterns are regular expressions, unless '--glob' or '--fixed-strings' is used."
+    )]
+    r#and: Vec<String>,
     /// Filter by file size
     ///
     /// PREFIXES:
@@ -296,6 +311,7 @@ fn main() -> Result<(), SearchConfigError> {
 
     let finder = Finder::init(&path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
+        .and_patterns(args.r#and)
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .fixed_string(args.fixed_string)
@@ -313,6 +329,7 @@ fn main() -> Result<(), SearchConfigError> {
         .respect_gitignore(!args.no_ignore)
         .ignore_patterns(args.ignore)
         .ignore_glob_patterns(args.ignoreg)
+        .ignore_files(args.ignore_file)
         .thread_count(args.thread_num)
         .build()?;
 

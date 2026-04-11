@@ -1731,4 +1731,124 @@ mod tests {
 
         fs::remove_dir_all(&temp_dir).unwrap();
     }
+
+    #[test]
+    fn test_ignore_file_integration_with_finder() {
+        let temp_dir = temp_dir().join("ignore_file_integration_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let ignore_file = temp_dir.join(".custom.ignore");
+        fs::write(&ignore_file, "*.tmp\n").unwrap();
+
+        fs::write(temp_dir.join("keep.rs"), "keep").unwrap();
+        fs::write(temp_dir.join("drop.tmp"), "drop").unwrap();
+
+        let finder = Finder::init(&temp_dir)
+            .ignore_files(vec![ignore_file.into_os_string()])
+            .build()
+            .unwrap();
+
+        let mut file_names: Vec<Vec<u8>> = finder
+            .traverse()
+            .unwrap()
+            .filter(|entry| entry.is_regular_file())
+            .map(|entry| entry.file_name().to_vec())
+            .collect();
+        file_names.sort();
+
+        assert_eq!(file_names, vec![b"keep.rs".to_vec()]);
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_ignore_file_has_lower_precedence_than_repo_gitignore() {
+        let temp_dir = temp_dir().join("ignore_file_precedence_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join(".git")).unwrap();
+
+        let ignore_file = temp_dir.join("custom.ignore");
+        fs::write(&ignore_file, "*.keep\n").unwrap();
+        fs::write(temp_dir.join(".gitignore"), "!important.keep\n").unwrap();
+        fs::write(temp_dir.join("important.keep"), "must survive").unwrap();
+
+        let finder = Finder::init(&temp_dir)
+            .ignore_files(vec![ignore_file.into_os_string()])
+            .build()
+            .unwrap();
+
+        let file_names: Vec<Vec<u8>> = finder
+            .traverse()
+            .unwrap()
+            .filter(|entry| entry.is_regular_file())
+            .map(|entry| entry.file_name().to_vec())
+            .collect();
+
+        assert!(
+            file_names.contains(&b"important.keep".to_vec()),
+            "repo .gitignore whitelist should override custom ignore-file"
+        );
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_and_patterns_require_all_matches() {
+        let temp_dir = temp_dir().join("and_pattern_integration_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        fs::write(temp_dir.join("alpha_beta.txt"), "keep").unwrap();
+        fs::write(temp_dir.join("alpha_only.txt"), "drop").unwrap();
+        fs::write(temp_dir.join("beta_only.txt"), "drop").unwrap();
+
+        let finder = Finder::init(&temp_dir)
+            .pattern("alpha")
+            .and_patterns(vec![String::from("beta")])
+            .build()
+            .unwrap();
+
+        let mut file_names: Vec<Vec<u8>> = finder
+            .traverse()
+            .unwrap()
+            .filter(|entry| entry.is_regular_file())
+            .map(|entry| entry.file_name().to_vec())
+            .collect();
+        file_names.sort();
+
+        assert_eq!(file_names, vec![b"alpha_beta.txt".to_vec()]);
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_and_patterns_respect_fixed_strings_mode() {
+        let temp_dir = temp_dir().join("and_pattern_fixed_string_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        fs::write(temp_dir.join("a.b_x+y.txt"), "keep").unwrap();
+        fs::write(temp_dir.join("axb_x+y.txt"), "drop").unwrap();
+        fs::write(temp_dir.join("a.b_xy.txt"), "drop").unwrap();
+
+        let finder = Finder::init(&temp_dir)
+            .pattern("a.b")
+            .and_patterns(vec![String::from("x+y")])
+            .fixed_string(true)
+            .build()
+            .unwrap();
+
+        let mut file_names: Vec<Vec<u8>> = finder
+            .traverse()
+            .unwrap()
+            .filter(|entry| entry.is_regular_file())
+            .map(|entry| entry.file_name().to_vec())
+            .collect();
+        file_names.sort();
+
+        assert_eq!(file_names, vec![b"a.b_x+y.txt".to_vec()]);
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
 }

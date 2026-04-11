@@ -1,11 +1,15 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        always_run: true
       - id: end-of-file-fixer
+        always_run: true
       - id: check-yaml
+        always_run: true
       - id: check-toml
+        always_run: true
 
   - repo: https://github.com/FeryET/pre-commit-rust
     rev: v1.2.1
@@ -46,4 +50,11 @@ repos:
         language: system
         files: \.rs$
         pass_filenames: false
-        always_run: true
+        always_run: false
+      - id: shellcheck-local
+        name: ShellCheck
+        description: Run ShellCheck
+        entry: shellcheck
+        language: system
+        pass_filenames: true
+        files: \.sh$

@@ -3,9 +3,13 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        always_run: true
       - id: end-of-file-fixer
+        always_run: true
       - id: check-yaml
+        always_run: true
       - id: check-toml
+        always_run: true
 
   - repo: https://github.com/FeryET/pre-commit-rust
     rev: v1.2.1
@@ -49,11 +53,12 @@ repos:
         always_run: true
       - id: shellcheck-local
         name: ShellCheck
-        description: Run ShellCheck using local binary (no Docker required)
-        entry: shellcheck
+        description: Run ShellCheck
+        entry: shellcheck **/*.sh
         language: system
         files: \.sh$
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:
       - id: actionlint
+        always_run: true

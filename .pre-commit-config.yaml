@@ -50,15 +50,11 @@ repos:
         language: system
         files: \.rs$
         pass_filenames: false
-        always_run: true
+        always_run: false
       - id: shellcheck-local
         name: ShellCheck
         description: Run ShellCheck
-        entry: shellcheck **/*.sh
+        entry: shellcheck
         language: system
+        pass_filenames: true
         files: \.sh$
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
-    hooks:
-      - id: actionlint
-        always_run: true

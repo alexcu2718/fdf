@@ -49,6 +49,8 @@ pub struct Finder {
     pub(crate) errors: Option<Arc<Mutex<Vec<TraversalError>>>>,
     /// Maximum worker threads used for traversal
     pub(crate) thread_count: NonZeroUsize,
+    /// Custom ignore-file matchers added via CLI (`--ignore-file`).
+    pub(crate) custom_ignore_matchers: Vec<Arc<Gitignore>>,
 }
 
 /// Maximum size of a result batch before flushing to the receiver.
@@ -282,7 +284,7 @@ impl Finder {
             let finder = Arc::new(self);
             injector.push(WorkItem {
                 dir: entry,
-                ignore_ctx: IgnoreContext::empty(),
+                ignore_ctx: finder.initial_ignore_context(),
             });
 
             for (index, worker) in workers.into_iter().enumerate() {
@@ -410,6 +412,15 @@ impl Finder {
     }
 
     #[inline]
+    fn initial_ignore_context(&self) -> Arc<IgnoreContext> {
+        self.custom_ignore_matchers
+            .iter()
+            .fold(IgnoreContext::empty(), |ctx, matcher| {
+                IgnoreContext::child(ctx, Some(Arc::clone(matcher)), false)
+            })
+    }
+
+    #[inline]
     fn build_ignore_context(
         &self,
         dir: &DirEntry,
@@ -440,7 +451,9 @@ impl Finder {
 
     #[inline]
     fn is_gitignored(&self, dir: &DirEntry, ctx: &Arc<IgnoreContext>) -> bool {
-        if !self.search_config.respect_gitignore || !ctx.repo_active {
+        if !self.search_config.respect_gitignore
+            || (!ctx.repo_active && self.custom_ignore_matchers.is_empty())
+        {
             return false;
         }
 

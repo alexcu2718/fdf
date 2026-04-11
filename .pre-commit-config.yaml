@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -47,3 +47,13 @@ repos:
         files: \.rs$
         pass_filenames: false
         always_run: true
+      - id: shellcheck-local
+        name: ShellCheck
+        description: Run ShellCheck using local binary (no Docker required)
+        entry: shellcheck
+        language: system
+        files: \.sh$
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint

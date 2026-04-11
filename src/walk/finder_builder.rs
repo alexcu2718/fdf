@@ -11,9 +11,11 @@ use crate::{
 use core::num::NonZeroU32;
 use core::num::NonZeroUsize;
 use dashmap::DashSet;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use std::{
     ffi::{OsStr, OsString},
     fs::metadata,
+    io,
     os::unix::fs::MetadataExt as _,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -33,6 +35,7 @@ use std::{
 pub struct FinderBuilder {
     pub(crate) root: OsString,
     pub(crate) pattern: Option<String>,
+    pub(crate) and_patterns: Vec<String>,
     pub(crate) hide_hidden: bool,
     pub(crate) case_insensitive: bool,
     pub(crate) file_name_only: bool,
@@ -51,6 +54,7 @@ pub struct FinderBuilder {
     pub(crate) respect_gitignore: bool,
     pub(crate) ignore_patterns: Vec<String>,
     pub(crate) ignore_glob_patterns: Vec<String>,
+    pub(crate) ignore_files: Vec<PathBuf>,
 }
 
 impl FinderBuilder {
@@ -60,6 +64,7 @@ impl FinderBuilder {
         Self {
             root: root.as_ref().to_owned(),
             pattern: None,
+            and_patterns: Vec::new(),
             hide_hidden: true,
             case_insensitive: true,
             file_name_only: true,
@@ -78,6 +83,7 @@ impl FinderBuilder {
             respect_gitignore: true,
             ignore_patterns: Vec::new(),
             ignore_glob_patterns: Vec::new(),
+            ignore_files: Vec::new(),
         }
     }
 
@@ -85,6 +91,13 @@ impl FinderBuilder {
     #[must_use]
     pub fn pattern<P: AsRef<str>>(mut self, pattern: P) -> Self {
         self.pattern = Some(pattern.as_ref().into());
+        self
+    }
+
+    /// Set additional required patterns. All of them must match.
+    #[must_use]
+    pub fn and_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.and_patterns = patterns;
         self
     }
 
@@ -203,6 +216,11 @@ impl FinderBuilder {
     pub fn fixed_string(mut self, fixed_string: bool) -> Self {
         if fixed_string {
             self.pattern = self.pattern.as_ref().map(|patt| regex::escape(patt));
+            self.and_patterns = self
+                .and_patterns
+                .into_iter()
+                .map(|patt| regex::escape(&patt))
+                .collect();
         }
         self
     }
@@ -246,6 +264,13 @@ impl FinderBuilder {
         self
     }
 
+    /// Set custom ignore files in `.gitignore` format.
+    #[must_use]
+    pub fn ignore_files(mut self, files: Vec<OsString>) -> Self {
+        self.ignore_files = files.into_iter().map(PathBuf::from).collect();
+        self
+    }
+
     /**
     Builds a [`Finder`] instance with the configured options.
 
@@ -267,6 +292,7 @@ impl FinderBuilder {
     pub fn build(self) -> core::result::Result<Finder, SearchConfigError> {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
+        let custom_ignore_matchers = self.compile_ignore_files()?;
 
         let starting_filesystem = if self.same_filesystem {
             // Get the filesystem ID of the root directory directly
@@ -288,6 +314,7 @@ impl FinderBuilder {
             self.file_type,
             self.time_filter,
             self.use_glob,
+            self.and_patterns,
             self.respect_gitignore,
             self.ignore_patterns,
             self.ignore_glob_patterns,
@@ -320,7 +347,28 @@ impl FinderBuilder {
             inode_cache,
             errors,
             thread_count: self.thread_count,
+            custom_ignore_matchers,
         })
+    }
+
+    fn compile_ignore_files(&self) -> core::result::Result<Vec<Arc<Gitignore>>, SearchConfigError> {
+        self.ignore_files
+            .iter()
+            .map(|path| {
+                let base = path.parent().unwrap_or_else(|| Path::new("."));
+                let mut builder = GitignoreBuilder::new(base);
+
+                if let Some(error) = builder.add(path) {
+                    return Err(SearchConfigError::IOError(io::Error::other(
+                        error.to_string(),
+                    )));
+                }
+
+                builder.build().map(Arc::new).map_err(|error| {
+                    SearchConfigError::IOError(io::Error::other(error.to_string()))
+                })
+            })
+            .collect()
     }
 
     /**

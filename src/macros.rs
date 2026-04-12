@@ -256,36 +256,40 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 }
             }
 
-            #[cfg(all(not(has_d_namlen),any(
-                target_os = "linux",
-                target_os = "android",
-                target_os="fuchsia",
-                target_os="redox",
-            )))]
-            {
-                const MINIMUM_DIRENT_SIZE: usize =
-                    core::mem::offset_of!($crate::dirent64, d_name).next_multiple_of(8);
+            #[cfg(all(
+                not(has_d_namlen),
+                any(
+                    target_os = "linux",
+                    target_os = "android",
+                    target_os = "fuchsia",
+                    target_os = "redox",
+                )
+            ))]
+            {   // Find the offset to which should contain the 3rd word, so d_reclen, d_type and d_name are all in this 1 word.
+                const OFFSET: usize = core::mem::offset_of!($crate::dirent64, d_reclen);
 
-                if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
-                    // f3b=first 3 bytes, the d_name is guaranteed to be 5 or more bytes long (from point 19 to 24)
-                    // this is because the pointer is padded up to 24, its filled with junk after the first null terminator however.
-                    let f3b: [u8; 3] = *access_dirent!($entry, d_name);
+                let third_word = $entry.byte_add(OFFSET).cast::<u64>().read();
+                #[expect(clippy::cast_possible_truncation, reason = "Intentional")]
+                let first_bytes = (third_word >> 24) as u16; // access the lower 5 bits only and read as a u16, aka taking the first two elements of the name
+                #[expect(clippy::host_endian_bytes, reason = "Intentional")]
+                const DOT_DOT: u16 = u16::from_ne_bytes([b'.', b'.']);
+                #[expect(clippy::host_endian_bytes, reason = "^")]
+                const DOT: u16 = u16::from_ne_bytes([b'.', b'\0']);
 
-                    if f3b[0] == b'.' {
-                        match f3b[1..] {
-                            [b'\0', _] | [b'.', b'\0'] => $action, //similar to above
-                            _ => (),
-                        }
-                    }
+                if first_bytes == DOT || first_bytes == DOT_DOT {
+                    $action
                 }
             }
 
-            #[cfg(all(not(has_d_namlen),not(any(
-                target_os = "linux",
-                target_os = "android",
-                target_os="fuchsia",
-                target_os="redox",
-            ))))]
+            #[cfg(all(
+                not(has_d_namlen),
+                not(any(
+                    target_os = "linux",
+                    target_os = "android",
+                    target_os = "fuchsia",
+                    target_os = "redox",
+                ))
+            ))]
             {
                 // Generic fallback: inspect name bytes only.
                 let f3b: [u8; 3] = *access_dirent!($entry, d_name);

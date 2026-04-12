@@ -2,8 +2,7 @@ use crate::fs::FileDes;
 use core::ffi::CStr;
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
-    DT_SOCK, DT_UNKNOWN, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
-    fstatat, mode_t,
+    DT_SOCK, DT_UNKNOWN, S_IFMT, fstatat, mode_t,
 };
 use std::{os::unix::fs::FileTypeExt as _, path::Path};
 
@@ -222,16 +221,8 @@ impl FileType {
     #[must_use]
     #[inline]
     pub const fn from_mode(mode: mode_t) -> Self {
-        match mode & S_IFMT {
-            S_IFREG => Self::RegularFile,
-            S_IFDIR => Self::Directory,
-            S_IFBLK => Self::BlockDevice,
-            S_IFCHR => Self::CharDevice,
-            S_IFIFO => Self::Pipe,
-            S_IFLNK => Self::Symlink,
-            S_IFSOCK => Self::Socket,
-            _ => Self::Unknown,
-        }
+        Self::from_dtype(((mode & S_IFMT) >> 12) as u8)
+        // Shift by 12 to get the DT_* representation
     }
 
     /**

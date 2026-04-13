@@ -255,40 +255,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                     }
                 }
             }
-
-            #[cfg(all(
-                not(has_d_namlen),
-                any(
-                    target_os = "linux",
-                    target_os = "android",
-                    target_os = "fuchsia",
-                    target_os = "redox",
-                )
-            ))]
-            {   // Find the offset to which should contain the 3rd word, so d_reclen, d_type and d_name are all in this 1 word.
-                const OFFSET: usize = core::mem::offset_of!($crate::dirent64, d_reclen);
-                let third_word = $entry.byte_add(OFFSET).cast::<u64>().read();
-                #[expect(clippy::cast_possible_truncation,reason="intentional")]
-                let name_prefix = (third_word >> 24) as u32; // read only the first 4 bytes of the name
-                const DOT_MASK: u32 = u32::from_ne_bytes([0xff, 0xff, 0x00, 0x00]);
-                const DOT: u32 = u32::from_ne_bytes([b'.', b'\0', 0x00, 0x00]);
-                const DOT_DOT_MASK: u32 = u32::from_ne_bytes([0xff, 0xff, 0xff, 0x00]);
-                const DOT_DOT: u32 = u32::from_ne_bytes([b'.', b'.', b'\0', 0x00]);
-
-                if ((name_prefix & DOT_MASK) == DOT) || ((name_prefix & DOT_DOT_MASK) == DOT_DOT){
-                    $action
-                }
-            }
-
-            #[cfg(all(
-                not(has_d_namlen),
-                not(any(
-                    target_os = "linux",
-                    target_os = "android",
-                    target_os = "fuchsia",
-                    target_os = "redox",
-                ))
-            ))]
+            #[cfg(not(has_d_namlen))]
             {
                 // Generic fallback: inspect name bytes only.
                 let f3b: [u8; 3] = *access_dirent!($entry, d_name);

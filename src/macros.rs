@@ -255,37 +255,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                     }
                 }
             }
-
-            #[cfg(all(not(has_d_namlen),any(
-                target_os = "linux",
-                target_os = "android",
-                target_os="fuchsia",
-                target_os="redox",
-            )))]
-            {
-                const MINIMUM_DIRENT_SIZE: usize =
-                    core::mem::offset_of!($crate::dirent64, d_name).next_multiple_of(8);
-
-                if access_dirent!($entry, d_reclen) == MINIMUM_DIRENT_SIZE {
-                    // f3b=first 3 bytes, the d_name is guaranteed to be 5 or more bytes long (from point 19 to 24)
-                    // this is because the pointer is padded up to 24, its filled with junk after the first null terminator however.
-                    let f3b: [u8; 3] = *access_dirent!($entry, d_name);
-
-                    if f3b[0] == b'.' {
-                        match f3b[1..] {
-                            [b'\0', _] | [b'.', b'\0'] => $action, //similar to above
-                            _ => (),
-                        }
-                    }
-                }
-            }
-
-            #[cfg(all(not(has_d_namlen),not(any(
-                target_os = "linux",
-                target_os = "android",
-                target_os="fuchsia",
-                target_os="redox",
-            ))))]
+            #[cfg(not(has_d_namlen))]
             {
                 // Generic fallback: inspect name bytes only.
                 let f3b: [u8; 3] = *access_dirent!($entry, d_name);

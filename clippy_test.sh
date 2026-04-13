@@ -12,6 +12,7 @@ cargo clippy --all -- \
   -A clippy::as_conversions \
   -A clippy::wildcard_enum_match_arm \
   -A clippy::question_mark_used \
+  -A clippy::host_endian_bytes \
   -A clippy::semicolon_if_nothing_returned \
   -A clippy::missing_trait_methods \
   -A clippy::semicolon_inside_block \

@@ -365,6 +365,12 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
         // Compile time assert to immediately cancel the build if invalidated
         const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
+        const {
+            assert!(
+                align_of::<dirent64>() == align_of::<u64>(),
+                "These should align completly"
+            )
+        };
 
         const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
         const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
@@ -392,7 +398,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
-        let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64);
+        let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64); // (should use select unpredictable here if it was const)
+
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.
          Result:

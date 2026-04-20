@@ -141,6 +141,13 @@ where
     fn file_name_index(&self) -> usize;
 }
 
+// Help the branch predictor out.
+#[cold]
+#[inline(never)]
+const fn file_name_index_len_one() -> usize {
+    0
+}
+
 impl<T> BytePath<T> for T
 where
     T: Deref<Target = [u8]>,
@@ -170,7 +177,7 @@ where
     fn file_name_index(&self) -> usize {
         // (every file path going in here has at least a '/' inside it), this is a special case for root/'.'
         if self.len() == 1 {
-            return 0;
+            return file_name_index_len_one(); //help the branch predictor
         }
 
         debug_assert!(!self.is_empty(), "should never be empty");
@@ -344,6 +351,7 @@ On some systems
     target_os = "hurd"
 ))]
 #[allow(
+    clippy::missing_assert_message,
     clippy::as_conversions,
     clippy::host_endian_bytes,
     clippy::cast_ptr_alignment
@@ -365,12 +373,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
         // Compile time assert to immediately cancel the build if invalidated
         const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
-        const {
-            assert!(
-                align_of::<dirent64>() == align_of::<u64>(),
-                "These should align completly"
-            )
-        };
+        const { assert!(align_of::<dirent64>() == align_of::<u64>()) };
 
         const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
         const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
@@ -399,6 +402,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
         let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64); // (should use select unpredictable here if it was const)
+        // This generates a conditional move under the hood.
 
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.

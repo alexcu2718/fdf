@@ -4,13 +4,14 @@ use core::num::NonZeroUsize;
 use fdf::filters::{FileTypeFilterParser, SizeFilterParser, TimeFilterParser};
 use fdf::walk::Finder;
 use fdf::{
-    SearchConfigError,
+    SearchConfigError, TraversalError,
     filters::{FileTypeFilter, SizeFilter, TimeFilter},
 };
 use std::env;
 use std::ffi::OsString;
-use std::io::stdout;
-use std::os::unix::ffi::OsStrExt as _;
+use std::io::{self, stdout};
+use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
+use std::process::Command;
 
 #[cfg(all(
     any(target_os = "linux", target_os = "android", target_os = "macos"),
@@ -171,6 +172,24 @@ struct Args {
         help = "Strip the leading './' from results when searching the current directory"
     )]
     strip_cwd_prefix: bool,
+    #[arg(
+        short = 'Q',
+        long = "quoted",
+        default_value_t = false,
+        help = "Wrap printed file paths in double quotes"
+    )]
+    quoted: bool,
+    #[arg(
+        long = "exec",
+        value_name = "CMD",
+        num_args = 1..,
+        allow_hyphen_values = true,
+        conflicts_with_all = ["generate", "quoted", "print0", "no_colour"],
+        help = "Execute a command once per search result",
+        long_help = "Execute a command once per search result. Use '{}' to insert the matched path into an argument; if '{}' is omitted, the path is appended as the final argument. This option should be the final CLI flag
+        Example: 'fdf 'junk.files' 'test_directory' -HI --exec rm -rf ' , delete all files meeting the criteria"
+    )]
+    exec: Option<Vec<OsString>>,
     #[arg(
         long = "ignore",
         value_name = "PATTERN",
@@ -333,14 +352,136 @@ fn main() -> Result<(), SearchConfigError> {
         .thread_count(args.thread_num)
         .build()?;
 
+    let errors = finder.error_store();
+
+    if let Some(exec) = args.exec.as_deref() {
+        run_exec_search(
+            finder.traverse()?,
+            exec,
+            args.sort,
+            args.top_n,
+            strip_cwd_prefix,
+        )?;
+
+        if args.show_errors {
+            print_collected_errors(errors.as_deref());
+        }
+
+        return Ok(());
+    }
+
     finder
         .build_printer()?
         .limit(args.top_n)
+        .sort(args.sort)
         .null_terminated(args.print0)
         .nocolour(args.no_colour)
+        .quoted(args.quoted)
         .strip_leading_dot_slash(strip_cwd_prefix)
         .print_errors(args.show_errors)
         .print()?;
 
     Ok(())
+}
+#[allow(clippy::print_stderr)] // CLI opt
+fn print_collected_errors(errors: Option<&std::sync::Mutex<Vec<TraversalError>>>) {
+    if let Some(errors_arc) = errors
+        && let Ok(error_vec) = errors_arc.lock()
+    {
+        for error in error_vec.iter() {
+            eprintln!("{error}");
+        }
+    }
+}
+
+fn run_exec_search<I>(
+    paths: I,
+    exec: &[OsString],
+    sort: bool,
+    limit: Option<usize>,
+    strip_leading_dot_slash: bool,
+) -> Result<(), SearchConfigError>
+where
+    I: Iterator<Item = fdf::fs::DirEntry>,
+{
+    let new_limit = limit.unwrap_or(usize::MAX);
+
+    if sort {
+        let mut collected: Vec<_> = paths.collect();
+        collected.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+
+        for path in collected.into_iter().take(new_limit) {
+            execute_for_path(exec, &path, strip_leading_dot_slash)?;
+        }
+    } else {
+        for path in paths.take(new_limit) {
+            execute_for_path(exec, &path, strip_leading_dot_slash)?;
+        }
+    }
+
+    Ok(())
+}
+#[allow(clippy::indexing_slicing)]
+fn execute_for_path(
+    exec: &[OsString],
+    path: &fdf::fs::DirEntry,
+    strip_leading_dot_slash: bool,
+) -> Result<(), SearchConfigError> {
+    let argv = build_exec_argv(exec, displayed_path_bytes(path, strip_leading_dot_slash));
+    let status = Command::new(&argv[0]).args(&argv[1..]).status()?;
+
+    if status.success() {
+        return Ok(());
+    }
+
+    let command_name = argv[0].as_os_str().to_string_lossy();
+    Err(SearchConfigError::IOError(io::Error::other(format!(
+        "command '{command_name}' exited with status {status}"
+    ))))
+}
+
+fn displayed_path_bytes(path: &fdf::fs::DirEntry, strip_leading_dot_slash: bool) -> &[u8] {
+    let start = usize::from(strip_leading_dot_slash) * 2;
+    // SAFETY: `strip_leading_dot_slash` is only enabled when the root is `.` or `./`,
+    // so every emitted path is guaranteed to start with `./`.
+    unsafe { path.get_unchecked(start..) }
+}
+
+fn build_exec_argv(exec: &[OsString], path: &[u8]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(exec.len() + 1);
+    let mut replaced_placeholder = false;
+
+    for arg in exec {
+        let (replaced, did_replace) = replace_exec_placeholder(arg, path);
+        replaced_placeholder |= did_replace;
+        argv.push(replaced);
+    }
+
+    if !replaced_placeholder {
+        argv.push(OsString::from_vec(path.to_vec()));
+    }
+
+    argv
+}
+#[allow(clippy::indexing_slicing)]
+fn replace_exec_placeholder(arg: &OsString, path: &[u8]) -> (OsString, bool) {
+    let bytes = arg.as_os_str().as_bytes();
+    let mut index = 0;
+    let mut replaced = false;
+    let mut output = Vec::with_capacity(bytes.len().saturating_add(path.len()));
+
+    while let Some(relative_pos) = bytes[index..].windows(2).position(|window| window == b"{}") {
+        let absolute_pos = index + relative_pos;
+        output.extend_from_slice(&bytes[index..absolute_pos]);
+        output.extend_from_slice(path);
+        index = absolute_pos + 2;
+        replaced = true;
+    }
+
+    if !replaced {
+        return (arg.clone(), false);
+    }
+
+    output.extend_from_slice(&bytes[index..]);
+    (OsString::from_vec(output), true)
 }

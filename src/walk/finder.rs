@@ -235,6 +235,13 @@ impl Finder {
             })
     }
 
+    /// Returns the shared traversal error storage when error collection is enabled.
+    #[must_use]
+    #[allow(clippy::missing_inline_in_public_items)]
+    pub fn error_store(&self) -> Option<Arc<Mutex<Vec<TraversalError>>>> {
+        self.errors.clone()
+    }
+
     /**
     Traverse the directory tree starting from the root and return an iterator for the found entries.
 

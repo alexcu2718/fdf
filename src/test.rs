@@ -171,10 +171,9 @@ mod tests {
                 .expect("generated d_name must contain a null terminator");
 
             let got = unsafe {
-                crate::util::dirent_const_time_strlen(std::mem::transmute::<
-                    *const Dirent64,
-                    *const libc::dirent64,
-                >(entry))
+                crate::util::dirent_const_time_strlen(
+                    std::mem::transmute::<_, *const libc::dirent64>(entry),
+                )
             };
 
             assert_eq!(

@@ -12,18 +12,32 @@ use std::{
     sync::{Arc, Mutex},
 };
 const NEWLINE: &[u8] = b"\n";
-const NEWLINE_CRLF: &[u8] = b"/\n";
-const NEWLINE_RESET: &[u8] = b"\x1b[0m\n";
-const NEWLINE_CRLF_RESET: &[u8] = b"/\x1b[0m\n";
+const QUOTE: &[u8] = b"\"";
+const EMPTY: &[u8] = b"";
 
-const NULL_TERMINATED_CRLF: &[u8] = b"/\0";
 const NULL_TERMINATED_NEWLINE: &[u8] = b"\0";
-// Creating lookup  arrays(look up tables) to do branchless formatting for paths
-const NEWLINES_RESET: [&[u8]; 2] = [NEWLINE_RESET, NEWLINE_CRLF_RESET];
-const NEWLINES_PLAIN: [&[u8]; 2] = [NEWLINE, NEWLINE_CRLF];
-const NULL_TERMINATED_PLAIN: [&[u8]; 2] = [NULL_TERMINATED_NEWLINE, NULL_TERMINATED_CRLF];
+const NULL_TERMINATED_QUOTED_NEWLINE: &[u8] = b"\"\0";
+
+const PREFIXES: [&[u8]; 2] = [EMPTY, QUOTE];
+const PLAIN_SUFFIXES: [&[u8]; 4] = [NEWLINE, b"\"\n", b"/\n", b"/\"\n"];
+const NULL_SUFFIXES: [&[u8]; 4] = [
+    NULL_TERMINATED_NEWLINE,
+    NULL_TERMINATED_QUOTED_NEWLINE,
+    b"/\0",
+    b"/\"\0",
+];
+const COLOURED_SUFFIXES: [&[u8]; 4] = [
+    RESET_NEWLINE,
+    RESET_QUOTED_NEWLINE,
+    DIR_RESET_NEWLINE,
+    DIR_RESET_QUOTED_NEWLINE,
+];
 
 const RESET: &[u8] = b"\x1b[0m";
+const RESET_NEWLINE: &[u8] = b"\x1b[0m\n";
+const RESET_QUOTED_NEWLINE: &[u8] = b"\x1b[0m\"\n";
+const DIR_RESET_NEWLINE: &[u8] = b"/\x1b[0m\n";
+const DIR_RESET_QUOTED_NEWLINE: &[u8] = b"/\x1b[0m\"\n";
 
 #[allow(clippy::struct_excessive_bools)]
 pub struct PrinterBuilder<I>
@@ -36,6 +50,7 @@ where
     print_errors: bool,
     null_terminated: bool,
     strip_leading_dot_slash: bool,
+    quoted: bool,
     errors: Option<Arc<Mutex<Vec<TraversalError>>>>,
     paths: I,
 }
@@ -53,6 +68,7 @@ where
             print_errors: false,
             null_terminated: false,
             strip_leading_dot_slash: false,
+            quoted: false,
             errors: None,
             paths,
         }
@@ -104,6 +120,13 @@ where
     }
 
     #[must_use]
+    /// Wrap printed file paths in double quotes
+    pub const fn quoted(mut self, quoted: bool) -> Self {
+        self.quoted = quoted;
+        self
+    }
+
+    #[must_use]
     pub(crate) fn errors(mut self, errors: Option<Arc<Mutex<Vec<TraversalError>>>>) -> Self {
         self.errors = errors;
         self
@@ -135,6 +158,7 @@ where
                 use_colour,
                 self.null_terminated,
                 self.strip_leading_dot_slash,
+                self.quoted,
             )?;
         } else {
             Self::write_iter(
@@ -143,6 +167,7 @@ where
                 use_colour,
                 self.null_terminated,
                 self.strip_leading_dot_slash,
+                self.quoted,
             )?;
         }
 
@@ -168,21 +193,29 @@ where
     }
 
     #[inline]
+    #[allow(clippy::fn_params_excessive_bools)] // convenience
     fn write_iter<W, J>(
         writer: &mut W,
         iter_paths: J,
         use_colour: bool,
         null_terminated: bool,
         strip_leading_dot_slash: bool,
+        quoted: bool,
     ) -> std::io::Result<()>
     where
         W: Write,
         J: IntoIterator<Item = DirEntry>,
     {
         if use_colour {
-            write_coloured(writer, iter_paths, strip_leading_dot_slash)
+            write_coloured(writer, iter_paths, strip_leading_dot_slash, quoted)
         } else {
-            write_nocolour(writer, iter_paths, null_terminated, strip_leading_dot_slash)
+            write_nocolour(
+                writer,
+                iter_paths,
+                null_terminated,
+                strip_leading_dot_slash,
+                quoted,
+            )
         }
     }
 }
@@ -213,30 +246,26 @@ fn write_nocolour<W, I>(
     iter_paths: I,
     null_terminated: bool,
     strip_leading_dot_slash: bool,
+    quoted: bool,
 ) -> std::io::Result<()>
 where
     W: Write,
     I: IntoIterator<Item = DirEntry>,
 {
-    let terminator_array = if null_terminated {
-        //  https://tenor.com/en-GB/view/the-terminator-you-are-terminated-youre-fired-arnold-schwarzenegger-gif-22848847
-        NULL_TERMINATED_PLAIN
-    } else {
-        NEWLINES_PLAIN
-    };
     // Branchless offset: 2 when stripping `./`, 0 otherwise.
     // Every path is guaranteed to start with `./` when the root was `./`.
     let start = usize::from(strip_leading_dot_slash) * 2;
+    let prefix = PREFIXES[usize::from(quoted)];
+    let suffixes = [PLAIN_SUFFIXES, NULL_SUFFIXES][usize::from(null_terminated)];
 
     for path in iter_paths {
         // SAFETY: when strip_leading_dot_slash is true the root was `./`, so every
         // emitted path is guaranteed to start with `./` (len >= 2). When false,
         // start == 0 so we just take the full slice, which is always valid.
         let bytes = unsafe { path.get_unchecked(start..) };
+        writer.write_all(prefix)?;
         writer.write_all(bytes)?;
-        // We're indexing in bounds (trivially, either 0 or 1, this should never need to be checked but im too lazy to check assembly on it)
-        // If it's a directory, we access index 1, which adds a / to the end
-        writer.write_all(terminator_array[usize::from(path.is_dir())])?;
+        writer.write_all(suffixes[(usize::from(path.is_dir()) << 1) | usize::from(quoted)])?;
         // I don't append a slash for symlinks that are directories when not sending to stdout
         // This is to avoid calling stat on symlinks. It seems extremely wasteful.
     }
@@ -248,19 +277,24 @@ fn write_coloured<W, I>(
     writer: &mut W,
     iter_paths: I,
     strip_leading_dot_slash: bool,
+    quoted: bool,
 ) -> std::io::Result<()>
 where
     W: Write,
     I: IntoIterator<Item = DirEntry>,
 {
-    // as aove.
+    // as above.
     let start = usize::from(strip_leading_dot_slash) * 2;
+    let prefix = PREFIXES[usize::from(quoted)];
     for path in iter_paths {
         // SAFETY: same guarantee as write_nocolour — root was `./` so len >= 2.
         let bytes = unsafe { path.get_unchecked(start..) };
+        writer.write_all(prefix)?;
         writer.write_all(extension_colour(&path))?;
         writer.write_all(bytes)?;
-        writer.write_all(NEWLINES_RESET[usize::from(path.is_dir())])?;
+        writer.write_all(
+            COLOURED_SUFFIXES[(usize::from(path.is_dir()) << 1) | usize::from(quoted)],
+        )?;
     }
     Ok(())
 }

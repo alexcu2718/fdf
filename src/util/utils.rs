@@ -344,6 +344,7 @@ On some systems
     target_os = "hurd"
 ))]
 #[allow(
+    clippy::missing_assert_message,
     clippy::as_conversions,
     clippy::host_endian_bytes,
     clippy::cast_ptr_alignment
@@ -365,12 +366,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
         // Compile time assert to immediately cancel the build if invalidated
         const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
-        const {
-            assert!(
-                align_of::<dirent64>() == align_of::<u64>(),
-                "These should align completly"
-            )
-        };
+        const { assert!(align_of::<dirent64>() == align_of::<u64>()) };
 
         const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
         const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);

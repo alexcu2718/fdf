@@ -373,6 +373,9 @@ Options:
   -0, --print0
           Makes all output null terminated as opposed to newline terminated only applies to non-coloured output and redirected(useful for xargs)
 
+  -Q, --quoted
+          Wrap printed file paths in double quotes
+
   -I, --no-ignore
           Do not respect .gitignore rules during traversal
 

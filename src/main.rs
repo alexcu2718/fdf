@@ -172,6 +172,13 @@ struct Args {
     )]
     strip_cwd_prefix: bool,
     #[arg(
+        short = 'Q',
+        long = "quoted",
+        default_value_t = false,
+        help = "Wrap printed file paths in double quotes"
+    )]
+    quoted: bool,
+    #[arg(
         long = "ignore",
         value_name = "PATTERN",
         action = ArgAction::Append,
@@ -338,6 +345,7 @@ fn main() -> Result<(), SearchConfigError> {
         .limit(args.top_n)
         .null_terminated(args.print0)
         .nocolour(args.no_colour)
+        .quoted(args.quoted)
         .strip_leading_dot_slash(strip_cwd_prefix)
         .print_errors(args.show_errors)
         .print()?;

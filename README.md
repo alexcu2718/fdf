@@ -53,7 +53,7 @@ Other Operating systems eg: AIX, untested. (Too many POSIX systems to test!)
 
 ### Not Yet Supported
 
-- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/). The plan is this to work on this after a 1.0.
+- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/). The plan is this to work on this after a 1.0. ( I am definitelty **not** procastinating this)
 
 -**DragonflyBSD**: Not supporting Rust 2024 (but will in future)
 
@@ -306,6 +306,8 @@ fdf . /usr/local -e py -H
 fdf -HI --print 0 . ~ | xargs -0 realpath
 
 
+
+
 # Generate shell completions for Zsh/bash (also supports powershell/fish!)
 # For Zsh
 echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc
@@ -373,14 +375,18 @@ Options:
   -0, --print0
           Makes all output null terminated as opposed to newline terminated only applies to non-coloured output and redirected(useful for xargs)
 
-  -Q, --quoted
-          Wrap printed file paths in double quotes
-
   -I, --no-ignore
           Do not respect .gitignore rules during traversal
 
       --strip-cwd-prefix
           Strip the leading './' from results when searching the current directory
+
+  -Q, --quoted
+          Wrap printed file paths in double quotes
+
+      --exec <CMD>...
+          Execute a command once per search result. Use '{}' to insert the matched path into an argument; if '{}' is omitted, the path is appended as the final argument. This option should be the final CLI flag
+                  Example: 'fdf 'junk.files' 'test_directory' -HI --exec rm -rf ' , delete all files meeting the criteria
 
       --ignore <PATTERN>
           Ignore paths that match this regex pattern (repeatable)
@@ -388,11 +394,11 @@ Options:
       --ignoreg <GLOB>
           Ignore paths that match this glob pattern (repeatable)
 
-          --ignore-file <path>
-                  Add a custom ignore-file in '.gitignore' format. These files have a low precedence.
+      --ignore-file <path>
+          Add a custom ignore-file in '.gitignore' format. These files have a low precedence.
 
-          --and <pattern>
-                  Add additional required search patterns, all of which must be matched. Multiple additional patterns can be specified. The patterns are regular expressions, unless '--glob' or '--fixed-strings' is used.
+      --and <pattern>
+          Add additional required search patterns, all of which must be matched. Multiple additional patterns can be specified. The patterns are regular expressions, unless '--glob' or '--fixed-strings' is used.
 
       --size <SIZE>
           Filter by file size
@@ -483,7 +489,7 @@ Options:
 
       --generate <GENERATE>
 
-              Generate shell completions for bash/zsh/fish/powershell
+              Generate shell completions for bash/zsh/fish/powershell/elvish
               To use: eval "$(fdf --generate SHELL)"
               Example:
               # Add to shell config for permanent use

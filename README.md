@@ -4,7 +4,7 @@
 
 fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
 
-It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct syscalls.
+It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and  direct syscalls.
 
 PLEASE NOTE: This is due to undergo a rename before a 1.0
 

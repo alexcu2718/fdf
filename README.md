@@ -218,9 +218,9 @@ See [fd_benchmarks/syscalltest.sh](./fd_benchmarks/syscalltest.sh) for a rough s
 
 ### Development Philosophy
 
-** Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.
+**Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.**
 
-** Open to contributions - Once the codebase stabilises, contributions are welcome.
+**Open to contributions - Once the codebase stabilises, contributions are welcome.**
 
 In short, this project explores performance, low-level programming, and practical tooling.
 

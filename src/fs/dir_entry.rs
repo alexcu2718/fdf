@@ -323,99 +323,31 @@ impl DirEntry {
      - `O_CLOEXEC`: Close the file descriptor on exec
      - `O_DIRECTORY`: Fail if not a directory
      - `O_NONBLOCK`: Open in non-blocking mode
+     - `O_RDONLY`: Indicate read only access
 
     */
     pub(crate) fn open(&self) -> Result<FileDes> {
-        // Opens the file and returns a file descriptor..
-        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+        // TODO investigate openat2 benefits (RESOLVE_NO_MAGICLINKS? good for excluding /proc)
+        // We could do this with a kernel query to see if it has it, then save the result in an atomicbool
+        // However, I am being lazy.
+
+        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY;
+
+        // Linux specific notes:
+        // Note, we cannot use `libc::O_NOATIME` because  certain files (ie under root)
+        // require superuser permissions, breaking current behaviour.
+        // Unfortunately, because the error returned is just 'PERMISSION DENIED' (find the appropriate libc errno for it)
+        // We can't just 'retry' certain files, ie ones in /proc
+
         // SAFETY: the pointer is null terminated
         let fd = unsafe { libc::open(self.as_ptr(), FLAGS) };
 
         if fd < 0 {
             return_os_error!()
         }
+
         Ok(FileDes(fd))
     }
-
-    /*
-    Commented out temporarily while I work on API
-    /**
-     Opens the directory relative to a directory file descriptor and returns a file descriptor.
-
-     This function uses the `openat` system call to open a directory relative to an already open
-     directory file descriptor. This is useful for avoiding race conditions that can occur when
-     using absolute paths, as it ensures the operation is performed relative to a specific directory.
-
-     The directory is opened with the following flags:
-     - `O_CLOEXEC`: Close the file descriptor on exec
-     - `O_DIRECTORY`: Fail if not a directory
-     - `O_NONBLOCK`: Open in non-blocking mode
-
-     # Examples
-
-     ## Basic usage
-
-     ```
-     use fdf::{DirEntry, FileDes, Result};
-     use std::fs;
-     use std::env::temp_dir;
-
-     # fn main() -> Result<()> {
-     // Create a temporary directory for testing
-     let temp_dir = temp_dir().join("fdf_openat_test");
-     let _ = fs::remove_dir_all(&temp_dir);
-     fs::create_dir_all(&temp_dir)?;
-
-     // Create a subdirectory inside the temp directory
-     let subdir_path = temp_dir.join("test_subdir");
-     fs::create_dir(&subdir_path)?;
-
-     // Open the temporary directory
-     let temp_dir_entry = DirEntry::new(&temp_dir)?;
-     let temp_fd = temp_dir_entry.open()?;
-
-     // Use openat to open the subdirectory relative to the temp directory
-     let subdir_entry = DirEntry::new(&subdir_path)?;
-     let subdir_fd = subdir_entry.openat(&temp_fd)?;
-
-     // Clean up
-     let _ = fs::remove_dir_all(&temp_dir);
-     # Ok(())
-     # }
-     ```
-     # Platform-specific behavior
-
-     - On Linux, this uses the `openat` system call directly
-     - The behavior may vary on other Unix-like systems, but the interface is standardized in POSIX
-
-     # Errors
-
-     Returns an error if:
-     - The directory doesn't exist or can't be opened
-     - The path doesn't point to a directory (fails due to `O_DIRECTORY` flag)
-     - Permission is denied for the directory
-     - The parent file descriptor (`dir_fd`) is invalid or not open
-     - The path contains null bytes
-     - System resources are exhausted (too many open file descriptors)
-
-     # See also
-
-     - [openat(2) - Linux man page](https://man7.org/linux/man-pages/man2/openat.2.html)
-     - [`DirEntry::open`] for opening directories with absolute paths
-    */
-    #[inline]
-    pub fn openat(&self, fd: &FileDes) -> Result<FileDes> {
-        // Opens the file and returns a file descriptor.
-        // This is a low-level operation that may fail if the file does not exist or cannot be opened.
-        const FLAGS: i32 = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK;
-        // SAFETY: the pointer is null terminated
-        let filedes = unsafe { openat(fd.0, self.file_name_cstr().as_ptr(), FLAGS) };
-
-        if filedes < 0 {
-            return_os_error!()
-        }
-        Ok(FileDes(filedes))
-    }*/
 
     // Converts to a lossy string for ease of use
     #[inline]

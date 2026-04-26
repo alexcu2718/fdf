@@ -1,13 +1,10 @@
 # fdf - High-Performance POSIX File Finder
 
 [![CI (main)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml?query=branch%3Amain)
-[![PR checks](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml/badge.svg?event=pull_request)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml?query=event%3Apull_request)
-
-CI details: [Workflow page](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml) · [Recent runs](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml)
 
 fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
 
-It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct kernel interfacing.
+It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct syscalls.
 
 PLEASE NOTE: This is due to undergo a rename before a 1.0
 
@@ -23,12 +20,13 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 This is primarily a learning and performance exploration project. Whilst already useful and performant, it remains under active development towards a stable 1.0 release. The name 'fdf' is a temporary placeholder.
 
-The implemented subset performs exceptionally well. This project focuses on creating the best possible tool.
+(I'm tending to think `frep` is a good name?)
 
-Development can be a bit slow because ideas take a while to develop,
-Sometimes I don't feel like doing something until I know I have a *good* way to implement something
+This project focuses on creating the best possible tool. So:
+-Development can be a bit slow because ideas take a while to develop,
+-Sometimes I don't feel like doing something until I know I have a *good* way to implement something
 
-While the CLI is usable, the internal library is not stable yet. Alas!
+While the CLI is usable, the internal library is not stable yet. This is similar to `fd` and many other tools.
 
 ## Platform Support
 
@@ -53,7 +51,7 @@ Other Operating systems eg: AIX, untested. (Too many POSIX systems to test!)
 
 ### Not Yet Supported
 
-- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/). The plan is this to work on this after a 1.0. ( I am definitelty **not** procastinating this)
+- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/). The plan is this to work on this after a 1.0. ( I am definitely **not** procastinating this)
 
 -**DragonflyBSD**: Not supporting Rust 2024 (but will in future)
 
@@ -74,12 +72,6 @@ Note: Miri validation (Rust's undefined behaviour detector) cannot be used due t
 TMP_DIR="${TMP:-/tmp}"
 git clone --depth 1 https://github.com/alexcu2718/fdf "$TMP_DIR/fdf_test"
 cd "$TMP_DIR/fdf_test"
-
-
-# If on Android, ensure the script is executable
-if [[ "$(uname -o)" == "Android" ]]; then
-    chmod +x ./scripts/run_benchmarks.sh
-fi
 
 ./scripts/run_benchmarks.sh
 ```
@@ -170,8 +162,6 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
 
 - ** An optimised gitignore parser with 5x fewer stat64/statx calls.
-
-- **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)
 
 - **A custom written crossbeam workstealing parallel traversal algorithm**
 
@@ -275,8 +265,7 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 
 **API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 
-**POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris/Android (the other ones are embedded mostly, correct me if i'm wrong!), I have tentative work for other OS'es, but ultimately it is hard to even emulate these! Such as l4re,horizon etc.
-Some OS'es are plainly not supported, such as vita/nuttx (due to lacking inodes) and hurd (due to unbounded filenames)
+**POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris/Android (the other ones are embedded mostly, correct me if i'm wrong!), I have tentative work for other OS'es, it may support NuttX/few others but completely untested.
 
 Ultimately, these are an extremely fringe usecase and I think it is beyond pointless to focus on these.
 

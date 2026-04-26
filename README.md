@@ -1,15 +1,12 @@
 # fdf - High-Performance POSIX File Finder
 
 [![CI (main)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml?query=branch%3Amain)
-[![PR checks](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml/badge.svg?event=pull_request)](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml?query=event%3Apull_request)
-
-CI details: [Workflow page](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml) · [Recent runs](https://github.com/alexcu2718/fdf/actions/workflows/rust.yml)
 
 fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
 
-It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct kernel interfacing.
+It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and  direct syscalls(where possible).
 
-PLEASE NOTE: This is due to undergo a rename before a 1.0
+PLEASE NOTE: This is due to undergo a rename before a 1.0, I am tending towards `frep` as a name
 
 **Quick Installation:**
 
@@ -21,14 +18,9 @@ cargo install --git https://github.com/alexcu2718/fdf
 
 ## Project Status
 
-This is primarily a learning and performance exploration project. Whilst already useful and performant, it remains under active development towards a stable 1.0 release. The name 'fdf' is a temporary placeholder.
+This is a performance-focused project that remains under active development towards a stable 1.0 release. The current name is temporary and will change before that release.
 
-The implemented subset performs exceptionally well. This project focuses on creating the best possible tool.
-
-Development can be a bit slow because ideas take a while to develop,
-Sometimes I don't feel like doing something until I know I have a *good* way to implement something
-
-While the CLI is usable, the internal library is not stable yet. Alas!
+The CLI is already usable, but the internal library API is not yet stable.
 
 ## Platform Support
 
@@ -43,25 +35,24 @@ While the CLI is usable, the internal library is not stable yet. Alas!
 
 ### Compiles with Limited Testing
 
-*Note: GitHub Actions does not yet provide Rust 2024 support for some(most of these) platforms. Additional checks will be added when available.*
+*Note: GitHub Actions does not yet provide Rust 2024 support for some of these platforms. Additional checks will be added when available.*
 
-- Android (tested on my phone)
+- Android
+- 32-bit Linux
 
-- 32 Bit Linux (tested, Can't find a way to set it up on github actions without extensive work.)
-
-Other Operating systems eg: AIX, untested. (Too many POSIX systems to test!)
+Other POSIX operating systems, such as AIX, are currently untested.
 
 ### Not Yet Supported
 
-- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable. Windows already has highly effective tools such as [Everything](https://www.voidtools.com/). The plan is this to work on this after a 1.0. ( I am definitelty **not** procastinating this)
+- **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable.
 
--**DragonflyBSD**: Not supporting Rust 2024 (but will in future)
+- **DragonflyBSD**: Blocked on Rust 2024 support.
 
 ## Testing
 
 The project includes comprehensive testing with 100+ Rust tests and 15+ correctness benchmarks comparing against fd.
 
-Note: Miri validation (Rust's undefined behaviour detector) cannot be used due to the extensive libc calls. Intensive testing and valgrind validation are used instead. See the [valgrind script here](./scripts/valgrind-test.sh)
+Miri validation (Rust's undefined behaviour detector) is not practical here due to the extensive libc usage, so validation relies on intensive testing and Valgrind. See [scripts/valgrind-test.sh](./scripts/valgrind-test.sh).
 
 - Rust tests: [Available here](./src/test.rs)
 - Shell scripts clone the LLVM repository to provide an accurate testing environment
@@ -75,32 +66,16 @@ TMP_DIR="${TMP:-/tmp}"
 git clone --depth 1 https://github.com/alexcu2718/fdf "$TMP_DIR/fdf_test"
 cd "$TMP_DIR/fdf_test"
 
-
-# If on Android, ensure the script is executable
-if [[ "$(uname -o)" == "Android" ]]; then
-    chmod +x ./scripts/run_benchmarks.sh
-fi
-
 ./scripts/run_benchmarks.sh
 ```
 
-This executes a comprehensive suite of internal library tests, CLI tests, and benchmarks.
+This runs the internal library tests, CLI tests, and benchmarks.
 
 ## Performance Benchmarks
 
-The benchmarks are fully repeatable using the testing code above and cover file type filtering, extension matching, file sizes, and many other scenarios. The following results were obtained on a local system and the LLVM repo to provide realistic usage  examples:
-(These are tests done via hyperfine and summarised to save space here.)
-
-(*TESTED ON LINUX, other OS's will (probably) be lower due to specific linux optimisations)
-
-(I cannot test accurately on qemu due to virtualisation overhead and I do not have a mac)
-
-Rough tests indicate a significant 75%+ speedup on BSD's/Illumos/Solaris but macos has less optimisations, macos is a much heftier OS and I struggle to emulate it stably (I get bizarre results from SSHing into it and running dtruss)
+The benchmarks are repeatable using the testing code above and cover file type filtering, extension matching, file sizes, and several other scenarios. The following results were gathered on Linux against local directories and the LLVM repository and summarised from hyperfine output.
 
 ```bash
-
-
-
 | Test Case                                                              | fdf Mean        | fd Mean         | Speedup   | Relative        |
 | :----------                                                            | :--------:      | :-------:       | :-------: | :--------:      |
 | cold-cache `.' '/home/alexc' -HI -d 4`                                 | 244.1 ± 10.3    | 353.6 ± 5.1     | 1.45x     | 1.45 ± 0.06     |
@@ -155,7 +130,7 @@ When following symlinks, behaviour will vary slightly. For example, fd can enter
  (see recursive_symlink_fs_test.sh) [Available here](./scripts/recursive_symlink_fs_test.sh)
 whereas my implementation prevents hangs. It may, however, return more results than expected.
 
-To avoid issues, use --same-file-system when traversing symlinks. Both fd and find also handle them poorly without such flags. My approach ensures the program always terminates safely, even in complex directories like ~/.steam, ~/.wine, /sys, and /proc.
+To avoid issues, use --same-file-system when traversing symlinks. This ensures traversal terminates safely even in complex directories such as ~/.steam, ~/.wine, /sys, and /proc.
 
 ## Technical Highlights
 
@@ -165,13 +140,9 @@ To avoid issues, use --same-file-system when traversing symlinks. Both fd and fi
 
 - **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L581)**
 
--**Also has an optimised path for `FreeBSD` using `getdirentries`**
-
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
 
-- ** An optimised gitignore parser with 5x fewer stat64/statx calls.
-
-- **Compile-time colour mapping**: A compile-time perfect hashmap for colouring file paths, defined in a [separate repository](https://github.com/alexcu2718/compile_time_ls_colours)
+- **An optimised gitignore parser with 5x fewer stat64/statx calls**.
 
 - **A custom written crossbeam workstealing parallel traversal algorithm**
 
@@ -218,7 +189,6 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
             (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
         )
     };
-
     // Find the position of the null terminator
     #[cfg(target_endian = "little")]
     let byte_pos = (masked_word.trailing_zeros() >> 3) as usize;
@@ -234,30 +204,25 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 ## Why?
 
 I started this project because I found find slow and wanted to learn how to interface directly with the kernel.
-What began as a random experiment turned out to be a genuinely useful tool - one I'll probably use for the rest of my life, which is much more interesting than a project I'd just create and forget about.
-
-At the core, this is about learning.
-
-When I began I had barely used Linux/Rust for a few months, I didn't even know C, so there are some rough ABI edges. But along the way, I've picked up low-level skills and this project has been really useful for that!
+What began as a small experiment became a practical tool for exploring low-level systems work.
 
 ### Performance Motivation
 
-Even though fdf is already faster than fd in all cases, I'm planning to experiment with filtering before allocation(I don't stop at good enough!)
-Rust's std::fs has some inefficiencies, too much heap allocation, file descriptor manipulation, constant strlen calculations, usage of readdir (not optimal because it implicitly stat calls every file it sees!). Rewriting all of it  using libc was the ideal way to bypass that and learn in the process.
+Rust's std::fs has inefficiencies for this workload, including extra allocation, file descriptor handling overhead, repeated strlen work, and readdir-based traversal. Rewriting those paths with libc allowed tighter control over traversal costs and was a useful learning exercise.
 
-Notably the standard library will keep file descriptors open(UNIX specific) until the last reference to the inner `ReadDir` disappears, because UNIX has a limit on open file descriptors, this can cause a form of 'rate limiting', not ideal.
+The standard library can also keep file descriptors open until the last reference to an inner `ReadDir` disappears, which can become limiting on Unix systems with lower descriptor limits.
 
-It will also tend to call 'stat' style calls heavily which is very! inefficient
+It also tends to rely heavily on `stat`-style calls, which is costly in traversal-heavy workloads.
 
-(I do have a shell script documenting syscall differences here(it's crude but it works well)) [Available here](./fd_benchmarks/syscalltest.sh)
+See [fd_benchmarks/syscalltest.sh](./fd_benchmarks/syscalltest.sh) for a rough syscall comparison.
 
 ### Development Philosophy
 
-** Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.
+**Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.**
 
-** Open to contributions - Once the codebase stabilises, I welcome others to add features if they're extremely inclined anyway!
+**Open to contributions - Once the codebase stabilises, contributions are welcome.**
 
-In short, this project is a personal exploration into performance, low-level programming, and building practical tools - with the side benefit of making a useful tool and learning a crazy amount!
+In short, this project explores performance, low-level programming, and practical tooling.
 
 ## Acknowledgements/Disclaimers
 
@@ -275,8 +240,7 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 
 **API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 
-**POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris/Android (the other ones are embedded mostly, correct me if i'm wrong!), I have tentative work for other OS'es, but ultimately it is hard to even emulate these! Such as l4re,horizon etc.
-Some OS'es are plainly not supported, such as vita/nuttx (due to lacking inodes) and hurd (due to unbounded filenames)
+**POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris/Android (the other ones are embedded mostly, correct me if i'm wrong!), I have tentative work for other OS'es, it may support NuttX/few others but completely untested.
 
 Ultimately, these are an extremely fringe usecase and I think it is beyond pointless to focus on these.
 
@@ -515,11 +479,7 @@ Options:
   - Conflicts with the project’s minimal-dependency design.
   - Linux-only feature, making it a low-priority and high-effort addition.  **I will likely NOT do this**
 
-#### 2. Optimisations for the BSD family
-
-- Part done. Need to implement getdirentries/getdents for DragonflyBSD then I'm done.
-
-#### 3. Allocation-Optimised Iterator Adaptor
+#### 2. Allocation-Optimised Iterator Adaptor
 
 - Implement a filtering mechanism that avoids unnecessary directory allocations.
 - Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.

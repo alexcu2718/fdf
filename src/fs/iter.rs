@@ -1,4 +1,3 @@
-use crate::Unique;
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",
@@ -12,7 +11,7 @@ use crate::Unique;
 use crate::fs::types::SyscallBuffer;
 use crate::fs::{DirEntry, FileType};
 use crate::fs::{FileDes, Result};
-use crate::{dirent64, readdir64};
+use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
@@ -239,6 +238,13 @@ impl GetDents {
     }
 
     #[inline]
+    /// Convenience function for pointer arithmetic on the buffer
+    pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u8 {
+        // SAFETY:  internal use only, the `amt` parameter is always within bounds of the buffer.
+        unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
+    }
+
+    #[inline]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.end_of_stream {
@@ -260,38 +266,38 @@ impl GetDents {
         // Return true only if we successfully read non-zero bytes
         has_bytes_remaining
     }
+    // Commented out until more testing done on practicality.
+    // /**
+    //   Initiates read-ahead for the directory to improve sequential read performance.
 
-    /**
-      Initiates read-ahead for the directory to improve sequential read performance.
+    //   This system call hints to the kernel that the application intends to read
+    //   the specified range of the directory file soon. The kernel may preload
+    //   this data into the page cache, reducing I/O latency for subsequent reads.
 
-      This system call hints to the kernel that the application intends to read
-      the specified range of the directory file soon. The kernel may preload
-      this data into the page cache, reducing I/O latency for subsequent reads.
+    //   # Arguments
+    //     `count` - Number of bytes to read ahead from the current offset
 
-      # Arguments
-        `count` - Number of bytes to read ahead from the current offset
+    //   # Returns
+    //   The number of bytes actually read ahead, or -1 on error.
 
-      # Returns
-      The number of bytes actually read ahead, or -1 on error.
-
-      # Note
-      This is an optimisation hint and may be ignored by the kernel.
-     Errors are typically silent as read-ahead failures don't affect correctness.
-    */
-    #[inline]
-    #[must_use]
-    #[allow(clippy::cast_possible_wrap)]
-    #[cfg(target_os = "linux")] // Only available on linux to my knowledge
-    pub fn readahead(&self, count: usize) -> isize {
-        /*  SAFETY:
-         - The file descriptor is valid and owned by this struct
-         - The offset is within valid bounds for the directory file
-         - The count is a valid usize that won't cause arithmetic overflow
-         - readahead is a safe syscall that only performs read operationS
-        */
-        unsafe { libc::readahead(self.fd.0, self.offset as _, count) }
-        // Note, not used yet but will be.
-    }
+    //   # Note
+    //   This is an optimisation hint and may be ignored by the kernel.
+    //  Errors are typically silent as read-ahead failures don't affect correctness.
+    // */
+    // #[inline]
+    // #[must_use]
+    // #[allow(clippy::cast_possible_wrap)]
+    // #[cfg(target_os = "linux")] // Only available on linux to my knowledge
+    // pub(crate) fn readahead(&self, count: usize) -> isize {
+    //     /*  SAFETY:
+    //      - The file descriptor is valid and owned by this struct
+    //      - The offset is within valid bounds for the directory file
+    //      - The count is a valid usize that won't cause arithmetic overflow
+    //      - readahead is a safe syscall that only performs read operationS
+    //     */
+    //     unsafe { libc::readahead(self.fd.0, self.offset as _, count) }
+    //     // Note, not used yet but will be.
+    // }
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
@@ -344,12 +350,7 @@ impl GetDents {
 
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
-        let drnt = unsafe {
-            self.syscall_buffer
-                .as_ptr()
-                .add(self.offset)
-                .cast::<dirent64>()
-        };
+        let drnt = unsafe { self.buffer_add(self.offset).cast::<dirent64>() };
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");

@@ -103,7 +103,9 @@ pub unsafe fn getdirentries64(
         // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
         fn getdirentries(fd: i32, buf: *mut c_char, nbytes: size_t, basep: *mut off_t) -> ssize_t;
     } // as above
-
+    // By doing this, we avoid fstatf64 calls and a thread mutex enforced by readdir (completely not needed for single thread reading)
+    // IT MAKES NO SENSE to parallelise readdir, it's fundamentally a sequential operation unless you're doing some really wacky stuff.
+    // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L334
     // SAFETY: As specified above
     unsafe { getdirentries(fd, buffer_ptr, nbytes, basep) }
 }

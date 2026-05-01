@@ -138,7 +138,8 @@ To avoid issues, use --same-file-system when traversing symlinks. This ensures t
 
 - **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD/NetBSD/Illumos/Solaris directory reading by significantly reducing the number of stat/statx/fstatat system calls**
 
-- **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat calls at [link here](./src/fs/iter.rs#L581)**
+- **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat/pthread_mutex calls at [link here](./src/fs/iter.rs#L581)
+ (Also works on FreeBSD)**
 
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
 

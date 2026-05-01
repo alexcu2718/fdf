@@ -569,6 +569,8 @@ pub struct GetDirEntries {
 impl GetDirEntries {
     #[inline]
     #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_ptr_alignment)]
+    #[allow(unfulfilled_lint_expectations)] //For platform variants with EOF trick.
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
         if self.end_of_stream {
@@ -595,9 +597,22 @@ impl GetDirEntries {
             // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
             // As this is ~5 years old, we can safely assume that all kernels have this capability
 
+            debug_assert!(
+                self.syscall_buffer.as_ptr().cast::<u32>().is_aligned(),
+                "Incorrect alignment expected"
+            );
+
             self.end_of_stream =
-            // SAFETY: AS ABOVE
-            unsafe { self.syscall_buffer.as_ptr().add(SyscallBuffer::BUFFER_SIZE - 4).read() == 1 };
+            // SAFETY: the fundamentally buffer is always aligned to a multiple of 8, which means it's always aligned for 4 byte->u32 access
+            // as debug assert above shows
+            unsafe {
+                self.syscall_buffer
+                    .as_ptr()
+                    .add(SyscallBuffer::BUFFER_SIZE - 4)
+                    .cast::<u32>()
+                    .read()
+                    == 1
+            }
         }
 
         #[cfg(not(has_eof_trick))]
@@ -610,37 +625,51 @@ impl GetDirEntries {
 
 
 
-        Example of syscall differences( also note the lack of fstatfs64!)
+                Example of syscall differences( also note the lack of fstatfs64 and semwait signal!)
 
 
+        󰀵 alexc fdf_test  main !   v1.90.0   05:43 
+        λ   sudo dtruss -c fd -HI . ~ 2>&1 | tail -n 15
 
-            /tmp/fdf_test getdirentries !8 ❯ sudo dtruss -c fd -HI . ~ 2>&1  | tail                              ✘ 0|INT 4s alexc@alexcs-iMac 01:03:12
-
-            psynch_mutexdrop                              165
-            psynch_mutexwait                              165
-            __semwait_signal                              834
-            madvise                                      1337
-            close_nocancel                               5050
-            fstatfs64                                    5054
-            open_nocancel                                5054
-            getdirentries64                              5399
-            write                                        6267
-
-            /tmp/fdf_test getdirentries !8 ❯ sudo dtruss -c ./target/release/fdf -HI . ~ 2>&1 | tail                    47s alexc@alexcs-iMac 01:04:06
-
-            psynch_mutexdrop                               91
-            psynch_mutexwait                               91
-            stat64                                        138
-            psynch_cvsignal                               142
-            psynch_cvwait                                 153
-            write                                        2414
-            close_nocancel                               3538
-            open                                         3543
-            getdirentries64                              3545
+        sysctl                                         12
+        ulock_wait2                                    12
+        mmap                                           13
+        ulock_wake                                     14
+        munmap                                         17
+        mprotect                                       26
+        sigaltstack                                    30
+        write                                         156
+        madvise                                       196
+        close_nocancel                               1898
+        fstatfs64                                    1899
+        open_nocancel                                1903
+        getdirentries64                              1920
+        __semwait_signal                            11184
 
 
+        󰀵 alexc fdf_test  main !   v1.90.0   05:43 
+        λ   sudo dtruss -c fdf -HI . ~ 2>&1 | tail -n 15
 
-        */
+        munmap                                          7
+        bsdthread_create                                8
+        stat64                                          8
+        thread_selfid                                   9
+        close                                          10
+        sysctl                                         11
+        mmap                                           15
+        sigaltstack                                    18
+        mprotect                                       25
+        write                                          32
+        madvise                                       175
+        close_nocancel                               2562
+        open                                         2578
+        getdirentries64                              2606
+
+
+        󰀵 alexc fdf_test  main !   v1.90.0   05:44 
+
+
+                */
 
         // Branchless check
         self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);

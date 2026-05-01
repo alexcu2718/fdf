@@ -445,7 +445,7 @@ pub trait DirentConstructor {
 
         // SAFETY: write is within buffer bounds
         unsafe {
-            *path_buffer.as_mut_ptr().add(base_len) = b'/' //this doesnt matter for non directories, since we're overwriting it anyway
+            path_buffer.as_mut_ptr().add(base_len).write(b'/') //this doesnt matter for non directories, since we're overwriting it anyway
         };
 
         base_len += needs_slash;
@@ -568,6 +568,13 @@ pub struct GetDirEntries {
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 impl GetDirEntries {
     #[inline]
+    /// Convenience function for pointer arithmetic on the buffer
+    pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u8 {
+        // SAFETY:  internal use only, the `amt` parameter is always within bounds of the buffer.
+        unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
+    }
+
+    #[inline]
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_ptr_alignment)]
     #[allow(unfulfilled_lint_expectations)] //For platform variants with EOF trick.
@@ -580,7 +587,7 @@ impl GetDirEntries {
         //SAFETY: passing a valid buffer to an open file descriptor.
         let remaining_bytes = unsafe {
             self.syscall_buffer
-                .getdirentries64(&self.fd, &raw mut self.base_pointer)
+                .getdirentries64(&self.fd, &mut self.base_pointer)
         };
         let is_more_remaining = remaining_bytes.is_positive();
         // Only macOS has this optimisation, the other BSD's do not
@@ -593,12 +600,16 @@ impl GetDirEntries {
             // The last bytes-4 is set to 1 to act as a sentinel to mark EOF(this was a PAIN to find out)
             // It always marks the end of the buffer regardless if EOF or not.
             // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
-            // (Or at least I cant find it anywhere!)
             // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
-            // As this is ~5 years old, we can safely assume that all kernels have this capability
+            // As this is ~5 years old, we can safely assume that all kernels have this capability, this is the best we'll get
 
             debug_assert!(
-                self.syscall_buffer.as_ptr().cast::<u32>().is_aligned(),
+                // SAFETY: as comments suggest.
+                unsafe {
+                    self.buffer_add(SyscallBuffer::BUFFER_SIZE - 4)
+                        .cast::<u32>()
+                        .is_aligned()
+                },
                 "Incorrect alignment expected"
             );
 
@@ -606,9 +617,7 @@ impl GetDirEntries {
             // SAFETY: the fundamentally buffer is always aligned to a multiple of 8, which means it's always aligned for 4 byte->u32 access
             // as debug assert above shows
             unsafe {
-                self.syscall_buffer
-                    .as_ptr()
-                    .add(SyscallBuffer::BUFFER_SIZE - 4)
+                self.buffer_add(SyscallBuffer::BUFFER_SIZE - 4)
                     .cast::<u32>()
                     .read()
                     == 1
@@ -712,12 +721,7 @@ impl GetDirEntries {
         }
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
-        let drnt = unsafe {
-            self.syscall_buffer
-                .as_ptr()
-                .add(self.offset)
-                .cast::<dirent64>()
-        };
+        let drnt = unsafe { self.buffer_add(self.offset).cast::<dirent64>() };
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");

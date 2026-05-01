@@ -67,8 +67,7 @@ impl ValueType for u8 {}
 
  // The buffer maintains proper alignment for syscalls
  //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
- assert!((buffer.as_ptr() as usize) % 8 ==0,"We expect the buffer to be aligned to 8 bytes")
- // assert!((buffer.as_ptr() as usize).is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
+ assert!(buffer.as_ptr().cast::<usize>().addr().is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
  ```
 */
 #[derive(Debug)]
@@ -106,7 +105,20 @@ where
         unsafe { self.assume_init_mut().get_unchecked_mut(index) }
     }
 }
-#[allow(clippy::new_without_default)]
+
+impl<T> Default for AlignedBuffer<T, { crate::fs::types::BUFFER_SIZE }>
+where
+    T: ValueType + Default + Copy,
+{
+    #[inline]
+    /// Defaults to the recommended buffer size for getdents(64)/getdirentries(64) on your OS.
+    fn default() -> Self {
+        Self {
+            data: MaybeUninit::new([T::default(); crate::fs::types::BUFFER_SIZE]),
+        }
+    }
+}
+
 impl<T, const SIZE: usize> AlignedBuffer<T, SIZE>
 where
     T: ValueType,
@@ -182,17 +194,39 @@ where
         unsafe { crate::util::getdents64(fd.0, self.as_mut_ptr().cast(), SIZE) }
     }
 
+    /// Executes the `getdirentries64` system call
+    /// Supported on macOS and FreeBSD.
+    ///
+    /// On success, the return value is the number of bytes written into this buffer.
+    /// A return value of `0` indicates end-of-directory. Negative values indicate an
+    /// OS error as returned by the underlying syscall wrapper.
+    ///
+    /// Caveats
+    /// - This method is `unsafe` because the kernel only initialises the first `n`
+    ///   bytes it writes. Callers must only read the returned byte count, not the
+    ///   whole buffer.
+    /// - `basep` is an in/out directory position cookie. It must point to valid,
+    ///   writable memory for the duration of the call, and the updated value should
+    ///   be preserved if the caller needs to resume iteration correctly.
+    ///
+    ///
+    ///
+    /// # Safety
+    /// The caller must ensure `fd` refers to an open directory and that `basep`
+    /// remains a valid mutable reference for the duration of the call.
+    ///  Only Available on macOS and FreeBSD (with dragonfly to be expected in future update)
     #[inline]
     #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-    /// Executes the getdirentries(64) syscall
-    pub(crate) unsafe fn getdirentries64(
-        //TODO improve the safety of this wrapper eventually
-        &mut self,
-        fd: &crate::fs::FileDes,
-        basep: *mut i64,
-    ) -> isize {
-        // SAFETY: we're passing a valid buffer
-        unsafe { crate::util::getdirentries64(fd.0, self.as_mut_ptr().cast(), SIZE, basep) }
+    pub unsafe fn getdirentries64(&mut self, fd: &crate::fs::FileDes, basep: &mut i64) -> isize {
+        // SAFETY: we're passing a valid buffer and valid base pointer
+        unsafe {
+            crate::util::getdirentries64(
+                fd.0,
+                self.as_mut_ptr().cast(),
+                SIZE,
+                core::ptr::from_mut(basep),
+            )
+        }
     }
 
     /**

@@ -12,7 +12,7 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
 [build-dependencies]
-libc = { version = "0.2.185" }
+libc = { version = "0.2.186" }
 cc = "1.2.60"
 
 [dependencies]

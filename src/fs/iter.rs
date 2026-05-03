@@ -575,14 +575,32 @@ impl GetDirEntries {
         unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
     }
 
+    pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
+
     #[inline]
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_ptr_alignment)]
     #[allow(unfulfilled_lint_expectations)] //For platform variants with EOF trick.
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
+
         if self.end_of_stream {
             return false;
+        }
+
+        #[cfg(has_eof_trick)]
+        {
+            // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
+            // this means that we detect when the kernel writes it's EOF flags
+            // SAFETY: Buffer is aligned to 8 bytes->aligned to 4, the write is in bounds by construction
+            // so alignment met+accessing valid(but uinitialised) memory.
+            unsafe {
+                self.syscall_buffer
+                    .as_mut_ptr()
+                    .byte_add(Self::BUFFER_SIZE - 4)
+                    .cast::<u32>()
+                    .write(0)
+            }
         }
 
         //SAFETY: passing a valid buffer to an open file descriptor.
@@ -590,6 +608,7 @@ impl GetDirEntries {
             self.syscall_buffer
                 .getdirentries64(&self.fd, &mut self.base_pointer)
         };
+
         let is_more_remaining = remaining_bytes.is_positive();
         // Only macOS has this optimisation, the other BSD's do not
         #[cfg(has_eof_trick)] // Check at build time for the optimisation
@@ -607,7 +626,7 @@ impl GetDirEntries {
             debug_assert!(
                 // SAFETY: as comments suggest.
                 unsafe {
-                    self.buffer_add(SyscallBuffer::BUFFER_SIZE - 4)
+                    self.buffer_add(Self::BUFFER_SIZE - 4)
                         .cast::<u32>()
                         .is_aligned()
                 },
@@ -618,7 +637,7 @@ impl GetDirEntries {
             // SAFETY: the fundamentally buffer is always aligned to a multiple of 8, which means it's always aligned for 4 byte->u32 access
             // as debug assert above shows
             unsafe {
-                self.buffer_add(SyscallBuffer::BUFFER_SIZE - 4)
+                self.buffer_add(Self::BUFFER_SIZE - 4)
                     .cast::<u32>()
                     .read()
                     == 1

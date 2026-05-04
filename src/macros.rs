@@ -160,16 +160,13 @@ macro_rules! read_direntries {
             target_os = "openbsd",
             target_os = "netbsd",
             target_os = "illumos",
-            target_os = "solaris"
+            target_os = "solaris",
+            target_os = "macos",
+            target_os = "freebsd"
         ))]
         {
             // additionally, readdir internally calls stat on each file, which is expensive.
             $dir.getdents()
-        }
-
-        #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-        {
-            $dir.getdirentries()
         }
 
         #[cfg(not(any(
@@ -180,7 +177,9 @@ macro_rules! read_direntries {
             target_os = "openbsd",
             target_os = "netbsd",
             target_os = "illumos",
-            target_os = "solaris"
+            target_os = "solaris",
+            target_os = "macos",
+            target_os = "freebsd"
         )))]
         {
             $dir.readdir()

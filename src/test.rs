@@ -425,7 +425,7 @@ mod tests {
 
     #[test]
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn test_getdents() {
+    fn test_getdirentries() {
         let temp_dir = std::env::temp_dir();
         let dir_path = temp_dir.as_path().join("testdir");
         let _ = std::fs::create_dir(&dir_path);
@@ -1349,8 +1349,8 @@ mod tests {
 
     #[test]
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn test_filedes_getdents() {
-        let dir = temp_dir().join("test_filedes_getdents");
+    fn test_filedes_getdirentries() {
+        let dir = temp_dir().join("test_filedes_getdirentries");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = fs::create_dir_all(&dir);
 

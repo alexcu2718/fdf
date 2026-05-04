@@ -1550,57 +1550,33 @@ impl DirEntry {
         ReadDir::new(self)
     }
 
+    //TODO add dragonflybsd
     /**
-     Low-level directory iterator using the `getdents(64)` system call.
+    Low-level directory iterator backed by `getdents` or `getdirentries`,
+    depending on the target platform.
 
-     This method provides high-performance directory scanning by using a large buffer
-     generally faster than `readdir` for bulk directory operations due to lack of needing to call stat.
+    This method exposes the crate's high-throughput kernel-backed directory
+    iteration path. On Linux, Android, and several other Unix targets it uses
+    `getdents`, while macOS and FreeBSD use `getdirentries`.
 
-     # Errors
+    Entries are read in batches directly into an internal buffer, which reduces
+    libc overhead compared with `readdir`. It also avoids implicit per-entry
+    `stat` calls and only falls back to metadata lookups when the filesystem
+    does not report a usable entry type.
 
-     Returns `Err` if:
-     - The entry is not a directory
-     - Permission restrictions prevent reading the directory
-     - The directory file descriptor cannot be opened
-     - Buffer allocation fails
-     - Any other system error occurs during the `getdents` operation
+    On macOS, the iterator also uses the EOF sentinel trick to avoid an extra
+    syscall when determining that the directory stream has been exhausted.
 
-     # Platform Specificity
+    # Platform
+    - Linux, Android, OpenBSD, NetBSD, illumos, Solaris, macOS, and FreeBSD
+    - `DragonFlyBSD` is not wired up yet
 
-     This method is only available on Linux/Android/OpenBSD/NetBSD/Illumos/Solaris.
+    # Errors
+    Returns `Err` when the directory cannot be opened or read, when the
+    target is not a directory, or when permissions prevent iteration.
 
-     # Examples
 
-     ```
-     use fdf::fs::DirEntry;
-     use std::fs::{self, File};
-     use std::io::Write;
-
-     // Create a temporary directory with test files
-     let temp_dir = std::env::temp_dir().join("test_getdents");
-     fs::create_dir(&temp_dir).unwrap();
-
-     // Create test files
-     File::create(temp_dir.join("file1.txt")).unwrap().write_all(b"test").unwrap();
-     File::create(temp_dir.join("file2.txt")).unwrap().write_all(b"test").unwrap();
-     fs::create_dir(temp_dir.join("subdir")).unwrap();
-
-     // Create DirEntry for the temporary directory
-     let entry= DirEntry::new(&temp_dir).unwrap();
-
-     // Use getdents to iterate through directory contents
-     let mut entries: Vec<_> = entry.getdents().unwrap().collect();
-     entries.sort_by_key(|e| e.file_name().to_vec());
-
-     // Should contain 3 entries: 2 files and 1 directory
-     assert_eq!(entries.len(), 3);
-     assert!(entries.iter().any(|e| e.file_name() == b"file1.txt"));
-     assert!(entries.iter().any(|e| e.file_name() == b"file2.txt"));
-     assert!(entries.iter().any(|e| e.file_name() == b"subdir"));
-
-     // Clean up
-     fs::remove_dir_all(&temp_dir).unwrap();
-    ```
+    For examples, see the documentation on `readdir`.
     */
     #[inline]
     #[cfg(any(
@@ -1609,37 +1585,11 @@ impl DirEntry {
         target_os = "openbsd",
         target_os = "netbsd",
         target_os = "illumos",
-        target_os = "solaris"
+        target_os = "solaris",
+        target_os = "macos",
+        target_os = "freebsd"
     ))]
     pub fn getdents(&self) -> Result<crate::fs::GetDents> {
         crate::fs::GetDents::new(self)
-    }
-
-    //TODO add dragonflybsd
-    /**
-    Low-level directory iterator using macOS/FreeBSD `getdirentries64`/`getdirentries` system calls.
-
-    This method provides a macOS/BSD-specific, high-performance streaming iterator
-    over directory entries by leveraging the platform's `getdirentries(2)`
-    family. It is analogous to the Linux `getdents` specialisation
-
-    It implements a specialised EOF trick to avoid an extra syscall to terminate reading on macOS
-
-
-    # Platform
-    - macOS only/FreeBSD only (future plans to expand to NetBSD/DragonFlyBSD)
-
-    # Errors
-    Returns `Err` when the directory cannot be opened or read, when the
-    target is not a directory, or when permissions prevent iteration.
-
-
-    For examples: See documentation on `readdir`
-    ```
-    */
-    #[inline]
-    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-    pub fn getdirentries(&self) -> Result<crate::fs::GetDirEntries> {
-        crate::fs::GetDirEntries::new(self)
     }
 }

@@ -9,15 +9,13 @@
     target_os = "solaris"
 ))]
 use crate::fs::types::SyscallBuffer;
-use crate::fs::{DirEntry, FileType};
-use crate::fs::{FileDes, Result};
+use crate::fs::{DirEntry, FileDes, FileType, Result};
 use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
 use libc::closedir;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, fstatat};
-//use crate::util::
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -129,238 +127,6 @@ impl Drop for ReadDir {
     // was obtained from the `dirfd()`
     //( i want to pass ownership to the FileDes BUT due to above limitations, I need a different approach
     // TODO!
-}
-
-/**
-Linux/Android/BSDspecific directory iterator using the `getdents` system call.
-
-Provides more efficient directory traversal than `readdir` for large directories
-
-Unlike some directory iteration methods, this does not implicitly call `stat`
-on each entry unless required by unusual filesystem behaviour.
-*/
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
-pub struct GetDents {
-    /// File descriptor of the open directory, wrapped for automatic resource management
-    pub(crate) fd: FileDes,
-    /// Kernel buffer for batch reading directory entries via system call I/O
-    pub(crate) syscall_buffer: SyscallBuffer,
-    /// Buffer for constructing full entry paths
-    /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
-    pub(crate) path_buffer: Vec<u8>,
-    /// Length of the base directory path including the trailing slash
-    /// Used for efficient filename extraction and path construction
-    pub(crate) file_name_index: usize,
-    /// Depth of the parent directory in the directory tree hierarchy
-    /// Used to calculate depth for child entries during recursive traversal
-    pub(crate) parent_depth: u32,
-    /// Current read position within the directory entry buffer
-    /// Tracks progress through the currently loaded batch of entries
-    pub(crate) offset: usize,
-    /// Number of bytes remaining to be processed in the current buffer
-    /// Indicates when a new system call is needed to fetch more entries
-    pub(crate) remaining_bytes: usize,
-    /// A marker for when the `FileDes` can give no more entries
-    pub(crate) end_of_stream: bool,
-}
-
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
-impl Drop for GetDents {
-    /**
-      Drops the iterator, closing the file descriptor.
-      we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
-    */
-    #[inline]
-    fn drop(&mut self) {
-        debug_assert!(
-            self.fd.is_open(),
-            "We expect the file descriptor to be open before closing"
-        );
-        // SAFETY: only closing HERE
-        #[cfg(not(debug_assertions))]
-        unsafe {
-            libc::close(self.fd.0)
-        };
-        // SAFETY: As above
-        #[cfg(debug_assertions)]
-        unsafe {
-            assert!(libc::close(self.fd.0) == 0, "fd was not closed in getdents")
-        }
-    }
-}
-
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
-impl GetDents {
-    /**
-    Returns the number of unprocessed bytes remaining in the current kernel buffer.
-
-    This indicates how much data is still available to be processed before needing
-    to perform another `getdents(64)` system call. When this returns 0, the buffer
-    has been exhausted.
-
-    # Examples
-    ```
-    use fdf::fs::DirEntry;
-    let start_path=std::env::temp_dir();
-    let getdents=DirEntry::new(start_path).unwrap().getdents().unwrap();
-    while getdents.remaining_bytes() > 0 {
-       // Process entries from current buffer
-       }
-       // Buffer exhausted, need to read more
-       ```
-
-       */
-    #[inline]
-    #[must_use]
-    pub const fn remaining_bytes(&self) -> usize {
-        self.remaining_bytes
-    }
-
-    #[inline]
-    /// Convenience function for pointer arithmetic on the buffer
-    pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u8 {
-        // SAFETY:  internal use only, the `amt` parameter is always within bounds of the buffer.
-        unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
-    }
-
-    #[inline]
-    pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
-        // Early return if we've already reached end of stream
-        if self.end_of_stream {
-            return false;
-        }
-
-        // Read directory entries, ignoring negative error codes(same as readdir semantics)
-        let remaining_bytes = self.syscall_buffer.getdents(&self.fd);
-
-        let has_bytes_remaining = remaining_bytes.is_positive();
-        // Cast the boolean to 0/1  (because 0 * x=0, trivially), keeping only positive results(avoid branching)
-        self.remaining_bytes = usize::from(has_bytes_remaining) * remaining_bytes.cast_unsigned();
-
-        self.end_of_stream = !has_bytes_remaining;
-
-        // Reset to start reading from the beginning of the new buffer data for the case where it's got
-        self.offset = 0;
-
-        // Return true only if we successfully read non-zero bytes
-        has_bytes_remaining
-    }
-    // Commented out until more testing done on practicality.
-    // /**
-    //   Initiates read-ahead for the directory to improve sequential read performance.
-
-    //   This system call hints to the kernel that the application intends to read
-    //   the specified range of the directory file soon. The kernel may preload
-    //   this data into the page cache, reducing I/O latency for subsequent reads.
-
-    //   # Arguments
-    //     `count` - Number of bytes to read ahead from the current offset
-
-    //   # Returns
-    //   The number of bytes actually read ahead, or -1 on error.
-
-    //   # Note
-    //   This is an optimisation hint and may be ignored by the kernel.
-    //  Errors are typically silent as read-ahead failures don't affect correctness.
-    // */
-    // #[inline]
-    // #[must_use]
-    // #[allow(clippy::cast_possible_wrap)]
-    // #[cfg(target_os = "linux")] // Only available on linux to my knowledge
-    // pub(crate) fn readahead(&self, count: usize) -> isize {
-    //     /*  SAFETY:
-    //      - The file descriptor is valid and owned by this struct
-    //      - The offset is within valid bounds for the directory file
-    //      - The count is a valid usize that won't cause arithmetic overflow
-    //      - readahead is a safe syscall that only performs read operationS
-    //     */
-    //     unsafe { libc::readahead(self.fd.0, self.offset as _, count) }
-    //     // Note, not used yet but will be.
-    // }
-
-    #[inline]
-    pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
-        let fd = dir.open()?; //getting the file descriptor
-        debug_assert!(fd.is_open(), "We expect it to always be open");
-
-        let (path_buffer, file_name_index) = Self::init_from_path(dir);
-        Ok(Self {
-            fd,
-            syscall_buffer: SyscallBuffer::new(),
-            path_buffer,
-            file_name_index,
-            parent_depth: dir.depth,
-            offset: 0,
-            remaining_bytes: 0,
-            end_of_stream: false,
-        })
-    }
-
-    /**
-        Advances the iterator to the next directory entry in the buffer and returns a pointer to it.
-
-        This function processes the internal buffer filled by `getdents64` system calls, interpreting
-        the data at the current offset as a `dirent64` structure. After reading an entry, the internal
-        offset is advanced by the entry's record length (`d_reclen`), positioning the iterator for
-        the next subsequent call.
-
-        IMPORTANT: This function returns ALL directory entries, including "." and ".." entries.
-        Filtering of these entries should be handled by the caller if desired.
-
-        # Returns
-        - `Some(Unique<dirent64>)` when a valid directory entry is available
-        - `None` when the buffer is exhausted and no more entries can be read
-
-        # Behavior
-        The function performs the following steps:
-        1. Checks if unread data remains in the internal buffer
-        2. Casts the current buffer position to a `dirent64` pointer
-        3. Extracts the entry's record length to advance the internal offset
-        4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
-    */
-    #[inline]
-    #[allow(clippy::cast_ptr_alignment)]
-    pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
-        while self.offset >= self.remaining_bytes {
-            if !self.are_more_entries_remaining() {
-                return None;
-            }
-        }
-
-        // We have data in buffer, get next entry
-        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
-        let drnt = unsafe { self.buffer_add(self.offset).cast::<dirent64>() };
-
-        // Quick sanity checks for debug builds (alignment check+nullcheck)
-        debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
-        debug_assert!(drnt.is_aligned(), "the dirent is malformed"); //not aligned to 8 bytes
-        // SAFETY: dirent is not null so field access is safe
-        self.offset += unsafe { access_dirent!(drnt, d_reclen) };
-        // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
-        // SAFETY: dirent is not null (
-        unsafe { Some(Unique::new_unchecked(drnt)) }
-    }
 }
 
 /**
@@ -530,20 +296,33 @@ pub trait DirentConstructor {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 /**
-macOS/freeBSD directory iterator using the `getdirentries` system call.
+High-throughput directory iterator backed by `getdents` or `getdirentries`,
+ depending on the target platform.
 
- Provides more efficient directory traversal than `readdir` for large directories
+ This implementation reads directory entries in batches directly from the kernel,
+ which reduces libc overhead and is typically faster than `readdir` when walking
+ large directories.
 
- Unlike some directory iteration methods, this does not implicitly call `stat`
- on each entry unless required by unusual filesystem behaviour.
+ It also avoids implicit `stat` calls for each entry and only falls back to
+ metadata lookups when the filesystem does not provide a usable entry type.
 */
-pub struct GetDirEntries {
-    /// File descriptor of the open directory, wrapped for automatic resource management
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "freebsd",
+    target_os = "macos"
+))]
+pub struct GetDents {
+    /// File descriptor of the open directory, wrapped in a `New Type`, does not implement Drop(maydo at later point),
+    /// The iterator closes the file descriptor upon this struct beying dropped.
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
-    /// 8192 bytes, matching macos readdir semantics) in size, optimised for typical directory traversal
+    /// typically using the best calculated  buffer sizes, optimised for typical directory traversal (derived from syscall tracing)
     pub(crate) syscall_buffer: SyscallBuffer,
     /// buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
@@ -562,12 +341,22 @@ pub struct GetDirEntries {
     pub(crate) remaining_bytes: usize,
     /// A marker for when the `FileDes` can give no more entries
     pub(crate) end_of_stream: bool,
+    #[cfg(any(target_os = "freebsd", target_os = "macos"))] // TODO add dragonflyBSD here eventually
     /// The base pointer for the getdirentries call
     pub(crate) base_pointer: i64,
 }
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-impl GetDirEntries {
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "freebsd",
+    target_os = "macos"
+))]
+impl GetDents {
     #[inline]
     /// Convenience function for pointer arithmetic on the buffer
     pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u8 {
@@ -581,6 +370,7 @@ impl GetDirEntries {
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_ptr_alignment)]
     #[allow(unfulfilled_lint_expectations)] //For platform variants with EOF trick.
+    #[allow(clippy::missing_assert_message)] // for cleaner code.
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
 
@@ -588,7 +378,7 @@ impl GetDirEntries {
             return false;
         }
 
-        #[cfg(has_eof_trick)]
+        #[cfg(all(has_eof_trick, target_os = "macos"))]
         {
             // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
             // this means that we detect when the kernel writes it's EOF flags
@@ -604,14 +394,21 @@ impl GetDirEntries {
         }
 
         //SAFETY: passing a valid buffer to an open file descriptor.
+        #[cfg(any(target_os = "macos", target_os = "freebsd"))] //TODO ADD DRAGONFLYBSD
         let remaining_bytes = unsafe {
             self.syscall_buffer
                 .getdirentries64(&self.fd, &mut self.base_pointer)
         };
 
+        #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+        let remaining_bytes = self.syscall_buffer.getdents(&self.fd);
+
+        const { assert!(Self::BUFFER_SIZE.is_multiple_of(8)) };
+        debug_assert!(self.syscall_buffer.as_ptr().cast::<u64>().is_aligned());
+
         let is_more_remaining = remaining_bytes.is_positive();
         // Only macOS has this optimisation, the other BSD's do not
-        #[cfg(has_eof_trick)] // Check at build time for the optimisation
+        #[cfg(all(has_eof_trick, target_os = "macos"))] // Check at build time for the optimisation
         {
             // SAFETY: Buffer is already initialised by the kernel
             // The kernel writes the WHOLE of the buffer passed to `getdirentries`
@@ -622,26 +419,9 @@ impl GetDirEntries {
             // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
             // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
             // As this is ~5 years old, we can safely assume that all kernels have this capability, this is the best we'll get
-
-            debug_assert!(
-                // SAFETY: as comments suggest.
-                unsafe {
-                    self.buffer_add(Self::BUFFER_SIZE - 4)
-                        .cast::<u32>()
-                        .is_aligned()
-                },
-                "Incorrect alignment expected"
-            );
-
             self.end_of_stream =
             // SAFETY: the fundamentally buffer is always aligned to a multiple of 8, which means it's always aligned for 4 byte->u32 access
-            // as debug assert above shows
-            unsafe {
-                self.buffer_add(Self::BUFFER_SIZE - 4)
-                    .cast::<u32>()
-                    .read()
-                    == 1
-            }
+            unsafe { self.buffer_add(Self::BUFFER_SIZE - 4).cast::<u32>().read() == 1 }
         }
 
         #[cfg(not(has_eof_trick))]
@@ -650,55 +430,43 @@ impl GetDirEntries {
         }
 
         /*
+        Example of syscall differences( also note the lack of fstatfs64 and semwait signal!)
+
+           λ   sudo dtruss -c fd -HI . ~ 2>&1 | tail -n 15
+
+           sysctl                                         12
+           ulock_wait2                                    12
+           mmap                                           13
+           ulock_wake                                     14
+           munmap                                         17
+           mprotect                                       26
+           sigaltstack                                    30
+           write                                         156
+           madvise                                       196
+           close_nocancel                               1898
+           fstatfs64                                    1899
+           open_nocancel                                1903
+           getdirentries64                              1920
+           __semwait_signal                            11184
 
 
+           λ   sudo dtruss -c fdf -HI . ~ 2>&1 | tail -n 15
 
-
-                Example of syscall differences( also note the lack of fstatfs64 and semwait signal!)
-
-
-        󰀵 alexc fdf_test  main !   v1.90.0   05:43 
-        λ   sudo dtruss -c fd -HI . ~ 2>&1 | tail -n 15
-
-        sysctl                                         12
-        ulock_wait2                                    12
-        mmap                                           13
-        ulock_wake                                     14
-        munmap                                         17
-        mprotect                                       26
-        sigaltstack                                    30
-        write                                         156
-        madvise                                       196
-        close_nocancel                               1898
-        fstatfs64                                    1899
-        open_nocancel                                1903
-        getdirentries64                              1920
-        __semwait_signal                            11184
-
-
-        󰀵 alexc fdf_test  main !   v1.90.0   05:43 
-        λ   sudo dtruss -c fdf -HI . ~ 2>&1 | tail -n 15
-
-        munmap                                          7
-        bsdthread_create                                8
-        stat64                                          8
-        thread_selfid                                   9
-        close                                          10
-        sysctl                                         11
-        mmap                                           15
-        sigaltstack                                    18
-        mprotect                                       25
-        write                                          32
-        madvise                                       175
-        close_nocancel                               2562
-        open                                         2578
-        getdirentries64                              2606
-
-
-        󰀵 alexc fdf_test  main !   v1.90.0   05:44 
-
-
-                */
+           munmap                                          7
+           bsdthread_create                                8
+           stat64                                          8
+           thread_selfid                                   9
+           close                                          10
+           sysctl                                         11
+           mmap                                           15
+           sigaltstack                                    18
+           mprotect                                       25
+           write                                          32
+           madvise                                       175
+           close_nocancel                               2562
+           open                                         2578
+           getdirentries64                              2606
+                   */
 
         // Branchless check
         self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
@@ -759,6 +527,7 @@ impl GetDirEntries {
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, path_len) = Self::init_from_path(dir);
+
         Ok(Self {
             fd,
             syscall_buffer: SyscallBuffer::new(),
@@ -768,13 +537,23 @@ impl GetDirEntries {
             offset: 0,
             remaining_bytes: 0,
             end_of_stream: false,
+            #[cfg(any(target_os = "macos", target_os = "freebsd"))]
             base_pointer: 0,
         })
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-impl Drop for GetDirEntries {
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "freebsd",
+    target_os = "macos"
+))]
+impl Drop for GetDents {
     /**
       Drops the iterator, closing the file descriptor.
       we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
@@ -888,7 +667,9 @@ impl_dirent_constructor!(ReadDir);
     target_os = "openbsd",
     target_os = "netbsd",
     target_os = "illumos",
-    target_os = "solaris"
+    target_os = "solaris",
+    target_os = "freebsd",
+    target_os = "macos"
 ))]
 impl_iterator_public_methods!(GetDents);
 #[cfg(any(
@@ -897,12 +678,8 @@ impl_iterator_public_methods!(GetDents);
     target_os = "openbsd",
     target_os = "netbsd",
     target_os = "illumos",
-    target_os = "solaris"
+    target_os = "solaris",
+    target_os = "freebsd",
+    target_os = "macos"
 ))]
 impl_dirent_constructor!(GetDents);
-
-// Macos/FreeBSD's only(?)
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-impl_iterator_public_methods!(GetDirEntries);
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-impl_dirent_constructor!(GetDirEntries);

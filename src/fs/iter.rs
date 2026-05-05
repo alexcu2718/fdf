@@ -361,7 +361,8 @@ impl GetDents {
     /// Convenience function for pointer arithmetic on the buffer
     pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u64 {
         // SAFETY:  internal use only, the `amt` parameter is always within bounds of the buffer.
-        unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
+        // Guaranteed alignment due to align(8)
+        unsafe { self.syscall_buffer.as_ptr().byte_add(amt).cast() }
     }
 
     #[inline]

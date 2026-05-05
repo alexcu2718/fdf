@@ -7,6 +7,7 @@ mod sealed {
     pub trait Sealed {}
     impl Sealed for i8 {}
     impl Sealed for u8 {}
+    impl Sealed for u64 {}
 }
 
 /// Marker trait for valid buffer value types (i8 and u8)
@@ -17,6 +18,7 @@ pub trait ValueType: sealed::Sealed + Copy {}
 
 impl ValueType for i8 {}
 impl ValueType for u8 {}
+impl ValueType for u64 {}
 
 /**
  A optimised, aligned buffer for system call operations

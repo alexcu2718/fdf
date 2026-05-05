@@ -14,7 +14,7 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
     target_os = "solaris",
     target_os = "illumos"
 ))]
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, BUFFER_SIZE>;
 
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]

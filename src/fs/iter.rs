@@ -359,7 +359,7 @@ pub struct GetDents {
 impl GetDents {
     #[inline]
     /// Convenience function for pointer arithmetic on the buffer
-    pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u8 {
+    pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u64 {
         // SAFETY:  internal use only, the `amt` parameter is always within bounds of the buffer.
         unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
     }
@@ -429,8 +429,6 @@ impl GetDents {
     pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
 
     #[inline]
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::cast_ptr_alignment)]
     #[allow(unfulfilled_lint_expectations)] //For platform variants with EOF trick.
     #[allow(clippy::missing_assert_message)] // for cleaner code.
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
@@ -459,7 +457,6 @@ impl GetDents {
         let remaining_bytes = self.getdents();
 
         const { assert!(Self::BUFFER_SIZE.is_multiple_of(8)) };
-        debug_assert!(self.syscall_buffer.as_ptr().cast::<u64>().is_aligned());
 
         let is_more_remaining = remaining_bytes.is_positive();
         // Only macOS has this optimisation, the other BSD's do not
@@ -555,7 +552,6 @@ impl GetDents {
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
     */
     #[inline]
-    #[allow(clippy::cast_ptr_alignment)]
     pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         while self.offset >= self.remaining_bytes {
             if !self.are_more_entries_remaining() {

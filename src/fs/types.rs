@@ -14,7 +14,9 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
     target_os = "solaris",
     target_os = "illumos"
 ))]
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, BUFFER_SIZE>;
+#[allow(clippy::integer_division_remainder_used)]
+#[allow(clippy::integer_division)]
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, { BUFFER_SIZE / 8 }>;
 
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]

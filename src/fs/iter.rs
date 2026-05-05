@@ -364,6 +364,68 @@ impl GetDents {
         unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
     }
 
+    #[inline]
+    #[must_use]
+    /// Returns the current offset into the internal [`SyscallBuffer`]
+    pub const fn offset(&self) -> usize {
+        self.offset
+    }
+
+    #[inline]
+    #[must_use]
+    /**
+    Returns the reusable kernel I/O buffer backing batched directory reads.
+
+    This exposes the internal [`SyscallBuffer`] used by `getdents`/`getdirentries64`
+    so low-level callers can inspect buffer sizing or reuse it for diagnostics.
+    The buffer remains owned by the iterator and is mutated whenever a new batch
+    of directory entries is fetched.
+    */
+    pub const fn syscall_buffer(&self) -> &SyscallBuffer {
+        &self.syscall_buffer
+    }
+
+    #[inline]
+    /**
+     Refills the internal directory-entry buffer using the platform directory syscall.
+
+     On Linux-like targets this dispatches to `getdents`, while on macOS and
+     FreeBSD it calls `getdirentries64` and updates the internal base pointer
+     required by that API.
+
+     # Returns
+
+     Returns the raw syscall result as a signed byte count:
+     - positive: the number of bytes written into the buffer
+     - `0`: end of directory stream
+     - negative: the syscall failed
+
+     This method does not interpret the returned entries; higher-level iteration
+     code is responsible for consuming the buffer and handling end-of-stream.
+    */
+    pub fn getdents(&mut self) -> isize {
+        #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+        {
+            self.syscall_buffer.getdents(&self.fd)
+        }
+        #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+        {
+            //SAFETY: passing a valid buffer to an open file descriptor and base pointer
+            unsafe {
+                self.syscall_buffer
+                    .getdirentries64(&self.fd, &mut self.base_pointer)
+            }
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    /// Returns the amount of bytes left in the buffer
+    pub const fn remaining_bytes(&self) -> usize {
+        self.remaining_bytes
+    }
+    /// A constant representing the maximum size of the internal Stack based buffer on this platform
+    /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
     pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
 
     #[inline]
@@ -378,7 +440,7 @@ impl GetDents {
             return false;
         }
 
-        #[cfg(all(has_eof_trick, target_os = "macos"))]
+        #[cfg(has_eof_trick)]
         {
             // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
             // this means that we detect when the kernel writes it's EOF flags
@@ -393,22 +455,15 @@ impl GetDents {
             }
         }
 
-        //SAFETY: passing a valid buffer to an open file descriptor.
-        #[cfg(any(target_os = "macos", target_os = "freebsd"))] //TODO ADD DRAGONFLYBSD
-        let remaining_bytes = unsafe {
-            self.syscall_buffer
-                .getdirentries64(&self.fd, &mut self.base_pointer)
-        };
-
-        #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
-        let remaining_bytes = self.syscall_buffer.getdents(&self.fd);
+        // Get the syscall return amount in bytes
+        let remaining_bytes = self.getdents();
 
         const { assert!(Self::BUFFER_SIZE.is_multiple_of(8)) };
         debug_assert!(self.syscall_buffer.as_ptr().cast::<u64>().is_aligned());
 
         let is_more_remaining = remaining_bytes.is_positive();
         // Only macOS has this optimisation, the other BSD's do not
-        #[cfg(all(has_eof_trick, target_os = "macos"))] // Check at build time for the optimisation
+        #[cfg(has_eof_trick)] // Check at build time for the optimisation
         {
             // SAFETY: Buffer is already initialised by the kernel
             // The kernel writes the WHOLE of the buffer passed to `getdirentries`

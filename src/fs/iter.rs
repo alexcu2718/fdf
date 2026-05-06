@@ -361,8 +361,7 @@ impl GetDents {
     /// Convenience function for pointer arithmetic on the buffer
     pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u64 {
         // SAFETY:  internal use only, the `amt` parameter is always within bounds of the buffer.
-        // Guaranteed alignment due to align(8)
-        unsafe { self.syscall_buffer.as_ptr().byte_add(amt).cast() }
+        unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
     }
 
     #[inline]
@@ -375,15 +374,15 @@ impl GetDents {
     #[inline]
     #[must_use]
     /**
-    Returns the reusable kernel I/O buffer backing batched directory reads.
+    Returns the mutable reusable kernel I/O buffer backing batched directory reads.
 
     This exposes the internal [`SyscallBuffer`] used by `getdents`/`getdirentries64`
     so low-level callers can inspect buffer sizing or reuse it for diagnostics.
     The buffer remains owned by the iterator and is mutated whenever a new batch
     of directory entries is fetched.
     */
-    pub const fn syscall_buffer(&self) -> &SyscallBuffer {
-        &self.syscall_buffer
+    pub const fn syscall_buffer(&mut self) -> &mut SyscallBuffer {
+        &mut self.syscall_buffer
     }
 
     #[inline]
@@ -425,6 +424,13 @@ impl GetDents {
     pub const fn remaining_bytes(&self) -> usize {
         self.remaining_bytes
     }
+
+    #[inline]
+    #[must_use]
+    /// Returns a boolean indicating whether the stream is exhausted
+    pub const fn is_end_of_stream(&self) -> bool {
+        self.end_of_stream
+    }
     /// A constant representing the maximum size of the internal Stack based buffer on this platform
     /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
     pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
@@ -435,7 +441,7 @@ impl GetDents {
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
 
-        if self.end_of_stream {
+        if self.is_end_of_stream() {
             return false;
         }
 
@@ -460,7 +466,7 @@ impl GetDents {
         const { assert!(Self::BUFFER_SIZE.is_multiple_of(8)) };
 
         let is_more_remaining = remaining_bytes.is_positive();
-        // Only macOS has this optimisation, the other BSD's do not
+        // Only macOS has this optimisation, the other platforms do not, if macos does not have this, default to checking for 0 ret value
         #[cfg(has_eof_trick)] // Check at build time for the optimisation
         {
             // SAFETY: Buffer is already initialised by the kernel
@@ -553,14 +559,17 @@ impl GetDents {
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
     */
     #[inline]
+    #[allow(clippy::missing_assert_message)]
     pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         while self.offset >= self.remaining_bytes {
             if !self.are_more_entries_remaining() {
                 return None;
             }
         }
+        debug_assert!(self.offset.is_multiple_of(8), "Must be a multiple of 8");
+        const { assert!(align_of::<u64>() == align_of::<dirent64>(),) };
         // We have data in buffer, get next entry
-        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read
+        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read and is properly aligned
         let drnt = unsafe { self.buffer_add(self.offset).cast::<dirent64>() };
 
         // Quick sanity checks for debug builds (alignment check+nullcheck)

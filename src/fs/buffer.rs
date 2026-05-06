@@ -8,6 +8,11 @@ mod sealed {
     impl Sealed for i8 {}
     impl Sealed for u8 {}
     impl Sealed for u64 {}
+    impl Sealed for i64 {}
+    impl Sealed for usize {}
+    impl Sealed for isize {}
+    impl Sealed for i32 {}
+    impl Sealed for u32 {}
 }
 
 /// Marker trait for valid buffer value types (i8 and u8)
@@ -19,6 +24,11 @@ pub trait ValueType: sealed::Sealed + Copy {}
 impl ValueType for i8 {}
 impl ValueType for u8 {}
 impl ValueType for u64 {}
+impl ValueType for i64 {}
+impl ValueType for usize {}
+impl ValueType for isize {}
+impl ValueType for i32 {}
+impl ValueType for u32 {}
 
 /**
  A optimised, aligned buffer for system call operations
@@ -110,7 +120,13 @@ where
 
 impl<T> Default for AlignedBuffer<T, { crate::fs::types::BUFFER_SIZE }>
 where
-    T: ValueType + Default + Copy,
+    T: ValueType
+        + Default
+        + Copy
+        + core::ops::Add
+        + core::ops::Sub
+        + core::ops::Mul
+        + core::ops::Div,
 {
     #[inline]
     /// Defaults to the recommended buffer size for getdents(64)/getdirentries(64) on your OS.
@@ -138,8 +154,8 @@ where
             data: MaybeUninit::uninit(),
         }
     }
-    /// Returns the size of which this buffer was created by.
-    pub const BUFFER_SIZE: usize = SIZE;
+    /// Returns the size of which this buffer was created by (counted in raw bytes)
+    pub const BUFFER_SIZE: usize = size_of::<T>() * SIZE;
 
     /// Returns a mutable pointer to the buffer's data
     #[inline]
@@ -193,7 +209,7 @@ where
     ))]
     pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> isize {
         // SAFETY: we're passing a valid buffer
-        unsafe { crate::util::getdents64(fd.0, self.as_mut_ptr().cast(), SIZE) }
+        unsafe { crate::util::getdents64(fd.0, self.as_mut_ptr().cast(), Self::BUFFER_SIZE) }
     }
 
     /// Executes the `getdirentries64` system call
@@ -225,7 +241,7 @@ where
             crate::util::getdirentries64(
                 fd.0,
                 self.as_mut_ptr().cast(),
-                SIZE,
+                Self::BUFFER_SIZE,
                 core::ptr::from_mut(basep),
             )
         }

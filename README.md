@@ -10,6 +10,8 @@ Note, my philosophy is to keep this non-publicised at at all until a 1.0.
 
 PLEASE NOTE: This is due to undergo a rename before a 1.0, I am tending towards `frep` as a name
 
+*Windows version*: Requires significant rewrite, planned for post 1.0.
+
 **Quick Installation:**
 
 ```bash
@@ -166,8 +168,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     use core::mem::offset_of;
     use core::num::NonZeroU64;
     /*The only unsafe action is dereferencing the pointer; This MUST be validated beforehand */
-    const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
-    const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
+    const LO_U64: u64 = 0x0101_0101_0101_0101;
+    const HI_U64: u64 = 0x8080_8080_8080_8080;
     // Create a mask for the first 3 bytes in the case where reclen==24
     const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
     const DIRENT_HEADER_START: usize = offset_of!(dirent64, d_name);

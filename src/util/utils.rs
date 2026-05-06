@@ -1,8 +1,8 @@
 use crate::c_char;
 use crate::dirent64;
 use crate::util::memchr_derivations::memrchr;
+use core::ffi::c_int;
 use core::ops::Deref;
-
 /**
   Wrapper for direct getdents syscalls
 
@@ -32,7 +32,7 @@ use core::ops::Deref;
     target_os = "illumos",
     target_os = "solaris"
 ))]
-pub unsafe fn getdents64(fd: i32, buffer_ptr: *mut c_char, buffer_size: usize) -> isize {
+pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_char, buffer_size: usize) -> isize {
     #[cfg(any(
         target_os = "openbsd",
         target_os = "solaris",
@@ -42,7 +42,7 @@ pub unsafe fn getdents64(fd: i32, buffer_ptr: *mut c_char, buffer_size: usize) -
     unsafe extern "C" {
 
         #[cfg_attr(target_os = "netbsd", link_name = "__getdents30")] //special case for NetBSD
-        fn getdents(fd: i32, dirp: *mut c_char, count: usize) -> isize;
+        fn getdents(fd: c_int, dirp: *mut c_char, count: usize) -> isize;
     }
 
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
@@ -91,7 +91,7 @@ pub unsafe fn getdents64(fd: i32, buffer_ptr: *mut c_char, buffer_size: usize) -
  This function is only available on macOS/FreeBSD
 */
 pub unsafe fn getdirentries64(
-    fd: i32,
+    fd: c_int,
     buffer_ptr: *mut c_char,
     nbytes: usize,
     basep: *mut i64,
@@ -101,7 +101,8 @@ pub unsafe fn getdirentries64(
     unsafe extern "C" {
         #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
         // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
-        fn getdirentries(fd: i32, buf: *mut c_char, nbytes: size_t, basep: *mut off_t) -> ssize_t;
+        fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t)
+        -> ssize_t;
     } // as above
     // By doing this, we avoid fstatf64 calls and a thread mutex enforced by readdir (completely not needed for single thread reading)
     // IT MAKES NO SENSE to parallelise readdir, it's fundamentally a sequential operation unless you're doing some really wacky stuff.
@@ -376,9 +377,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         // Compile time assert to immediately cancel the build if invalidated
         const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
         const { assert!(align_of::<dirent64>() == align_of::<u64>()) };
-
-        const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
-        const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
+        const LO_U64: u64 = 0x0101_0101_0101_0101;
+        const HI_U64: u64 = 0x8080_8080_8080_8080;
 
         /*  SAFETY: `dirent` is valid by precondition */
         let reclen = unsafe { (*drnt).d_reclen } as usize;

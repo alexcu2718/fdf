@@ -14,7 +14,10 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
     target_os = "solaris",
     target_os = "illumos"
 ))]
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u8, BUFFER_SIZE>;
+#[allow(clippy::integer_division_remainder_used)]
+#[allow(clippy::integer_division)]
+/// An aligned(to 8 bytes) stack allocated buffer of [`MaybeUninit`]
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, { BUFFER_SIZE / size_of::<u64>() }>;
 
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]
@@ -115,7 +118,7 @@ pub const BUFFER_SIZE: usize = 0x1000;
 */
 
 #[cfg(all(any(target_os = "linux", target_os = "android"), debug_assertions))]
-pub const BUFFER_SIZE: usize = 4096; // Crashes during testing due to parallel processes taking up too much stack
+pub const BUFFER_SIZE: usize = 0x1000; // Crashes during testing due to parallel processes taking up too much stack
 
 #[cfg(target_os = "freebsd")]
 pub const BUFFER_SIZE: usize = 4096; // freebsd's buffer size (verified)

@@ -1,7 +1,11 @@
+#![allow(clippy::all)]
+#![allow(clippy::pedantic)]
+#![allow(clippy::restriction)]
+#![allow(clippy::nursery)]
+
 use core::mem::offset_of;
 use core::num::NonZeroU64;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use fdf::access_dirent;
 use std::hint::black_box;
 
 /// Modified version to work for this test function(copy pasted really)
@@ -16,8 +20,8 @@ use std::hint::black_box;
 pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
     const DIRENT_HEADER_START: usize = offset_of!(LibcDirent64, d_name);
     const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
-    const LO_U64: u64 = u64::from_ne_bytes([0x01; size_of::<u64>()]);
-    const HI_U64: u64 = u64::from_ne_bytes([0x80; size_of::<u64>()]);
+    const LO_U64: u64 = 0x0101_0101_0101_0101;
+    const HI_U64: u64 = 0x8080_8080_8080_8080;
     let reclen = unsafe { (*dirent).d_reclen } as usize;
     /*
       Read the last 8 bytes of the struct as a u64.
@@ -85,8 +89,12 @@ fn make_dirent(name: &str) -> LibcDirent64 {
         d_name: [0; 256],
     };
 
-    entry.d_name[..bytes.len()].copy_from_slice(bytes);
-    entry.d_name[bytes.len()] = 0;
+    let (name_bytes, tail) = entry.d_name.split_at_mut(bytes.len());
+    name_bytes.copy_from_slice(bytes);
+
+    if let Some(null_byte) = tail.first_mut() {
+        *null_byte = 0;
+    }
 
     entry
 }
@@ -106,7 +114,7 @@ fn bench_strlen(c: &mut Criterion) {
 
     let all_entries: Vec<_> = length_groups
         .iter()
-        .map(|(_, name)| make_dirent(name))
+        .map(|entry| make_dirent(entry.1))
         .collect();
 
     //  make separate benchmark groups one at a time
@@ -123,8 +131,9 @@ fn bench_strlen(c: &mut Criterion) {
                 BenchmarkId::new("const_time_swar", size_name),
                 &entry,
                 |b, e| {
+                    // SAFETY: `e` points to a live `LibcDirent64` created in this benchmark.
                     b.iter(|| unsafe {
-                        black_box(dirent_const_time_strlen(black_box(e as *const _)))
+                        black_box(dirent_const_time_strlen(black_box(core::ptr::from_ref(e))))
                     })
                 },
             );
@@ -134,13 +143,13 @@ fn bench_strlen(c: &mut Criterion) {
                 &entry,
                 |b, e| {
                     b.iter(|| unsafe {
-                        black_box(libc::strlen(black_box(access_dirent!(e, d_name))))
+                        black_box(libc::strlen(black_box((&raw const (*e).d_name).cast())))
                     })
                 },
             );
         }
         group.finish();
-    }
+    };
 
     //  create the batch comparison group
     {
@@ -152,7 +161,9 @@ fn bench_strlen(c: &mut Criterion) {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(dirent_const_time_strlen(black_box(entry as *const _)))
+                        black_box(dirent_const_time_strlen(black_box(core::ptr::from_ref(
+                            entry,
+                        ))))
                     };
                 }
                 black_box(total) //make sure compiler does not optimise this away
@@ -164,7 +175,7 @@ fn bench_strlen(c: &mut Criterion) {
                 let mut total = 0;
                 for entry in &all_entries {
                     total += unsafe {
-                        black_box(libc::strlen(black_box(access_dirent!(entry, d_name))))
+                        black_box(libc::strlen(black_box((&raw const (*entry).d_name).cast())))
                     };
                 }
                 black_box(total) //make sure compiler does not optimise this away

@@ -88,8 +88,8 @@ use core::ffi::CStr;
 use core::fmt;
 
 use libc::{
-    AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, fstatat, lstat,
-    realpath, stat,
+    AT_EACCESS, AT_FDCWD, AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access,
+    faccessat, fstatat, lstat, realpath, stat,
 };
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
 
@@ -169,6 +169,8 @@ pub struct DirEntry {
     /// `None` means not computed yet, `Some(bool)` means cached result.
     pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
 } //38 bytes, rounded to 40
+
+// TODO add extra metadata from stat calls if available to avoid doing, ie like st_mode etc.
 
 impl core::ops::Deref for DirEntry {
     type Target = [u8];
@@ -283,6 +285,19 @@ impl DirEntry {
         self.is_regular_file() && unsafe { access(self.as_ptr(), X_OK) == 0 }
     }
 
+    #[inline]
+    pub(crate) fn is_executable_at(&self, opt_fd: Option<&FileDes>) -> bool {
+        // X_OK is the execute permission, requires access call
+        // SAFETY: All pointers are valid C strings from DirEntry internals.
+        self.is_regular_file()
+            && unsafe {
+                opt_fd.map_or_else(
+                    || faccessat(AT_FDCWD, self.as_ptr(), X_OK, AT_EACCESS) == 0,
+                    |fd| faccessat(fd.0, self.file_name_ptr(), X_OK, AT_EACCESS) == 0,
+                )
+            }
+    }
+
     /**
      Returns a raw pointer to the underlying C string.
 
@@ -328,6 +343,9 @@ impl DirEntry {
     */
     pub(crate) fn open(&self) -> Result<FileDes> {
         // TODO investigate openat2 benefits (RESOLVE_NO_MAGICLINKS? good for excluding /proc)
+        // There's additional flags
+        //https://github.com/BurntSushi/ripgrep/issues/1333
+        // I'd like to use this however,
         // We could do this with a kernel query to see if it has it, then save the result in an atomicbool
         // However, I am being lazy.
 
@@ -347,6 +365,44 @@ impl DirEntry {
         }
 
         Ok(FileDes(fd))
+    }
+
+    /// Opens a child directory by name relative to an already-open parent directory fd.
+    ///
+    /// Uses `openat(2)` to avoid a full path resolution — the kernel resolves the name
+    /// relative to `parent_fd` directly.  The same flags as [`Self::open`] are used.
+    #[inline]
+    pub(crate) fn open_at(parent_fd: i32, child_name: &core::ffi::CStr) -> Result<FileDes> {
+        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY;
+        // SAFETY: child_name is null-terminated; parent_fd is a valid open directory fd.
+        let fd = unsafe { libc::openat(parent_fd, child_name.as_ptr(), FLAGS) };
+        if fd < 0 {
+            return_os_error!()
+        }
+        Ok(FileDes(fd))
+    }
+
+    /// Returns a [`ReadDir`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
+    #[inline]
+    #[allow(unused)] // for esoteric platforms
+    pub(crate) fn readdir_from_fd(&self, fd: FileDes) -> ReadDir {
+        ReadDir::from_fd(fd, self)
+    }
+
+    /// Returns a [`GetDents`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
+    #[inline]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    pub(crate) fn getdents_from_fd(&self, fd: FileDes) -> crate::fs::GetDents {
+        crate::fs::GetDents::from_fd(fd, self)
     }
 
     // Converts to a lossy string for ease of use
@@ -481,6 +537,30 @@ impl DirEntry {
                 let result = self.is_empty_posix(); //Avoid allocating a buffer here or any other ops.
                 result
             }
+            _ => false,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) fn is_empty_at(&self, opt_fd: Option<&FileDes>) -> bool {
+        match self.file_type {
+            FileType::RegularFile => opt_fd.map_or_else(
+                || self.file_size().is_ok_and(|size| size == 0),
+                |fd| {
+                    self.get_lstatat(fd)
+                        .is_ok_and(|statted| statted.st_size == 0)
+                },
+            ),
+            FileType::Directory => opt_fd.map_or_else(
+                || self.is_empty(),
+                |parent_fd| {
+                    Self::open_at(parent_fd.0, self.file_name_cstr())
+                        .ok()
+                        .and_then(|dir_fd| read_direntries_from_fd!(self, dir_fd).ok())
+                        .is_some_and(|mut entries| entries.next().is_none())
+                },
+            ),
             _ => false,
         }
     }
@@ -658,15 +738,15 @@ impl DirEntry {
     */
     #[inline]
     pub const fn file_name_cstr(&self) -> &CStr {
-        let path = self.path.to_bytes_with_nul();
-        let len = path.len() - self.file_name_index;
+        let len = self.len() + 1 - self.file_name_index; // add 1 to include the null terminator
+
         /*SAFETY:
         `file_name_index` returns a valid index within `bytes` bounds
         The slice from this index includes the terminating null byte
         `bytes` contains no interior null bytes before the terminator*/
         unsafe {
             CStr::from_bytes_with_nul_unchecked(core::slice::from_raw_parts(
-                path.as_ptr().add(self.file_name_index),
+                self.file_name_ptr().cast(),
                 len,
             ))
             // Rearranged to make const compatible(identical assembly to previous version but wasnt const)
@@ -757,12 +837,11 @@ impl DirEntry {
             "this should always be equal or below (equal only when root)"
         );
 
-        let path = self.as_bytes();
-        let len = path.len() - self.file_name_index;
+        let len = self.len() - self.file_name_index;
         /*SAFETY:
         `file_name_index` returns a valid index within `bytes` bounds */
         unsafe {
-            core::slice::from_raw_parts(path.as_ptr().add(self.file_name_index), len)
+            core::slice::from_raw_parts(self.file_name_ptr().cast(), len)
             // Rearranged to make const compatible(identical assembly to previous version but wasnt const)
         }
     }
@@ -1171,6 +1250,30 @@ impl DirEntry {
         is_traversible
     }
 
+    #[inline]
+    pub(crate) fn check_symlink_traversibility_at(&self, opt_fd: Option<&FileDes>) -> bool {
+        debug_assert!(
+            self.file_type() == FileType::Symlink,
+            "we only expect symlinks to use this function(hence private)"
+        );
+        // Return cached result if available
+        if let Some(cached) = self.is_traversible_cache.get() {
+            return cached;
+        }
+
+        // Compute and cache the result
+        let is_traversible = opt_fd.map_or_else(
+            || self.check_symlink_traversibility(),
+            |fd| {
+                self.get_lstatat(fd)
+                    .is_ok_and(|entry| FileType::from_stat(&entry) == FileType::Directory)
+            },
+        );
+
+        self.is_traversible_cache.set(Some(is_traversible));
+        is_traversible
+    }
+
     /** Checks if the file is hidden (e.g., `.gitignore`, `.config`).
 
     A file is considered hidden if its filename (not the full path)
@@ -1245,7 +1348,7 @@ impl DirEntry {
     pub const fn is_hidden(&self) -> bool {
         // SAFETY: file_name_index is guaranteed to be within bounds
         // and we're using pointer arithmetic which is const-compatible (slight const hack)
-        unsafe { self.as_ptr().cast::<u8>().add(self.file_name_index).read() == b'.' }
+        unsafe { self.file_name_ptr().cast::<u8>().read() == b'.' }
     }
 
     /**
@@ -1325,8 +1428,14 @@ impl DirEntry {
         let filename = self.file_name();
         let len = filename.len();
 
+        #[cold] //help branch predictor
+        #[inline(never)]
+        const fn len_one<'arbit>() -> Option<&'arbit [u8]> {
+            None
+        }
+
         if len <= 1 {
-            return None;
+            return len_one();
         }
 
         // Search for the last dot in the filename, excluding the last character ('.''s dont count if they're the final character)
@@ -1470,6 +1579,23 @@ impl DirEntry {
         .ok_or(DirEntryError::TimeError)
     }
 
+    /// Returns last modification time in UTC, resolving relative to `opt_fd` when provided.
+    #[inline]
+    #[expect(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        reason = "needs to be in u32 for chrono"
+    )]
+    pub(crate) fn modified_time_at(&self, opt_fd: Option<&FileDes>) -> Result<DateTime<Utc>> {
+        let statted = opt_fd.map_or_else(|| self.get_lstat(), |fd| self.get_lstatat(fd))?;
+
+        DateTime::from_timestamp(
+            access_stat!(statted, st_mtime),
+            access_stat!(statted, st_mtimensec),
+        )
+        .ok_or(DirEntryError::TimeError)
+    }
+
     /**
     Gets the file size in bytes.
 
@@ -1492,10 +1618,9 @@ impl DirEntry {
     the length of the symlink path itself, not the target file size.
     */
     #[inline]
-    #[expect(clippy::cast_sign_loss, reason = "Size is a u64")]
     pub fn file_size(&self) -> Result<u64> {
         //https://github.com/rust-lang/rust/blob/bbb6f68e2888eea989337d558b47372ecf110e08/library/std/src/sys/fs/unix.rs#L442
-        self.get_lstat().map(|s| s.st_size as _)
+        self.get_lstat().map(|s| s.st_size.cast_unsigned() as _) // upcast to u64 incase it's not.
     }
 
     /**

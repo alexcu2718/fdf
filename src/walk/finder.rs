@@ -1,6 +1,6 @@
 use crate::{
     DirEntryError, FilesystemIOError, SearchConfig, SearchConfigError, TraversalError,
-    fs::{DirEntry, FileType},
+    fs::{DirEntry, FileDes, FileType},
     util::PrinterBuilder,
     walk::{DirEntryFilter, FilterType, finder_builder::FinderBuilder},
 };
@@ -218,6 +218,7 @@ impl Finder {
     */
     #[must_use]
     #[allow(clippy::missing_inline_in_public_items)]
+    #[cold]
     pub fn errors(&self) -> Option<Vec<TraversalError>> {
         self.errors
             .as_ref()
@@ -363,7 +364,7 @@ impl Finder {
     # Errors
     Returns a [`SearchConfigError`] if traversal setup fails.
     */
-    #[inline]
+    #[allow(clippy::missing_inline_in_public_items)] // Don't bloat code gen.
     pub fn build_printer(
         self,
     ) -> core::result::Result<PrinterBuilder<impl Iterator<Item = DirEntry>>, SearchConfigError>
@@ -375,20 +376,20 @@ impl Finder {
     /// Determines if a directory should be sent through the channel
     #[inline]
     fn should_send_dir(&self, dir: &DirEntry) -> bool {
-        dir.depth() != 0 && self.file_filter(dir)
+        dir.depth() != 0 && self.file_filter(dir, None)
         // Don't send root
     }
 
     /// Determines if a directory should be traversed and caches the result
     #[inline]
-    fn should_traverse(&self, dir: &DirEntry) -> bool {
+    fn should_traverse(&self, dir: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
         match dir.file_type {
             // Regular directory - always traversible
             FileType::Directory => true,
 
             // Symlink - check if we should follow and if it points to a directory(the result is cached so the call isn't required each time.)
             FileType::Symlink if self.search_config.follow_symlinks => {
-                dir.check_symlink_traversibility()
+                dir.check_symlink_traversibility_at(opt_fd)
             }
 
             // All other file types or symlinks we don't follow
@@ -405,8 +406,8 @@ impl Finder {
 
     /// Applies custom file filtering logic
     #[inline]
-    fn file_filter(&self, dir: &DirEntry) -> bool {
-        (self.file_filter)(&self.search_config, dir, self.custom_filter)
+    fn file_filter(&self, dir: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+        (self.file_filter)(&self.search_config, dir, self.custom_filter, opt_fd)
     }
 
     #[inline]
@@ -465,7 +466,7 @@ impl Finder {
         }
 
         let mut current = Some(Arc::clone(ctx));
-        let is_dir = self.should_traverse(dir);
+        let is_dir = self.should_traverse(dir, None);
 
         while let Some(node) = current.as_ref() {
             if let Some(matcher) = node.matcher.as_ref() {
@@ -473,6 +474,7 @@ impl Finder {
                 if matched.is_whitelist() {
                     return false;
                 }
+
                 if matched.is_ignore() {
                     return true;
                 }
@@ -492,12 +494,6 @@ impl Finder {
     to prevent infinite loops and duplicate traversal.
     */
     #[inline]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "Exhaustive on traversible types, Follows std treatment of dev devices"
-    )]
-    //https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.dev
-    #[allow(unfulfilled_lint_expectations)] // As above
     fn directory_or_symlink_filter(&self, dir: &DirEntry) -> bool {
         // This is a beast of a function to read, sorry!
         match dir.file_type {
@@ -617,15 +613,21 @@ impl Finder {
         // Otherwise use readdir
         match read_direntries!(dir) {
             Ok(entries) => {
+                let opt_fd = Some(&FileDes(entries.fd.0)); //dirty hack, need to revisit my approach
+                // I need to figure out how to use 'openat' style on opening queued file descriptors
+                // Unfortunately queueing file descriptors will fail once file descriptors go past ulimit
+                // but they won't for consequent file descriptors
+                // I can see *why* the std library did it the way it did, I should research how walkdir handles it.
                 let (dirs, mut files): (Vec<_>, Vec<_>) = entries
                     // I'm not too happy with this method. need to revisit my approach.
                     .filter(|entry| {
                         self.keep_hidden(entry)
                             && !self.matches_ignore_path(entry)
                             && !self.is_gitignored(entry, &current_ignore_ctx)
-                            && (self.should_traverse(entry) || self.file_filter(entry))
+                            && (self.should_traverse(entry, opt_fd)
+                                || self.file_filter(entry, opt_fd))
                     })
-                    .partition(|ent| self.should_traverse(ent));
+                    .partition(|ent| self.should_traverse(ent, opt_fd));
 
                 for dirnt in dirs {
                     if !Self::enqueue_dir(dirnt, Arc::clone(&current_ignore_ctx), ctx) {

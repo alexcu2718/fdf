@@ -186,8 +186,7 @@ struct Args {
         allow_hyphen_values = true,
         conflicts_with_all = ["generate", "quoted", "print0", "no_colour"],
         help = "Execute a command once per search result",
-        long_help = "Execute a command once per search result. Use '{}' to insert the matched path into an argument; if '{}' is omitted, the path is appended as the final argument. This option should be the final CLI flag
-        Example: 'fdf 'junk.files' 'test_directory' -HI --exec rm -rf ' , delete all files meeting the criteria"
+        long_help = "Execute a command once per search result.\nUse '{}' to insert the matched path into an argument; if '{}' is omitted, the path is appended as the final argument. This option should be the final CLI flag.\nExample: 'fdf 'junk.files' 'test_directory' -HI --exec rm -rf ' , delete all files meeting the criteria"
     )]
     exec: Option<Vec<OsString>>,
     #[arg(
@@ -216,9 +215,9 @@ struct Args {
         long = "and",
         value_name = "pattern",
         action = ArgAction::Append,
-        help = "Add additional required search patterns, all of which must be matched. Multiple additional patterns can be specified. The patterns are regular expressions, unless '--glob' or '--fixed-strings' is used."
+        help = "Add additional required search patterns, all of which must be matched.\nMultiple additional patterns can be specified. The patterns are regular expressions, unless '--glob' or '--fixed-strings' is used."
     )]
-    r#and: Vec<String>,
+    and_opt: Vec<String>,
     /// Filter by file size
     ///
     /// PREFIXES:
@@ -330,7 +329,7 @@ fn main() -> Result<(), SearchConfigError> {
 
     let finder = Finder::init(&path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
-        .and_patterns(args.r#and)
+        .and_patterns(args.and_opt)
         .keep_hidden(!args.hidden)
         .case_insensitive(args.case_insensitive)
         .fixed_string(args.fixed_string)

@@ -1,6 +1,6 @@
 use crate::SearchConfigError;
 use crate::filters::{FileTypeFilter, SizeFilter, TimeFilter};
-use crate::fs::{DirEntry, FileType};
+use crate::fs::{DirEntry, FileDes, FileType};
 use crate::util::glob_to_regex;
 use core::num::NonZeroU32;
 use core::ops::Deref;
@@ -357,6 +357,50 @@ impl SearchConfig {
         }
     }
 
+    #[inline]
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)] // Sign loss does not matter here
+    pub(crate) fn matches_size_at(&self, entry: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+        let Some(filter_size) = self.size_filter else {
+            return true; // No filter means always match
+        };
+
+        match entry.file_type {
+            FileType::RegularFile => opt_fd.map_or_else(
+                || {
+                    entry
+                        .file_size()
+                        .ok()
+                        .is_some_and(|sz| filter_size.is_within_size(sz))
+                },
+                |fd| {
+                    entry
+                        .get_lstatat(fd)
+                        .ok()
+                        .is_some_and(|statted| filter_size.is_within_size(statted.st_size as _))
+                },
+            ),
+            // Check if it exists first, then call stat..
+            FileType::Symlink => opt_fd.map_or_else(
+                || {
+                    entry.exists()
+                        && entry.get_stat().is_ok_and(|statted| {
+                            FileType::from_stat(&statted) == FileType::RegularFile
+                                && filter_size.is_within_size(statted.st_size as _)
+                        })
+                },
+                |fd| {
+                    entry.get_statat(fd).is_ok_and(|statted| {
+                        FileType::from_stat(&statted) == FileType::RegularFile
+                            && filter_size.is_within_size(statted.st_size as _)
+                    })
+                },
+            ),
+
+            _ => false,
+        }
+    }
+
     /// Applies a type filter using `FileTypeFilter` enum
     /// Supports common file types: file, dir, symlink, device, pipe, etc
     #[inline]
@@ -380,6 +424,27 @@ impl SearchConfig {
         }
     }
 
+    #[inline]
+    #[must_use]
+    pub(crate) fn matches_type_at(&self, entry: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+        let Some(type_filter) = self.type_filter else {
+            return true;
+        };
+
+        match type_filter {
+            FileTypeFilter::File => entry.is_regular_file(),
+            FileTypeFilter::Directory => entry.is_dir(),
+            FileTypeFilter::Symlink => entry.is_symlink(),
+            FileTypeFilter::Pipe => entry.is_pipe(),
+            FileTypeFilter::CharDevice => entry.is_char_device(),
+            FileTypeFilter::BlockDevice => entry.is_block_device(),
+            FileTypeFilter::Socket => entry.is_socket(),
+            FileTypeFilter::Unknown => entry.is_unknown(),
+            FileTypeFilter::Executable => entry.is_executable_at(opt_fd),
+            FileTypeFilter::Empty => entry.is_empty_at(opt_fd),
+        }
+    }
+
     /// Applies time-based filtering to files based on modification time
     /// Returns true if the file's modification time matches the filter criteria
     #[inline]
@@ -392,6 +457,22 @@ impl SearchConfig {
         // Get the modification time from the file and convert to SystemTime
         entry
             .modified_time()
+            .ok()
+            .and_then(|datetime| datetime.timestamp_nanos_opt())
+            .and_then(|nanos| UNIX_EPOCH.checked_add(Duration::from_nanos(nanos.cast_unsigned())))
+            .is_some_and(|systime| time_filter.matches_time(systime))
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) fn matches_time_at(&self, entry: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+        let Some(time_filter) = self.time_filter else {
+            return true; // No filter means always match
+        };
+
+        // Get the modification time from the file and convert to SystemTime
+        entry
+            .modified_time_at(opt_fd)
             .ok()
             .and_then(|datetime| datetime.timestamp_nanos_opt())
             .and_then(|nanos| UNIX_EPOCH.checked_add(Duration::from_nanos(nanos.cast_unsigned())))

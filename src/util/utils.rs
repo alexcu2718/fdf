@@ -38,11 +38,16 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_char, buffer_size: usize)
         target_os = "solaris",
         target_os = "illumos",
         target_os = "netbsd"
-    ))] //Link the function, we can't use the direct syscall because BSD's dont allow it.
-    unsafe extern "C" {
+    ))]
+    {
+        //Link the function, we can't use the direct syscall because BSD's dont allow it.
+        unsafe extern "C" {
+            //TODO add dragonfly here(?) TODO once they support Rust 2024
+            #[cfg_attr(target_os = "netbsd", link_name = "__getdents30")] //special case for NetBSD
+            fn getdents(fd: c_int, dirp: *mut c_char, count: usize) -> isize;
+        }
 
-        #[cfg_attr(target_os = "netbsd", link_name = "__getdents30")] //special case for NetBSD
-        fn getdents(fd: c_int, dirp: *mut c_char, count: usize) -> isize;
+        unsafe { getdents(fd, buffer_ptr, buffer_size) }
     }
 
     // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
@@ -51,19 +56,6 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_char, buffer_size: usize)
     unsafe {
         libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _
     } // We can do similar linking for getdents64 but prefer not to use the indirection if can be avoided.
-
-    //TODO add dragonfly here(?) TODO once they support Rust 2024
-    // NVM it seems dragonfly uses getdirentries, yay...
-    #[cfg(any(
-        target_os = "openbsd",
-        target_os = "solaris",
-        target_os = "illumos",
-        target_os = "netbsd"
-    ))]
-    // SAFETY: same as above
-    unsafe {
-        getdents(fd, buffer_ptr, buffer_size)
-    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
@@ -100,7 +92,8 @@ pub unsafe fn getdirentries64(
     // link to libc
     unsafe extern "C" {
         #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
-        // Sneaky isnt it?, pretty much not seen this done anywhere before lol.
+        // Never seen this done, I searched all of github for similar stuff. I love dirty stuff like this.
+        // Dirty(yet it works!)
         fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t)
         -> ssize_t;
     } // as above
@@ -144,13 +137,6 @@ where
     fn file_name_index(&self) -> usize;
 }
 
-// Help the branch predictor out.
-#[cold]
-#[inline(never)]
-const fn file_name_index_len_one() -> usize {
-    0
-}
-
 impl<T> BytePath<T> for T
 where
     T: Deref<Target = [u8]>,
@@ -178,6 +164,12 @@ where
     /// Returns 0 for length 1 byte paths
     #[inline]
     fn file_name_index(&self) -> usize {
+        #[cold] // Help the branch predictor out.
+        #[inline(never)]
+        const fn file_name_index_len_one() -> usize {
+            0
+        }
+
         // (every file path going in here has at least a '/' inside it), this is a special case for root/'.'
         if self.len() == 1 {
             return file_name_index_len_one(); //help the branch predictor
@@ -353,12 +345,7 @@ On some systems
     target_os = "aix",
     target_os = "hurd"
 ))]
-#[allow(
-    clippy::missing_assert_message,
-    clippy::as_conversions,
-    clippy::host_endian_bytes,
-    clippy::cast_ptr_alignment
-)] //we're aligned (compiler can't see it though and we're doing fancy operations)
+#[allow(clippy::missing_assert_message)] //we're aligned (compiler can't see it though and we're doing fancy operations)
 #[must_use]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
@@ -382,6 +369,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         /*  SAFETY: `dirent` is valid by precondition */
         let reclen = unsafe { (*drnt).d_reclen } as usize;
+        debug_assert!(reclen.is_multiple_of(8));
 
         /*
           Read the last 8 bytes of the struct as a u64.
@@ -404,8 +392,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
         let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64); // (should use select unpredictable here if it was const)
-        // This generates a conditional move under the hood.
-
+        // // This generates a conditional move under the hood.
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.
          Result:
@@ -450,7 +437,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         // present of 0x01 bytes in a filename, given POSIX paths are raw bytes
         // and the POSIX standard only dictates 1. a filename cannot contain a slash and 2. cannot be empty.
         #[cfg(target_endian = "big")]
-        //SAFETY: The u64 can never be all 0's post-SWAR
+        //SAFETY: as in LE version.
         let masked_word = unsafe {
             NonZeroU64::new_unchecked(
                 (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
@@ -469,6 +456,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
                 //SAFETY: should never matter because debug assert checks pointer validity above.
                     == unsafe{core::ffi::CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() },
             // Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length array)
+            // We use this method as workaround specifically because `from_ptr` is const
+            // (We could've also used a while loop but that's even more verbose and makes this more complicated....)
             "const swar dirent length calculation failed!"
         );
         /*
@@ -572,7 +561,8 @@ uint32_t dirent_const_time(const struct dirent *drnt) {
 
 /*
 C version assembly
-(Only distinction is we don't use LEA because we need to explicitly cast to usize in rust (for indexing))
+(Only distinction is we don't use LEA is due to LLVM vs GCC compiler model, I should look into this one day!)
+
 
 
 dirent_const_time:

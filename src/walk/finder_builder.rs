@@ -320,14 +320,14 @@ impl FinderBuilder {
             self.ignore_glob_patterns,
         )?;
 
-        let lambda: FilterType = |rconfig, rdir, rfilter| {
+        let lambda: FilterType = |rconfig, rdir, rfilter, opt_fd| {
             {
                 // arrange the filters by order of costliness
                 rconfig.matches_extension(&rdir.file_name())
                     && rconfig.matches_path(rdir, !rconfig.file_name_only)
-                    && rconfig.matches_type(rdir)
-                    && rconfig.matches_size(rdir)
-                    && rconfig.matches_time(rdir)
+                    && rconfig.matches_type_at(rdir, opt_fd)
+                    && rconfig.matches_size_at(rdir, opt_fd)
+                    && rconfig.matches_time_at(rdir, opt_fd)
                     && rfilter.is_none_or(|func| func(rdir)) // put the custom filter last because it's almost always unlikely
             }
         };
@@ -389,7 +389,6 @@ impl FinderBuilder {
 
         let path_check = Path::new(&dir_to_use);
 
-        // Validate that the path exists and is a directory
         if !path_check.is_dir() {
             return Err(SearchConfigError::NotADirectory);
         }

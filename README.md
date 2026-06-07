@@ -4,7 +4,7 @@
 
 fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
 
-It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and  direct syscalls(where possible).
+It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct syscalls(where possible).
 
 Note, my philosophy is to keep this non-publicised at at all until a 1.0.
 
@@ -82,56 +82,46 @@ The benchmarks are repeatable using the testing code above and cover file type f
 ```bash
 | Test Case                                                              | fdf Mean        | fd Mean         | Speedup   | Relative        |
 | :----------                                                            | :--------:      | :-------:       | :-------: | :--------:      |
-| cold-cache `.' '/home/alexc' -HI -d 4`                                 | 244.1 ± 10.3    | 353.6 ± 5.1     | 1.45x     | 1.45 ± 0.06     |
-| cold-cache `.' '/tmp/llvm-project' -HI -d 2`                           | 14.0 ± 0.2      | 72.9 ± 1.1      | 5.21x     | 5.22 ± 0.12     |
-| cold-cache `-HI --extension 'c' '' '/home/alexc`                       | 5.752 ± 1.169   | 5.852 ± 1.416   | 1.02x     | 1.02 ± 0.32     |
-| cold-cache `-HI --extension 'c' '' '/tmp/llvm-project`                 | 28.6 ± 2.9      | 99.4 ± 2.8      | 3.48x     | 3.47 ± 0.36     |
-| cold-cache `.' '/home/alexc' -HI`                                      | 4.413 ± 0.031   | 4.594 ± 0.040   | 1.04x     | 1.04 ± 0.01     |
-| cold-cache `.' '/tmp/llvm-project' -HI`                                | 29.3 ± 0.6      | 100.1 ± 2.3     | 3.42x     | 3.41 ± 0.11     |
-| cold-cache `.' '..' -HI`                                               | 36.5 ± 0.8      | 117.3 ± 2.5     | 3.21x     | 3.22 ± 0.10     |
-| cold-cache `-HI '.*[0-9].*(md\|\.c)$' '/home/alexc`                    | 5.696 ± 1.386   | 7.258 ± 0.632   | 1.27x     | 1.27 ± 0.33     |
-| cold-cache `-HI '.*[0-9].*(md\|\.c)$' '/tmp/llvm-project`              | 31.4 ± 0.5      | 103.9 ± 3.5     | 3.31x     | 3.31 ± 0.13     |
-| cold-cache `-HI --size +1mb '' '/home/alexc`                           | 5.632 ± 0.015   | 5.982 ± 0.014   | 1.06x     | 1.06 ± 0.00     |
-| cold-cache `-HI --size '-1mb' '' '/tmp/llvm-project`                   | 55.0 ± 1.9      | 148.3 ± 3.4     | 2.70x     | 2.70 ± 0.11     |
-| cold-cache `-HI --size -1mb '' '/home/alexc`                           | 5.558 ± 0.007   | 6.183 ± 0.272   | 1.11x     | 1.11 ± 0.05     |
-| cold-cache `.' '/tmp/llvm-project' -HI --type d`                       | 30.1 ± 0.6      | 106.3 ± 1.4     | 3.53x     | 3.53 ± 0.08     |
-| cold-cache `.' '/tmp/llvm-project' -HI --type e`                       | 83.8 ± 5.7      | 168.7 ± 2.5     | 2.01x     | 2.01 ± 0.14     |
-| cold-cache `.' '/tmp/llvm-project' -HI --type x`                       | 67.0 ± 2.7      | 144.0 ± 1.5     | 2.15x     | 2.15 ± 0.09     |
-| warm-cache `.' '/home/alexc' -HI -d 4`                                 | 8.2 ± 0.4       | 21.0 ± 0.6      | 2.56x     | 2.57 ± 0.15     |
-| warm-cache `.' '/tmp/llvm-project' -HI -d 2`                           | 2.5 ± 0.3       | 5.7 ± 0.5       | 2.28x     | 2.25 ± 0.32     |
-| warm-cache `-HI --extension 'c' '' '/home/alexc`                       | 108.4 ± 1.2     | 191.3 ± 1.6     | 1.76x     | 1.76 ± 0.02     |
-| warm-cache `-HI --extension 'c' '' '/tmp/llvm-project`                 | 16.0 ± 0.8      | 31.4 ± 1.1      | 1.96x     | 1.96 ± 0.12     |
-| warm-cache `.' '/home/alexc' -HI`                                      | 122.9 ± 1.0     | 220.5 ± 3.4     | 1.79x     | 1.79 ± 0.03     |
-| warm-cache `.' '/tmp/llvm-project' -HI`                                | 18.2 ± 0.7      | 36.0 ± 1.4      | 1.98x     | 1.98 ± 0.10     |
-| warm-cache `.' '..' -HI`                                               | 18.7 ± 0.7      | 38.2 ± 1.8      | 2.04x     | 2.04 ± 0.12     |
-| warm-cache `-HI '.*[0-9].*(md\|\.c)$' '/home/alexc`                    | 111.9 ± 1.4     | 178.4 ± 1.1     | 1.59x     | 1.59 ± 0.02     |
-| warm-cache `-HI '.*[0-9].*(md\|\.c)$' '/tmp/llvm-project`              | 15.7 ± 0.5      | 29.4 ± 0.8      | 1.87x     | 1.87 ± 0.08     |
-| warm-cache `-HI --size +1mb '' '/home/alexc`                           | 318.8 ± 10.7    | 674.4 ± 2.6     | 2.12x     | 2.12 ± 0.07     |
-| warm-cache `-HI --size '+1mb' '' '/tmp/llvm-project`                   | 51.0 ± 3.1      | 139.7 ± 2.5     | 2.74x     | 2.74 ± 0.17     |
-| warm-cache `-HI --size -1mb '' '/home/alexc`                           | 800.4 ± 15.2    | 1707.8 ± 19.1   | 2.13x     | 2.13 ± 0.05     |
-| warm-cache `.' '/home/alexc' -HI --type d`                             | 210.0 ± 2.3     | 438.6 ± 16.1    | 2.09x     | 2.09 ± 0.08     |
-| warm-cache `.' '/tmp/llvm-project' -HI --type d`                       | 15.2 ± 0.5      | 31.1 ± 1.1      | 2.05x     | 2.05 ± 0.10     |
-| warm-cache `.' '/home/alexc' -HI --type e`                             | 885.5 ± 11.1    | 1202.9 ± 5.0    | 1.36x     | 1.36 ± 0.02     |
-| warm-cache `.' '/tmp/llvm-project' -HI --type e`                       | 49.2 ± 2.0      | 105.6 ± 3.7     | 2.15x     | 2.15 ± 0.12     |
-| warm-cache `.' '/home/alexc' -HI --type x`                             | 649.2 ± 6.1     | 869.4 ± 4.1     | 1.34x     | 1.34 ± 0.01     |
-| warm-cache `.' '/tmp/llvm-project' -HI --type x`                       | 39.3 ± 2.2      | 54.4 ± 1.2      | 1.38x     | 1.38 ± 0.08     |
-| warm-cache-ignore `-H --extension 'c' '' '/home/alexc'`                | 293.0 ± 20.7    | 604.6 ± 19.1    | 2.06x     | 2.06 ± 0.16     |
-| warm-cache-ignore `.' '/home/alexc' -H`                                | 739.8 ± 183.8   | 1.453 ± 0.045   | 1.96x     | 1.96 ± 0.49     |
-| warm-cache-ignore `.' '/tmp/llvm-project' -H`                          | 137.6 ± 6.5     | 230.4 ± 10.1    | 1.67x     | 1.67 ± 0.11     |
-| warm-cache-ignore `-H '.*[0-9].*(md\|\.c)$' '/home/alexc'`             | 696.4 ± 47.3    | 1.305 ± 0.057   | 1.87x     | 1.87 ± 0.15     |
-| warm-cache-ignore `-H --size +1mb '' '/home/alexc'`                    | 1.244 ± 0.076   | 2.505 ± 0.135   | 2.01x     | 2.01 ± 0.16     |
-| warm-cache-ignore `.' '/tmp/llvm-project' -H --type e`                 | 230.1 ± 10.4    | 324.0 ± 24.3    | 1.41x     | 1.41 ± 0.12     |
-
+| cold-cache `.' '/home/alexc' -HI -d 4`                                 | 538.0 ± 52.4    | 889.9 ± 79.6    | 1.65x     | 1.65 ± 0.22     |
+| cold-cache `.' '/tmp/llvm-project' -HI -d 2`                           | 14.3 ± 0.6      | 46.9 ± 0.9      | 3.28x     | 3.28 ± 0.15     |
+| cold-cache `-HI --extension 'c' '' '/home/alexc`                       | 20.347 ± 1.666  | 47.247 ± 10.933 | 2.32x     | 2.32 ± 0.57     |
+| cold-cache `-HI --extension 'c' '' '/tmp/llvm-project`                 | 27.2 ± 1.0      | 77.5 ± 1.8      | 2.85x     | 2.85 ± 0.12     |
+| cold-cache `.' '/tmp/llvm-project' -HI`                                | 30.4 ± 1.2      | 77.3 ± 4.1      | 2.54x     | 2.54 ± 0.17     |
+| cold-cache `.' '..' -HI`                                               | 32.1 ± 1.3      | 82.7 ± 2.9      | 2.58x     | 2.57 ± 0.14     |
+| cold-cache `-HI --size -1mb '' '/home/alexc`                           | 31.754 ± 8.892  | 39.331 ± 14.878 | 1.24x     | 1.24 ± 0.58     |
+| cold-cache `.' '/tmp/llvm-project' -HI --type d`                       | 27.9 ± 0.8      | 75.3 ± 1.5      | 2.70x     | 2.70 ± 0.09     |
+| cold-cache `.' '/home/alexc' -HI --type e`                             | 21.994 ± 1.973  | 32.881 ± 12.948 | 1.49x     | 1.50 ± 0.60     |
+| cold-cache `.' '/tmp/llvm-project' -HI --type e`                       | 53.1 ± 4.3      | 121.2 ± 3.1     | 2.28x     | 2.28 ± 0.19     |
+| cold-cache `.' '/home/alexc' -HI --type x`                             | 21.332 ± 3.758  | 38.071 ± 24.323 | 1.78x     | 1.78 ± 1.18     |
+| cold-cache `.' '/tmp/llvm-project' -HI --type x`                       | 40.6 ± 2.6      | 100.5 ± 2.2     | 2.48x     | 2.47 ± 0.17     |
+| warm-cache `.' '/home/alexc' -HI -d 4`                                 | 36.9 ± 1.4      | 249.1 ± 10.3    | 6.75x     | 6.75 ± 0.38     |
+| warm-cache `.' '/tmp/llvm-project' -HI -d 2`                           | 2.7 ± 0.4       | 5.5 ± 0.3       | 2.04x     | 2.06 ± 0.31     |
+| warm-cache `-HI --extension 'c' '' '/home/alexc`                       | 466.3 ± 3.7     | 848.3 ± 4.3     | 1.82x     | 1.82 ± 0.02     |
+| warm-cache `-HI --extension 'c' '' '/tmp/llvm-project`                 | 15.5 ± 0.5      | 30.2 ± 0.7      | 1.95x     | 1.95 ± 0.07     |
+| warm-cache `.' '/home/alexc' -HI`                                      | 524.0 ± 2.9     | 954.0 ± 5.9     | 1.82x     | 1.82 ± 0.02     |
+| warm-cache `.' '/tmp/llvm-project' -HI`                                | 17.6 ± 0.6      | 33.3 ± 0.8      | 1.89x     | 1.89 ± 0.08     |
+| warm-cache `.' '..' -HI`                                               | 19.7 ± 0.6      | 35.2 ± 1.1      | 1.79x     | 1.79 ± 0.08     |
+| warm-cache `-HI '.*[0-9].*(md\|\.c)$' '/home/alexc`                    | 492.8 ± 3.5     | 797.7 ± 3.4     | 1.62x     | 1.62 ± 0.01     |
+| warm-cache `-HI '.*[0-9].*(md\|\.c)$' '/tmp/llvm-project`              | 17.0 ± 0.8      | 27.8 ± 0.8      | 1.64x     | 1.64 ± 0.09     |
+| warm-cache `-HI --size +1mb '' '/home/alexc`                           | 755.6 ± 3.1     | 1781.2 ± 5.4    | 2.36x     | 2.36 ± 0.01     |
+| warm-cache `-HI --size '+1mb' '' '/tmp/llvm-project`                   | 32.0 ± 1.7      | 70.5 ± 0.9      | 2.20x     | 2.21 ± 0.12     |
+| warm-cache `-HI --size -1mb '' '/home/alexc`                           | 814.8 ± 5.0     | 1980.6 ± 19.4   | 2.43x     | 2.43 ± 0.03     |
+| warm-cache `.' '/home/alexc' -HI --type d`                             | 489.6 ± 4.5     | 891.6 ± 18.5    | 1.82x     | 1.82 ± 0.04     |
+| warm-cache `.' '/tmp/llvm-project' -HI --type d`                       | 15.1 ± 0.4      | 29.5 ± 1.1      | 1.95x     | 1.96 ± 0.09     |
+| warm-cache `.' '/home/alexc' -HI --type e`                             | 1.091 ± 0.021   | 1.821 ± 0.008   | 1.67x     | 1.67 ± 0.03     |
+| warm-cache `.' '/tmp/llvm-project' -HI --type e`                       | 35.1 ± 1.7      | 58.9 ± 1.1      | 1.68x     | 1.68 ± 0.09     |
+| warm-cache `.' '/home/alexc' -HI --type x`                             | 699.9 ± 2.4     | 1233.2 ± 3.4    | 1.76x     | 1.76 ± 0.01     |
+| warm-cache `.' '/tmp/llvm-project' -HI --type x`                       | 28.0 ± 1.7      | 47.3 ± 1.9      | 1.69x     | 1.69 ± 0.12     |
 ```
 
---*Average Speedup:  2.11x*--
+--*Average Speedup: 2.20x*--
 
 ## Distinctions from fd/find
 
 Symlink resolution in my method differs from fd and find. Although I generally advise against following symlinks, the option exists for completeness.
 
 When following symlinks, behaviour will vary slightly. For example, fd can enter infinite loops with recursive symlinks
- (see recursive_symlink_fs_test.sh) [Available here](./scripts/recursive_symlink_fs_test.sh)
+(see recursive_symlink_fs_test.sh) [Available here](./scripts/recursive_symlink_fs_test.sh)
 whereas my implementation prevents hangs. It may, however, return more results than expected.
 
 To avoid issues, use --same-file-system when traversing symlinks. This ensures traversal terminates safely even in complex directories such as ~/.steam, ~/.wine, /sys, and /proc.
@@ -142,8 +132,8 @@ To avoid issues, use --same-file-system when traversing symlinks. This ensures t
 
 - **getdents64/getdents: Optimised the Linux/Android-specific/OpenBSD/NetBSD/Illumos/Solaris directory reading by significantly reducing the number of stat/statx/fstatat system calls**
 
-- **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat/pthread_mutex calls at [link here](./src/fs/iter.rs#L581)
- (Also works on FreeBSD)**
+- **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat/pthread_mutex calls at [link here](./src/fs/iter.rs#460) and [this link for syscall implementation](./src/util/utils.rs#85)
+  (Also works on FreeBSD)**
 
 - **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
 
@@ -155,9 +145,10 @@ To avoid issues, use --same-file-system when traversing symlinks. This ensures t
 
 The following function provides an elegant solution to avoid branch mispredictions/SIMD instructions during directory entry parsing (a performance-critical loop):
 
-Check source code for further explanation [in utils.rs](./src/util/utils.rs#L195)**
+Check source code for further explanation [in utils.rs](./src/util/utils.rs#340)\*\*
 
-(This version is simplified from the actual implementation)
+<!-- markdownlint-disable-next-line MD033 -->
+#### <ins>This version is simplified from the actual implementation</ins>
 
 ```rust
 // Computational complexity: O(1) - truly constant time
@@ -188,7 +179,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     // ^ Reference for the BE algorithm
     // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
     #[cfg(target_endian = "big")]
-    //SAFETY: The u64 can never be all 0's post-mask
+    //SAFETY: as in LE version.
     let masked_word = unsafe {
         NonZeroU64::new_unchecked(
             (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
@@ -236,7 +227,7 @@ Notably I modified it because it's quite old and has dependencies I was able to 
 
 (I have emailed and received approval from the author above)
 
-I've also done so for some SWAR tricks from the standard library [(see link)](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161)
+I've also done so for some SWAR tricks from the standard library [(see link)](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161) which is implemented at the [following link](./src/util/memchr_derivations.rs)
 I additionally emailed the author of memchr and got some nice tips, great guy, someone I respect whole heartedly!
 
 ## Future Plans
@@ -354,8 +345,9 @@ Options:
           Wrap printed file paths in double quotes
 
       --exec <CMD>...
-          Execute a command once per search result. Use '{}' to insert the matched path into an argument; if '{}' is omitted, the path is appended as the final argument. This option should be the final CLI flag
-                  Example: 'fdf 'junk.files' 'test_directory' -HI --exec rm -rf ' , delete all files meeting the criteria
+          Execute a command once per search result.
+          Use '{}' to insert the matched path into an argument; if '{}' is omitted, the path is appended as the final argument. This option should be the final CLI flag.
+          Example: 'fdf 'junk.files' 'test_directory' -HI --exec rm -rf ' , delete all files meeting the criteria
 
       --ignore <PATTERN>
           Ignore paths that match this regex pattern (repeatable)
@@ -367,7 +359,8 @@ Options:
           Add a custom ignore-file in '.gitignore' format. These files have a low precedence.
 
       --and <pattern>
-          Add additional required search patterns, all of which must be matched. Multiple additional patterns can be specified. The patterns are regular expressions, unless '--glob' or '--fixed-strings' is used.
+          Add additional required search patterns, all of which must be matched.
+          Multiple additional patterns can be specified. The patterns are regular expressions, unless '--glob' or '--fixed-strings' is used.
 
       --size <SIZE>
           Filter by file size
@@ -458,7 +451,7 @@ Options:
 
       --generate <GENERATE>
 
-              Generate shell completions for bash/zsh/fish/powershell/elvish
+              Generate shell completions for bash/zsh/fish/powershell
               To use: eval "$(fdf --generate SHELL)"
               Example:
               # Add to shell config for permanent use
@@ -482,7 +475,7 @@ Options:
   - No native `getdents` support in `io_uring`.
   - Would require async runtime integration (e.g. Tokio).
   - Conflicts with the project’s minimal-dependency design.
-  - Linux-only feature, making it a low-priority and high-effort addition.  **I will likely NOT do this**
+  - Linux-only feature, making it a low-priority and high-effort addition. **I will likely NOT do this**
 
 #### 2. Allocation-Optimised Iterator Adaptor
 
@@ -490,3 +483,8 @@ Options:
 - Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.
 - Although the cost of allocations doesn't seem too bad, I will look at this again at some point.
 - Maybe achieved via a lending iterator type approach? See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)
+
+#### 3. Add additional filter criteria
+
+- Implement features such as ownership tracking.
+- Maybe use `NO_ATIME` to avoid disk writes, this has a lot of drawbacks however.

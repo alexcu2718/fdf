@@ -92,9 +92,6 @@ getdents64(3, 0x557e625c37a0 /* 0 entries */, 32768) = 0
     not(debug_assertions)
 ))]
 pub const BUFFER_SIZE: usize = 8192;
-
-#[cfg(all(any(target_os = "illumos", target_os = "solaris"), debug_assertions))]
-pub const BUFFER_SIZE: usize = 4096;
 // Same buffer sizes for illumos/solaris(essentially identical)
 /*
 alexc@omnios:~% sudo truss -f ls . 2>&1 | grep -Eiv '^/' | grep getdents
@@ -103,7 +100,7 @@ alexc@omnios:~% sudo truss -f ls . 2>&1 | grep -Eiv '^/' | grep getdents
 alexc@omnios:~%
 
 */
-#[cfg(target_os = "netbsd")]
+#[cfg(all(target_os = "netbsd", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 0x1000;
 
 /*
@@ -117,17 +114,11 @@ pub const BUFFER_SIZE: usize = 0x1000;
  27582  16284 fdfind   RET   __getdents30 56/0x38
 */
 
-#[cfg(all(any(target_os = "linux", target_os = "android"), debug_assertions))]
-pub const BUFFER_SIZE: usize = 0x1000; // Crashes during testing due to parallel processes taking up too much stack
-
-#[cfg(target_os = "freebsd")]
+#[cfg(all(target_os = "freebsd", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 4096; // freebsd's buffer size (verified)
 
 #[cfg(all(target_os = "openbsd", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 0x10000;
-
-#[cfg(all(target_os = "openbsd", debug_assertions))]
-pub const BUFFER_SIZE: usize = 4096; //avoid stack overflow during parallelised tests
 /*.
 foo#  ktrace fd -H . / > /dev/null 2>&1; kdump | grep getdents | head
  57610 fd       CALL  getdents(3,0xad7363e0000,0x10000)
@@ -145,8 +136,20 @@ foo#  ktrace fd -H . / > /dev/null 2>&1; kdump | grep getdents | head
 #[cfg(all(target_os = "macos", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 0x2000; //readdir calls this value for buffer size, look at syscall tracing below (8192)
 
-#[cfg(all(target_os = "macos", debug_assertions))]
-pub const BUFFER_SIZE: usize = 0x1000; // Give a smaller size to avoid stack overflow when going on tests
+#[cfg(all(
+    debug_assertions,
+    any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "solaris",
+        target_os = "illumos"
+    )
+))]
+pub const BUFFER_SIZE: usize = 0x1000; // Keep stack use low during debug/test runs
 
 /*
 /tmp/fdf_test getdirentries ❯ sudo dtruss  fd -HI . 2>&1 | grep getdirentries | head                  ✘ INT alexc@alexcs-iMac 00:52:24
@@ -167,7 +170,8 @@ getdirentries64(0x3, 0x7FEE86013C00, 0x2000)             = 344 0
 
 */
 
-//TODO, use this info for dragonflybsd when I add support
+//TODO, use this info for dragonflybsd when I add support+rust 2024 is supported, it's only 2026
+//(at least it isn't as bad as C++!)
 
 /*
 

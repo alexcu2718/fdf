@@ -1,5 +1,3 @@
-#![allow(clippy::host_endian_bytes)]
-
 // I was reading through the std library for random silly things and I found this , https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161
 // this essentially provides a more rigorous foundation to my SWAR technique.
 
@@ -10,7 +8,7 @@ READ
 
 I was basically using this as a learning project, to do cool things, then I found an optimisation for memrchr that was nice
 
-this code is extremely janky and REALLY not contiguous to this code base, but because i'm learning, it's  fun!
+this code is a bit janky, not really important.
 
 memrchr is significantly changed from stdlib implementation to use a more efficient swar method.
 
@@ -68,7 +66,7 @@ const unsafe fn rposition_byte_len(base: *const u8, len: usize, needle: u8) -> O
 }
 
 #[inline]
-#[allow(unused)] // only needed for LE
+#[cfg(target_endian = "little")]
 #[must_use]
 const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
     // Hybrid approach:
@@ -125,18 +123,11 @@ const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
 /// Returns the last index matching the byte `x` in `text`.
 #[must_use]
 #[inline]
-#[expect(clippy::cast_ptr_alignment, reason = "alignment guaranteed")]
 pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // Scan for a single byte value by reading two `usize` words at a time.
-
-    //
-
     // Split `text` in three parts:
-
     // - unaligned tail, after the last word aligned address in text,
-
     // - body, scanned by 2 words at a time,
-
     // - the first remaining bytes, < 2 word size.
 
     let len = text.len();
@@ -165,15 +156,6 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     if let Some(i) = unsafe { rposition_byte_len(start.add(offset), tail_len, x) } {
         return Some(offset + i);
     }
-    /*
-    This adds an extra ~10 instructions!(on x86 v1) (from std.) definitely worthwhile to avoid!
-
-     if let Some(index) = text[offset..].iter().rposition(|elt| *elt == x) {
-        return Some(offset + index);
-    }
-
-
-     */
 
     // Search the body of the text, make sure we don't cross min_aligned_offset.
 
@@ -222,7 +204,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
         offset -= 2 * USIZE_BYTES;
     }
+    // The character we were looking for didn't appear in the aligned body, do a simple loop to check the head segment.
     // SAFETY: trivially within bounds
-    // Find the byte before the point the body loop stopped.
     unsafe { rposition_byte_len(start, offset, x) }
 }

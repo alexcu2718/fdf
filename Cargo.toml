@@ -1,6 +1,6 @@
 [package]
 name = "fdf"
-version = "0.9.3"
+version = "0.9.0"
 rust-version = "1.90.0"
 edition = "2024"
 license = "MIT"
@@ -35,7 +35,6 @@ mimalloc = { version = "0.1.49", optional = true, features = [
 [features]
 default = ["mimalloc"]
 mimalloc = ["dep:mimalloc"]
-no-mimalloc = []
 
 
 [dev-dependencies]
@@ -62,7 +61,7 @@ incremental = true
 opt-level = 3
 debug = false
 strip = true
-lto = true
+lto = "fat"             ## bad name lol
 codegen-units = 1
 panic = "abort"
 overflow-checks = false

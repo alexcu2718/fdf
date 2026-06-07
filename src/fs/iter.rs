@@ -94,6 +94,25 @@ impl ReadDir {
             fd,
         })
     }
+
+    /// Constructs a `ReadDir` from a pre-opened file descriptor, skipping the `open()` call.
+    ///
+    /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
+    /// full-path resolution for the child directory.
+    #[inline]
+    pub(crate) fn from_fd(fd: FileDes, dir_path: &DirEntry) -> Self {
+        let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
+        // SAFETY: caller provides a valid directory fd; fdopendir takes ownership.
+        let dir = unsafe { NonNull::new_unchecked(libc::fdopendir(fd.0)) };
+        debug_assert!(fd.is_open(), "We expect it to be open");
+        Self {
+            dir,
+            path_buffer,
+            file_name_index,
+            parent_depth: dir_path.depth,
+            fd,
+        }
+    }
 }
 
 impl Drop for ReadDir {
@@ -601,6 +620,28 @@ impl GetDents {
             #[cfg(any(target_os = "macos", target_os = "freebsd"))]
             base_pointer: 0,
         })
+    }
+
+    /// Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
+    ///
+    /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
+    /// full-path resolution for the child directory.
+    #[inline]
+    pub(crate) fn from_fd(fd: FileDes, dir: &DirEntry) -> Self {
+        debug_assert!(fd.is_open(), "We expect it to always be open");
+        let (path_buffer, path_len) = Self::init_from_path(dir);
+        Self {
+            fd,
+            syscall_buffer: SyscallBuffer::new(),
+            path_buffer,
+            file_name_index: path_len,
+            parent_depth: dir.depth,
+            offset: 0,
+            remaining_bytes: 0,
+            end_of_stream: false,
+            #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+            base_pointer: 0,
+        }
     }
 }
 

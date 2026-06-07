@@ -10,6 +10,8 @@ cargo clippy --all -- \
   -A clippy::arithmetic_side_effects \
   -A clippy::default_numeric_fallback \
   -A clippy::as_conversions \
+  -A clippy::cast_ptr_alignment \
+  -A clippy::used_underscore_items \
   -A clippy::wildcard_enum_match_arm \
   -A clippy::question_mark_used \
   -A clippy::host_endian_bytes \

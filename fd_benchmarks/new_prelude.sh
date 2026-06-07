@@ -13,13 +13,8 @@ fi
 
 ask_for_sudo() {
     echo "This script will now ask for your password in order to gain root/sudo"
-    echo "permissions. These are required to reset the harddisk caches in between"
-    echo "benchmark runs."
-    echo ""
-
+    echo "permissions. These are required to reset the harddisk caches in between benchmark runs."
     sudo echo "Okay, acquired superpowers :-)" || exit
-
-    echo ""
 }
 
 
@@ -45,18 +40,10 @@ EXCLUDE='paru/clone/.*/pkg|systemd-private|fd.*\.lst$'
 
 
 
-if [ ! -e "$LLVM" ] && [ -e "$HOME/llvm-project" ]; then
-    echo "Found llvm-project in HOME directory, copying to $LLVM"
-    if command -v rsync >/dev/null 2>&1; then
-        rsync -a --info=progress2 --delete "$HOME/llvm-project/" "$LLVM/"
-    else
-        cp -a "$HOME/llvm-project" "$LLVM"
-    fi
-elif [ ! -e "$LLVM" ]; then
+
+if [[ ! -d "$LLVM" ]]; then
     echo "cloning llvm repo $llvm_link, this may take a while sorry!"
     git clone --depth 1 "$llvm_link" "$LLVM" >/dev/null 2>&1
-else
-    :
 fi
 
 

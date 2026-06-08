@@ -1265,7 +1265,7 @@ impl DirEntry {
         let is_traversible = opt_fd.map_or_else(
             || self.check_symlink_traversibility(),
             |fd| {
-                self.get_lstatat(fd)
+                self.get_statat(fd)
                     .is_ok_and(|entry| FileType::from_stat(&entry) == FileType::Directory)
             },
         );

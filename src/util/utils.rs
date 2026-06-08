@@ -183,7 +183,6 @@ where
 
 #[inline]
 #[must_use]
-#[allow(clippy::missing_const_for_fn)]
 /**
  Returns the length of `dirent64` / `dirent` `d_name` without the trailing null byte.
 
@@ -196,7 +195,7 @@ where
    field is properly null-terminated within the record.
  - The pointer must remain valid for the duration of the call.
 */
-pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
+pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
     #[cfg(any(
         target_os = "linux",
@@ -234,8 +233,10 @@ pub unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         target_os = "hurd"
     )))]
     {
+        // unsafe { libc::strlen((&raw const (*drnt).d_name).cast()) }
+        // The above has the same assembly as below but the below is allowed in const context.
         // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { libc::strlen((&raw const (*drnt).d_name).cast()) }
+        unsafe { core::ffi::CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() }
         // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cast (it's essentially just reinterpreting)
         //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
         // EG for NTFS it can be up to 512 bytes
@@ -392,7 +393,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         Mask them out to avoid false detection of a terminator.
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
         let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64); // (should use select unpredictable here if it was const)
-        // // This generates a conditional move under the hood.
+        // This generates a conditional move under the hood.
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.
          Result:

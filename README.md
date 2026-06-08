@@ -25,6 +25,7 @@ cargo install --git https://github.com/alexcu2718/fdf
 This is a performance-focused project that remains under active development towards a stable 1.0 release. The current name is temporary and will change before that release.
 
 The CLI is already usable, but the internal library API is not yet stable.
+It is quite irritating to both expose a stable api and CLI (fd doesn't do it and walkdir/ignore are much simpler.)
 
 ## Platform Support
 

@@ -222,7 +222,7 @@ impl Unique<dirent64> {
     #[must_use]
     #[inline]
     /// Returns a slice reference to the `d_name`, not including null terminator.
-    pub fn d_name_slice<'pointer>(self) -> &'pointer [u8] {
+    pub const fn d_name_slice<'pointer>(self) -> &'pointer [u8] {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length()) }
     }
@@ -230,7 +230,7 @@ impl Unique<dirent64> {
     #[must_use]
     #[inline]
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
-    pub fn d_name_slice_c_str<'pointer>(self) -> &'pointer CStr {
+    pub const fn d_name_slice_c_str<'pointer>(self) -> &'pointer CStr {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         let as_slice =
             unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length() + 1) };
@@ -250,7 +250,7 @@ impl Unique<dirent64> {
     #[inline]
     #[must_use]
     /// Returns the length of the `d_name` but, like strlen, it doesn't include the null terminator.
-    pub fn name_length(self) -> usize {
+    pub const fn name_length(self) -> usize {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { crate::util::dirent_name_length(self.as_ptr()) }
     }

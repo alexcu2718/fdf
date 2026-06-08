@@ -135,7 +135,7 @@ struct WorkItem {
 }
 
 struct IgnoreContext {
-    parent: Option<Arc<IgnoreContext>>,
+    parent: Option<Arc<Self>>,
     matcher: Option<Arc<Gitignore>>,
     repo_active: bool,
 }
@@ -650,6 +650,7 @@ impl Finder {
                 }
             }
             Err(error) => {
+                core::hint::cold_path();
                 if let Some(errors_arc) = self.errors.as_ref() {
                     // This will only show errors if collect errors is enabled
                     // Generally I don't like this approach due to the locking it can cause

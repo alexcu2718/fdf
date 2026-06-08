@@ -164,15 +164,10 @@ where
     /// Returns 0 for length 1 byte paths
     #[inline]
     fn file_name_index(&self) -> usize {
-        #[cold] // Help the branch predictor out.
-        #[inline(never)]
-        const fn file_name_index_len_one() -> usize {
-            0
-        }
-
         // (every file path going in here has at least a '/' inside it), this is a special case for root/'.'
         if self.len() == 1 {
-            return file_name_index_len_one(); //help the branch predictor
+            core::hint::cold_path();
+            return 0; //help the branch predictor
         }
 
         debug_assert!(!self.is_empty(), "should never be empty");
@@ -237,7 +232,7 @@ pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         // The above has the same assembly as below but the below is allowed in const context.
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { core::ffi::CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() }
-        // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cast (it's essentially just reinterpreting)
+        // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cost (it's essentially just reinterpreting)
         //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
         // EG for NTFS it can be up to 512 bytes
     }

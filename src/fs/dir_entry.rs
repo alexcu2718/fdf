@@ -1265,7 +1265,7 @@ impl DirEntry {
         let is_traversible = opt_fd.map_or_else(
             || self.check_symlink_traversibility(),
             |fd| {
-                self.get_lstatat(fd)
+                self.get_statat(fd)
                     .is_ok_and(|entry| FileType::from_stat(&entry) == FileType::Directory)
             },
         );
@@ -1428,14 +1428,9 @@ impl DirEntry {
         let filename = self.file_name();
         let len = filename.len();
 
-        #[cold] //help branch predictor
-        #[inline(never)]
-        const fn len_one<'arbit>() -> Option<&'arbit [u8]> {
-            None
-        }
-
         if len <= 1 {
-            return len_one();
+            core::hint::cold_path();
+            return None;
         }
 
         // Search for the last dot in the filename, excluding the last character ('.''s dont count if they're the final character)

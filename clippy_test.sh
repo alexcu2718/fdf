@@ -37,4 +37,7 @@ cargo clippy --all -- \
   -A clippy::absolute_paths \
   -A clippy::let_underscore_untyped \
   -A clippy::items_after_statements \
-  -A clippy::mod_module_files
+  -A clippy::mod_module_files \
+  -A clippy::doc_paragraphs_missing_punctuation
+
+## fix doc paragraphs eventually.

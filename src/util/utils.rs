@@ -237,7 +237,7 @@ pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         // The above has the same assembly as below but the below is allowed in const context.
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { core::ffi::CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() }
-        // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cast (it's essentially just reinterpreting)
+        // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cost (it's essentially just reinterpreting)
         //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
         // EG for NTFS it can be up to 512 bytes
     }

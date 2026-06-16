@@ -497,7 +497,7 @@ impl GetDents {
             // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
             // As this is ~5 years old, we can safely assume that all kernels have this capability, this is the best we'll get
             self.end_of_stream = unsafe {
-                last_four_bytes.read() == 1 || !is_more_remaining;
+                last_four_bytes.read() == 1 || !is_more_remaining
                 // check if the syscall returns 0 too, the latter branch should almost never be true on supported system
             }
         }

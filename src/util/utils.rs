@@ -1,8 +1,12 @@
-use crate::c_char;
 use crate::dirent64;
 use crate::util::memchr_derivations::memrchr;
 use core::ffi::c_int;
+use core::ffi::c_void;
 use core::ops::Deref;
+
+#[allow(unused)]
+//used in debug printing and on weird platforms, just ignore this, makes there be less visual clutter.
+use core::ffi::CStr;
 /**
   Wrapper for direct getdents syscalls
 
@@ -15,6 +19,7 @@ use core::ops::Deref;
  # Safety
  - Requires valid open directory descriptor
  - Buffer must be valid for writes of `buffer_size` bytes
+ - Buffer must be aligned to 8 bytes.
 
  # Returns
  - Positive: Number of bytes read
@@ -32,7 +37,7 @@ use core::ops::Deref;
     target_os = "illumos",
     target_os = "solaris"
 ))]
-pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_char, buffer_size: usize) -> isize {
+pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize) -> isize {
     #[cfg(any(
         target_os = "openbsd",
         target_os = "solaris",
@@ -44,9 +49,9 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_char, buffer_size: usize)
         unsafe extern "C" {
             //TODO add dragonfly here(?) TODO once they support Rust 2024
             #[cfg_attr(target_os = "netbsd", link_name = "__getdents30")] //special case for NetBSD
-            fn getdents(fd: c_int, dirp: *mut c_char, count: usize) -> isize;
+            fn getdents(fd: c_int, dirp: *mut c_void, count: usize) -> isize;
         }
-
+        // SAFETY: non required except buffer length must not exceed the provided size, then we get accessing out of bounds memory...
         unsafe { getdents(fd, buffer_ptr, buffer_size) }
     }
 
@@ -73,6 +78,7 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_char, buffer_size: usize)
  - Requires valid open directory descriptor
  - Buffer must be valid for writes of `nbytes` bytes
  - basep must point to valid memory for `libc::off_t`
+ - Buffer must be aligned to 8 bytes.
 
  # Returns
  - Positive: Number of bytes read
@@ -84,7 +90,7 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_char, buffer_size: usize)
 */
 pub unsafe fn getdirentries64(
     fd: c_int,
-    buffer_ptr: *mut c_char,
+    buffer_ptr: *mut c_void,
     nbytes: usize,
     basep: *mut i64,
 ) -> isize {
@@ -94,7 +100,7 @@ pub unsafe fn getdirentries64(
         #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
         // Never seen this done, I searched all of github for similar stuff. I love dirty stuff like this.
         // Dirty(yet it works!)
-        fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t)
+        fn getdirentries(fd: c_int, buf: *mut c_void, nbytes: size_t, basep: *mut off_t)
         -> ssize_t;
     } // as above
     // By doing this, we avoid fstatf64 calls and a thread mutex enforced by readdir (completely not needed for single thread reading)
@@ -142,22 +148,20 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
+    #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn extension(&self) -> Option<&[u8]> {
         debug_assert!(!self.is_empty(), "should never be empty");
         debug_assert!(!self.ends_with(b"/"), "file path ends with a slash!");
         // filepaths entering this will always have a slash in them, guaranteed, no trailing slashes!!!
         // The edge cases to watch our for are ./ and /, these are handled
-        // SAFETY: self.len() is guaranteed to be at least 1, as we don't expect empty filepaths (avoid UB check)
-        memrchr(b'.', unsafe {
-            self.get_unchecked(..self.len().saturating_sub(1))
-        }) //exclude cases where the . is the final character
-        // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
-        // Due to an internal invariant, filepaths going down here always are length >=2
-        // (I should really be less hacky in this approach.)
-        // Therefore, `pos` is a valid index into `self`.
-        // `pos + 1` is also guaranteed to be a valid index.
-        // We do this to avoid any runtime checks
-        .map(|pos| unsafe { self.get_unchecked(pos + 1..) })
+        memrchr(b'.', &self[..self.len().saturating_sub(1)]) //exclude cases where the . is the final character
+            // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
+            // Due to an internal invariant, filepaths going down here always are length >=2
+            // (I should really be less hacky in this approach.)
+            // Therefore, `pos` is a valid index into `self`.
+            // `pos + 1` is also guaranteed to be a valid index.
+            // We do this to avoid any runtime checks
+            .map(|pos| unsafe { self.get_unchecked(pos + 1..) })
     }
 
     /// Get the length of the basename of a path (up to and including the last '/')
@@ -172,7 +176,7 @@ where
 
         // (every file path going in here has at least a '/' inside it), this is a special case for root/'.'
         if self.len() == 1 {
-            return file_name_index_len_one(); //help the branch predictor
+            return file_name_index_len_one();
         }
 
         debug_assert!(!self.is_empty(), "should never be empty");
@@ -236,7 +240,7 @@ pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         // unsafe { libc::strlen((&raw const (*drnt).d_name).cast()) }
         // The above has the same assembly as below but the below is allowed in const context.
         // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { core::ffi::CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() }
+        unsafe { CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() }
         // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cost (it's essentially just reinterpreting)
         //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
         // EG for NTFS it can be up to 512 bytes
@@ -357,7 +361,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     #[cfg(not(has_d_namlen))]
     // On these systems where we need a bit of 'black magic' (no d_namlen field)
     {
-        use core::num::NonZeroU64;
+        use core::num::NonZero;
         // Offset from the start of the struct to the beginning of d_name.
         const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
         // Access the last field and then round up to find the minimum struct size
@@ -416,7 +420,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
            Check hackers delight reference above for better explanation.
 
           Then use a niche optimisation, because the last word will ALWAYS contain a null terminator,
-          so we can use `NonZeroU64`!,
+          so we can use `NonZeroU`!,
           This has the benefit of using a smarter intrinsic
           https://doc.rust-lang.org/src/core/num/nonzero.rs.html#599
         https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
@@ -425,11 +429,10 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         This allows us to skip a 0 check which then allows us to use tzcnt/lzcnt on most cpu's (well x86_64, not knowledgeable on ARM/etc)
          */
 
-        #[cfg(target_endian = "little")]
         //SAFETY: The u64 can never be all 0's post-SWAR
-        let masked_word = unsafe {
-            NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
-        };
+        #[cfg(target_endian = "little")]
+        let masked_word =
+            unsafe { NonZero::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64) };
 
         //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
         // ^ Reference for the BE algorithm
@@ -440,7 +443,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         #[cfg(target_endian = "big")]
         //SAFETY: as in LE version.
         let masked_word = unsafe {
-            NonZeroU64::new_unchecked(
+            NonZero::new_unchecked(
                 (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
             )
         };
@@ -455,7 +458,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         debug_assert!(
             reclen - DIRENT_HEADER_START +byte_pos -8
                 //SAFETY: should never matter because debug assert checks pointer validity above.
-                    == unsafe{core::ffi::CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() },
+                    == unsafe{CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() },
             // Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length array)
             // We use this method as workaround specifically because `from_ptr` is const
             // (We could've also used a while loop but that's even more verbose and makes this more complicated....)

@@ -14,8 +14,7 @@ use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::ptr::NonNull;
-use libc::closedir;
-use libc::{AT_SYMLINK_NOFOLLOW, DIR, fstatat};
+use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -187,11 +186,12 @@ pub trait DirentConstructor {
 
     #[inline]
     fn init_from_path(path: &[u8]) -> (Vec<u8>, usize) {
-        let mut base_len = path.len(); // get length of directory path
+        let mut dirlen = path.len(); // get length of directory path
 
         // Quicker shortcircuit
-        let is_root = base_len == 1 && path == b"/";
+        let is_root = dirlen == 1 && path == b"/";
 
+        // for a branchless trick later (adding 0/1)
         let needs_slash = usize::from(!is_root);
 
         // Fast-path filename capacity (+NUL is included in `name_len` during append).
@@ -201,28 +201,23 @@ pub trait DirentConstructor {
         const FAST_PATH_DIRENT_LENGTH: usize = 256;
 
         //  Allocate exact size and copy in one operation
-        let total_capacity = base_len + needs_slash + FAST_PATH_DIRENT_LENGTH;
-        let mut path_buffer: Vec<u8> = Vec::with_capacity(total_capacity);
+        let total_capacity = dirlen + needs_slash + FAST_PATH_DIRENT_LENGTH;
+        let mut buffer: Vec<u8> = Vec::with_capacity(total_capacity);
+        // Get a mutable buffer to the pointer and overwrite with the most efficient operation.
+        let buf_ptr = buffer.as_mut_ptr();
 
         /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
          SAFETY:
-         - `path.as_ptr()` is valid for reads of `base_len` bytes (source slice length)
-         - `path_buffer.as_mut_ptr()` is valid for writes of `base_len` bytes (we allocated `total_capacity >= base_len`)
-         - The memory regions are guaranteed non-overlapping: `path` points to existing data
-           while `path_buffer` points to freshly allocated memory
-         - Both pointers are properly aligned for u8 access
-         - `base_len` equals `path.len()`, ensuring we don't read beyond source bounds
+         - `buf_ptr` is valid for writes of `base_len` bytes (we allocated `total_capacity >= base_len`)
+         - Different memoery regions(stack vs heap), trivial alignment(1)
         */
-        unsafe {
-            path.as_ptr()
-                .copy_to_nonoverlapping(path_buffer.as_mut_ptr(), base_len)
-        };
-        //https://en.cppreference.com/w/c/string/byte/memcpy (usually I hate cppreference but it's fine for this)
-        // from above "memcpy is the fastest library routine for memory-to-memory copy"
+        unsafe { path.as_ptr().copy_to_nonoverlapping(buf_ptr, dirlen) };
+        //https://en.cppreference.com/w/c/string/byte/memcpy
+        // "memcpy is the fastest library routine for memory-to-memory copy"
 
         // SAFETY: We've allocated enough capacity and only need to set the length
         // The filename portion will be overwritten during iteration
-        unsafe { path_buffer.set_len(total_capacity) };
+        unsafe { buffer.set_len(total_capacity) };
 
         /*
         Essentially  what we're doing here is creating 1 vector per  directory, with enough space allocated to hold any filename
@@ -231,13 +226,13 @@ pub trait DirentConstructor {
 
         // SAFETY: write is within buffer bounds
         unsafe {
-            path_buffer.as_mut_ptr().add(base_len).write(b'/') //this doesnt matter for non directories, since we're overwriting it anyway
+            buf_ptr.add(dirlen).write(b'/') //this doesnt matter for non directories, since we're overwriting it anyway
         };
 
-        base_len += needs_slash;
+        dirlen += needs_slash;
         // update length if slash added(we're tracking the baselen, we dont care about the slash on the end because we're truncating it anyway)
 
-        (path_buffer, base_len)
+        (buffer, dirlen)
     }
 
     /**
@@ -247,7 +242,7 @@ pub trait DirentConstructor {
     */
     #[inline]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
-        let d_name = drnt.d_name();
+        let d_name: *const u8 = drnt.d_name().cast();
         let d_ino = drnt.d_ino(); // Returns 0 if d_ino isn't defined on your system
 
         // Add 1 to include the null terminator
@@ -288,28 +283,27 @@ pub trait DirentConstructor {
         let base_len = self.file_index();
         let required_len = base_len + name_len;
 
-        let path_buffer = self.path_buffer();
-        if required_len > path_buffer.len() {
-            reserve_for_long_name(path_buffer, required_len);
+        let d_buffer = self.path_buffer();
+        if required_len > d_buffer.len() {
+            reserve_for_long_name(d_buffer, required_len);
         }
 
-        // Get the portion of the buffer that goes past the last slash
-        // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
-        let buffer: &mut [u8] = unsafe { path_buffer.get_unchecked_mut(base_len..) };
+        // Copy the name portion into the buffer that has a section reserved for the file NAME
+        // SAFETY: name_len is within bounds as baselen+name_len < totally capacity len
+        // Alignment is trivial(1)
+        unsafe { d_name.copy_to_nonoverlapping(d_buffer.as_mut_ptr().add(base_len), name_len) };
 
-        // SAFETY: `d_name` and `buffer` don't overlap (different memory regions)
-        // - Both pointers are properly aligned for byte copying
-        // - `name_len` is within `buffer` bounds
-        // Copy the name into the final portion
-        unsafe {
-            d_name
-                .cast::<u8>()
-                .copy_to_nonoverlapping(buffer.as_mut_ptr(), name_len)
-        };
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
-        let full_path = unsafe {
-            CStr::from_bytes_with_nul_unchecked(path_buffer.get_unchecked(..required_len))
-        }; //truncate the buffer to the first null terminator of the full path
+        let full_path =
+            unsafe { CStr::from_bytes_with_nul_unchecked(d_buffer.get_unchecked(..required_len)) }; //truncate the buffer to the first null terminator of the full path
+
+        // By doing it this way, we avoid calling strlen, which as the path increases in size, will end up taking a hefty toll on CPU calculations
+        // It's really obtuse but it's a complexity-performance trade off,
+        debug_assert!(
+            // SAFETY: proving an invariant.
+            unsafe { CStr::from_ptr(d_buffer.as_ptr().cast()) } == full_path,
+            "cstrpath truncated incorrectly"
+        );
 
         (full_path, d_ino, file_type)
     }
@@ -464,42 +458,48 @@ impl GetDents {
             return false;
         }
 
+        const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
+
+        #[cfg(has_eof_trick)]
+        // Create a ptr to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
+        // In doing the `getdirentries64` syscalls, we zero the last four bytes, so they're guaranteed initialised.
+        // If this marker changes, the kernel has indicated EOF, the buffer is never filled up the the maximum
+        // (I've done some rudimentary println and syscall tracing of the buffer, it always leaves a reserved space, probably some reference exists but too lazy currently.)
+        // Alignment of 8 => Alignment of 4 guaranteed invariant.
+        // SAFETY: see above
+        let last_four_bytes: *mut u32 = unsafe {
+            self.syscall_buffer
+                .as_mut_ptr()
+                .byte_add(Self::BUFFER_SIZE - 4)
+                .cast::<u32>()
+        };
+
         #[cfg(has_eof_trick)]
         {
             // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
             // this means that we detect when the kernel writes it's EOF flags
-            // SAFETY: Buffer is aligned to 8 bytes->aligned to 4, the write is in bounds by construction
-            // so alignment met+accessing valid(but uinitialised) memory.
-            unsafe {
-                self.syscall_buffer
-                    .as_mut_ptr()
-                    .byte_add(Self::BUFFER_SIZE - 4)
-                    .cast::<u32>()
-                    .write(0)
-            }
+            // so alignment met+writing valid memory.
+            unsafe { last_four_bytes.write(0) }
         }
 
         // Get the syscall return amount in bytes
         let remaining_bytes = self.getdents();
 
-        const { assert!(Self::BUFFER_SIZE.is_multiple_of(8)) };
-
         let is_more_remaining = remaining_bytes.is_positive();
         // Only macOS has this optimisation, the other platforms do not, if macos does not have this, default to checking for 0 ret value
         #[cfg(has_eof_trick)] // Check at build time for the optimisation
         {
-            // SAFETY: Buffer is already initialised by the kernel
-            // The kernel writes the WHOLE of the buffer passed to `getdirentries`
-            //(also it's to u8, which has no restrictions on alignment)
+            // SAFETY: The segment of the bfufer we
             //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
             // The last bytes-4 is set to 1 to act as a sentinel to mark EOF(this was a PAIN to find out)
             // It always marks the end of the buffer regardless if EOF or not.
             // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
             // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
             // As this is ~5 years old, we can safely assume that all kernels have this capability, this is the best we'll get
-            self.end_of_stream =
-            // SAFETY: the fundamentally buffer is always aligned to a multiple of 8, which means it's always aligned for 4 byte->u32 access
-            unsafe { self.buffer_add(Self::BUFFER_SIZE - 4).cast::<u32>().read() == 1 }
+            self.end_of_stream = unsafe {
+                last_four_bytes.read() == 1 || !is_more_remaining;
+                // check if the syscall returns 0 too, the latter branch should almost never be true on supported system
+            }
         }
 
         #[cfg(not(has_eof_trick))]
@@ -509,16 +509,11 @@ impl GetDents {
 
         /*
         Example of syscall differences( also note the lack of fstatfs64 and semwait signal!)
-
+        macOS is only virtualised via qemu, I get some wacky results, I don't know why
+        the open calls differ EVERY invocation, maybe something to do with macs anti malware or strange apple-ism?
            λ   sudo dtruss -c fd -HI . ~ 2>&1 | tail -n 15
 
-           sysctl                                         12
-           ulock_wait2                                    12
-           mmap                                           13
-           ulock_wake                                     14
-           munmap                                         17
-           mprotect                                       26
-           sigaltstack                                    30
+
            write                                         156
            madvise                                       196
            close_nocancel                               1898
@@ -526,25 +521,13 @@ impl GetDents {
            open_nocancel                                1903
            getdirentries64                              1920
            __semwait_signal                            11184
-
-
            λ   sudo dtruss -c fdf -HI . ~ 2>&1 | tail -n 15
 
-           munmap                                          7
-           bsdthread_create                                8
-           stat64                                          8
-           thread_selfid                                   9
-           close                                          10
-           sysctl                                         11
-           mmap                                           15
-           sigaltstack                                    18
-           mprotect                                       25
            write                                          32
            madvise                                       175
            close_nocancel                               2562
            open                                         2578
-           getdirentries64                              2606
-                   */
+           getdirentries64                              2606 */
 
         // Branchless check
         self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
@@ -586,7 +569,7 @@ impl GetDents {
             }
         }
         debug_assert!(self.offset.is_multiple_of(8), "Must be a multiple of 8");
-        const { assert!(align_of::<u64>() == align_of::<dirent64>(),) };
+        const { assert!(align_of::<u64>() == align_of::<dirent64>()) };
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read and is properly aligned
         let drnt = unsafe { self.buffer_add(self.offset).cast::<dirent64>() };
@@ -626,6 +609,7 @@ impl GetDents {
     ///
     /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
     /// full-path resolution for the child directory.
+    /// Used internally only due to non-enforceable invariants
     #[inline]
     pub(crate) fn from_fd(fd: FileDes, dir: &DirEntry) -> Self {
         debug_assert!(fd.is_open(), "We expect it to always be open");

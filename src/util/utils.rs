@@ -1,7 +1,6 @@
 use crate::dirent64;
 use crate::util::memchr_derivations::memrchr;
-use core::ffi::c_int;
-use core::ffi::c_void;
+use core::ffi::{c_char, c_int, c_void};
 use core::ops::Deref;
 
 #[allow(unused)]
@@ -240,11 +239,23 @@ pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
         // unsafe { libc::strlen((&raw const (*drnt).d_name).cast()) }
         // The above has the same assembly as below but the below is allowed in const context.
         // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() }
+        unsafe { strlen((&raw const (*drnt).d_name).cast()) }
         // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cost (it's essentially just reinterpreting)
         //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
         // EG for NTFS it can be up to 512 bytes
     }
+}
+
+/**
+A convenience const function which is *just* a fancy call to your libc's strlen.
+*/
+#[inline(always)]
+#[expect(clippy::inline_always, reason = "Allow codegen to see strlen")]
+pub(crate) const unsafe fn strlen(x: *const c_char) -> usize {
+    // SAFETY: user has to check whether pointer is null
+    unsafe { CStr::from_ptr(x).count_bytes() }
+    // equivalent assembly to
+    // unsafe{libc::strlen(x)}
 }
 
 /*
@@ -361,9 +372,9 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     #[cfg(not(has_d_namlen))]
     // On these systems where we need a bit of 'black magic' (no d_namlen field)
     {
-        use core::num::NonZero;
+        use core::{mem::offset_of, num::NonZeroU64};
         // Offset from the start of the struct to the beginning of d_name.
-        const DIRENT_HEADER_START: usize = core::mem::offset_of!(dirent64, d_name);
+        const DIRENT_HEADER_START: usize = offset_of!(dirent64, d_name);
         // Access the last field and then round up to find the minimum struct size
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
         // Compile time assert to immediately cancel the build if invalidated
@@ -420,7 +431,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
            Check hackers delight reference above for better explanation.
 
           Then use a niche optimisation, because the last word will ALWAYS contain a null terminator,
-          so we can use `NonZeroU`!,
+          so we can use `NonZeroU64`!,
           This has the benefit of using a smarter intrinsic
           https://doc.rust-lang.org/src/core/num/nonzero.rs.html#599
         https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
@@ -431,8 +442,9 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         //SAFETY: The u64 can never be all 0's post-SWAR
         #[cfg(target_endian = "little")]
-        let masked_word =
-            unsafe { NonZero::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64) };
+        let masked_word = unsafe {
+            NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
+        };
 
         //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
         // ^ Reference for the BE algorithm
@@ -443,7 +455,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         #[cfg(target_endian = "big")]
         //SAFETY: as in LE version.
         let masked_word = unsafe {
-            NonZero::new_unchecked(
+            NonZeroU64::new_unchecked(
                 (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
             )
         };
@@ -458,7 +470,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         debug_assert!(
             reclen - DIRENT_HEADER_START +byte_pos -8
                 //SAFETY: should never matter because debug assert checks pointer validity above.
-                    == unsafe{CStr::from_ptr((&raw const (*drnt).d_name).cast()).count_bytes() },
+                    == unsafe{strlen((&raw const (*drnt).d_name).cast()) },
             // Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length array)
             // We use this method as workaround specifically because `from_ptr` is const
             // (We could've also used a while loop but that's even more verbose and makes this more complicated....)

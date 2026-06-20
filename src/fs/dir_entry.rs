@@ -78,13 +78,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 */
 
-use crate::c_char;
 use crate::fs::ReadDir;
 use crate::fs::{FileDes, FileType, types::Result};
 use crate::{DirEntryError, util::BytePath as _};
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
-use core::ffi::CStr;
+use core::ffi::{CStr, c_char};
 use core::fmt;
 
 use libc::{

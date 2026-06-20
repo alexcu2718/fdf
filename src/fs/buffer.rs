@@ -181,7 +181,7 @@ where
     #[inline]
     pub const unsafe fn as_slice(&self) -> &[T] {
         // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { &*self.data.as_ptr() }
+        unsafe { self.data.assume_init_ref() }
     }
     /**
      Returns a mutable slice of the buffer's contents
@@ -193,7 +193,7 @@ where
     #[inline]
     pub const unsafe fn as_mut_slice(&mut self) -> &mut [T] {
         // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { &mut *self.data.as_mut_ptr() }
+        unsafe { self.data.assume_init_mut() }
     }
 
     /// Executes the getdents(64) system call using <unistd.h>/direct `libc` syscalls
@@ -291,7 +291,7 @@ where
     #[inline]
     const unsafe fn assume_init(&self) -> &[T; SIZE] {
         // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { &*self.data.as_ptr() }
+        unsafe { self.data.assume_init_ref() }
     }
 
     /**
@@ -304,6 +304,6 @@ where
     #[inline]
     const unsafe fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
         // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { &mut *self.data.as_mut_ptr() }
+        unsafe { self.data.assume_init_mut() }
     }
 }

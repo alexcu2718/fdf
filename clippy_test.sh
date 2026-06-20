@@ -13,6 +13,7 @@ cargo clippy --all -- \
   -A clippy::cast_ptr_alignment \
   -A clippy::used_underscore_items \
   -A clippy::wildcard_enum_match_arm \
+  -A clippy::redundant_pub_crate \
   -A clippy::question_mark_used \
   -A clippy::host_endian_bytes \
   -A clippy::semicolon_if_nothing_returned \

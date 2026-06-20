@@ -618,35 +618,31 @@ impl Finder {
                 // Unfortunately queueing file descriptors will fail once file descriptors go past ulimit
                 // but they won't for consequent file descriptors
                 // I can see *why* the std library did it the way it did, I should research how walkdir handles it.
-                let (dirs, mut files): (Vec<_>, Vec<_>) = entries
-                    // I'm not too happy with this method. need to revisit my approach.
-                    .filter(|entry| {
-                        self.keep_hidden(entry)
-                            && !self.matches_ignore_path(entry)
-                            && !self.is_gitignored(entry, &current_ignore_ctx)
-                            && (self.should_traverse(entry, opt_fd)
-                                || self.file_filter(entry, opt_fd))
-                    })
-                    .partition(|ent| self.should_traverse(ent, opt_fd));
+                for entry in entries {
+                    if !self.keep_hidden(&entry)
+                        || self.matches_ignore_path(&entry)
+                        || self.is_gitignored(&entry, &current_ignore_ctx)
+                    {
+                        continue;
+                    }
 
-                for dirnt in dirs {
-                    if !Self::enqueue_dir(dirnt, Arc::clone(&current_ignore_ctx), ctx) {
+                    let should_traverse = self.should_traverse(&entry, opt_fd);
+                    if should_traverse {
+                        if !Self::enqueue_dir(entry, Arc::clone(&current_ignore_ctx), ctx) {
+                            return;
+                        }
+                        continue;
+                    }
+
+                    if self.file_filter(&entry, opt_fd) && sender.send(entry).is_err() {
+                        ctx.shutdown_flag.store(true, Ordering::Relaxed);
                         return;
                     }
                 }
 
                 // Checking if we should send directories
-                if should_send_dir_or_symlink {
-                    files.push(dir);
-                }
-
-                // We do batch sending to minimise contention of sending
-                // as opposed to sending one at a time, which will cause tremendous locks
-                for entry in files {
-                    if sender.send(entry).is_err() {
-                        ctx.shutdown_flag.store(true, Ordering::Relaxed);
-                        return;
-                    }
+                if should_send_dir_or_symlink && sender.send(dir).is_err() {
+                    ctx.shutdown_flag.store(true, Ordering::Relaxed);
                 }
             }
             Err(error) => {
@@ -661,6 +657,7 @@ impl Finder {
             }
         }
     }
+
     #[inline]
     fn enqueue_dir(dir: DirEntry, ignore_ctx: Arc<IgnoreContext>, ctx: &WorkerContext<'_>) -> bool {
         if ctx.shutdown_flag.load(Ordering::Relaxed) {

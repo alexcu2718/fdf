@@ -473,34 +473,37 @@ impl GetDents {
                 .byte_add(Self::BUFFER_SIZE - 4)
                 .cast::<u32>()
         };
+        // Creating a reference to unitialised memory is defined so we have to keep as a pointer.
+        // We could use the `NonNull` pointer to expose intent more, but this is a 1 off piece.
 
         #[cfg(has_eof_trick)]
-        {
-            // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
-            // this means that we detect when the kernel writes it's EOF flags
-            // so alignment met+writing valid memory.
-            unsafe { last_four_bytes.write(0) }
-        }
+        // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
+        // this means that we detect when the kernel writes it's EOF flags
+        // so alignment met+writing valid memory.
+        // SAFETY: As specified.
+        unsafe {
+            last_four_bytes.write(0)
+        };
 
         // Get the syscall return amount in bytes
         let remaining_bytes = self.getdents();
 
         let is_more_remaining = remaining_bytes.is_positive();
         // Only macOS has this optimisation, the other platforms do not, if macos does not have this, default to checking for 0 ret value
-        #[cfg(has_eof_trick)] // Check at build time for the optimisation
-        {
-            // SAFETY: The segment of the bfufer we
-            //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
-            // The last bytes-4 is set to 1 to act as a sentinel to mark EOF(this was a PAIN to find out)
-            // It always marks the end of the buffer regardless if EOF or not.
-            // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
-            // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
-            // As this is ~5 years old, we can safely assume that all kernels have this capability, this is the best we'll get
-            self.end_of_stream = unsafe {
-                last_four_bytes.read() == 1 || !is_more_remaining
-                // check if the syscall returns 0 too, the latter branch should almost never be true on supported system
-            }
+
+        // Check the last four bytes for the marker
+        // Also the XNU kernel never fills buffer up to maximum size, it always has a flags section towards the end.
+        //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
+        // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
+        // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
+        // As this has existed for decades, it's relatively stable, any ABI breaks are unlikely since we're on 64bit for good.
+        #[cfg(has_eof_trick)]
+        unsafe {
+            // Check at build time for the optimisation
+            // SAFETY: as specified above
+            self.end_of_stream = last_four_bytes.read() == 1 || !is_more_remaining;
         }
+        // check if the syscall returns 0 too, the latter branch should almost never be true on supported system
 
         #[cfg(not(has_eof_trick))]
         {
@@ -577,8 +580,8 @@ impl GetDents {
         // Quick sanity checks for debug builds (alignment check+nullcheck)
         debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
         debug_assert!(drnt.is_aligned(), "the dirent is malformed"); //not aligned to 8 bytes
-        // SAFETY: dirent is not null so field access is safe
-        self.offset += unsafe { access_dirent!(drnt, d_reclen) };
+        // SAFETY: dirent is not null and it is aligned, so field access is safe
+        self.offset += unsafe { (*drnt).d_reclen as usize };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
         // SAFETY: dirent is not null
         unsafe { Some(Unique::new_unchecked(drnt)) }

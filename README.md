@@ -117,6 +117,30 @@ The benchmarks are repeatable using the testing code above and cover file type f
 
 --*Average Speedup: 2.20x*--
 
+When Run on identical commands, quickly tested, the rough memory allocation difference is astounding.
+
+(Note, these commands spam your console, done deliberately to model coloured printing too)
+
+```bash
+
+λ  rm -f *.zst && heaptrack fdf . / -HI && heaptrack_print ./heaptrack.fdf.*.zst | tail -n 6
+total runtime: 10.71s.
+calls to allocation functions: 66 (6/s)
+temporary memory allocations: 2 (0/s)
+peak heap memory consumption: 77.38K
+peak RSS (including heaptrack overhead): 58.74M
+total memory leaked: 2.82K
+
+
+λ  rm -f *.zst && heaptrack fd . / -HI && heaptrack_print ./heaptrack.fd.*.zst | tail -n 6
+total runtime: 21.04s.
+calls to allocation functions: 15342262 (729264/s)
+temporary memory allocations: 3076227 (146222/s)
+peak heap memory consumption: 3.00G
+peak RSS (including heaptrack overhead): 39.36M
+total memory leaked: 3.00G
+```
+
 ## Distinctions from fd/find
 
 Symlink resolution in my method differs from fd and find. Although I generally advise against following symlinks, the option exists for completeness.

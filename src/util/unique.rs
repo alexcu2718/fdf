@@ -17,13 +17,13 @@ Edited slightly, essentially providing a type safe wrapper to inforce internal i
 //!
 //! Look at the [`Unique` definition](crate::fdf) for more info.
 #![allow(clippy::missing_inline_in_public_items)]
-use crate::{c_char, dirent64};
+use crate::dirent64;
 use core::convert::From;
 use core::ffi::CStr;
+use core::ffi::c_char;
 use core::fmt;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
-
 /// A wrapper around a raw non-null `*const T` that indicates that the possessor
 /// of this wrapper owns the referent. Usefor building abstractions like
 /// `Box<T>`, `Vec<T>`, `String`, and `HashMap<K, V>`.
@@ -93,6 +93,7 @@ impl<T: ?Sized> Unique<T> {
     /// `ptr` must be non-null.
     #[inline]
     pub const unsafe fn new_unchecked(ptr: *const T) -> Self {
+        debug_assert!(!ptr.is_null(), "Pointer is null in Unique::new_unchecked");
         // SAFETY: the caller must guarantee that `ptr` is non-null.
         unsafe { Self(NonNull::new_unchecked(ptr.cast_mut()), PhantomData) }
     }
@@ -175,7 +176,7 @@ impl<T: ?Sized> From<&mut T> for Unique<T> {
     #[inline]
     fn from(reference: &mut T) -> Self {
         // SAFETY: A mutable reference cannot be null
-        unsafe { Self::new_unchecked(core::ptr::from_mut(reference)) }
+        unsafe { Self::new_unchecked(&raw mut *reference) }
     }
 }
 
@@ -192,7 +193,7 @@ impl Unique<dirent64> {
     /// Returns the inode of the `dirent64`, returns 0 if `d_ino` is not a struct member on your OS.
     pub const fn d_ino(self) -> u64 {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        unsafe { access_dirent!(self.0.as_ptr(), d_ino) }
+        unsafe { access_dirent!(self.as_ptr(), d_ino) }
     }
 
     #[inline]
@@ -205,7 +206,7 @@ impl Unique<dirent64> {
         #[cfg(has_d_type)]
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe {
-            access_dirent!(self.0.as_ptr(), d_type)
+            access_dirent!(self.as_ptr(), d_type)
         }
         #[cfg(not(has_d_type))]
         libc::DT_UNKNOWN
@@ -216,7 +217,7 @@ impl Unique<dirent64> {
     #[cfg(has_d_namlen)]
     pub const fn d_namlen(self) -> usize {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        unsafe { access_dirent!(self.0.as_ptr(), d_namlen) }
+        unsafe { access_dirent!(self.as_ptr(), d_namlen) }
     }
 
     #[must_use]
@@ -231,11 +232,11 @@ impl Unique<dirent64> {
     #[inline]
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
     pub const fn d_name_slice_c_str<'pointer>(self) -> &'pointer CStr {
-        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        let as_slice =
-            unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length() + 1) };
+        // add to include terminal
+        let as_slice: *const [c_char] =
+            core::ptr::slice_from_raw_parts(self.d_name(), self.name_length() + 1);
         // SAFETY:  has it's null terminator included, and no interior nulls..
-        unsafe { CStr::from_bytes_with_nul_unchecked(as_slice) }
+        unsafe { &*(as_slice as *const CStr) }
     }
 
     #[inline]
@@ -244,7 +245,7 @@ impl Unique<dirent64> {
     /// So careful attention has to be paid
     pub const fn d_name(self) -> *const c_char {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        unsafe { access_dirent!(self.0.as_ptr(), d_name) }
+        unsafe { access_dirent!(self.as_ptr(), d_name) }
     }
 
     #[inline]

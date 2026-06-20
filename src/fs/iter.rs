@@ -473,7 +473,7 @@ impl GetDents {
                 .byte_add(Self::BUFFER_SIZE - 4)
                 .cast::<u32>()
         };
-        // Creating a reference to unitialised memory is defined so we have to keep as a pointer.
+        // Creating a reference to unintialised memory is UB so we have to keep as a pointer.
         // We could use the `NonNull` pointer to expose intent more, but this is a 1 off piece.
 
         #[cfg(has_eof_trick)]

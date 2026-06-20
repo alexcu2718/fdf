@@ -106,8 +106,6 @@ pub(crate) use libc::{dirent as dirent64, readdir as readdir64};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) use libc::{dirent64, readdir64};
 
-pub use std::os::raw::c_char;
-
 mod test;
 
 mod error;

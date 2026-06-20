@@ -37,6 +37,8 @@ use core::ffi::CStr;
     target_os = "solaris"
 ))]
 pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize) -> isize {
+    debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in getdents64");
+    debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
     #[cfg(any(
         target_os = "openbsd",
         target_os = "solaris",
@@ -93,6 +95,8 @@ pub unsafe fn getdirentries64(
     nbytes: usize,
     basep: *mut i64,
 ) -> isize {
+    debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in GDE64");
+    debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
     use libc::{off_t, size_t, ssize_t};
     // link to libc
     unsafe extern "C" {
@@ -132,7 +136,7 @@ where
 
 /// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 /// Provides efficient path operations, FFI compatibility, and filesystem interactions.
-pub trait BytePath<T>
+pub(crate) trait BytePath<T>
 where
     T: Deref<Target = [u8]>,
 {

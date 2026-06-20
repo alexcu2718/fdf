@@ -13,3 +13,4 @@ settings.json
 
 # MacOS specific
 .DS_Store
+**/*.zst

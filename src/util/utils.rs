@@ -2,8 +2,6 @@ use crate::dirent64;
 use crate::util::memchr_derivations::memrchr;
 use core::ffi::{c_char, c_int, c_void};
 use core::ops::Deref;
-
-#[allow(unused)]
 //used in debug printing and on weird platforms, just ignore this, makes there be less visual clutter.
 use core::ffi::CStr;
 /**
@@ -261,6 +259,10 @@ pub(crate) const unsafe fn strlen(x: *const c_char) -> usize {
     // equivalent assembly to
     // unsafe{libc::strlen(x)}
 }
+
+// disable unused warning.
+#[allow(clippy::undocumented_unsafe_blocks)]
+const _: () = assert!(unsafe { strlen(c"hello".as_ptr()) } == 5, "removing lint");
 
 /*
 Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.

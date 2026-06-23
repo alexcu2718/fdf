@@ -13,7 +13,9 @@ use crate::fs::{DirEntry, FileDes, FileType, Result};
 use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
+use core::mem::MaybeUninit;
 use core::ptr::NonNull;
+use core::ptr::slice_from_raw_parts;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
 /**
  POSIX-compliant directory iterator using libc's readdir
@@ -28,7 +30,7 @@ pub struct ReadDir {
     /// Raw directory pointer from libc's `opendir() wrapped in a nonnull`
     pub(crate) dir: NonNull<DIR>,
     /// Buffer storing the full directory path for constructing entry paths
-    pub(crate) path_buffer: Vec<u8>,
+    pub(crate) path_buffer: Vec<MaybeUninit<u8>>,
     /// Index into `path_buffer` where filenames start (avoids recalculating)
     pub(crate) file_name_index: usize,
     /// Depth of this directory relative to traversal root
@@ -157,7 +159,7 @@ impl Drop for ReadDir {
 */
 pub trait DirentConstructor {
     /// Returns a mutable reference to the path buffer used for constructing full paths
-    fn path_buffer(&mut self) -> &mut Vec<u8>;
+    fn path_buffer(&mut self) -> &mut Vec<MaybeUninit<u8>>;
     /// Returns the current index in the path buffer where the filename should be appended
     ///
     /// This represents the length of the base directory path before adding the current filename.
@@ -168,6 +170,8 @@ pub trait DirentConstructor {
     fn parent_depth(&self) -> u32;
     /// Returns the file descriptor for the current directory being read
     fn file_descriptor(&self) -> &FileDes;
+
+    fn total_capacity(&self) -> usize;
 
     #[inline]
     /// Constructs a `DirEntry` from a raw directory entry pointer
@@ -185,7 +189,7 @@ pub trait DirentConstructor {
     }
 
     #[inline]
-    fn init_from_path(path: &[u8]) -> (Vec<u8>, usize) {
+    fn init_from_path(path: &[u8]) -> (Vec<MaybeUninit<u8>>, usize) {
         let mut dirlen = path.len(); // get length of directory path
 
         // Quicker shortcircuit
@@ -202,9 +206,9 @@ pub trait DirentConstructor {
 
         //  Allocate exact size and copy in one operation
         let total_capacity = dirlen + needs_slash + FAST_PATH_DIRENT_LENGTH;
-        let mut buffer: Vec<u8> = Vec::with_capacity(total_capacity);
+        let mut buffer: Vec<MaybeUninit<u8>> = Vec::with_capacity(total_capacity);
         // Get a mutable buffer to the pointer and overwrite with the most efficient operation.
-        let buf_ptr = buffer.as_mut_ptr();
+        let buf_ptr = buffer.as_mut_ptr().cast();
 
         /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
          SAFETY:
@@ -233,6 +237,17 @@ pub trait DirentConstructor {
         // update length if slash added(we're tracking the baselen, we dont care about the slash on the end because we're truncating it anyway)
 
         (buffer, dirlen)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn reserve_for_long_name(&mut self, required_len: usize) {
+        let path_buffer = self.path_buffer();
+        let current_len = path_buffer.len();
+        path_buffer.reserve_exact(required_len - current_len);
+        // SAFETY: we reserved enough capacity and bytes in the extended range
+        // are immediately written by `copy_to_nonoverlapping`.
+        unsafe { path_buffer.set_len(required_len) };
     }
 
     /**
@@ -270,40 +285,30 @@ pub trait DirentConstructor {
             DTYPE
         );
 
-        #[cold]
-        #[inline(never)]
-        fn reserve_for_long_name(path_buffer: &mut Vec<u8>, required_len: usize) {
-            let current_len = path_buffer.len();
-            path_buffer.reserve_exact(required_len - current_len);
-            // SAFETY: we reserved enough capacity and bytes in the extended range
-            // are immediately written by `copy_to_nonoverlapping`.
-            unsafe { path_buffer.set_len(required_len) };
-        }
-
         let base_len = self.file_index();
+        let total_capacity = self.total_capacity();
         let required_len = base_len + name_len;
 
-        let d_buffer = self.path_buffer();
-        if required_len > d_buffer.len() {
-            reserve_for_long_name(d_buffer, required_len);
+        if required_len > total_capacity {
+            self.reserve_for_long_name(required_len); // unlikely branch.
         }
+        let buf_ptr: *mut u8 = self.path_buffer().as_mut_ptr().cast();
 
         // Copy the name portion into the buffer that has a section reserved for the file NAME
         // SAFETY: name_len is within bounds as baselen+name_len < totally capacity len
         // Alignment is trivial(1)
-        unsafe { d_name.copy_to_nonoverlapping(d_buffer.as_mut_ptr().add(base_len), name_len) };
+        unsafe { d_name.copy_to_nonoverlapping(buf_ptr.add(base_len), name_len) };
 
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
-        let full_path =
-            unsafe { CStr::from_bytes_with_nul_unchecked(d_buffer.get_unchecked(..required_len)) }; //truncate the buffer to the first null terminator of the full path
+        // memory is guaranteed to be initialised up to required_len
+        let full_path = unsafe { &*(slice_from_raw_parts(buf_ptr, required_len) as *const CStr) }; //truncate the buffer to the first null terminator of the full path
 
         // By doing it this way, we avoid calling strlen, which as the path increases in size, will end up taking a hefty toll on CPU calculations
         // It's really obtuse but it's a complexity-performance trade off,
-        debug_assert!(
-            // SAFETY: proving an invariant.
-            unsafe { CStr::from_ptr(d_buffer.as_ptr().cast()) } == full_path,
-            "cstrpath truncated incorrectly"
-        );
+        // SAFETY: proving an invariant.
+        #[rustfmt::skip]
+        // SAFETY: proving an invariant.
+        debug_assert!(unsafe { CStr::from_ptr(buf_ptr.cast()) } == full_path, "cstrpath truncated incorrectly");
 
         (full_path, d_ino, file_type)
     }
@@ -339,7 +344,7 @@ pub struct GetDents {
     pub(crate) syscall_buffer: SyscallBuffer,
     /// buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
-    pub(crate) path_buffer: Vec<u8>,
+    pub(crate) path_buffer: Vec<MaybeUninit<u8>>,
     /// Length of the base directory path including the trailing slash
     /// Used for efficient filename extraction and path construction
     pub(crate) file_name_index: usize,
@@ -724,7 +729,7 @@ macro_rules! impl_dirent_constructor {
     ($type:ty) => {
         impl DirentConstructor for $type {
             #[inline]
-            fn path_buffer(&mut self) -> &mut Vec<u8> {
+            fn path_buffer(&mut self) -> &mut Vec<core::mem::MaybeUninit<u8>> {
                 &mut self.path_buffer
             }
 
@@ -741,6 +746,10 @@ macro_rules! impl_dirent_constructor {
             #[inline]
             fn file_descriptor(&self) -> &$crate::fs::FileDes {
                 &self.fd
+            }
+            #[inline]
+            fn total_capacity(&self) -> usize {
+                self.path_buffer.len()
             }
         }
     };

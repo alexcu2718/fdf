@@ -31,8 +31,6 @@ fn test_eof() {
 
      */
 
-    // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
-
     // link to libc (as done it in main crate)
     unsafe extern "C" {
         fn __getdirentries64(
@@ -70,11 +68,9 @@ fn test_eof() {
         )
     };
 
-    let last_four_bytes = &buffer[BUFFER_SIZE - 4..];
-    // We don't need to care about endianness since macos is LE only
-    //(well, tbf, I don't care for even googling if some old ass macos from 2002 on a big endian chinese esoteric CPU(on a thinkpad no less...) is BE
-    let has_eof = last_four_bytes == [1, 0, 0, 0];
-    // If the last 4 bytes are in this arrangement, we know that the kernel is using the EOF trick.
+    let last_four_bytes = u32::from_ne_bytes((&buffer[BUFFER_SIZE - 4..]).try_into().unwrap());
+    let has_eof = last_four_bytes == 1;
+    // If the last 4 bytes==1 then it has EOF trick
 
     if has_eof {
         println!("cargo:rustc-cfg=has_eof_trick")
@@ -133,6 +129,10 @@ fn main() {
     check_dirent_has_field("has_d_reclen");
 
     check_dirent_has_field("has_d_namlen");
+
+    check_dirent_has_field("has_d_off");
+
+    check_dirent_has_field("has_d_seekoff");
 
     check_dirent_has_field("has_d_ino");
 }

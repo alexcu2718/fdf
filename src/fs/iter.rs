@@ -236,7 +236,7 @@ pub(crate) trait DirentConstructor {
 
     returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
-    #[inline(never)]
+    #[inline]
     #[rustfmt::skip]
     #[expect(clippy::indexing_slicing, reason = "debug build only")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {

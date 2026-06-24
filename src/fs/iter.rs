@@ -15,7 +15,6 @@ use core::cell::Cell;
 use core::ffi::CStr;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
-use core::ptr::slice_from_raw_parts;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
 /**
  POSIX-compliant directory iterator using libc's readdir
@@ -157,7 +156,7 @@ impl Drop for ReadDir {
  file name positions, and managing directory traversal depth.
 
 */
-pub trait DirentConstructor {
+pub(crate) trait DirentConstructor {
     /// Returns a mutable reference to the path buffer used for constructing full paths
     fn path_buffer(&mut self) -> &mut Vec<MaybeUninit<u8>>;
     /// Returns the current index in the path buffer where the filename should be appended
@@ -170,7 +169,7 @@ pub trait DirentConstructor {
     fn parent_depth(&self) -> u32;
     /// Returns the file descriptor for the current directory being read
     fn file_descriptor(&self) -> &FileDes;
-
+    /// Returns total allocated capacity of the buffer.
     fn total_capacity(&self) -> usize;
 
     #[inline]
@@ -190,52 +189,34 @@ pub trait DirentConstructor {
 
     #[inline]
     fn init_from_path(path: &[u8]) -> (Vec<MaybeUninit<u8>>, usize) {
-        let mut dirlen = path.len(); // get length of directory path
-
-        // Quicker shortcircuit
-        let is_root = dirlen == 1 && path == b"/";
-
-        // for a branchless trick later (adding 0/1)
-        let needs_slash = usize::from(!is_root);
+        use core::slice;
+        let mut dirlen = path.len();
+        let needs_slash = usize::from(path != b"/");
 
         // Fast-path filename capacity (+NUL is included in `name_len` during append).
         // Longer names take the cold slow-path reserve in `construct_path`.
         // Most filepaths will never be longer than this. In the odd-case they are, it's really rare
         // with no negligible affect otherwise
         const FAST_PATH_DIRENT_LENGTH: usize = 256;
+        let total_capacity = dirlen + FAST_PATH_DIRENT_LENGTH + needs_slash;
 
-        //  Allocate exact size and copy in one operation
-        let total_capacity = dirlen + needs_slash + FAST_PATH_DIRENT_LENGTH;
         let mut buffer: Vec<MaybeUninit<u8>> = Vec::with_capacity(total_capacity);
-        // Get a mutable buffer to the pointer and overwrite with the most efficient operation.
-        let buf_ptr = buffer.as_mut_ptr().cast();
 
-        /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
-         SAFETY:
-         - `buf_ptr` is valid for writes of `base_len` bytes (we allocated `total_capacity >= base_len`)
-         - Different memoery regions(stack vs heap), trivial alignment(1)
-        */
-        unsafe { path.as_ptr().copy_to_nonoverlapping(buf_ptr, dirlen) };
-        //https://en.cppreference.com/w/c/string/byte/memcpy
-        // "memcpy is the fastest library routine for memory-to-memory copy"
-
-        // SAFETY: We've allocated enough capacity and only need to set the length
-        // The filename portion will be overwritten during iteration
+        // SAFETY: we immediately write the bytes we read from and later overwrite filename bytes.
         unsafe { buffer.set_len(total_capacity) };
 
-        /*
-        Essentially  what we're doing here is creating 1 vector per  directory, with enough space allocated to hold any filename
-        This allows no dynamic resizing during iteration, which is costly!
-         */
+        // SAFETY:
+        // - buffer has length `total_capacity`, so first `dirlen` bytes are in-bounds
+        // - cast to u8 is valid because MaybeUninit<u8> has same layout/alignment as u8 (trivial)
+        let dst_prefix: &mut [u8] =
+            unsafe { slice::from_raw_parts_mut(buffer.as_mut_ptr().cast(), dirlen) };
 
-        // SAFETY: write is within buffer bounds
-        unsafe {
-            buf_ptr.add(dirlen).write(b'/') //this doesnt matter for non directories, since we're overwriting it anyway
-        };
+        dst_prefix.copy_from_slice(path);
+
+        // SAFETY: In-bounds because total_capacity = dirlen + FAST_PATH_DIRENT_LENGTH + 1
+        unsafe { buffer.get_unchecked_mut(dirlen).write(b'/') };
 
         dirlen += needs_slash;
-        // update length if slash added(we're tracking the baselen, we dont care about the slash on the end because we're truncating it anyway)
-
         (buffer, dirlen)
     }
 
@@ -255,8 +236,11 @@ pub trait DirentConstructor {
 
     returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
-    #[inline]
+    #[inline(never)]
+    #[rustfmt::skip]
+    #[expect(clippy::indexing_slicing, reason = "debug build only")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
+        use core::slice;
         let d_name: *const u8 = drnt.d_name().cast();
         let d_ino = drnt.d_ino(); // Returns 0 if d_ino isn't defined on your system
 
@@ -292,23 +276,29 @@ pub trait DirentConstructor {
         if required_len > total_capacity {
             self.reserve_for_long_name(required_len); // unlikely branch.
         }
-        let buf_ptr: *mut u8 = self.path_buffer().as_mut_ptr().cast();
+        let path_buffer = self.path_buffer();
 
-        // Copy the name portion into the buffer that has a section reserved for the file NAME
-        // SAFETY: name_len is within bounds as baselen+name_len < totally capacity len
-        // Alignment is trivial(1)
-        unsafe { d_name.copy_to_nonoverlapping(buf_ptr.add(base_len), name_len) };
+        // SAFETY: path_buffer len is at least required_len here.
+        // MaybeUninit<u8> has same layout as u8.
+        let bytes: &mut [u8] = unsafe {
+            slice::from_raw_parts_mut(path_buffer.as_mut_ptr().cast(), required_len)
+        };
 
-        // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
-        // memory is guaranteed to be initialised up to required_len
-        let full_path = unsafe { &*(slice_from_raw_parts(buf_ptr, required_len) as *const CStr) }; //truncate the buffer to the first null terminator of the full path
+        // SAFETY: d_name points to at least name_len bytes (dirent name + NUL).
+        let name_src: &[u8] = unsafe { slice::from_raw_parts(d_name, name_len) };
+
+        // use a memcpy (under the good)
+        // SAFETY: always in bounds
+        unsafe {
+            bytes.get_unchecked_mut(base_len..required_len).copy_from_slice(name_src)
+        };
 
         // By doing it this way, we avoid calling strlen, which as the path increases in size, will end up taking a hefty toll on CPU calculations
-        // It's really obtuse but it's a complexity-performance trade off,
-        // SAFETY: proving an invariant.
-        #[rustfmt::skip]
-        // SAFETY: proving an invariant.
-        debug_assert!(unsafe { CStr::from_ptr(buf_ptr.cast()) } == full_path, "cstrpath truncated incorrectly");
+        // cheap debug build check
+        debug_assert_eq!(bytes[required_len - 1], 0,"Cstr not created properly in construct path");
+
+        // SAFETY: we just ensured [0..required_len] is initialised and NUL-terminated.
+        let full_path = unsafe { CStr::from_bytes_with_nul_unchecked(&bytes[..required_len]) };
 
         (full_path, d_ino, file_type)
     }
@@ -454,7 +444,6 @@ impl GetDents {
     pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
 
     #[inline]
-    #[allow(unfulfilled_lint_expectations)] //For platform variants with EOF trick.
     #[allow(clippy::missing_assert_message)] // for cleaner code.
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
@@ -466,29 +455,26 @@ impl GetDents {
         const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
 
         #[cfg(has_eof_trick)]
+        #[rustfmt::skip]
         // Create a ptr to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
         // In doing the `getdirentries64` syscalls, we zero the last four bytes, so they're guaranteed initialised.
         // If this marker changes, the kernel has indicated EOF, the buffer is never filled up the the maximum
         // (I've done some rudimentary println and syscall tracing of the buffer, it always leaves a reserved space, probably some reference exists but too lazy currently.)
         // Alignment of 8 => Alignment of 4 guaranteed invariant.
         // SAFETY: see above
-        let last_four_bytes: *mut u32 = unsafe {
-            self.syscall_buffer
-                .as_mut_ptr()
-                .byte_add(Self::BUFFER_SIZE - 4)
-                .cast::<u32>()
+        let last_four_bytes: &mut MaybeUninit<u32> = unsafe {
+            &mut *self.syscall_buffer
+            .as_mut_ptr().byte_add(Self::BUFFER_SIZE - 4)
+            .cast()
         };
-        // Creating a reference to unintialised memory is UB so we have to keep as a pointer.
-        // We could use the `NonNull` pointer to expose intent more, but this is a 1 off piece.
+        // TODO replace with this once rust 1.95 on all CI platfors
+        //https://doc.rust-lang.org/src/core/ptr/mut_ptr.rs.html#618
 
         #[cfg(has_eof_trick)]
         // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
         // this means that we detect when the kernel writes it's EOF flags
-        // so alignment met+writing valid memory.
-        // SAFETY: As specified.
-        unsafe {
-            last_four_bytes.write(0)
-        };
+        // Write a 0 to initialise the memory, we check if this changes to 1 after the syscall
+        let last_four_bytes_init = last_four_bytes.write(0);
 
         // Get the syscall return amount in bytes
         let remaining_bytes = self.getdents();
@@ -503,25 +489,23 @@ impl GetDents {
         // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
         // As this has existed for decades, it's relatively stable, any ABI breaks are unlikely since we're on 64bit for good.
         #[cfg(has_eof_trick)]
-        unsafe {
-            // Check at build time for the optimisation
-            // SAFETY: as specified above
-            self.end_of_stream = last_four_bytes.read() == 1 || !is_more_remaining;
+        {
+            self.end_of_stream = *last_four_bytes_init == 1 || !is_more_remaining;
         }
+        // Check at build time for the optimisation
         // check if the syscall returns 0 too, the latter branch should almost never be true on supported system
 
+        // returned bytes=0
         #[cfg(not(has_eof_trick))]
         {
-            self.end_of_stream = !is_more_remaining // returned bytes=0
-        }
+            self.end_of_stream = !is_more_remaining
+        } // returned bytes=0
 
         /*
         Example of syscall differences( also note the lack of fstatfs64 and semwait signal!)
         macOS is only virtualised via qemu, I get some wacky results, I don't know why
         the open calls differ EVERY invocation, maybe something to do with macs anti malware or strange apple-ism?
            λ   sudo dtruss -c fd -HI . ~ 2>&1 | tail -n 15
-
-
            write                                         156
            madvise                                       196
            close_nocancel                               1898
@@ -530,13 +514,11 @@ impl GetDents {
            getdirentries64                              1920
            __semwait_signal                            11184
            λ   sudo dtruss -c fdf -HI . ~ 2>&1 | tail -n 15
-
            write                                          32
            madvise                                       175
            close_nocancel                               2562
            open                                         2578
            getdirentries64                              2606 */
-
         // Branchless check
         self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
 
@@ -597,13 +579,13 @@ impl GetDents {
         let fd = dir.open()?; //getting the file descriptor
         debug_assert!(fd.is_open(), "We expect it to always be open");
 
-        let (path_buffer, path_len) = Self::init_from_path(dir);
+        let (path_buffer, file_name_index) = Self::init_from_path(dir);
 
         Ok(Self {
             fd,
             syscall_buffer: SyscallBuffer::new(),
             path_buffer,
-            file_name_index: path_len,
+            file_name_index,
             parent_depth: dir.depth,
             offset: 0,
             remaining_bytes: 0,
@@ -621,12 +603,12 @@ impl GetDents {
     #[inline]
     pub(crate) fn from_fd(fd: FileDes, dir: &DirEntry) -> Self {
         debug_assert!(fd.is_open(), "We expect it to always be open");
-        let (path_buffer, path_len) = Self::init_from_path(dir);
+        let (path_buffer, file_name_index) = Self::init_from_path(dir);
         Self {
             fd,
             syscall_buffer: SyscallBuffer::new(),
             path_buffer,
-            file_name_index: path_len,
+            file_name_index,
             parent_depth: dir.depth,
             offset: 0,
             remaining_bytes: 0,
@@ -694,7 +676,6 @@ macro_rules! impl_iterator_public_methods {
 
             Useful for operations that need the raw directory FD.
 
-            ISSUE: this file descriptor is only closed by the iterator due to current limitations
             */
             #[inline]
             #[must_use]

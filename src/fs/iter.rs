@@ -236,11 +236,11 @@ pub(crate) trait DirentConstructor {
 
     returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
-    #[inline(never)]
+    #[inline]
     #[rustfmt::skip]
     #[expect(clippy::indexing_slicing, reason = "debug build only")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
-        use core::slice;
+        use core::slice::{from_raw_parts,from_raw_parts_mut};
         let d_name: *const u8 = drnt.d_name().cast();
         let d_ino = drnt.d_ino(); // Returns 0 if d_ino isn't defined on your system
 
@@ -276,22 +276,19 @@ pub(crate) trait DirentConstructor {
         if required_len > total_capacity {
             self.reserve_for_long_name(required_len); // unlikely branch.
         }
-        let path_buffer = self.path_buffer();
+        let path_ptr:*mut u8 = self.path_buffer().as_mut_ptr().cast();
 
         // SAFETY: path_buffer len is at least required_len here.
         // MaybeUninit<u8> has same layout as u8.
-        let bytes: &mut [u8] = unsafe {
-            slice::from_raw_parts_mut(path_buffer.as_mut_ptr().cast(), required_len)
-        };
+        let bytes: &mut [u8] = unsafe {from_raw_parts_mut(path_ptr, required_len)};
 
         // SAFETY: d_name points to at least name_len bytes (dirent name + NUL).
-        let name_src: &[u8] = unsafe { slice::from_raw_parts(d_name, name_len) };
+        let name_src: &[u8] = unsafe { from_raw_parts(d_name, name_len) };
 
         // use a memcpy (under the good)
         // SAFETY: always in bounds
-        unsafe {
-            bytes.get_unchecked_mut(base_len..required_len).copy_from_slice(name_src)
-        };
+        unsafe {bytes.get_unchecked_mut(base_len..required_len).copy_from_slice(name_src)};
+
 
         // By doing it this way, we avoid calling strlen, which as the path increases in size, will end up taking a hefty toll on CPU calculations
         // cheap debug build check

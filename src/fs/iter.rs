@@ -240,12 +240,12 @@ pub(crate) trait DirentConstructor {
     #[rustfmt::skip]
     #[expect(clippy::indexing_slicing, reason = "debug build only")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
-        use core::slice::{from_raw_parts,from_raw_parts_mut};
-        let d_name: *const u8 = drnt.d_name().cast();
+        use core::slice::from_raw_parts_mut;
+        let d_name:&CStr = drnt.d_name_cstr();
         let d_ino = drnt.d_ino(); // Returns 0 if d_ino isn't defined on your system
-
+        let name_len=d_name.count_bytes()+1; // strlen(x)+1 but the length is already computed by the slice.
         // Add 1 to include the null terminator
-        let name_len = drnt.name_length() + 1; //technically should be a u16 but we need it for indexing :(
+
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
@@ -253,7 +253,7 @@ pub(crate) trait DirentConstructor {
             FileType::Unknown => stat_syscall!(
                 fstatat,
                 self.file_descriptor().0, //borrow before mutably borrowing the path buffer
-                d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+                d_name.as_ptr().cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
                 AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
                 DTYPE
             ),
@@ -264,7 +264,7 @@ pub(crate) trait DirentConstructor {
         let file_type = stat_syscall!(
             fstatat,
             self.file_descriptor().0, //borrow before mutably borrowing the path buffer
-            d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+            d_name.as_ptr().cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
             AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
             DTYPE
         );
@@ -282,20 +282,20 @@ pub(crate) trait DirentConstructor {
         // MaybeUninit<u8> has same layout as u8.
         let bytes: &mut [u8] = unsafe {from_raw_parts_mut(path_ptr, required_len)};
 
-        // SAFETY: d_name points to at least name_len bytes (dirent name + NUL).
-        let name_src: &[u8] = unsafe { from_raw_parts(d_name, name_len) };
 
-        // use a memcpy (under the good)
+
+
+        // use a memcpy (under the hood)
         // SAFETY: always in bounds
-        unsafe {bytes.get_unchecked_mut(base_len..required_len).copy_from_slice(name_src)};
+        unsafe {bytes.get_unchecked_mut(base_len..required_len).copy_from_slice(d_name.to_bytes_with_nul())};
 
-
-        // By doing it this way, we avoid calling strlen, which as the path increases in size, will end up taking a hefty toll on CPU calculations
-        // cheap debug build check
-        debug_assert_eq!(bytes[required_len - 1], 0,"Cstr not created properly in construct path");
 
         // SAFETY: we just ensured [0..required_len] is initialised and NUL-terminated.
         let full_path = unsafe { CStr::from_bytes_with_nul_unchecked(&bytes[..required_len]) };
+
+        // BY doing it this way, we avoid calling strlen, which as the path increases in size, will end up taking a hefty toll on CPU calculations
+        // SAFETY:
+        debug_assert!(unsafe{CStr::from_ptr(bytes.as_ptr().cast())}==full_path,"testing for interior nulls");
 
         (full_path, d_ino, file_type)
     }
@@ -364,9 +364,20 @@ pub struct GetDents {
 impl GetDents {
     #[inline]
     /// Convenience function for pointer arithmetic on the buffer
-    pub(crate) const unsafe fn buffer_add(&self, amt: usize) -> *const u64 {
-        // SAFETY:  internal use only, the `amt` parameter is always within bounds of the buffer.
-        unsafe { self.syscall_buffer.as_ptr().byte_add(amt) }
+    pub(crate) const unsafe fn get_next_pointer(&self) -> Unique<dirent64> {
+        debug_assert!(
+            self.offset.is_multiple_of(8),
+            "offset should always be multiple of 8"
+        );
+        // SAFETY:  internal use only, the `offset` parameter is always within bounds of the buffer.
+        unsafe {
+            Unique::new_unchecked(
+                self.syscall_buffer
+                    .as_ptr()
+                    .byte_add(self.offset)
+                    .cast::<dirent64>(),
+            )
+        }
     }
 
     #[inline]
@@ -388,6 +399,17 @@ impl GetDents {
     */
     pub const fn syscall_buffer(&mut self) -> &mut SyscallBuffer {
         &mut self.syscall_buffer
+    }
+
+    /// Convenience function to safe verbosity(+safety)
+    ///
+    /// By constructing a NonNull, we car
+    #[inline]
+    #[must_use]
+    #[cfg(has_eof_trick)]
+    pub(crate) const fn syscall_buffer_ptr(&mut self) -> NonNull<u64> {
+        // SAFETY: never null
+        unsafe { NonNull::new_unchecked(self.syscall_buffer().as_mut_ptr()) }
     }
 
     #[inline]
@@ -436,6 +458,7 @@ impl GetDents {
     pub const fn is_end_of_stream(&self) -> bool {
         self.end_of_stream
     }
+
     /// A constant representing the maximum size of the internal Stack based buffer on this platform
     /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
     pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
@@ -453,19 +476,20 @@ impl GetDents {
 
         #[cfg(has_eof_trick)]
         #[rustfmt::skip]
-        // Create a ptr to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
-        // In doing the `getdirentries64` syscalls, we zero the last four bytes, so they're guaranteed initialised.
-        // If this marker changes, the kernel has indicated EOF, the buffer is never filled up the the maximum
-        // (I've done some rudimentary println and syscall tracing of the buffer, it always leaves a reserved space, probably some reference exists but too lazy currently.)
-        // Alignment of 8 => Alignment of 4 guaranteed invariant.
+        /*
+         Create a ptr to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
+         In doing the `getdirentries64` syscalls, we zero the last four bytes, so they're guaranteed initialised.
+         If this marker changes, the kernel has indicated EOF, the buffer is never filled up the the maximum
+         (I've done some rudimentary println and syscall tracing of the buffer, it always leaves a reserved space, probably some reference exists but too lazy currently.)
+         Alignment of 8 => Alignment of 4 guaranteed invariant. */
         // SAFETY: see above
         let last_four_bytes: &mut MaybeUninit<u32> = unsafe {
-            &mut *self.syscall_buffer
-            .as_mut_ptr().byte_add(Self::BUFFER_SIZE - 4)
-            .cast()
+            self.syscall_buffer_ptr().byte_add(Self::BUFFER_SIZE - 4)
+            .cast::<MaybeUninit<u32>>().as_mut()
         };
-        // TODO replace with this once rust 1.95 on all CI platfors
-        //https://doc.rust-lang.org/src/core/ptr/mut_ptr.rs.html#618
+        // TODO replace with this once rust 1.95 on all CI platforms https://doc.rust-lang.org/src/core/ptr/mut_ptr.rs.html#618
+        // Basically rust 'knows' under the hood that creating an (aligned) reference to uninit memory that is
+        // *always* in bounds, so hence why it skips the panic branch.
 
         #[cfg(has_eof_trick)]
         // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
@@ -487,7 +511,7 @@ impl GetDents {
         // As this has existed for decades, it's relatively stable, any ABI breaks are unlikely since we're on 64bit for good.
         #[cfg(has_eof_trick)]
         {
-            self.end_of_stream = *last_four_bytes_init == 1 || !is_more_remaining;
+            self.end_of_stream = *last_four_bytes_init == 1 || !is_more_remaining
         }
         // Check at build time for the optimisation
         // check if the syscall returns 0 too, the latter branch should almost never be true on supported system
@@ -496,7 +520,7 @@ impl GetDents {
         #[cfg(not(has_eof_trick))]
         {
             self.end_of_stream = !is_more_remaining
-        } // returned bytes=0
+        }
 
         /*
         Example of syscall differences( also note the lack of fstatfs64 and semwait signal!)
@@ -559,16 +583,12 @@ impl GetDents {
         const { assert!(align_of::<u64>() == align_of::<dirent64>()) };
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read and is properly aligned
-        let drnt = unsafe { self.buffer_add(self.offset).cast::<dirent64>() };
+        let drnt = unsafe { self.get_next_pointer() };
 
-        // Quick sanity checks for debug builds (alignment check+nullcheck)
-        debug_assert!(!drnt.is_null(), "dirent is null in get next entry!");
-        debug_assert!(drnt.is_aligned(), "the dirent is malformed"); //not aligned to 8 bytes
-        // SAFETY: dirent is not null and it is aligned, so field access is safe
-        self.offset += unsafe { (*drnt).d_reclen as usize };
+        // Increment the offset by the reclen to get to the next `dirent64` pointer
+        self.offset += drnt.d_reclen();
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
-        // SAFETY: dirent is not null
-        unsafe { Some(Unique::new_unchecked(drnt)) }
+        Some(drnt)
     }
 
     #[inline]

@@ -403,7 +403,7 @@ impl GetDents {
 
     /// Convenience function to safe verbosity(+safety)
     ///
-    /// By constructing a NonNull, we car
+    /// By constructing a `NonNull``, we can preserve our safety invariants better.
     #[inline]
     #[must_use]
     #[cfg(has_eof_trick)]
@@ -487,9 +487,6 @@ impl GetDents {
             self.syscall_buffer_ptr().byte_add(Self::BUFFER_SIZE - 4)
             .cast::<MaybeUninit<u32>>().as_mut()
         };
-        // TODO replace with this once rust 1.95 on all CI platforms https://doc.rust-lang.org/src/core/ptr/mut_ptr.rs.html#618
-        // Basically rust 'knows' under the hood that creating an (aligned) reference to uninit memory that is
-        // *always* in bounds, so hence why it skips the panic branch.
 
         #[cfg(has_eof_trick)]
         // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,

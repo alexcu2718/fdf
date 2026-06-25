@@ -144,8 +144,6 @@ impl Drop for ReadDir {
     // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
     // This is because it's UB to close via file descriptor according to GNU docs, if that file descriptor
     // was obtained from the `dirfd()`
-    //( i want to pass ownership to the FileDes BUT due to above limitations, I need a different approach
-    // TODO!
 }
 
 /**
@@ -189,8 +187,7 @@ pub(crate) trait DirentConstructor {
 
     #[inline]
     fn init_from_path(path: &[u8]) -> (Vec<MaybeUninit<u8>>, usize) {
-        use core::slice;
-        let mut dirlen = path.len();
+        let mut base_len = path.len();
         let needs_slash = usize::from(path != b"/");
 
         // Fast-path filename capacity (+NUL is included in `name_len` during append).
@@ -198,26 +195,31 @@ pub(crate) trait DirentConstructor {
         // Most filepaths will never be longer than this. In the odd-case they are, it's really rare
         // with no negligible affect otherwise
         const FAST_PATH_DIRENT_LENGTH: usize = 256;
-        let total_capacity = dirlen + FAST_PATH_DIRENT_LENGTH + needs_slash;
+        let total_capacity = base_len + FAST_PATH_DIRENT_LENGTH + needs_slash;
 
         let mut buffer: Vec<MaybeUninit<u8>> = Vec::with_capacity(total_capacity);
 
         // SAFETY: we immediately write the bytes we read from and later overwrite filename bytes.
         unsafe { buffer.set_len(total_capacity) };
 
-        // SAFETY:
-        // - buffer has length `total_capacity`, so first `dirlen` bytes are in-bounds
-        // - cast to u8 is valid because MaybeUninit<u8> has same layout/alignment as u8 (trivial)
-        let dst_prefix: &mut [u8] =
-            unsafe { slice::from_raw_parts_mut(buffer.as_mut_ptr().cast(), dirlen) };
+        /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
+         SAFETY:
+         - `path.as_ptr()` is valid for reads of `base_len` bytes (source slice length)
+         - `path_buffer.as_mut_ptr()` is valid for writes of `base_len` bytes (we allocated `total_capacity >= base_len`)
+         - The memory regions are guaranteed non-overlapping: `path` points to existing data
+           while `path_buffer` points to freshly allocated memory
+         - `dirlen` equals `path.len()`, ensuring we don't read beyond source bounds
+        */
+        unsafe {
+            path.as_ptr()
+                .copy_to_nonoverlapping(buffer.as_mut_ptr().cast(), base_len)
+        };
 
-        dst_prefix.copy_from_slice(path);
+        // SAFETY: In-bounds because total_capacity = dirlen + FAST_PATH_DIRENT_LENGTH + needs_slash (0/1)
+        unsafe { buffer.get_unchecked_mut(base_len).write(b'/') };
 
-        // SAFETY: In-bounds because total_capacity = dirlen + FAST_PATH_DIRENT_LENGTH + 1
-        unsafe { buffer.get_unchecked_mut(dirlen).write(b'/') };
-
-        dirlen += needs_slash;
-        (buffer, dirlen)
+        base_len += needs_slash;
+        (buffer, base_len)
     }
 
     #[cold]
@@ -237,15 +239,13 @@ pub(crate) trait DirentConstructor {
     returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
     #[inline]
-    #[rustfmt::skip]
-    #[expect(clippy::indexing_slicing, reason = "debug build only")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
-        use core::slice::from_raw_parts_mut;
-        let d_name:&CStr = drnt.d_name_cstr();
+        use core::ptr::slice_from_raw_parts;
+        let d_name: *const u8 = drnt.d_name().cast();
         let d_ino = drnt.d_ino(); // Returns 0 if d_ino isn't defined on your system
-        let name_len=d_name.count_bytes()+1; // strlen(x)+1 but the length is already computed by the slice.
-        // Add 1 to include the null terminator
 
+        // Add 1 to include the null terminator
+        let name_len = drnt.name_length() + 1; //technically should be a u16 but we need it for indexing :(
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
@@ -253,7 +253,7 @@ pub(crate) trait DirentConstructor {
             FileType::Unknown => stat_syscall!(
                 fstatat,
                 self.file_descriptor().0, //borrow before mutably borrowing the path buffer
-                d_name.as_ptr().cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+                d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
                 AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
                 DTYPE
             ),
@@ -264,38 +264,29 @@ pub(crate) trait DirentConstructor {
         let file_type = stat_syscall!(
             fstatat,
             self.file_descriptor().0, //borrow before mutably borrowing the path buffer
-            d_name.as_ptr().cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+            d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
             AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
             DTYPE
         );
 
         let base_len = self.file_index();
-        let total_capacity = self.total_capacity();
         let required_len = base_len + name_len;
 
-        if required_len > total_capacity {
-            self.reserve_for_long_name(required_len); // unlikely branch.
+        if required_len > self.total_capacity() {
+            self.reserve_for_long_name(required_len);
         }
-        let path_ptr:*mut u8 = self.path_buffer().as_mut_ptr().cast();
+        let buf_ptr: *mut u8 = self.path_buffer().as_mut_ptr().cast();
+        // Get the portion of the buffer that goes past the last slash
+        // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
+        let name_portion: *mut u8 = unsafe { buf_ptr.add(base_len) };
 
-        // SAFETY: path_buffer len is at least required_len here.
-        // MaybeUninit<u8> has same layout as u8.
-        let bytes: &mut [u8] = unsafe {from_raw_parts_mut(path_ptr, required_len)};
-
-
-
-
-        // use a memcpy (under the hood)
-        // SAFETY: always in bounds
-        unsafe {bytes.get_unchecked_mut(base_len..required_len).copy_from_slice(d_name.to_bytes_with_nul())};
-
-
-        // SAFETY: we just ensured [0..required_len] is initialised and NUL-terminated.
-        let full_path = unsafe { CStr::from_bytes_with_nul_unchecked(&bytes[..required_len]) };
-
-        // BY doing it this way, we avoid calling strlen, which as the path increases in size, will end up taking a hefty toll on CPU calculations
-        // SAFETY:
-        debug_assert!(unsafe{CStr::from_ptr(bytes.as_ptr().cast())}==full_path,"testing for interior nulls");
+        // SAFETY: `d_name` and `name_portion` don't overlap (different memory regions(stack vs heap))
+        // - Alignment is trivial(1)
+        // - `name_len` is within `buffer` bounds
+        // Copy the name into the final portion
+        unsafe { d_name.copy_to_nonoverlapping(name_portion, name_len) };
+        // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
+        let full_path = unsafe { &*(slice_from_raw_parts(buf_ptr, required_len) as *const CStr) }; //truncate the buffer to the first null terminator of the full path
 
         (full_path, d_ino, file_type)
     }
@@ -363,21 +354,24 @@ pub struct GetDents {
 ))]
 impl GetDents {
     #[inline]
+    #[rustfmt::skip]
     /// Convenience function for pointer arithmetic on the buffer
-    pub(crate) const unsafe fn get_next_pointer(&self) -> Unique<dirent64> {
+    pub(crate) const unsafe fn get_next_pointer(&mut self) -> Unique<dirent64> {
         debug_assert!(
             self.offset.is_multiple_of(8),
             "offset should always be multiple of 8"
         );
         // SAFETY:  internal use only, the `offset` parameter is always within bounds of the buffer.
-        unsafe {
-            Unique::new_unchecked(
-                self.syscall_buffer
-                    .as_ptr()
+        let drnt = unsafe {
+            Unique::new_unchecked(self.syscall_buffer.as_ptr()
                     .byte_add(self.offset)
                     .cast::<dirent64>(),
             )
-        }
+        };
+        // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
+        self.offset += drnt.d_reclen();
+
+        drnt
     }
 
     #[inline]
@@ -403,7 +397,7 @@ impl GetDents {
 
     /// Convenience function to safe verbosity(+safety)
     ///
-    /// By constructing a `NonNull``, we can preserve our safety invariants better.
+    /// By constructing a `NonNull`, we can preserve our safety invariants better.
     #[inline]
     #[must_use]
     #[cfg(has_eof_trick)]
@@ -485,7 +479,7 @@ impl GetDents {
         // SAFETY: see above
         let last_four_bytes: &mut MaybeUninit<u32> = unsafe {
             self.syscall_buffer_ptr().byte_add(Self::BUFFER_SIZE - 4)
-            .cast::<MaybeUninit<u32>>().as_mut()
+            .cast().as_mut()
         };
 
         #[cfg(has_eof_trick)]
@@ -569,22 +563,16 @@ impl GetDents {
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
     */
     #[inline]
-    #[allow(clippy::missing_assert_message)]
     pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         while self.offset >= self.remaining_bytes {
             if !self.are_more_entries_remaining() {
                 return None;
             }
         }
-        debug_assert!(self.offset.is_multiple_of(8), "Must be a multiple of 8");
-        const { assert!(align_of::<u64>() == align_of::<dirent64>()) };
         // We have data in buffer, get next entry
         // SAFETY: the buffer is not empty and therefore has remaining bytes to be read and is properly aligned
         let drnt = unsafe { self.get_next_pointer() };
 
-        // Increment the offset by the reclen to get to the next `dirent64` pointer
-        self.offset += drnt.d_reclen();
-        // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
         Some(drnt)
     }
 

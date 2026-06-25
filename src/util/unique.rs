@@ -231,12 +231,21 @@ impl Unique<dirent64> {
     #[must_use]
     #[inline]
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
-    pub const fn d_name_slice_c_str<'pointer>(self) -> &'pointer CStr {
+    pub const fn d_name_cstr<'pointer>(self) -> &'pointer CStr {
         // add to include terminal
         let as_slice: *const [c_char] =
             core::ptr::slice_from_raw_parts(self.d_name(), self.name_length() + 1);
         // SAFETY:  has it's null terminator included, and no interior nulls..
         unsafe { &*(as_slice as *const CStr) }
+    }
+
+    #[inline]
+    #[must_use]
+    #[cfg(has_d_reclen)] // Overly paranoid, I want to know what builds fail.
+    /// Returns the `d_reclen` member as a usize.
+    pub const fn d_reclen(self) -> usize {
+        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+        unsafe { access_dirent!(self.as_ptr(), d_reclen) }
     }
 
     #[inline]

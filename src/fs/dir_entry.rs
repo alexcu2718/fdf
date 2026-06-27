@@ -87,8 +87,8 @@ use core::ffi::{CStr, c_char};
 use core::fmt;
 
 use libc::{
-    AT_EACCESS, AT_FDCWD, AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access,
-    faccessat, fstatat, lstat, realpath, stat,
+    AT_EACCESS, AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, faccessat, fstatat,
+    lstat, realpath, stat,
 };
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
 
@@ -1126,8 +1126,8 @@ impl DirEntry {
     /**
     Gets file metadata using statat for a file relative to a directory file descriptor.
 
-    This function uses `fstatat` with `AT_SYMLINK_FOLLOW` to get metadata by
-    following symbolic links, similar to `stat` but relative to a directory fd.
+    This function uses `fstatat` with no flags to follow symbolic links,
+    similar to `stat` but relative to a directory fd.
 
     # Arguments
     `fd` - Directory file descriptor to use as the base for relative path resolution
@@ -1141,7 +1141,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(fstatat, fd.0, self.file_name_ptr(), AT_SYMLINK_FOLLOW)
+        stat_syscall!(fstatat, fd.0, self.file_name_ptr(), 0)
     }
 
     /// Cost free conversion to bytes (because it is already is bytes)

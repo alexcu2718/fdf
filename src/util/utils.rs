@@ -1,9 +1,8 @@
 use crate::dirent64;
 use crate::util::memchr_derivations::memrchr;
+use core::ffi::CStr;
 use core::ffi::{c_char, c_int, c_void};
 use core::ops::Deref;
-//used in debug printing and on weird platforms, just ignore this, makes there be less visual clutter.
-use core::ffi::CStr;
 /**
   Wrapper for direct getdents syscalls
 
@@ -48,6 +47,8 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
         unsafe extern "C" {
             //TODO add dragonfly here(?) TODO once they support Rust 2024
             #[cfg_attr(target_os = "netbsd", link_name = "__getdents30")] //special case for NetBSD
+            //#[cfg_attr(any(target_os = "linux", target_os = "android"),link_name = "getdents64")]
+            // ^ how to link on Linux, not sure if this works on android though., too lazy to test.
             fn getdents(fd: c_int, dirp: *mut c_void, count: usize) -> isize;
         }
         // SAFETY: non required except buffer length must not exceed the provided size, then we get accessing out of bounds memory...
@@ -100,7 +101,6 @@ pub unsafe fn getdirentries64(
     unsafe extern "C" {
         #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
         // Never seen this done, I searched all of github for similar stuff. I love dirty stuff like this.
-        // Dirty(yet it works!)
         fn getdirentries(fd: c_int, buf: *mut c_void, nbytes: size_t, basep: *mut off_t)
         -> ssize_t;
     } // as above
@@ -219,7 +219,7 @@ pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     ))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { dirent_const_time_strlen(drnt) } //const time strlen for the above platforms (specialisation)
+        unsafe { dirent_const_time_strlen(drnt) }
     }
 
     #[cfg(not(any(

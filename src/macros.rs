@@ -209,7 +209,7 @@ macro_rules! read_direntries_from_fd {
             target_os = "freebsd"
         ))]
         {
-            Ok::<_, crate::DirEntryError>($dir.getdents_from_fd($fd))
+            Ok::<_, $crate::DirEntryError>($dir.getdents_from_fd($fd))
         }
 
         #[cfg(not(any(
@@ -225,7 +225,7 @@ macro_rules! read_direntries_from_fd {
             target_os = "freebsd"
         )))]
         {
-            Ok::<_, crate::DirEntryError>($dir.readdir_from_fd($fd))
+            Ok::<_, $crate::DirEntryError>($dir.readdir_from_fd($fd))
         }
     }};
 }
@@ -247,14 +247,14 @@ macro_rules! const_assert {
     ($cond:expr $(,)?) => {
         const _: () = {
             if !$cond {
-                panic!(concat!("const assertion failed: ", stringify!($cond)));
+                core::panic!(concat!("const assertion failed: ", core::stringify!($cond)));
             }
         };
     };
     ($cond:expr, $($arg:tt)+) => {
         const _: () = {
             if !$cond {
-                panic!($($arg)+);
+                core::panic!($($arg)+);
             }
         };
     };
@@ -300,6 +300,8 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(not(has_d_namlen))]
             {
                 // Generic fallback: inspect name bytes only.
+                // This is safe because the dirent is always padded to reach a minimum struct size of 24/32 etc
+                // basically meaning the first few bytes are always in bounds.
                 let f3b: [u8; 3] = *access_dirent!($entry, d_name);
                 if f3b[0] == b'.' {
                     match f3b[1..] {
@@ -362,26 +364,26 @@ macro_rules! const_from_env {
 
                 let s_bytes = s.as_bytes();
                 if s_bytes.len() == 0 {
-                    panic!(concat!("Empty environment variable: ", stringify!($env)));
+                    core::panic!(core::concat!("Empty environment variable: ", core::stringify!($env)));
                 }
 
                 if !s_bytes.is_ascii(){
-                    panic!(concat!("Non ASCII characters in", stringify!($env)));
+                    core::panic!(core::concat!("Non ASCII characters in", core::stringify!($env)));
                 }
 
 
 
 
 
-                const TYPE_OF:&str=stringify!($t);
+                const TYPE_OF:&str=core::stringify!($t);
 
                 const TYPE_OF_AS_BYTES:&[u8]=TYPE_OF.as_bytes();
 
-                $crate::const_assert!(!matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
-                $crate::const_assert!(!matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
+                $crate::const_assert!(!core::matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
+                $crate::const_assert!(!core::matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
                 // Eq is not supported in const yet matches is, weird. annoying work around.
-                assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),concat!("Negative detected in unsigned env var ",stringify!($env)));
-                $crate::const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,concat!("Negative default not allowed for ", stringify!($default)));
+                core::assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),core::concat!("Negative detected in unsigned env var ",stringify!($env)));
+                $crate::const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,core::concat!("Negative default not allowed for ", stringify!($default)));
 
                 // Detect if we're parsing a float type
                 const IS_FLOAT: bool = TYPE_OF_AS_BYTES[0]==b'f';
@@ -415,11 +417,11 @@ macro_rules! const_from_env {
                             }
                             b'.' => {
                                 if in_fraction {
-                                    panic!(concat!("Multiple decimal points in: ", stringify!($env)));
+                                    core::panic!(core::concat!("Multiple decimal points in: ", core::stringify!($env)));
                                 }
                                 in_fraction = true;
                             }
-                            _ => panic!(concat!("Invalid float value in: ", stringify!($env))),
+                            _ => core::panic!(core::concat!("Invalid float value in: ", core::stringify!($env))),
                         }
                         i += 1;
                     }
@@ -443,7 +445,7 @@ macro_rules! const_from_env {
                             b'0'..=b'9' => {
                                 n = n * TEN + (b - b'0') as $t;
                             }
-                            _ => panic!(concat!("Invalid numeric value in: ", stringify!($env))),
+                            _ => core::panic!(core::concat!("Invalid numeric value in: ", core::stringify!($env))),
                         }
                         i += 1;
                     }
@@ -456,7 +458,7 @@ macro_rules! const_from_env {
                 }
             }
 
-            match option_env!($env) {
+            match core::option_env!($env) {
                 Some(val) => parse_env(val),
                 None => $default as _,
             }

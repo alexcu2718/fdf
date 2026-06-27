@@ -4,7 +4,7 @@
 
 fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
 
-It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running up to 2x faster than comparable tools, achieved through low-level optimisation, SIMD techniques, and direct syscalls(where possible).
+It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running *at least* 2x faster than comparable tools(in most cases**), achieved through low-level optimisation, SIMD techniques, and direct syscalls(where possible).
 
 Note, my philosophy is to keep this non-publicised at at all until a 1.0.
 
@@ -15,8 +15,10 @@ PLEASE NOTE: This is due to undergo a rename before a 1.0, I am tending towards 
 **Quick Installation:**
 
 ```bash
+cargo install fdf
 cargo install --git https://github.com/alexcu2718/fdf
-
+# cargo add fdf
+# I don't recommend using as a library until 1.0, sorry!
 ## Additionally specify  --no-default-features to remove mimalloc dependency
 ```
 
@@ -53,9 +55,13 @@ Other POSIX operating systems, such as AIX, are currently untested.
 
 - **DragonflyBSD**: Blocked on Rust 2024 support.
 
+### Probably Broken
+
+- MacOSx 32bit (granted the last 32bit OSx was released in 2009, suffice to say, I don't really care but would possibly tick it off if I get *very* bored)
+
 ## Testing
 
-The project includes comprehensive testing with 100+ Rust tests and 15+ correctness benchmarks comparing against fd.
+The project includes comprehensive testing with 100+ Rust (including doctests) tests and 15+ correctness benchmarks comparing against fd.
 
 Miri validation (Rust's undefined behaviour detector) is not practical here due to the extensive libc usage, so validation relies on intensive testing and Valgrind. See [scripts/valgrind-test.sh](./scripts/valgrind-test.sh).
 
@@ -121,6 +127,9 @@ When Run on identical commands, quickly tested, the rough memory allocation diff
 
 (Note, these commands spam your console, done deliberately to model coloured printing too)
 
+I *do* find it weird that fd leaks so much memory. Obviously it's a short term library so I'm guessing
+that it just relies on the OS to clean up after it.
+
 ```bash
 
 λ  rm -f *.zst && heaptrack fdf . / -HI && heaptrack_print ./heaptrack.fdf.*.zst | tail -n 6
@@ -150,6 +159,12 @@ When following symlinks, behaviour will vary slightly. For example, fd can enter
 whereas my implementation prevents hangs. It may, however, return more results than expected.
 
 To avoid issues, use --same-file-system when traversing symlinks. This ensures traversal terminates safely even in complex directories such as ~/.steam, ~/.wine, /sys, and /proc.
+
+I also do not deduplicate symlinks, as this would require basically calling a lot of unnecessary stat calls.
+
+Eg this is demonstrated here,
+
+![alt text](image.png)
 
 ## Technical Highlights
 
@@ -509,7 +524,7 @@ Options:
 - Although the cost of allocations doesn't seem too bad, I will look at this again at some point.
 - Maybe achieved via a lending iterator type approach? See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)
 
-#### 3. Add additional filter criteria
+#### 3. Additional Ideas
 
 - Implement features such as ownership tracking.
 - Maybe use `NO_ATIME` to avoid disk writes, this has a lot of drawbacks however.

@@ -17,7 +17,10 @@ Edited slightly, essentially providing a type safe wrapper to inforce internal i
 //!
 //! Look at the [`Unique` definition](crate::fdf) for more info.
 #![allow(clippy::missing_inline_in_public_items)]
+#![allow(unused)] //TODO FIX ME LATER
+#[cfg(unix)]
 use crate::dirent64;
+
 use core::convert::From;
 use core::ffi::CStr;
 use core::ffi::c_char;
@@ -186,6 +189,8 @@ impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
         unique.0
     }
 }
+
+#[cfg(unix)]
 // TODO, documentation, just being lazy.
 impl Unique<dirent64> {
     #[inline]

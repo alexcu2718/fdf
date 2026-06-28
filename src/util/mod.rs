@@ -36,6 +36,7 @@ pub use utils::getdents64;
 pub use utils::getdirentries64;
 
 pub(crate) use utils::BytePath;
+#[cfg(unix)]
 pub use utils::dirent_name_length;
 
 pub use printer::PrinterBuilder;

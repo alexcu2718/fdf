@@ -1,4 +1,5 @@
 #[macro_export]
+#[cfg(unix)]
 /**
  A helper macro to safely access dirent(64 on linux)'s
   fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
@@ -104,6 +105,7 @@ macro_rules! access_dirent {
 ///A macro to safely access stat entries in a filesystem independent way
 // TODO! add other fields as appropriate (this could be pretty long)
 // will be public when kinks are worked out
+#[cfg(unix)]
 macro_rules! access_stat {
     ($stat_struct:expr, st_mtimensec) => {{
         #[cfg(target_os = "netbsd")]
@@ -145,6 +147,8 @@ macro_rules! access_stat {
     // Fallback for other fields
     ($stat_struct:expr, $field:ident) => {{ $stat_struct.$field as _ }};
 }
+
+#[cfg(unix)]
 /*
  Selects the optimal directory reading syscall per target OS.
 
@@ -187,6 +191,7 @@ macro_rules! read_direntries {
     }};
 }
 
+#[cfg(unix)]
 /**
  Like [`read_direntries!`] but uses a pre-opened file descriptor instead of opening via path.
 
@@ -275,6 +280,7 @@ macro_rules! const_assert {
  - Improved branch prediction provides cumulative performance benefits
    across large directory trees.
 */
+#[cfg(unix)]
 macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
         #[allow(unused_unsafe)]
@@ -311,7 +317,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 }
             }
         }
-    }};
+    }};os::unix::fs::me
 }
 
 /**

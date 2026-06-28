@@ -1,3 +1,5 @@
+#![allow(unused)] //TODO FIX ME LATER
+#[cfg(unix)]
 use crate::dirent64;
 use crate::util::memchr_derivations::memrchr;
 use core::ffi::CStr;
@@ -188,6 +190,7 @@ where
 
 #[inline]
 #[must_use]
+#[cfg(unix)]
 /**
  Returns the length of `dirent64` / `dirent` `d_name` without the trailing null byte.
 

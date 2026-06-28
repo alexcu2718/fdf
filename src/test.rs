@@ -1,5 +1,7 @@
 // simple toggleable tests
 
+#![cfg(target_family = "unix")] // TEMP HACK
+
 #[cfg(test)]
 const DETERMINISTIC: bool = true;
 

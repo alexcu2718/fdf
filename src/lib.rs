@@ -90,9 +90,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 */
 
-#[cfg(target_os = "windows")]
-compile_error!("This application is not supported on Windows (yet)");
-
 // Re-exports
 pub use chrono;
 pub use libc;
@@ -100,10 +97,10 @@ pub use libc;
 #[macro_use]
 pub(crate) mod macros;
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
 pub(crate) use libc::{dirent as dirent64, readdir as readdir64};
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(all(unix, any(target_os = "linux", target_os = "android")))]
 pub(crate) use libc::{dirent64, readdir64};
 
 mod test;

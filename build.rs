@@ -81,6 +81,7 @@ fn test_eof() {
 }
 
 #[allow(clippy::unwrap_used)]
+#[cfg(target_family = "unix")]
 fn check_dirent_has_field(cfg_name: &str) {
     // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
     println!("cargo:rustc-check-cfg=cfg({cfg_name})");
@@ -113,6 +114,7 @@ fn check_dirent_has_field(cfg_name: &str) {
     }
 }
 
+#[cfg(target_family = "unix")]
 fn main() {
     // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
     println!("cargo:rustc-check-cfg=cfg(has_eof_trick)");
@@ -136,3 +138,6 @@ fn main() {
 
     check_dirent_has_field("has_d_ino");
 }
+
+#[cfg(target_os = "windows")]
+fn main() {}

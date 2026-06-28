@@ -16,10 +16,15 @@ use std::{
     ffi::{OsStr, OsString},
     fs::metadata,
     io,
-    os::unix::fs::MetadataExt as _,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
+
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt as _;
+
+#[cfg(target_os = "windows")]
+use std::os::windows::fs::MetadataExt as _;
 
 /**
  A builder for creating a `Finder` instance with customisable options.
@@ -293,15 +298,21 @@ impl FinderBuilder {
         // Resolve and validate the root directory
         let resolved_root = self.resolve_directory()?;
         let custom_ignore_matchers = self.compile_ignore_files()?;
-
+        compile_error!("FIX THIS");
         let starting_filesystem = if self.same_filesystem {
-            // Get the filesystem ID of the root directory directly
             let metadata = metadata(resolved_root.as_ref())?;
-            Some(metadata.dev()) // dev() returns the filesystem ID on Unix
+            #[cfg(unix)]
+            {
+                Some(metadata.dev())
+            }
+
+            #[cfg(windows)]
+            {
+                Some(0)
+            }
         } else {
             None
         };
-
         let search_config = config::SearchConfig::new(
             self.pattern.as_ref(),
             self.hide_hidden,

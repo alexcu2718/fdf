@@ -87,9 +87,16 @@ use core::ffi::{CStr, c_char};
 use core::fmt;
 
 use libc::{
-    AT_EACCESS, AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, faccessat, fstatat,
-    lstat, realpath, stat,
+    AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, faccessat, fstatat, lstat,
+    realpath, stat,
 };
+
+#[cfg(target_os = "android")]
+const AT_EACCESS: core::ffi::c_int = 0; // android being weird, again....
+
+#[cfg(not(target_os = "android"))]
+use libc::AT_EACCESS;
+
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
 
 //TODO, test #[align(64)] to check for presence of false sharing/perf improvements
@@ -102,7 +109,7 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
   It holds metadata and a path to a file or directory, optimised for size
   and efficient access to its components.
 
-  The struct's memory footprint is
+  The struct's memory footprint is:
   - **Path**: 16 bytes, `Box<CStr>`, retaining compatibility for use in libc but converting to `&[u8]` trivially(as deref)
   - **File type**:  1-byte enum representing the entry's type (file, directory, etc.).
   - **Inode**:  8-byte integer for the file's unique inode number.

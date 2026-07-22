@@ -20,6 +20,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C target-cpu=generic"
 
 jobs:
   test:
@@ -138,6 +139,8 @@ jobs:
         with:
           arch: s390x
           distro: ubuntu22.04
+          env: |
+            RUSTFLAGS: "-C target-cpu=generic"
           install: |
             apt-get update -q -y
             apt-get install -q -y curl build-essential
@@ -153,7 +156,7 @@ jobs:
       - name: Test on Alpine in Docker
         if: matrix.os == 'alpine' && matrix.arch == 'x86_64'
         run: |
-          docker run --rm -i -v "$PWD":/workspace -w /workspace alpine:latest sh -c "
+          docker run --rm -i -v "$PWD":/workspace -w /workspace -e RUSTFLAGS alpine:latest sh -c "
             apk update &&
             apk add curl build-base bash &&
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&

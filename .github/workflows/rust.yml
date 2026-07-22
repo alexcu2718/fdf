@@ -197,7 +197,7 @@ jobs:
           tool: cross
 
       - name: Build for Termux (${{ matrix.name }})
-        run: cross build --release --target ${{ matrix.target }} --verbose
+        run: cross build --release --target ${{ matrix.target }} --no-default-features
 
       - name: Upload Termux binary
         uses: actions/upload-artifact@v4

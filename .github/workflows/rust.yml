@@ -239,13 +239,21 @@ jobs:
       - name: Build test binary
         run: cross test --target x86_64-linux-android --no-default-features --no-run
 
+      - name: Prepare test script
+        run: |
+          TEST_BIN=$(find target/x86_64-linux-android/debug/deps -maxdepth 1 -name 'fdf-*' -executable | head -1)
+          cat > run_android_tests.sh << EOF
+          #!/bin/sh
+          set -e
+          adb push "${TEST_BIN}" /data/local/tmp/fdf-test
+          adb shell chmod +x /data/local/tmp/fdf-test
+          adb shell /data/local/tmp/fdf-test
+          EOF
+          chmod +x run_android_tests.sh
+
       - name: Run tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
           arch: x86_64
-          script: |
-            TEST_BIN=$(find target/x86_64-linux-android/debug/deps -maxdepth 1 -name 'fdf-*' -executable | head -1)
-            adb push "$TEST_BIN" /data/local/tmp/fdf-test
-            adb shell chmod +x /data/local/tmp/fdf-test
-            adb shell /data/local/tmp/fdf-test
+          script: ./run_android_tests.sh

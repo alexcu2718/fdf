@@ -31,30 +31,39 @@ jobs:
           - os: linux
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-linux-x86_64
           - os: macos
             arch: x86_64
             runner: macos-latest
+            artifact: fdf-macos-x86_64
           - os: macos
             arch: aarch64
             runner: macos-14
+            artifact: fdf-macos-aarch64
           - os: netbsd
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-netbsd-x86_64
           - os: freebsd
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-freebsd-x86_64
           - os: openbsd
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-openbsd-x86_64
           - os: linux
             arch: s390x
             runner: ubuntu-latest
+            artifact: fdf-linux-s390x
           - os: alpine
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-alpine-x86_64
           - os: solaris
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-solaris-x86_64
 
     steps:
       - uses: actions/checkout@v7
@@ -64,6 +73,7 @@ jobs:
         run: |
           cargo build --verbose
           cargo test --verbose
+          cargo build --release --verbose
           cargo doc --verbose
 
       - name: Test on macOS
@@ -71,6 +81,7 @@ jobs:
         run: |
           cargo build --verbose
           cargo test --verbose
+          cargo build --release --verbose
           cargo doc --verbose
 
       - name: Test on FreeBSD
@@ -87,6 +98,7 @@ jobs:
             . ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
 
       - name: Test on OpenBSD
@@ -101,6 +113,7 @@ jobs:
           run: |
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
 
       - name: Test in NetBSD
@@ -116,6 +129,7 @@ jobs:
           run: |
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
 
       - name: Test on Linux s390x (big-endian)
@@ -133,6 +147,7 @@ jobs:
             source ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
 
       - name: Test on Alpine in Docker
@@ -144,7 +159,8 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
             . /root/.cargo/env &&
             cargo build --verbose &&
-            cargo test --verbose
+            cargo test --verbose &&
+            cargo build --release --verbose
             cargo doc --verbose
           "
 
@@ -162,7 +178,16 @@ jobs:
             . ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/release/fdf
+          if-no-files-found: error
+          retention-days: 7
 
   termux:
     name: Build for Termux (${{ matrix.target }})
@@ -200,7 +225,7 @@ jobs:
         run: cross build --release --target ${{ matrix.target }}
 
       - name: Upload Termux binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fdf-termux-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/fdf

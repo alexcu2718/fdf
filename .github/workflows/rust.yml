@@ -20,6 +20,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C target-cpu=generic"
 
 jobs:
   test:
@@ -31,39 +32,49 @@ jobs:
           - os: linux
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-linux-x86_64
           - os: macos
             arch: x86_64
             runner: macos-latest
+            artifact: fdf-macos-x86_64
           - os: macos
             arch: aarch64
             runner: macos-14
+            artifact: fdf-macos-aarch64
           - os: netbsd
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-netbsd-x86_64
           - os: freebsd
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-freebsd-x86_64
           - os: openbsd
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-openbsd-x86_64
           - os: linux
             arch: s390x
             runner: ubuntu-latest
+            artifact: fdf-linux-s390x
           - os: alpine
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-alpine-x86_64
           - os: solaris
             arch: x86_64
             runner: ubuntu-latest
+            artifact: fdf-solaris-x86_64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Test on Linux x86_64
         if: matrix.os == 'linux' && matrix.arch == 'x86_64'
         run: |
           cargo build --verbose
           cargo test --verbose
+          cargo build --release --verbose
           cargo doc --verbose
 
       - name: Test on macOS
@@ -71,6 +82,7 @@ jobs:
         run: |
           cargo build --verbose
           cargo test --verbose
+          cargo build --release --verbose
           cargo doc --verbose
 
       - name: Test on FreeBSD
@@ -87,6 +99,7 @@ jobs:
             . ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
 
       - name: Test on OpenBSD
@@ -101,6 +114,7 @@ jobs:
           run: |
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
 
       - name: Test in NetBSD
@@ -116,6 +130,7 @@ jobs:
           run: |
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
 
       - name: Test on Linux s390x (big-endian)
@@ -124,6 +139,8 @@ jobs:
         with:
           arch: s390x
           distro: ubuntu22.04
+          env: |
+            RUSTFLAGS: "-C target-cpu=generic"
           install: |
             apt-get update -q -y
             apt-get install -q -y curl build-essential
@@ -133,18 +150,20 @@ jobs:
             source ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
 
       - name: Test on Alpine in Docker
         if: matrix.os == 'alpine' && matrix.arch == 'x86_64'
         run: |
-          docker run --rm -i -v "$PWD":/workspace -w /workspace alpine:latest sh -c "
+          docker run --rm -i -v "$PWD":/workspace -w /workspace -e RUSTFLAGS alpine:latest sh -c "
             apk update &&
             apk add curl build-base bash &&
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
             . /root/.cargo/env &&
             cargo build --verbose &&
-            cargo test --verbose
+            cargo test --verbose &&
+            cargo build --release --verbose
             cargo doc --verbose
           "
 
@@ -162,4 +181,107 @@ jobs:
             . ~/.cargo/env
             cargo build --verbose
             cargo test --verbose
+            cargo build --release --verbose
             cargo doc --verbose
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/release/fdf
+          if-no-files-found: error
+          retention-days: 7
+
+  termux:
+    name: Build for Termux (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+            name: ARM64
+          - target: x86_64-linux-android
+            name: x86_64
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache Cargo registry and build artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-termux-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-termux-${{ matrix.target }}-
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build for Termux (${{ matrix.name }})
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Upload Termux binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: fdf-termux-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/fdf
+          if-no-files-found: error
+          retention-days: 7
+
+  termux-test:
+    name: Test on Termux (Android x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Cache Cargo registry and build artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-termux-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-termux-test-
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build test binary
+        run: cross test --target x86_64-linux-android  --no-run
+
+      - name: Prepare test script
+        run: |
+          TEST_BIN=$(find target/x86_64-linux-android/debug/deps -maxdepth 1 -name 'fdf-*' -executable | head -1)
+          cat > run_android_tests.sh << EOF
+          #!/bin/sh
+          set -e
+          adb push "${TEST_BIN}" /data/local/tmp/fdf-test
+          adb shell chmod +x /data/local/tmp/fdf-test
+          adb shell /data/local/tmp/fdf-test
+          EOF
+          chmod +x run_android_tests.sh
+
+      - name: Run tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          script: ./run_android_tests.sh

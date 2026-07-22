@@ -1,0 +1,110 @@
+name: Release Binaries
+
+on:
+    release:
+        types: [published]
+
+permissions:
+    contents: write
+
+env:
+    CARGO_TERM_COLOR: always
+    RUSTFLAGS: "-C target-cpu=generic"
+
+jobs:
+    build:
+        name: Build ${{ matrix.target }}
+        runs-on: ${{ matrix.runner }}
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - target: x86_64-unknown-linux-gnu
+                      runner: ubuntu-latest
+                      use_cross: false
+                      bin_path: target/release/fdf
+
+                    - target: x86_64-apple-darwin
+                      runner: macos-latest
+                      use_cross: false
+                      bin_path: target/release/fdf
+
+                    - target: aarch64-apple-darwin
+                      runner: macos-14
+                      use_cross: false
+                      bin_path: target/release/fdf
+
+                    - target: aarch64-linux-android
+                      runner: ubuntu-latest
+                      use_cross: true
+                      bin_path: target/aarch64-linux-android/release/fdf
+
+                    - target: x86_64-linux-android
+                      runner: ubuntu-latest
+                      use_cross: true
+                      bin_path: target/x86_64-linux-android/release/fdf
+
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Install Rust toolchain
+              if: matrix.use_cross == false
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  target: ${{ matrix.target }}
+
+            - name: Build release binary (native)
+              if: matrix.use_cross == false
+              run: cargo build --release --target ${{ matrix.target }}
+
+            - name: Install cross
+              if: matrix.use_cross == true
+              uses: taiki-e/install-action@v2
+              with:
+                  tool: cross
+
+            - name: Build release binary (cross)
+              if: matrix.use_cross == true
+              run: cross build --release --target ${{ matrix.target }}
+
+            - name: Package binary
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  mkdir -p dist
+
+                  BIN_PATH="${{ matrix.bin_path }}"
+                  if [[ ! -f "$BIN_PATH" ]]; then
+                    echo "Expected binary not found at $BIN_PATH"
+                    exit 1
+                  fi
+
+                  ARCHIVE="fdf-${{ matrix.target }}.tar.gz"
+                  tar -C "$(dirname "$BIN_PATH")" -czf "dist/$ARCHIVE" "$(basename "$BIN_PATH")"
+
+            - name: Upload packaged binary artifact
+              uses: actions/upload-artifact@v7
+              with:
+                  name: fdf-${{ matrix.target }}-binary
+                  path: dist/fdf-${{ matrix.target }}.tar.gz
+                  if-no-files-found: error
+                  retention-days: 7
+
+    publish:
+        name: Publish to GitHub Release
+        runs-on: ubuntu-latest
+        needs: build
+
+        steps:
+            - name: Download packaged binaries
+              uses: actions/download-artifact@v7
+              with:
+                  pattern: fdf-*-binary
+                  merge-multiple: true
+                  path: dist
+
+            - name: Attach binaries to release
+              uses: softprops/action-gh-release@v3
+              with:
+                  files: dist/*.tar.gz
+                  fail_on_unmatched_files: true

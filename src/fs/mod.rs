@@ -20,3 +20,15 @@ pub use file_type::FileType;
 pub use iter::GetDents;
 pub use iter::ReadDir;
 pub use types::{FileDes, Result};
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "macos",
+    target_os = "freebsd"
+))]
+pub use types::SyscallBuffer;

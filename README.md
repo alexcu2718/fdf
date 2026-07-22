@@ -4,13 +4,10 @@
 
 fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
 
-It serves as a lightweight alternative to tools such as fd and find, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks demonstrate fdf running *at least* 2x faster than comparable tools(in most cases**), achieved through low-level optimisation, SIMD techniques, and direct syscalls(where possible).
+A faster alternative to tools such as `fd`/`find`/`bfs`, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks show fdf running at least 2x faster than comparable tools in most cases, achieved through low-level optimisation, SIMD techniques, and direct syscalls where possible.
 
-Note, my philosophy is to keep this non-publicised at at all until a 1.0.
-
-PLEASE NOTE: This is due to undergo a rename before a 1.0, I am tending towards `frep` as a name
-
-*Windows version*: Requires significant rewrite, planned for post 1.0.
+> **Note:** This project will be renamed before 1.0, currently leaning towards '`frep`' as the name.
+Windows support requires a significant rewrite and is planned for post-1.0.
 
 **Quick Installation:**
 

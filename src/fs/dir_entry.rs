@@ -620,7 +620,7 @@ impl DirEntry {
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents64;
-        const BUF_SIZE: usize = 500; //pretty arbitrary.
+        const BUF_SIZE: usize = 512; //pretty arbitrary.
         // On Linux it's 24, on solaris it's 24/32
         // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
         const MINIMUM_DIRENT_SIZE: isize = 32;

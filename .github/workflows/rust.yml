@@ -163,3 +163,46 @@ jobs:
             cargo build --verbose
             cargo test --verbose
             cargo doc --verbose
+
+  termux:
+    name: Build for Termux (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+            name: ARM64
+          - target: x86_64-linux-android
+            name: x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Cargo registry and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-termux-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-termux-${{ matrix.target }}-
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build for Termux (${{ matrix.name }})
+        run: cross build --release --target ${{ matrix.target }} --verbose
+
+      - name: Upload Termux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: fdf-termux-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/fdf
+          if-no-files-found: error
+          retention-days: 7

@@ -17,9 +17,10 @@ use std::process::Command;
     any(target_os = "linux", target_os = "android", target_os = "macos"),
     not(miri),
     not(debug_assertions),
+    not(test), // make testing cheaper
     feature = "mimalloc",
 ))]
-//miri doesnt support custom allocators
+//miri doesnt support custom allocators in the event i one day make FFI safe sims, UNLIKELY!
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc; //Please note, don't  use v3 it has weird bugs. I might try snmalloc in future.
 

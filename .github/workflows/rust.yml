@@ -197,8 +197,6 @@ jobs:
           tool: cross
 
       - name: Build for Termux (${{ matrix.name }})
-        env:
-          RUSTFLAGS: "-C panic=abort"
         run: cross build --release --target ${{ matrix.target }} --no-default-features
 
       - name: Upload Termux binary

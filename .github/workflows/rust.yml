@@ -197,7 +197,7 @@ jobs:
           tool: cross
 
       - name: Build for Termux (${{ matrix.name }})
-        run: cross build --release --target ${{ matrix.target }} --no-default-features
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Upload Termux binary
         uses: actions/upload-artifact@v4
@@ -237,7 +237,7 @@ jobs:
           tool: cross
 
       - name: Build test binary
-        run: cross test --target x86_64-linux-android --no-default-features --no-run
+        run: cross test --target x86_64-linux-android  --no-run
 
       - name: Prepare test script
         run: |

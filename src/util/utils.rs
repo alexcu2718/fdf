@@ -36,6 +36,11 @@ use core::ops::Deref;
 pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize) -> isize {
     debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in getdents64");
     debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
+
+    debug_assert!(
+        buffer_size <= libc::INT_MAX as _,
+        "buffer_size passed to getdents64 too big"
+    );
     #[cfg(any(
         target_os = "openbsd",
         target_os = "solaris",
@@ -96,13 +101,15 @@ pub unsafe fn getdirentries64(
 ) -> isize {
     debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in GDE64");
     debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
-    use libc::{off_t, size_t, ssize_t};
+    debug_assert!(
+        nbytes <= libc::INT_MAX as _,
+        "Buffer passed to getdirentries64 too big"
+    );
     // link to libc
     unsafe extern "C" {
         #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
         // Never seen this done, I searched all of github for similar stuff. I love dirty stuff like this.
-        fn getdirentries(fd: c_int, buf: *mut c_void, nbytes: size_t, basep: *mut off_t)
-        -> ssize_t;
+        fn getdirentries(fd: c_int, buf: *mut c_void, nbytes: usize, basep: *mut i64) -> isize;
     } // as above
     // By doing this, we avoid fstatf64 calls and a thread mutex enforced by readdir (completely not needed for single thread reading)
     // IT MAKES NO SENSE to parallelise readdir, it's fundamentally a sequential operation unless you're doing some really wacky stuff.
@@ -111,15 +118,30 @@ pub unsafe fn getdirentries64(
     unsafe { getdirentries(fd, buffer_ptr, nbytes, basep) }
 }
 
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    #[link_name = "openat$NOCANCEL"]
+    /// Using  avoids cancellation points in openat.
+    pub(crate) unsafe fn openat_nocancel(
+        dirfd: c_int,
+        path: *const c_char,
+        flags: c_int,
+        ...
+    ) -> c_int;
+}
+
 /*
 
 
+
+
+
 // Works same as above but I prefer to not rely on hardcoded syscall numbers! Old implementation, kept for posterity.
-pub unsafe fn getdirentries64<T>(
+pub unsafe fn getdirentries64(
     fd: libc::c_int,
-    buffer_ptr: *mut T,
+    buffer_ptr: *mut c_void,
     nbytes: libc::size_t,
-    basep: *mut libc::off_t,
+    basep: *mut i64,
 ) -> i32
 where
     T: crate::fs::ValueType,
@@ -367,7 +389,7 @@ On some systems
     target_os = "aix",
     target_os = "hurd"
 ))]
-#[allow(clippy::missing_assert_message)] //we're aligned (compiler can't see it though and we're doing fancy operations)
+#[allow(clippy::missing_assert_message)] //looks nicer
 #[must_use]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
@@ -415,6 +437,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
         let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64); // (should use select unpredictable here if it was const)
         // This generates a conditional move under the hood.
+        //let mask = 0u64.wrapping_sub((reclen == 24) as u64) & MASK; // or equivalently this, LLVM should compile to cmov on all platforms
+        // instead of going through a 'mul' op
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.
          Result:

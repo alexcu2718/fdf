@@ -68,7 +68,8 @@ fn test_eof() {
         )
     };
 
-    let last_four_bytes = u32::from_ne_bytes((&buffer[BUFFER_SIZE - 4..]).try_into().unwrap());
+    let last_four_bytes =
+        u32::from_ne_bytes((&buffer[BUFFER_SIZE - 4..]).try_into().expect("impossible"));
     let has_eof = last_four_bytes == 1;
     // If the last 4 bytes==1 then it has EOF trick
 

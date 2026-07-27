@@ -494,6 +494,8 @@ impl Finder {
     to prevent infinite loops and duplicate traversal.
     */
     #[inline]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(unfulfilled_lint_expectations)] // for systems with 32bit `st_dev`
     fn directory_or_symlink_filter(&self, dir: &DirEntry) -> bool {
         // This is a beast of a function to read, sorry!
         match dir.file_type {

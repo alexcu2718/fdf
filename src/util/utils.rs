@@ -96,13 +96,15 @@ pub unsafe fn getdirentries64(
 ) -> isize {
     debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in GDE64");
     debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
-    use libc::{off_t, size_t, ssize_t};
+    debug_assert!(
+        nbytes <= libc::INT_MAX as _,
+        "Buffer passed to getdirentries64 too big"
+    );
     // link to libc
     unsafe extern "C" {
         #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
         // Never seen this done, I searched all of github for similar stuff. I love dirty stuff like this.
-        fn getdirentries(fd: c_int, buf: *mut c_void, nbytes: size_t, basep: *mut off_t)
-        -> ssize_t;
+        fn getdirentries(fd: c_int, buf: *mut c_void, nbytes: usize, basep: *mut i64) -> isize;
     } // as above
     // By doing this, we avoid fstatf64 calls and a thread mutex enforced by readdir (completely not needed for single thread reading)
     // IT MAKES NO SENSE to parallelise readdir, it's fundamentally a sequential operation unless you're doing some really wacky stuff.
@@ -111,7 +113,21 @@ pub unsafe fn getdirentries64(
     unsafe { getdirentries(fd, buffer_ptr, nbytes, basep) }
 }
 
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    #[link_name = "openat$NOCANCEL"]
+    pub(crate) unsafe fn openat_nocancel(
+        dirfd: c_int,
+        path: *const c_char,
+        flags: c_int,
+        ...
+    ) -> c_int;
+}
+
 /*
+
+
+
 
 
 // Works same as above but I prefer to not rely on hardcoded syscall numbers! Old implementation, kept for posterity.

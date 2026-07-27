@@ -471,7 +471,7 @@ impl GetDents {
         #[cfg(has_eof_trick)]
         #[rustfmt::skip]
         /*
-         Create a ptr to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
+         Create a (uninitialised) reference to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
          In doing the `getdirentries64` syscalls, we zero the last four bytes, so they're guaranteed initialised.
          If this marker changes, the kernel has indicated EOF, the buffer is never filled up the the maximum
          (I've done some rudimentary println and syscall tracing of the buffer, it always leaves a reserved space, probably some reference exists but too lazy currently.)
@@ -479,7 +479,7 @@ impl GetDents {
         // SAFETY: see above
         let last_four_bytes: &mut MaybeUninit<u32> = unsafe {
             self.syscall_buffer_ptr().byte_add(Self::BUFFER_SIZE - 4)
-            .cast().as_mut()
+            .cast().as_mut() // We can safely make a reference to uninit memory as long as we write it *before* use
         };
 
         #[cfg(has_eof_trick)]
@@ -505,7 +505,7 @@ impl GetDents {
             self.end_of_stream = *last_four_bytes_init == 1 || !is_more_remaining
         }
         // Check at build time for the optimisation
-        // check if the syscall returns 0 too, the latter branch should almost never be true on supported system
+        // check if the syscall returns >=0 too, the latter branch should almost never be true on supported system
 
         // returned bytes=0
         #[cfg(not(has_eof_trick))]
@@ -533,6 +533,7 @@ impl GetDents {
            getdirentries64                              2606 */
         // Branchless check
         self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
+        // probably irrelevant as will *likely* compile to a cmov but being too lazy to check
 
         self.offset = 0;
 

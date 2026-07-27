@@ -364,8 +364,11 @@ impl DirEntry {
         // We can't just 'retry' certain files, ie ones in /proc
 
         // SAFETY: the pointer is null terminated
+        #[cfg(not(target_os = "macos"))]
         let fd = unsafe { libc::open(self.as_ptr(), FLAGS) };
-
+        #[cfg(target_os = "macos")]
+        // SAFETY: as above.
+        let fd = unsafe { crate::util::openat_nocancel(libc::AT_FDCWD, self.as_ptr(), FLAGS) };
         if fd < 0 {
             return_os_error!()
         }
@@ -375,13 +378,17 @@ impl DirEntry {
 
     /// Opens a child directory by name relative to an already-open parent directory fd.
     ///
-    /// Uses `openat(2)` to avoid a full path resolution — the kernel resolves the name
+    /// Uses `openat(2)/openat_nocancel` to avoid a full path resolution — the kernel resolves the name
     /// relative to `parent_fd` directly.  The same flags as [`Self::open`] are used.
     #[inline]
     pub(crate) fn open_at(parent_fd: i32, child_name: &core::ffi::CStr) -> Result<FileDes> {
         const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY;
+        #[cfg(not(target_os = "macos"))]
         // SAFETY: child_name is null-terminated; parent_fd is a valid open directory fd.
         let fd = unsafe { libc::openat(parent_fd, child_name.as_ptr(), FLAGS) };
+        #[cfg(target_os = "macos")]
+        // SAFETY: as above
+        let fd = unsafe { crate::util::openat_nocancel(parent_fd, child_name.as_ptr(), FLAGS) };
         if fd < 0 {
             return_os_error!()
         }

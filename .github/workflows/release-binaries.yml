@@ -96,7 +96,7 @@ jobs:
     needs: build
 
     steps:
-      - name: Download packaged binaries
+      - name: Download packaged  binaries
         uses: actions/download-artifact@v7
         with:
           pattern: fdf-*-binary

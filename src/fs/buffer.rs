@@ -1,5 +1,7 @@
+use core::fmt::{Debug, Display};
 use core::marker::Copy;
 use core::mem::MaybeUninit;
+use core::ops::{Add, Div, Mul, Sub};
 use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
 mod sealed {
@@ -19,7 +21,10 @@ mod sealed {
 ///
 /// This trait ensures type safety while allowing the buffer to work with both
 /// signed and unsigned byte types, which are equivalent for raw memory operations.
-pub trait ValueType: sealed::Sealed + Copy {}
+pub trait ValueType:
+    sealed::Sealed + Copy + Debug + Display + Add + Sub + Mul + Div + Default
+{
+}
 
 impl ValueType for i8 {}
 impl ValueType for u8 {}
@@ -120,13 +125,7 @@ where
 
 impl<T> Default for AlignedBuffer<T, { crate::fs::types::BUFFER_SIZE }>
 where
-    T: ValueType
-        + Default
-        + Copy
-        + core::ops::Add
-        + core::ops::Sub
-        + core::ops::Mul
-        + core::ops::Div,
+    T: ValueType,
 {
     #[inline]
     /// Defaults to the recommended buffer size for getdents(64)/getdirentries(64) on your OS.

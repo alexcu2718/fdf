@@ -189,11 +189,12 @@ pub(crate) trait DirentConstructor {
     fn init_from_path(path: &[u8]) -> (Vec<MaybeUninit<u8>>, usize) {
         let mut base_len = path.len();
         let needs_slash = usize::from(path != b"/");
-
-        // Fast-path filename capacity (+NUL is included in `name_len` during append).
-        // Longer names take the cold slow-path reserve in `construct_path`.
-        // Most filepaths will never be longer than this. In the odd-case they are, it's really rare
-        // with no negligible affect otherwise
+        /*
+        Fast-path filename capacity (+NUL is included in `name_len` during append).
+        Longer names take the cold slow-path reserve in `construct_path`.
+        Most filepaths will never be longer than this. In the odd-case they are, it's really rare
+        with no negligible affect otherwise
+        */
         const FAST_PATH_DIRENT_LENGTH: usize = 256;
         let total_capacity = base_len + FAST_PATH_DIRENT_LENGTH + needs_slash;
 
@@ -203,12 +204,8 @@ pub(crate) trait DirentConstructor {
         unsafe { buffer.set_len(total_capacity) };
 
         /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
-         SAFETY:
-         - `path.as_ptr()` is valid for reads of `base_len` bytes (source slice length)
-         - `path_buffer.as_mut_ptr()` is valid for writes of `base_len` bytes (we allocated `total_capacity >= base_len`)
-         - The memory regions are guaranteed non-overlapping: `path` points to existing data
-           while `path_buffer` points to freshly allocated memory
-         - `dirlen` equals `path.len()`, ensuring we don't read beyond source bounds
+         SAFETY: Always in bounds, trivial alignment
+
         */
         unsafe {
             path.as_ptr()
@@ -280,13 +277,11 @@ pub(crate) trait DirentConstructor {
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
         let name_portion: *mut u8 = unsafe { buf_ptr.add(base_len) };
 
-        // SAFETY: `d_name` and `name_portion` don't overlap (different memory regions(stack vs heap))
-        // - Alignment is trivial(1)
-        // - `name_len` is within `buffer` bounds
-        // Copy the name into the final portion
+        // SAFETY: `d_name` and `name_portion` don't overlap (different memory regions(stack vs heap)), inbounds, alignment trivial
         unsafe { d_name.copy_to_nonoverlapping(name_portion, name_len) };
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
-        let full_path = unsafe { &*(slice_from_raw_parts(buf_ptr, required_len) as *const CStr) }; //truncate the buffer to the first null terminator of the full path
+        let full_path = unsafe { &*(slice_from_raw_parts(buf_ptr, required_len) as *const CStr) };
+        //truncate the buffer to the first null terminator of the full path
 
         (full_path, d_ino, file_type)
     }
@@ -339,7 +334,7 @@ pub struct GetDents {
     pub(crate) end_of_stream: bool,
     #[cfg(any(target_os = "freebsd", target_os = "macos"))] // TODO add dragonflyBSD here eventually
     /// The base pointer for the getdirentries call
-    pub(crate) base_pointer: i64,
+    pub(crate) base_pointer: libc::off_t,
 }
 
 #[cfg(any(
@@ -385,19 +380,14 @@ impl GetDents {
     #[must_use]
     /**
     Returns the mutable reusable kernel I/O buffer backing batched directory reads.
-
-    This exposes the internal [`SyscallBuffer`] used by `getdents`/`getdirentries64`
-    so low-level callers can inspect buffer sizing or reuse it for diagnostics.
-    The buffer remains owned by the iterator and is mutated whenever a new batch
-    of directory entries is fetched.
     */
     pub const fn syscall_buffer(&mut self) -> &mut SyscallBuffer {
         &mut self.syscall_buffer
     }
 
-    /// Convenience function to safe verbosity(+safety)
-    ///
-    /// By constructing a `NonNull`, we can preserve our safety invariants better.
+    /**
+    Convenience function to safe verbosity(+safety)
+    By constructing a `NonNull`, we can preserve our safety invariants better. */
     #[inline]
     #[must_use]
     #[cfg(has_eof_trick)]
@@ -474,7 +464,7 @@ impl GetDents {
          Create a (uninitialised) reference to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
          In doing the `getdirentries64` syscalls, we zero the last four bytes, so they're guaranteed initialised.
          If this marker changes, the kernel has indicated EOF, the buffer is never filled up the the maximum
-         (I've done some rudimentary println and syscall tracing of the buffer, it always leaves a reserved space, probably some reference exists but too lazy currently.)
+         check explanation below
          Alignment of 8 => Alignment of 4 guaranteed invariant. */
         // SAFETY: see above
         let last_four_bytes: &mut MaybeUninit<u32> = unsafe {
@@ -483,23 +473,54 @@ impl GetDents {
         };
 
         #[cfg(has_eof_trick)]
-        // If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
-        // this means that we detect when the kernel writes it's EOF flags
-        // Write a 0 to initialise the memory, we check if this changes to 1 after the syscall
+        /*
+        If using the EOF trick, initialise the last 4 bytes of the buffer with 0,
+        this means that we detect when the kernel writes it's EOF flags
+        Write a 0 to initialise the memory, we check if this changes to 1 after the syscall
+        */
         let last_four_bytes_init = last_four_bytes.write(0);
 
         // Get the syscall return amount in bytes
         let remaining_bytes = self.getdents();
 
         let is_more_remaining = remaining_bytes.is_positive();
-        // Only macOS has this optimisation, the other platforms do not, if macos does not have this, default to checking for 0 ret value
 
-        // Check the last four bytes for the marker
-        // Also the XNU kernel never fills buffer up to maximum size, it always has a flags section towards the end.
-        //https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
-        // We can additionally deduce that readdir also uses the early EOF trick (closed source implementation)
+        /*
+        https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/readdir.c
+          Only macOS has this optimisation, the other platforms do not, if macos does not have this, default to checking for 0 ret value
+         Check the last four bytes for the marker
+        Also the XNU kernel never fills buffer up to maximum size, it always has a flags section towards the end.
+        https://github.com/apple/darwin-xnu/blob/main/bsd/sys/dirent.h
+        readdr uses the same implementation
+
+
+            #if __DARWIN_64_BIT_INO_T
+            /*
+             * sufficiently recent kernels when the buffer is large enough,
+             * will use the last bytes of the buffer to return status.
+             *
+             * To support older kernels:
+             * - make sure it's 0 initialized
+             * - make sure it's past `dd_size` before reading it
+             */
+            getdirentries64_flags_t *gdeflags =
+                (getdirentries64_flags_t *)(dirp->dd_buf + dirp->dd_len -
+                sizeof(getdirentries64_flags_t));
+            *gdeflags = 0;
+            initial_seek = dirp->dd_td->seekoff;
+            dirp->dd_size = (long)__getdirentries64(dirp->dd_fd,
+                dirp->dd_buf, dirp->dd_len, &dirp->dd_td->seekoff);
+            if (dirp->dd_size >= 0 &&
+                dirp->dd_size <= dirp->dd_len - sizeof(getdirentries64_flags_t)) {
+                if (*gdeflags & GETDIRENTRIES64_EOF) {
+                    dirp->dd_flags |= __DTF_ATEND;
+                }
+            }
+
         // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
         // As this has existed for decades, it's relatively stable, any ABI breaks are unlikely since we're on 64bit for good.
+
+        */
         #[cfg(has_eof_trick)]
         {
             self.end_of_stream = *last_four_bytes_init == 1 || !is_more_remaining
@@ -507,7 +528,7 @@ impl GetDents {
         // Check at build time for the optimisation
         // check if the syscall returns >=0 too, the latter branch should almost never be true on supported system
 
-        // returned bytes=0
+        // returned bytes<=0
         #[cfg(not(has_eof_trick))]
         {
             self.end_of_stream = !is_more_remaining
@@ -515,22 +536,41 @@ impl GetDents {
 
         /*
         Example of syscall differences( also note the lack of fstatfs64 and semwait signal!)
-        macOS is only virtualised via qemu, I get some wacky results, I don't know why
-        the open calls differ EVERY invocation, maybe something to do with macs anti malware or strange apple-ism?
-           λ   sudo dtruss -c fd -HI . ~ 2>&1 | tail -n 15
-           write                                         156
-           madvise                                       196
-           close_nocancel                               1898
-           fstatfs64                                    1899
-           open_nocancel                                1903
-           getdirentries64                              1920
-           __semwait_signal                            11184
-           λ   sudo dtruss -c fdf -HI . ~ 2>&1 | tail -n 15
-           write                                          32
-           madvise                                       175
-           close_nocancel                               2562
-           open                                         2578
-           getdirentries64                              2606 */
+        macOS is only virtualised via qemu,
+         λ  sudo dtruss -c fd -HI . ~ 2>&1 | tail -n 15
+
+        stat64                                         13
+        sysctl                                         13
+        ulock_wait2                                    13
+        ulock_wake                                     13
+        psynch_mutexdrop                               20
+        psynch_mutexwait                               20
+        sigaltstack                                    20
+        mprotect                                       26
+        write                                         364
+        madvise                                       527
+        fstatfs64                                    1728
+        close_nocancel                               1729
+        open_nocancel                                1736
+        getdirentries64                              1823
+
+
+        λ  sudo dtruss -c fdf -HI . ~ 2>&1 | tail -n 15
+
+        bsdthread_terminate                             8
+        stat64                                          8
+        thread_selfid                                   9
+        close                                          10
+        sysctl                                         11
+        mmap                                           15
+        munmap                                         16
+        mprotect                                       25
+        sigaltstack                                    27
+        write                                          71
+        madvise                                       143
+        close_nocancel                               1556
+        openat_nocancel                              1557
+        getdirentries64                              1760 */
         // Branchless check
         self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
         // probably irrelevant as will *likely* compile to a cmov but being too lazy to check

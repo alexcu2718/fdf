@@ -525,3 +525,14 @@ Options:
 
 - Implement features such as ownership tracking.
 - Maybe use `NO_ATIME` to avoid disk writes, this has a lot of drawbacks however.
+- Write my sorting algorithm with parallelism, currently it's single threaded, not a big issue for small results but if you want to sort your entire filesystem then you're much better off just piping the results to `sort` (hence why it's not been optimised much)
+
+#### 4. macOS optimisations
+
+- Unfortunately, due to lacking real Apple hardware (and incentive, I'll be blunt...), testing/benchmarking is done via QEMU (on x64 - you can't emulate ARM, unfortunately).
+- This makes it **extremely** hard to benchmark (surprisingly, benchmarks hold up well on emulated FreeBSD, etc.).
+- Benchmarking on a VM is *FULL* of inconsistent, silly things that makes a lot of results basically useless, I need to test on real hardware
+- I use [OSX-KVM](https://github.com/kholia/OSX-KVM) to emulate it if you're interested.
+- There's some interesting stuff in [pfind](https://github.com/elicpeter/pfind#why-it-is-fast), but honestly I suspect it's heavily vibe-coded...
+- I need to properly search for all the relevant links/references - the interesting part is how, somehow, lower thread counts on Apple hardware lead to better performance. It's really bizarre.
+- There is ****-all documentation for APFS also, which makes everything folklore based on 5 year old forum posts... I AM LIVING IN HELL.

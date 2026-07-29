@@ -328,6 +328,18 @@ fn main() -> Result<(), SearchConfigError> {
     let root_is_cwd = matches!(path.as_bytes(), b"." | b"./");
     let strip_cwd_prefix = args.strip_cwd_prefix && root_is_cwd;
 
+    #[cfg(target_os = "macos")]
+    #[allow(clippy::expect_used)]
+    let thread_num = Some(
+        args.thread_num
+            .unwrap_or(NonZeroUsize::new(4).expect("impossible")),
+    );
+    // https://github.com/elicpeter/pfind#why-it-is-fast
+    // Use 4 threads on macos due to apfs WEIRDNESS, it can be overridden though
+    // TODO!!! TEST THIS VARIABLE ON REAL HARDWARE EVENTUALLY
+    #[cfg(not(target_os = "macos"))]
+    let thread_num = args.thread_num;
+
     let finder = Finder::init(&path)
         .pattern(args.pattern.unwrap_or_else(String::new)) //empty string
         .and_patterns(args.and_opt)
@@ -349,7 +361,7 @@ fn main() -> Result<(), SearchConfigError> {
         .ignore_patterns(args.ignore)
         .ignore_glob_patterns(args.ignoreg)
         .ignore_files(args.ignore_file)
-        .thread_count(args.thread_num)
+        .thread_count(thread_num)
         .build()?;
 
     let errors = finder.error_store();

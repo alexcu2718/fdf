@@ -35,7 +35,7 @@ fn test_eof() {
     unsafe extern "C" {
         fn __getdirentries64(
             fd: libc::c_int,
-            buf: *mut libc::c_char,
+            buf: *mut libc::c_void,
             nbytes: libc::size_t,
             basep: *mut libc::off_t,
         ) -> libc::ssize_t;

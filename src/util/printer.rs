@@ -137,7 +137,7 @@ where
     #[allow(clippy::missing_errors_doc)] //write up docs l ater
     /// Print the results
     pub fn print(self) -> Result<(), SearchConfigError> {
-        let std_out = stdout();
+        let std_out = stdout().lock();
         let is_terminal = std_out.is_terminal();
         let use_colour = is_terminal && !Self::colour_disabled(self.nocolour);
 

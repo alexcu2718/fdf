@@ -97,7 +97,7 @@ pub unsafe fn getdirentries64(
     fd: c_int,
     buffer_ptr: *mut c_void,
     nbytes: usize,
-    basep: *mut i64,
+    basep: *mut libc::off_t,
 ) -> isize {
     debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in GDE64");
     debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
@@ -109,7 +109,12 @@ pub unsafe fn getdirentries64(
     unsafe extern "C" {
         #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
         // Never seen this done, I searched all of github for similar stuff. I love dirty stuff like this.
-        fn getdirentries(fd: c_int, buf: *mut c_void, nbytes: usize, basep: *mut i64) -> isize;
+        fn getdirentries(
+            fd: c_int,
+            buf: *mut c_void,
+            nbytes: usize,
+            basep: *mut libc::off_t,
+        ) -> isize;
     } // as above
     // By doing this, we avoid fstatf64 calls and a thread mutex enforced by readdir (completely not needed for single thread reading)
     // IT MAKES NO SENSE to parallelise readdir, it's fundamentally a sequential operation unless you're doing some really wacky stuff.
@@ -143,8 +148,6 @@ pub unsafe fn getdirentries64(
     nbytes: libc::size_t,
     basep: *mut i64,
 ) -> i32
-where
-    T: crate::fs::ValueType,
 {
     const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
 

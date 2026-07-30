@@ -20,7 +20,8 @@ use core::ops::Deref;
  # Returns
  - Positive: Number of bytes read
  - 0: End of directory
- - Negative: Error code (check errno)
+ - Negative: Error code (set errno and check)
+ - Buffer size must be less than `i32::MAX`
 
    This function is only available on Linux/Android/OpenBSD/NetBSD/Illumos/Solaris.
 */
@@ -89,6 +90,7 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
  - Positive: Number of bytes read
  - 0: End of directory
  - Negative: Error code (check errno)
+ - Buffer size must be less than `i32::MAX`
 
 
  This function is only available on macOS/FreeBSD
@@ -157,12 +159,23 @@ pub unsafe fn getdirentries64(
 }
 */
 
+#[cold] // Help the branch predictor out.
+#[inline(never)]
+const fn len_one() -> usize {
+    0
+}
+
+#[cold]
+#[inline(never)]
+const fn cold_none<T>() -> Option<T> {
+    None
+}
 /// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
-/// Provides efficient path operations, FFI compatibility, and filesystem interactions.
 pub(crate) trait BytePath<T>
 where
     T: Deref<Target = [u8]>,
 {
+    /// Returns the extension if available
     fn extension(&self) -> Option<&[u8]>;
 
     /// Gets index of filename component start
@@ -174,35 +187,24 @@ where
     T: Deref<Target = [u8]>,
 {
     #[inline]
-    #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn extension(&self) -> Option<&[u8]> {
-        debug_assert!(!self.is_empty(), "should never be empty");
-        debug_assert!(!self.ends_with(b"/"), "file path ends with a slash!");
-        // filepaths entering this will always have a slash in them, guaranteed, no trailing slashes!!!
-        // The edge cases to watch our for are ./ and /, these are handled
-        memrchr(b'.', &self[..self.len().saturating_sub(1)]) //exclude cases where the . is the final character
-            // SAFETY: The `pos` comes from `memrchr` which searches a slice of `self`.
-            // Due to an internal invariant, filepaths going down here always are length >=2
-            // (I should really be less hacky in this approach.)
-            // Therefore, `pos` is a valid index into `self`.
-            // `pos + 1` is also guaranteed to be a valid index.
-            // We do this to avoid any runtime checks
-            .map(|pos| unsafe { self.get_unchecked(pos + 1..) })
+        let (&last, without_last) = self.split_last()?;
+
+        if last == b'/' {
+            return cold_none();
+        }
+
+        let pos = memrchr(b'.', without_last)?;
+        self.get(pos + 1..)
     }
 
     /// Get the length of the basename of a path (up to and including the last '/')
     /// Returns 0 for length 1 byte paths
     #[inline]
     fn file_name_index(&self) -> usize {
-        #[cold] // Help the branch predictor out.
-        #[inline(never)]
-        const fn file_name_index_len_one() -> usize {
-            0
-        }
-
         // (every file path going in here has at least a '/' inside it), this is a special case for root/'.'
         if self.len() == 1 {
-            return file_name_index_len_one();
+            return len_one(); //unlikely branch
         }
 
         debug_assert!(!self.is_empty(), "should never be empty");
@@ -224,6 +226,7 @@ where
  - `drnt` must be a valid, non-null pointer to a `dirent` / `dirent64` whose `d_name`
    field is properly null-terminated within the record.
  - The pointer must remain valid for the duration of the call.
+ - dirent64 must be kernel provided, so from 'readdir(64)' or appropriate `syscall`
 */
 pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");

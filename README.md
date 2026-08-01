@@ -26,6 +26,8 @@ This is a performance-focused project that remains under active development towa
 The CLI is already usable, but the internal library API is not yet stable.
 It is quite irritating to both expose a stable api and CLI (fd doesn't do it and walkdir/ignore are much simpler.)
 
+Additional Note: If you use MacOS on native hardware and know your stuff, please contribute if you desire! I find it impossible to benchmark and improve(with certainty*) because I am virtualising x86_64 MacOS and I get so many baffling results from benchmarks due to the virtualisation overhead.
+
 ## Platform Support
 
 ### Fully Supported and CI Tested
@@ -36,15 +38,15 @@ It is quite irritating to both expose a stable api and CLI (fd doesn't do it and
 - NetBSD (x86_64)
 - OpenBSD (x86_64)
 - Solaris/Illumos(x86_64)
+- Android (Termux) (aarch64)
 
 ### Compiles with Limited Testing
 
 *Note: GitHub Actions does not yet provide Rust 2024 support for some of these platforms. Additional checks will be added when available.*
 
-- Android
 - 32-bit Linux
 
-Other POSIX operating systems, such as AIX, are currently untested.
+Other POSIX operating systems, such as AIX, are currently untested(read: probably broken).
 
 ### Not Yet Supported
 
@@ -120,12 +122,15 @@ The benchmarks are repeatable using the testing code above and cover file type f
 
 --*Average Speedup: 2.20x*--
 
-When Run on identical commands, quickly tested, the rough memory allocation difference is astounding.
+When Run on identical commands, quickly tested, *NOT RIGOROUS*
 
 (Note, these commands spam your console, done deliberately to model coloured printing too)
 
 I *do* find it weird that fd leaks so much memory. Obviously it's a short term library so I'm guessing
-that it just relies on the OS to clean up after it.
+that it just relies on the OS to clean up after it (hence why it's not a library?)
+
+Mostly the important part is the difference in call to allocation functions (This is likely due to use of mimalloc vs jemalloc/system allocator)
+(and partially the reason this project does not implement arena allocators, since mimalloc basically handles it all)
 
 ```bash
 
@@ -153,9 +158,11 @@ Symlink resolution in my method differs from fd and find. Although I generally a
 
 When following symlinks, behaviour will vary slightly. For example, fd can enter infinite loops with recursive symlinks
 (see recursive_symlink_fs_test.sh) [Available here](./scripts/recursive_symlink_fs_test.sh)
-whereas my implementation prevents hangs. It may, however, return more results than expected.
+whereas my implementation prevents hangs. It may, however, return more results than expected (because I do not deduplicate)
 
 To avoid issues, use --same-file-system when traversing symlinks. This ensures traversal terminates safely even in complex directories such as ~/.steam, ~/.wine, /sys, and /proc.
+
+Extension matching is not using a regex, if you wish to search for regex ends, just use EG: '.tmp$' in your search regex
 
 I also do not deduplicate symlinks, as this would require basically calling a lot of unnecessary stat calls.
 
@@ -243,7 +250,7 @@ What began as a small experiment became a practical tool for exploring low-level
 
 Rust's std::fs has inefficiencies for this workload, including extra allocation, file descriptor handling overhead, repeated strlen work, and readdir-based traversal. Rewriting those paths with libc allowed tighter control over traversal costs and was a useful learning exercise.
 
-The standard library can also keep file descriptors open until the last reference to an inner `ReadDir` disappears, which can become limiting on Unix systems with lower descriptor limits.
+The standard library can also keep file descriptors open until the last reference to an inner `ReadDir` disappears, which can become limiting.
 
 It also tends to rely heavily on `stat`-style calls, which is costly in traversal-heavy workloads.
 
@@ -526,6 +533,7 @@ Options:
 - Implement features such as ownership tracking.
 - Maybe use `NO_ATIME` to avoid disk writes, this has a lot of drawbacks however.
 - Write my sorting algorithm with parallelism, currently it's single threaded, not a big issue for small results but if you want to sort your entire filesystem then you're much better off just piping the results to `sort` (hence why it's not been optimised much)
+- Do some testing of statx vs fstat, This is only available on   Linux >=4.11, it's pretty easy to implement as [seen here](https://github.com/rust-lang/rust/blob/b6a3d7965e2c5de79378a88a3f28a6f1b73fbb16/library/std/src/sys/fs/unix.rs#L177)
 
 #### 4. macOS optimisations
 
@@ -533,6 +541,6 @@ Options:
 - This makes it **extremely** hard to benchmark (surprisingly, benchmarks hold up well on emulated FreeBSD, etc.).
 - Benchmarking on a VM is *FULL* of inconsistent, silly things that makes a lot of results basically useless, I need to test on real hardware
 - I use [OSX-KVM](https://github.com/kholia/OSX-KVM) to emulate it if you're interested.
-- There's some interesting stuff in [pfind](https://github.com/elicpeter/pfind#why-it-is-fast), but honestly I suspect it's heavily vibe-coded...
+- There's some interesting stuff in [pfind](https://github.com/elicpeter/pfind#why-it-is-fast), but I am suspect of some of it's claims.
 - I need to properly search for all the relevant links/references - the interesting part is how, somehow, lower thread counts on Apple hardware lead to better performance. It's really bizarre.
-- There is ****-all documentation for APFS also, which makes everything folklore based on 5 year old forum posts... I AM LIVING IN HELL.
+- There is ****-all documentation for APFS also, which makes everything folklore based on  old ass forum posts... I AM LIVING IN HELL.

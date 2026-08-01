@@ -1,7 +1,7 @@
 #![allow(clippy::undocumented_unsafe_blocks)]
 
 // Create a purposefully empty directory and test if the EOF trick is used by the kernel
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", target_pointer_width = "64"))]
 #[allow(clippy::expect_used, clippy::let_underscore_must_use)]
 fn test_eof() {
     use std::os::unix::ffi::OsStrExt as _;
@@ -45,17 +45,26 @@ fn test_eof() {
 
     let tmp = std::env::temp_dir();
 
-    let empty = tmp.join("MACOSEOFTESTINGDIR");
+    let empty = tmp.join("_________________MACOSEOFTESTINGDIR");
+    let _ = std::fs::remove_dir_all(&empty);
     std::fs::create_dir_all(&empty).expect("MACOS empty dir not created!");
+
+    assert!(
+        std::fs::read_dir(&empty)
+            .expect("impossible")
+            .collect::<Vec<_>>()
+            .is_empty(),
+        "Testing dir is not empty" // this should never happen
+    );
     // Guaranteed null terminated
     let empty_cstring = std::ffi::CString::new(empty.as_os_str().as_bytes())
         .expect("temporary dir Cstring not created!");
 
-    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK;
+    const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY;
     // SAFETY: guaranteed null terminated
     let get_fd = unsafe { libc::open(empty_cstring.as_ptr(), FLAGS) };
 
-    assert!(get_fd > 0, "Unexpected error in opening temporary fd!");
+    assert!(get_fd >= 0, "Unexpected error in opening  directory!");
     let mut buffer = [0u8; BUFFER_SIZE];
     let mut base_pointer = 0i64;
     // SAFETY: valid buffer+size+pointer
@@ -69,7 +78,7 @@ fn test_eof() {
     };
 
     let last_four_bytes =
-        u32::from_ne_bytes((&buffer[BUFFER_SIZE - 4..]).try_into().expect("impossible"));
+        u32::from_ne_bytes((&buffer[BUFFER_SIZE - 4..]).try_into().expect("impossible")) & 1;
     let has_eof = last_four_bytes == 1;
     // If the last 4 bytes==1 then it has EOF trick
 
@@ -122,7 +131,7 @@ fn main() {
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     println!("cargo:rustc-env=FDF_PAGE_SIZE={page_size}");
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
     test_eof();
 
     check_dirent_has_field("has_d_type");

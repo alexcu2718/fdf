@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+
+if ! command -v strace >/dev/null; then
+  echo "Error: strace is not installed or is not available in PATH. Likely this is not a Linux system" >&2
+  exit 1
+fi
+
 cd  "$(realpath "$(dirname "$0")")" || exit 1
 # shellcheck disable=SC1091
 source "new_prelude.sh"
@@ -9,6 +15,7 @@ FD="fd"
 DIR="$HOME"
 STRACE_OUT_DIR="./bench_results"
 mkdir -p "$STRACE_OUT_DIR"
+
 
 declare -a PATTERNS=(
   "NOMATCHLOL"

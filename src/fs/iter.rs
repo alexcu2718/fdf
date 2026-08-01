@@ -275,7 +275,7 @@ pub(crate) trait DirentConstructor {
         let buf_ptr: *mut u8 = self.path_buffer().as_mut_ptr().cast();
         // Get the portion of the buffer that goes past the last slash
         // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
-        let name_portion: *mut u8 = unsafe { buf_ptr.add(base_len) };
+        let name_portion = unsafe { buf_ptr.byte_add(base_len) };
 
         // SAFETY: `d_name` and `name_portion` don't overlap (different memory regions(stack vs heap)), inbounds, alignment trivial
         unsafe { d_name.copy_to_nonoverlapping(name_portion, name_len) };
@@ -381,19 +381,8 @@ impl GetDents {
     /**
     Returns the mutable reusable kernel I/O buffer backing batched directory reads.
     */
-    pub const fn syscall_buffer(&mut self) -> &mut SyscallBuffer {
+    pub(crate) const fn syscall_buffer(&mut self) -> &mut SyscallBuffer {
         &mut self.syscall_buffer
-    }
-
-    /**
-    Convenience function to safe verbosity(+safety)
-    By constructing a `NonNull`, we can preserve our safety invariants better. */
-    #[inline]
-    #[must_use]
-    #[cfg(has_eof_trick)]
-    pub(crate) const fn syscall_buffer_ptr(&mut self) -> NonNull<u64> {
-        // SAFETY: never null
-        unsafe { NonNull::new_unchecked(self.syscall_buffer().as_mut_ptr()) }
     }
 
     #[inline]
@@ -459,17 +448,18 @@ impl GetDents {
         const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
 
         #[cfg(has_eof_trick)]
-        #[rustfmt::skip]
         /*
-         Create a (uninitialised) reference to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
-         In doing the `getdirentries64` syscalls, we zero the last four bytes, so they're guaranteed initialised.
-         If this marker changes, the kernel has indicated EOF, the buffer is never filled up the the maximum
-         check explanation below
-         Alignment of 8 => Alignment of 4 guaranteed invariant. */
+        Create a pointer to the last four bytes of the buffer, use this to detect sentinel changes with EOF behaviour (macOS exclusive).
+        In doing the `getdirentries64` syscalls, we zero the last four bytes, so they're guaranteed initialised.
+        If this marker changes, the kernel has indicated EOF, the buffer is never filled up the the maximum
+        check explanation below
+        Alignment of 8 => Alignment of 4 guaranteed invariant. */
         // SAFETY: see above
-        let last_four_bytes: &mut MaybeUninit<u32> = unsafe {
-            self.syscall_buffer_ptr().byte_add(Self::BUFFER_SIZE - 4)
-            .cast().as_mut() // We can safely make a reference to uninit memory as long as we write it *before* use
+        let last_four_bytes: *mut u32 = unsafe {
+            self.syscall_buffer()
+                .as_mut_ptr()
+                .byte_add(Self::BUFFER_SIZE - 4)
+                .cast()
         };
 
         #[cfg(has_eof_trick)]
@@ -478,7 +468,10 @@ impl GetDents {
         this means that we detect when the kernel writes it's EOF flags
         Write a 0 to initialise the memory, we check if this changes to 1 after the syscall
         */
-        let last_four_bytes_init = last_four_bytes.write(0);
+        // SAFETY: guaranteed inbounds+valid alignment
+        unsafe {
+            last_four_bytes.write(0)
+        };
 
         // Get the syscall return amount in bytes
         let remaining_bytes = self.getdents();
@@ -517,21 +510,34 @@ impl GetDents {
                 }
             }
 
-        // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
-        // As this has existed for decades, it's relatively stable, any ABI breaks are unlikely since we're on 64bit for good.
-
+        https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
+        As this has existed for decades, it's relatively stable, any ABI breaks are unlikely since we're on 64bit for good.
         */
         #[cfg(has_eof_trick)]
         {
-            self.end_of_stream = *last_four_bytes_init == 1 || !is_more_remaining
+            // Here we mirror macos check for flags.
+            #[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
+            compile_error!("THIS OPTIMISATION IS ONLY AVAILABLE ON 64-BIT MACOS"); // if accidentally enabled later down the line.
+            // check if the syscall did not return the max buffer size, this is extremely unlikely in any case.
+            let eof_marker_is_valid: bool = is_more_remaining   // only cast to usize if known to be positive
+                && remaining_bytes.cast_unsigned() <= const { Self::BUFFER_SIZE - 4 };
+
+            self.end_of_stream = (eof_marker_is_valid
+            /*
+            SAFETY:
+            - the marker was initialised before the syscall;
+            - eof_marker_is_valid proves the returned payload did not  overlap it;
+            - the pointer is aligned and in bounds.
+            */
+            && unsafe { last_four_bytes.read()} & 1 != 0)
+                || !is_more_remaining //finally check if the syscall is 0<= for a *paranoid* backup.
         }
+
         // Check at build time for the optimisation
         // check if the syscall returns >=0 too, the latter branch should almost never be true on supported system
-
-        // returned bytes<=0
         #[cfg(not(has_eof_trick))]
         {
-            self.end_of_stream = !is_more_remaining
+            self.end_of_stream = !is_more_remaining //gosh this a lot simpler isnt it.
         }
 
         /*
@@ -571,11 +577,10 @@ impl GetDents {
         close_nocancel                               1556
         openat_nocancel                              1557
         getdirentries64                              1760 */
-        // Branchless check
         self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
         // probably irrelevant as will *likely* compile to a cmov but being too lazy to check
 
-        self.offset = 0;
+        self.offset = 0; //return the offset back to 0 as now the buffer is cleared
 
         // Return true only if we successfully read non-zero bytes
         is_more_remaining
@@ -637,12 +642,13 @@ impl GetDents {
             base_pointer: 0,
         })
     }
-
-    /// Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
-    ///
-    /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
-    /// full-path resolution for the child directory.
-    /// Used internally only due to non-enforceable invariants
+    /**
+    / Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
+    /
+    / Used when the caller already holds an fd obtained via `openat`, avoiding a second
+    / full-path resolution for the child directory.
+    / Used internally only due to non-enforceable invariants
+     */
     #[inline]
     pub(crate) fn from_fd(fd: FileDes, dir: &DirEntry) -> Self {
         debug_assert!(fd.is_open(), "We expect it to always be open");

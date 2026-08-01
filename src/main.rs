@@ -69,7 +69,7 @@ struct Args {
     #[arg(
         short = 'j',
         long = "threads",
-        help = "Number of threads to use, defaults to available threads available on your computer"
+        help = "Number of threads to use, defaults to available threads available on your computer (or 4 on MacOS)"
     )]
     thread_num: Option<NonZeroUsize>,
     #[arg(

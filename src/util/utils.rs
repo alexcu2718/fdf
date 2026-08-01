@@ -35,9 +35,11 @@ use core::ops::Deref;
     target_os = "solaris"
 ))]
 pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize) -> isize {
+    const { assert!(libc::INT_MAX == i32::MAX, "Trivial assert") }; //paranoia
     debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in getdents64");
     debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
 
+    //https://github.com/bminor/glibc/blob/04e750e75b73957cf1c791535a3f4319534a52fc/sysdeps/unix/sysv/linux/getdents64.c#L30
     debug_assert!(
         buffer_size <= libc::INT_MAX as _,
         "buffer_size passed to getdents64 too big"
@@ -101,6 +103,7 @@ pub unsafe fn getdirentries64(
     nbytes: usize,
     basep: *mut libc::off_t,
 ) -> isize {
+    const { assert!(libc::INT_MAX == i32::MAX, "Trivial assert") }; // me being overly paranoid.
     debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in GDE64");
     debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
     debug_assert!(
@@ -109,7 +112,10 @@ pub unsafe fn getdirentries64(
     );
     // link to libc
     unsafe extern "C" {
-        #[cfg_attr(target_os = "macos", link_name = "__getdirentries64")] //special case for macos
+        #[cfg_attr(
+            all(target_os = "macos", target_pointer_width = "64"),
+            link_name = "__getdirentries64"
+        )] //special case for macos
         // Never seen this done, I searched all of github for similar stuff. I love dirty stuff like this.
         fn getdirentries(
             fd: c_int,
@@ -125,39 +131,20 @@ pub unsafe fn getdirentries64(
     unsafe { getdirentries(fd, buffer_ptr, nbytes, basep) }
 }
 
+/*
+For macos you can also do this but linking the symbol is much better/safer
+  const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
+    //https://phrack.org/issues/66/16
+
+    unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
+*/
+
 #[cfg(target_os = "macos")]
 unsafe extern "C" {
     #[link_name = "openat$NOCANCEL"]
-    /// Using  avoids cancellation points in openat.
-    pub(crate) unsafe fn openat_nocancel(
-        dirfd: c_int,
-        path: *const c_char,
-        flags: c_int,
-        ...
-    ) -> c_int;
+    /// Skip cancellation points in multhithreaded code.
+    pub(crate) unsafe fn openat_nocancel(dirfd: c_int, path: *const c_char, flags: c_int) -> c_int;
 }
-
-/*
-
-
-
-
-
-// Works same as above but I prefer to not rely on hardcoded syscall numbers! Old implementation, kept for posterity.
-pub unsafe fn getdirentries64(
-    fd: libc::c_int,
-    buffer_ptr: *mut c_void,
-    nbytes: libc::size_t,
-    basep: *mut i64,
-) -> i32
-{
-    const SYS_GETDIRENTRIES64: libc::c_int = 344; // Reverse engineered syscall number
-
-    //https://phrack.org/issues/66/16
-    // We verify this works via build script, we check if `getdirentries` returns >0 for tmp directory, if not, syscall is broken.
-    unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
-}
-*/
 
 #[cold] // Help the branch predictor out.
 #[inline(never)]
@@ -166,7 +153,7 @@ const fn len_one() -> usize {
 }
 
 #[cold]
-#[inline(never)]
+#[inline(never)] //AS ABOVE
 const fn cold_none<T>() -> Option<T> {
     None
 }
@@ -194,7 +181,9 @@ where
             return cold_none();
         }
 
-        let pos = memrchr(b'.', without_last)?;
+        let after_first = without_last.get(1..)?; //do not count the first .
+        let pos = memrchr(b'.', after_first)? + 1;
+
         self.get(pos + 1..)
     }
 
@@ -288,27 +277,22 @@ pub(crate) const unsafe fn strlen(x: *const c_char) -> usize {
     // unsafe{libc::strlen(x)}
 }
 
-// disable unused warning.
-#[allow(clippy::undocumented_unsafe_blocks)]
+#[allow(clippy::undocumented_unsafe_blocks)] //stupid lints.
 const _: () = assert!(unsafe { strlen(c"hello".as_ptr()) } == 5, "removing lint");
+
+// this only fails on solaris/illumos when going from root, WHY???? that makes no sense. I had to remove solaris/illumos support for this function.
+// I never came across the issue simply because I never tried searching from root on my VM, until today.... what a  STRANGE bug JFC
+// nvm FOUND OUT WHY: d_reclen is 32 in /proc for illumos/solaris for small files. WHY? this will never work on these systems due to this reason
+// leaving this here as a warning to all, don't assume too much, test! (IT )
+// such a weird weird anomaly... (It probably holds kernel metadata or something, not booting up my solaris VM to test as all CI tests pass.)
+
+//cargo-asm --lib fdf::util::utils::dirent_const_time_strlen (put to inline(never) to display)
 
 /*
 Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
  (c) Alexander Curtis .
 My Cat Diavolo is cute.
-
-
-
-
 */
-// TODO! this only fails on solaris/illumos when going from root, WHY???? that makes no sense. I had to remove solaris/illumos support for this function. I am being too lazy to debug it
-// I never came across the issue simply because I never tried searching from root on my VM, until today.... what a  weird bug JFC, I should investigate this if i feel like it.
-// REALLY REALLY WEIRD
-// nvm FOUND OUT WHY: d_reclen is 32 in /proc for illumos/solaris for small files. WHY? this will never work on these systems due to this reason
-// leaving this here as a warning to all, don't assume too much, test!
-// such a weird weird anomaly...
-
-//cargo-asm --lib fdf::util::utils::dirent_const_time_strlen (put to inline(never) to display)
 
 /**
  Returns the length of a `dirent64' /`dirent`  d_name` string in constant time using

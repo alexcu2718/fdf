@@ -3,7 +3,7 @@ perf.data.old
 perf.data
 **/*.md
 **/*.lst
-bench_results/*
+bench_results
 *.out
 libc
 valgrind.log

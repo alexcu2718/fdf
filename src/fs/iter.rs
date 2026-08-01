@@ -65,9 +65,14 @@ impl ReadDir {
       standard libc directory handling functions
     - The function returns `None` both at end-of-directory and on errors, following
       the traditional `readdir` semantics
+
+    # Safety
+    The directory stream is always valid and open for the lifetime of `self` (the destructor closes it).
+    The returned pointer is only valid until the next call to `get_next_entry`; it must be
+    consumed (e.g. via `construct_entry`) before advancing the stream again.
     */
     #[inline]
-    pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
+    pub unsafe fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
         let dirent_ptr = unsafe { readdir64(self.dir.as_ptr()) };
 
@@ -598,9 +603,14 @@ impl GetDents {
         2. Casts the current buffer position to a `dirent64` pointer
         3. Extracts the entry's record length to advance the internal offset
         4. Returns a non-null pointer wrapped in `Some`, or `None` at buffer end
+
+        # Safety
+        The directory file descriptor is always valid and open for the lifetime of `self` (the destructor closes it).
+        The returned pointer is only valid until the next call to `get_next_entry`; it must be
+        consumed (e.g. via `construct_entry`) before advancing the stream again.
     */
     #[inline]
-    pub fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
+    pub unsafe fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         while self.offset >= self.remaining_bytes {
             if !self.are_more_entries_remaining() {
                 return None;
@@ -701,7 +711,8 @@ macro_rules! impl_iterator_public_methods {
 
             #[inline]
             fn next(&mut self) -> Option<Self::Item> {
-                while let Some(drnt) = self.get_next_entry() {
+                // SAFETY: the underlying fd/directory stream is kept open and valid for the lifetime of `self`
+                while let Some(drnt) = unsafe { self.get_next_entry() } {
                     skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
                     // this just skips dot entries in a really efficient manner(avoids strlen) by checking dtype first on most OS'es
                     return Some(self.construct_direntry(drnt));

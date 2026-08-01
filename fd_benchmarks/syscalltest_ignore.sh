@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+if ! command -v strace >/dev/null; then
+  echo "Error: strace is not installed or is not available in PATH. Likely this is not a Linux system" >&2
+  exit 1
+fi
+
 set -euo pipefail
 cd  "$(realpath "$(dirname "$0")")" || exit 1
 # shellcheck disable=SC1091

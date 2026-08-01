@@ -16,7 +16,7 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
 ))]
 #[allow(clippy::integer_division_remainder_used)]
 #[allow(clippy::integer_division)]
-/// An aligned(to 8 bytes) stack allocated buffer of [`MaybeUninit`]
+/// An aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
 pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, { BUFFER_SIZE / size_of::<u64>() }>;
 
 /// A safe abstraction around file descriptors for internal IO

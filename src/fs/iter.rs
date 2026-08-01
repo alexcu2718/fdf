@@ -377,15 +377,6 @@ impl GetDents {
     }
 
     #[inline]
-    #[must_use]
-    /**
-    Returns the mutable reusable kernel I/O buffer backing batched directory reads.
-    */
-    pub(crate) const fn syscall_buffer(&mut self) -> &mut SyscallBuffer {
-        &mut self.syscall_buffer
-    }
-
-    #[inline]
     /**
      Refills the internal directory-entry buffer using the platform directory syscall.
 
@@ -456,7 +447,7 @@ impl GetDents {
         Alignment of 8 => Alignment of 4 guaranteed invariant. */
         // SAFETY: see above
         let last_four_bytes: *mut u32 = unsafe {
-            self.syscall_buffer()
+            self.syscall_buffer
                 .as_mut_ptr()
                 .byte_add(Self::BUFFER_SIZE - 4)
                 .cast()

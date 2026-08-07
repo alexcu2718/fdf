@@ -177,7 +177,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(has_d_namlen)]
             {
                 // d_namlen fast path
-                let namelen = *($entry).d_namlen;
+                let namelen = (*$entry).d_namlen;
                 if namelen <= 2 {
                     let f2b: [u8; 2] = *(&raw const (*$entry).d_name).cast();
                     if f2b[0] == b'.' {

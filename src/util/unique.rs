@@ -207,7 +207,7 @@ impl Unique<dirent64> {
         ))]
         {
             // SAFETY: checked by caller
-            unsafe { (*self.as_ptr).d_fileno as _ }
+            unsafe { (*self.as_ptr()).d_fileno as _ }
         }
 
         #[cfg(all(

@@ -243,15 +243,19 @@ pub(crate) trait DirentConstructor {
     #[inline]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         use core::ptr::slice_from_raw_parts;
-        let d_name: *const u8 = drnt.d_name().cast();
-        let d_ino = drnt.d_ino(); // Returns 0 if d_ino isn't defined on your system
+        // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
+        let d_name: *const u8 = unsafe { drnt.d_name().cast() };
+        // SAFETY: as above
+        let d_ino = unsafe { drnt.d_ino() }; // Returns 0 if d_ino isn't defined on your system
 
-        // Add 1 to include the null terminator
-        let name_len = drnt.name_length() + 1; //technically should be a u16 but we need it for indexing :(
+        // SAFETY: as above
+        //Add 1 to include the null terminator
+        let name_len = unsafe { drnt.name_length() + 1 }; //technically should be a u16 but we need it for indexing :(
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
-        let file_type: FileType = match FileType::from_dtype(drnt.d_type()) {
+        // SAFETY: same conditions for the d/name etc
+        let file_type: FileType = match FileType::from_dtype(unsafe { drnt.d_type() }) {
             FileType::Unknown => stat_syscall!(
                 fstatat,
                 self.file_descriptor().0, //borrow before mutably borrowing the path buffer
@@ -369,7 +373,9 @@ impl GetDents {
             )
         };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
-        self.offset += drnt.d_reclen();
+        // SAFETY: we just obtained this pointer, safe to obtain this value
+        // we trust the reclen is kernel provided and must be >=24
+        self.offset += unsafe{ drnt.d_reclen()};
 
         drnt
     }

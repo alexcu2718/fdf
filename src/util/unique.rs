@@ -107,7 +107,7 @@ impl<T: ?Sized> Unique<T> {
             // SAFETY: The pointer has already been checked and is not null.
             Some(unsafe { Self::new_unchecked(ptr) })
         } else {
-            None
+            crate::util::utils::cold_none() //indicate cold path
         }
     }
 
@@ -191,9 +191,43 @@ impl Unique<dirent64> {
     #[inline]
     #[must_use]
     /// Returns the inode of the `dirent64`, returns 0 if `d_ino` is not a struct member on your OS.
-    pub const fn d_ino(self) -> u64 {
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn d_ino(self) -> u64 {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        unsafe { access_dirent!(self.as_ptr(), d_ino) }
+
+        #[cfg(all(
+            any(
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd",
+                target_os = "dragonfly"
+            ),
+            has_d_ino
+        ))]
+        {
+            // SAFETY: checked by caller
+            unsafe { (*self.as_ptr).d_fileno as _ }
+        }
+
+        #[cfg(all(
+            not(any(
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd",
+                target_os = "dragonfly"
+            )),
+            has_d_ino
+        ))]
+        {
+            // SAFETY: checked by caller
+            unsafe { (*self.as_ptr()).d_ino as _ }
+        }
+
+        #[cfg(not(has_d_ino))]
+        {
+            0
+        }
     }
 
     #[inline]
@@ -202,12 +236,16 @@ impl Unique<dirent64> {
     /// Follow the link  for [GNU documentation ](<https://ftp.gnu.org/old-gnu/Manuals/glibc-2.2.3/html_node/libc_260.html>)
     ///
     /// Returns `DT_UNKNOWN` for systems without `d_type` (eg Solaris/Illumos)
-    pub const fn d_type(self) -> u8 {
+    ///
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn d_type(self) -> u8 {
         #[cfg(has_d_type)]
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe {
-            access_dirent!(self.as_ptr(), d_type)
+            (*self.as_ptr()).d_type as _
         }
+
         #[cfg(not(has_d_type))]
         libc::DT_UNKNOWN
     }
@@ -215,26 +253,34 @@ impl Unique<dirent64> {
     #[must_use]
     #[inline]
     #[cfg(has_d_namlen)]
-    pub const fn d_namlen(self) -> usize {
+    /// Returns the `d_namlen` if the member exists on your system
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn d_namlen(self) -> usize {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        unsafe { access_dirent!(self.as_ptr(), d_namlen) }
+        unsafe { (*self.as_ptr()).d_namlen as _ }
     }
 
     #[must_use]
     #[inline]
     /// Returns a slice reference to the `d_name`, not including null terminator.
-    pub const fn d_name_slice<'pointer>(self) -> &'pointer [u8] {
-        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn d_name_slice<'pointer>(self) -> &'pointer [u8] {
+        // SAFETY: Caller must not invalidate the invariant.
         unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length()) }
     }
 
     #[must_use]
     #[inline]
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
-    pub const fn d_name_cstr<'pointer>(self) -> &'pointer CStr {
-        // add to include terminal
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn d_name_cstr<'pointer>(self) -> &'pointer CStr {
+        use core::ptr::slice_from_raw_parts;
+        // SAFETY: caller must ensure the invariants
         let as_slice: *const [c_char] =
-            core::ptr::slice_from_raw_parts(self.d_name(), self.name_length() + 1);
+            unsafe { slice_from_raw_parts(self.d_name(), self.name_length() + 1) }; // add  1 to include terminal
         // SAFETY:  has it's null terminator included, and no interior nulls..
         unsafe { &*(as_slice as *const CStr) }
     }
@@ -243,24 +289,31 @@ impl Unique<dirent64> {
     #[must_use]
     #[cfg(has_d_reclen)] // Overly paranoid, I want to know what builds fail.
     /// Returns the `d_reclen` member as a usize.
-    pub const fn d_reclen(self) -> usize {
-        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        unsafe { access_dirent!(self.as_ptr(), d_reclen) }
+    ///  # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn d_reclen(self) -> usize {
+        //SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+
+        unsafe { (*self.as_ptr()).d_reclen as _ }
     }
 
     #[inline]
     #[must_use]
     /// Access the pointer to `d_name`, note that `d-name` is not a [ u8/i8;255] array, it can be greater,
     /// So careful attention has to be paid
-    pub const fn d_name(self) -> *const c_char {
-        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-        unsafe { access_dirent!(self.as_ptr(), d_name) }
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn d_name(self) -> *const c_char {
+        // SAFETY: caller must maintain the invariant
+        unsafe { (&raw const (*self.as_ptr()).d_name).cast() }
     }
 
     #[inline]
     #[must_use]
     /// Returns the length of the `d_name` but, like strlen, it doesn't include the null terminator.
-    pub const fn name_length(self) -> usize {
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn name_length(self) -> usize {
         // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
         unsafe { crate::util::dirent_name_length(self.as_ptr()) }
     }

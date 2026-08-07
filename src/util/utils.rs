@@ -154,7 +154,7 @@ const fn len_one() -> usize {
 
 #[cold]
 #[inline(never)] //AS ABOVE
-const fn cold_none<T>() -> Option<T> {
+pub(crate) const fn cold_none<T>() -> Option<T> {
     None
 }
 /// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
@@ -175,16 +175,22 @@ where
 {
     #[inline]
     fn extension(&self) -> Option<&[u8]> {
-        let (&last, without_last) = self.split_last()?;
+        // Restrict the search to the filename, ignoring dots in any parent directories.
+        let filename = match memrchr(b'/', self) {
+            Some(pos) => self.get(pos + 1..)?,
+            None => self,
+        };
 
-        if last == b'/' {
+        let len = filename.len();
+        if len <= 1 {
             return cold_none();
         }
+        #[allow(clippy::indexing_slicing)] // panic free (asm checked)
+        // skip the starting character if it's a hidden file
+        let search_range = &filename[..len - 1];
+        let pos = memrchr(b'.', search_range)?;
 
-        let after_first = without_last.get(1..)?; //do not count the first .
-        let pos = memrchr(b'.', after_first)? + 1;
-
-        self.get(pos + 1..)
+        filename.get(pos + 1..)
     }
 
     /// Get the length of the basename of a path (up to and including the last '/')
@@ -219,47 +225,17 @@ where
 */
 pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "emscripten",
-        target_os = "redox",
-        target_os = "hermit",
-        target_os = "fuchsia",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "aix",
-        target_os = "hurd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { dirent_const_time_strlen(drnt) }
     }
 
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "emscripten",
-        target_os = "redox",
-        target_os = "hermit",
-        target_os = "fuchsia",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "aix",
-        target_os = "hurd"
-    )))]
+    #[cfg(not(any(target_os = "linux", target_os = "android", has_d_namlen)))]
     {
-        // unsafe { libc::strlen((&raw const (*drnt).d_name).cast()) }
         // The above has the same assembly as below but the below is allowed in const context.
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { strlen((&raw const (*drnt).d_name).cast()) }
-        // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cost (it's essentially just reinterpreting)
         //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
         // EG for NTFS it can be up to 512 bytes
     }
@@ -364,22 +340,9 @@ On some systems
 
 */
 #[inline]
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "emscripten",
-    target_os = "redox",
-    target_os = "hermit",
-    target_os = "fuchsia",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "aix",
-    target_os = "hurd"
-))]
-#[allow(clippy::missing_assert_message)] //looks nicer
+#[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
+// we can add more systems here but they're obscure, ie hermit/fuschia etc
+// given I lack tests for these, I will only add if needed.
 #[must_use]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
@@ -397,20 +360,20 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
         // Compile time assert to immediately cancel the build if invalidated
         const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
-        const { assert!(align_of::<dirent64>() == align_of::<u64>()) };
+        const { assert!(align_of::<dirent64>() == align_of::<u64>(), " not aligned!") };
         const LO_U64: u64 = 0x0101_0101_0101_0101;
         const HI_U64: u64 = 0x8080_8080_8080_8080;
 
         /*  SAFETY: `dirent` is valid by precondition */
         let reclen = unsafe { (*drnt).d_reclen } as usize;
-        debug_assert!(reclen.is_multiple_of(8));
+        debug_assert!(reclen.is_multiple_of(8), "reclen not % 8==0");
 
         /*
           Read the last 8 bytes of the struct as a u64.
         This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
 
         // SAFETY: We're indexing in bounds within the pointer. Since the reclen is size of the struct in bytes.
-        let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
+        let mut last_word = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
 
         // Create a mask for the first 3 bytes in the case where reclen==24, this handles the big endian case too.
 

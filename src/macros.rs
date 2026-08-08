@@ -144,14 +144,14 @@ macro_rules! const_assert {
     ($cond:expr $(,)?) => {
         const _: () = {
             if !$cond {
-                core::panic!(concat!("const assertion failed: ", core::stringify!($cond)));
+                ::core::panic!(concat!("const assertion failed: ", ::core::stringify!($cond)));
             }
         };
     };
     ($cond:expr, $($arg:tt)+) => {
         const _: () = {
             if !$cond {
-                core::panic!($($arg)+);
+                ::core::panic!($($arg)+);
             }
         };
     };
@@ -159,11 +159,6 @@ macro_rules! const_assert {
 
 /**
  An optimised macro for skipping "." and ".." directory entries
-
- This macro employs several heuristics to efficiently skip the common "." and ".."
- entries present in every directory. The approach reduces unnecessary work during
- directory traversal and improves CPU branch prediction behaviour.
-
 
 */
 macro_rules! skip_dot_or_dot_dot_entries {
@@ -177,9 +172,9 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(has_d_namlen)]
             {
                 // d_namlen fast path
-                let namelen = (*$entry).d_namlen;
+                let namelen =  $entry.d_namlen();
                 if namelen <= 2 {
-                    let f2b: [u8; 2] = *(&raw const (*$entry).d_name).cast();
+                    let f2b: [u8; 2] = *$entry.d_name().cast();
                     if f2b[0] == b'.' {
                         match (namelen, f2b[1]) {
                             (1, _) | (2, b'.') => $action,
@@ -193,7 +188,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 // Generic fallback: inspect name bytes only.
                 // This is safe because the dirent is always padded to reach a minimum struct size of 24/32 etc
                 // basically meaning the first few bytes are always in bounds.
-                let f3b: [u8; 3] = *(&raw const (*$entry).d_name).cast();
+                let f3b: [u8; 3] = *$entry.d_name().cast();
                 if f3b[0] == b'.' {
                     match f3b[1..] {
                         [b'\0', _] | [b'.', b'\0'] => $action,
@@ -255,26 +250,26 @@ macro_rules! const_from_env {
 
                 let s_bytes = s.as_bytes();
                 if s_bytes.len() == 0 {
-                    core::panic!(core::concat!("Empty environment variable: ", core::stringify!($env)));
+                    ::core::panic!(::core::concat!("Empty environment variable: ", ::core::stringify!($env)));
                 }
 
                 if !s_bytes.is_ascii(){
-                    core::panic!(core::concat!("Non ASCII characters in", core::stringify!($env)));
+                    ::core::panic!(::core::concat!("Non ASCII characters in", ::core::stringify!($env)));
                 }
 
 
 
 
 
-                const TYPE_OF:&str=core::stringify!($t);
+                const TYPE_OF:&str=::core::stringify!($t);
 
                 const TYPE_OF_AS_BYTES:&[u8]=TYPE_OF.as_bytes();
 
-                $crate::const_assert!(!core::matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
-                $crate::const_assert!(!core::matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
+                $crate::const_assert!(!::core::matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
+                $crate::const_assert!(!::core::matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
                 // Eq is not supported in const yet matches is, weird. annoying work around.
-                core::assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),core::concat!("Negative detected in unsigned env var ",stringify!($env)));
-                $crate::const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,core::concat!("Negative default not allowed for ", stringify!($default)));
+                ::core::assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),::core::concat!("Negative detected in unsigned env var ",stringify!($env)));
+                $crate::const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,::core::concat!("Negative default not allowed for ", stringify!($default)));
 
                 // Detect if we're parsing a float type
                 const IS_FLOAT: bool = TYPE_OF_AS_BYTES[0]==b'f';
@@ -308,11 +303,11 @@ macro_rules! const_from_env {
                             }
                             b'.' => {
                                 if in_fraction {
-                                    core::panic!(core::concat!("Multiple decimal points in: ", core::stringify!($env)));
+                                    ::core::panic!(::core::concat!("Multiple decimal points in: ", ::core::stringify!($env)));
                                 }
                                 in_fraction = true;
                             }
-                            _ => core::panic!(core::concat!("Invalid float value in: ", core::stringify!($env))),
+                            _ => ::core::panic!(::core::concat!("Invalid float value in: ", ::core::stringify!($env))),
                         }
                         i += 1;
                     }
@@ -336,7 +331,7 @@ macro_rules! const_from_env {
                             b'0'..=b'9' => {
                                 n = n * TEN + (b - b'0') as $t;
                             }
-                            _ => core::panic!(core::concat!("Invalid numeric value in: ", core::stringify!($env))),
+                            _ => ::core::panic!(::core::concat!("Invalid numeric value in: ", ::core::stringify!($env))),
                         }
                         i += 1;
                     }
@@ -349,7 +344,7 @@ macro_rules! const_from_env {
                 }
             }
 
-            match core::option_env!($env) {
+            match ::core::option_env!($env) {
                 Some(val) => parse_env(val),
                 None => $default as _,
             }
@@ -368,7 +363,7 @@ macro_rules! return_os_error {
 macro_rules! stat_syscall {
     // For fstatat with flags
     ($syscall:ident, $fd:expr, $path:expr, $flags:expr) => {{
-        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
         let res = unsafe {
@@ -389,7 +384,7 @@ macro_rules! stat_syscall {
     }};
       // For fstatat with flags - returns FileType directly (kinda like an internal black magic tool for me to save writing so much duplicate code)
      ($syscall:ident, $fd:expr, $path:expr, $flags:expr,DTYPE) => {{
-        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
         let res = unsafe {
@@ -413,7 +408,7 @@ macro_rules! stat_syscall {
 
     // For stat/lstat with path pointer
     ($syscall:ident, $path_ptr:expr) => {{
-        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: We know the path is valid because internally it's a cstr
         let res = unsafe { $syscall($path_ptr, stat_buf.as_mut_ptr()) };
 

@@ -102,12 +102,11 @@ impl<T: ?Sized> Unique<T> {
     #[inline]
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub const fn new(ptr: *const T) -> Option<Self> {
-        #[expect(clippy::if_not_else, reason = "prefer to take this branch")]
-        if !ptr.is_null() {
+        if ptr.is_null() {
+            None
+        } else {
             // SAFETY: The pointer has already been checked and is not null.
             Some(unsafe { Self::new_unchecked(ptr) })
-        } else {
-            crate::util::utils::cold_none() //indicate cold path
         }
     }
 
@@ -186,7 +185,6 @@ impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
         unique.0
     }
 }
-// TODO, documentation, just being lazy.
 impl Unique<dirent64> {
     #[inline]
     #[must_use]
@@ -194,7 +192,7 @@ impl Unique<dirent64> {
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
     pub const unsafe fn d_ino(self) -> u64 {
-        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+        // SAFETY: caller must maintain the invariant
 
         #[cfg(all(
             any(
@@ -222,6 +220,7 @@ impl Unique<dirent64> {
         {
             // SAFETY: checked by caller
             unsafe { (*self.as_ptr()).d_ino as _ }
+            //irritating.
         }
 
         #[cfg(not(has_d_ino))]
@@ -241,7 +240,7 @@ impl Unique<dirent64> {
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
     pub const unsafe fn d_type(self) -> u8 {
         #[cfg(has_d_type)]
-        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+        // SAFETY: caller must maintain the invariant
         unsafe {
             (*self.as_ptr()).d_type as _
         }
@@ -257,8 +256,22 @@ impl Unique<dirent64> {
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
     pub const unsafe fn d_namlen(self) -> usize {
-        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+        // SAFETY: caller must maintain the invariant
         unsafe { (*self.as_ptr()).d_namlen as _ }
+    }
+
+    #[must_use]
+    #[inline]
+    #[cfg(not(has_d_namlen))]
+    #[deprecated(
+        note = "`d_namlen` does not exist on this platform's `dirent`; use `name_length()` instead, which is portable"
+    )]
+    /// Stub present only to give a clear diagnostic; this platform has no `d_namlen` field.
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn d_namlen(self) -> usize {
+        // SAFETY: caller must maintain the invariant
+        unsafe { self.name_length() }
     }
 
     #[must_use]
@@ -295,14 +308,19 @@ impl Unique<dirent64> {
         //SAFETY: TRIVIALLY VALID BY CONSTRUCTION
 
         unsafe { (*self.as_ptr()).d_reclen as _ }
+        // although most systems should have this struct member.
     }
 
     #[inline]
     #[must_use]
-    /// Access the pointer to `d_name`, note that `d-name` is not a [ u8/i8;255] array, it can be greater,
-    /// So careful attention has to be paid
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    // can be anything from [c_char;3] to [c_char;1024] or whatever. It's a VLA.
+    /**
+    Access the pointer to `d_name`, note that `d-name` is not a [ `c_char` ;256] array, it can be greater,
+    So careful attention has to be paid
+
+     # Safety
+    The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    */
     pub const unsafe fn d_name(self) -> *const c_char {
         // SAFETY: caller must maintain the invariant
         unsafe { (&raw const (*self.as_ptr()).d_name).cast() }
@@ -314,7 +332,7 @@ impl Unique<dirent64> {
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
     pub const unsafe fn name_length(self) -> usize {
-        // SAFETY: TRIVIALLY VALID BY CONSTRUCTION
+        // SAFETY: caller must maintain the invariant
         unsafe { crate::util::dirent_name_length(self.as_ptr()) }
     }
 }

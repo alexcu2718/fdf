@@ -460,7 +460,7 @@ impl GetDents {
         let last_four_bytes: *mut u32 = unsafe {
             self.syscall_buffer
                 .as_mut_ptr()
-                .byte_add(Self::BUFFER_SIZE - 4)
+                .byte_add(const { Self::BUFFER_SIZE - 4 })
                 .cast()
         };
 
@@ -517,6 +517,7 @@ impl GetDents {
         */
         #[cfg(has_eof_trick)]
         {
+            assert!(Self::BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick"); // #define GETDIRENTRIES64_EXTENDED_BUFSIZE  1024
             // Here we mirror macos check for flags.
             #[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
             compile_error!("THIS OPTIMISATION IS ONLY AVAILABLE ON 64-BIT MACOS"); // if accidentally enabled later down the line.
@@ -719,8 +720,8 @@ macro_rules! impl_iterator_public_methods {
             fn next(&mut self) -> Option<Self::Item> {
                 // SAFETY: the underlying fd/directory stream is kept open and valid for the lifetime of `self`
                 while let Some(drnt) = unsafe { self.get_next_entry() } {
-                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
-                    // this just skips dot entries in a really efficient manner(avoids strlen) by checking dtype first on most OS'es
+                    skip_dot_or_dot_dot_entries!(drnt, continue);
+                    // avoids using strlen/strcmo on the pointer (avoids unnecessary non inlineable function calls)
                     return Some(self.construct_direntry(drnt));
                 }
                 None // signal end
@@ -767,7 +768,7 @@ macro_rules! impl_dirent_constructor {
     ($type:ty) => {
         impl DirentConstructor for $type {
             #[inline]
-            fn path_buffer(&mut self) -> &mut Vec<core::mem::MaybeUninit<u8>> {
+            fn path_buffer(&mut self) -> &mut Vec<::core::mem::MaybeUninit<u8>> {
                 &mut self.path_buffer
             }
 

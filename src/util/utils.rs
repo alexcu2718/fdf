@@ -146,25 +146,24 @@ unsafe extern "C" {
     pub(crate) unsafe fn openat_nocancel(dirfd: c_int, path: *const c_char, flags: c_int) -> c_int;
 }
 
-#[cold] // Help the branch predictor out.
-#[inline(never)]
-const fn len_one() -> usize {
-    0
-}
-
+// https://users.rust-lang.org/t/compiler-hint-for-unlikely-likely-for-if-branches/62102/4
+// copied from hashbrown
+#[inline]
 #[cold]
-#[inline(never)] //AS ABOVE
-const fn cold_none<T>() -> Option<T> {
-    None
+const fn cold() {}
+
+#[inline]
+pub(crate) const fn unlikely(b: bool) -> bool {
+    if b {
+        cold()
+    }
+    b
 }
 /// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
 pub(crate) trait BytePath<T>
 where
     T: Deref<Target = [u8]>,
 {
-    /// Returns the extension if available
-    fn extension(&self) -> Option<&[u8]>;
-
     /// Gets index of filename component start
     fn file_name_index(&self) -> usize;
 }
@@ -173,27 +172,13 @@ impl<T> BytePath<T> for T
 where
     T: Deref<Target = [u8]>,
 {
-    #[inline]
-    fn extension(&self) -> Option<&[u8]> {
-        let (&last, without_last) = self.split_last()?;
-
-        if last == b'/' {
-            return cold_none();
-        }
-
-        let after_first = without_last.get(1..)?; //do not count the first .
-        let pos = memrchr(b'.', after_first)? + 1;
-
-        self.get(pos + 1..)
-    }
-
     /// Get the length of the basename of a path (up to and including the last '/')
     /// Returns 0 for length 1 byte paths
     #[inline]
     fn file_name_index(&self) -> usize {
         // (every file path going in here has at least a '/' inside it), this is a special case for root/'.'
-        if self.len() == 1 {
-            return len_one(); //unlikely branch
+        if unlikely(self.len() == 1) {
+            return 0;
         }
 
         debug_assert!(!self.is_empty(), "should never be empty");
@@ -219,47 +204,17 @@ where
 */
 pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "emscripten",
-        target_os = "redox",
-        target_os = "hermit",
-        target_os = "fuchsia",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "aix",
-        target_os = "hurd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
     {
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { dirent_const_time_strlen(drnt) }
     }
 
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "emscripten",
-        target_os = "redox",
-        target_os = "hermit",
-        target_os = "fuchsia",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "aix",
-        target_os = "hurd"
-    )))]
+    #[cfg(not(any(target_os = "linux", target_os = "android", has_d_namlen)))]
     {
-        // unsafe { libc::strlen((&raw const (*drnt).d_name).cast()) }
         // The above has the same assembly as below but the below is allowed in const context.
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { strlen((&raw const (*drnt).d_name).cast()) }
-        // Fallback for other OSes, strlen is either on i8 or u8, casting is 0 cost (it's essentially just reinterpreting)
         //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
         // EG for NTFS it can be up to 512 bytes
     }
@@ -281,12 +236,10 @@ pub(crate) const unsafe fn strlen(x: *const c_char) -> usize {
 const _: () = assert!(unsafe { strlen(c"hello".as_ptr()) } == 5, "removing lint");
 
 // this only fails on solaris/illumos when going from root, WHY???? that makes no sense. I had to remove solaris/illumos support for this function.
-// I never came across the issue simply because I never tried searching from root on my VM, until today.... what a  STRANGE bug JFC
-// nvm FOUND OUT WHY: d_reclen is 32 in /proc for illumos/solaris for small files. WHY? this will never work on these systems due to this reason
+// I never came across the issue simply because I never tried searching from root on my VM, until today...
+// FOUND OUT WHY: d_reclen is 32 in /proc for illumos/solaris for small files. WHY? this will never work on these systems due to this reason
 // leaving this here as a warning to all, don't assume too much, test! (IT )
 // such a weird weird anomaly... (It probably holds kernel metadata or something, not booting up my solaris VM to test as all CI tests pass.)
-
-//cargo-asm --lib fdf::util::utils::dirent_const_time_strlen (put to inline(never) to display)
 
 /*
 Const-time `strlen` for `dirent64's d_name` using SWAR bit tricks.
@@ -364,22 +317,10 @@ On some systems
 
 */
 #[inline]
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "emscripten",
-    target_os = "redox",
-    target_os = "hermit",
-    target_os = "fuchsia",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "aix",
-    target_os = "hurd"
-))]
-#[allow(clippy::missing_assert_message)] //looks nicer
+#[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
+// we can add more systems here but they're obscure, ie hermit/fuschia etc
+// given I lack tests for these, I will only add if needed. Fuschia/Hermit/bunch of others will likely work
+// but it's a pain to make a VM, they probably don't support rust 2024 either...
 #[must_use]
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
@@ -397,19 +338,21 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
         // Compile time assert to immediately cancel the build if invalidated
         const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
-        const { assert!(align_of::<dirent64>() == align_of::<u64>()) };
+        const { assert!(align_of::<dirent64>() == align_of::<u64>(), " not aligned!") };
         const LO_U64: u64 = 0x0101_0101_0101_0101;
         const HI_U64: u64 = 0x8080_8080_8080_8080;
 
         /*  SAFETY: `dirent` is valid by precondition */
         let reclen = unsafe { (*drnt).d_reclen } as usize;
-        debug_assert!(reclen.is_multiple_of(8));
+        debug_assert!(reclen.is_multiple_of(8), "reclen not % 8==0");
+        debug_assert!(reclen >= 24, "reclen must be >=24, likely a corrupted fs");
 
         /*
           Read the last 8 bytes of the struct as a u64.
         This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
 
         // SAFETY: We're indexing in bounds within the pointer. Since the reclen is size of the struct in bytes.
+        // and above.
         let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
 
         // Create a mask for the first 3 bytes in the case where reclen==24, this handles the big endian case too.
@@ -457,10 +400,11 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         https://doc.rust-lang.org/beta/std/intrinsics/fn.ctlz_nonzero.html
         https://doc.rust-lang.org/beta/std/intrinsics/fn.cttz_nonzero.html
 
-        This allows us to skip a 0 check which then allows us to use tzcnt/lzcnt on most cpu's (well x86_64, not knowledgeable on ARM/etc)
+        This allows us to skip a 0 check which then allows us to use tzcnt/lzcnt on x86_64 (most platforms using this are probably x86_65)
+        because although rep bsf is microcoded to tzcnt (if supported), it still has to do an unnecessary 0 check here
          */
 
-        //SAFETY: The u64 can never be all 0's post-SWAR
+        //SAFETY: The u64 can never be all 0's post-mask
         #[cfg(target_endian = "little")]
         let masked_word = unsafe {
             NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
@@ -468,7 +412,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
         // ^ Reference for the BE algorithm
-        // Use a borrow free algorithm to do this on BE safely(1 more instruction than LE)
+        // Use a borrow free algorithm to do this on BE safely(2 more instruction than LE)
         // This is overly precautious, mostly because we can't use the typical `HASZERO` due to the possible
         // present of 0x01 bytes in a filename, given POSIX paths are raw bytes
         // and the POSIX standard only dictates 1. a filename cannot contain a slash and 2. cannot be empty.

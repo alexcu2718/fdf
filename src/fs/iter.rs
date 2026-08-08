@@ -243,15 +243,19 @@ pub(crate) trait DirentConstructor {
     #[inline]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         use core::ptr::slice_from_raw_parts;
-        let d_name: *const u8 = drnt.d_name().cast();
-        let d_ino = drnt.d_ino(); // Returns 0 if d_ino isn't defined on your system
+        // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
+        let d_name: *const u8 = unsafe { drnt.d_name().cast() };
+        // SAFETY: as above
+        let d_ino = unsafe { drnt.d_ino() }; // Returns 0 if d_ino isn't defined on your system
 
-        // Add 1 to include the null terminator
-        let name_len = drnt.name_length() + 1; //technically should be a u16 but we need it for indexing :(
+        // SAFETY: as above
+        //Add 1 to include the null terminator
+        let name_len = unsafe { drnt.name_length() + 1 }; //technically should be a u16 but we need it for indexing :(
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
-        let file_type: FileType = match FileType::from_dtype(drnt.d_type()) {
+        // SAFETY: same conditions for the d/name etc
+        let file_type: FileType = match FileType::from_dtype(unsafe { drnt.d_type() }) {
             FileType::Unknown => stat_syscall!(
                 fstatat,
                 self.file_descriptor().0, //borrow before mutably borrowing the path buffer
@@ -369,7 +373,9 @@ impl GetDents {
             )
         };
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
-        self.offset += drnt.d_reclen();
+        // SAFETY: we just obtained this pointer, safe to obtain this value
+        // we trust the reclen is kernel provided and must be >=24
+        self.offset += unsafe{ drnt.d_reclen()};
 
         drnt
     }
@@ -454,7 +460,7 @@ impl GetDents {
         let last_four_bytes: *mut u32 = unsafe {
             self.syscall_buffer
                 .as_mut_ptr()
-                .byte_add(Self::BUFFER_SIZE - 4)
+                .byte_add(const { Self::BUFFER_SIZE - 4 })
                 .cast()
         };
 
@@ -511,6 +517,7 @@ impl GetDents {
         */
         #[cfg(has_eof_trick)]
         {
+            assert!(Self::BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick"); // #define GETDIRENTRIES64_EXTENDED_BUFSIZE  1024
             // Here we mirror macos check for flags.
             #[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
             compile_error!("THIS OPTIMISATION IS ONLY AVAILABLE ON 64-BIT MACOS"); // if accidentally enabled later down the line.
@@ -713,8 +720,8 @@ macro_rules! impl_iterator_public_methods {
             fn next(&mut self) -> Option<Self::Item> {
                 // SAFETY: the underlying fd/directory stream is kept open and valid for the lifetime of `self`
                 while let Some(drnt) = unsafe { self.get_next_entry() } {
-                    skip_dot_or_dot_dot_entries!(drnt.as_ptr(), continue);
-                    // this just skips dot entries in a really efficient manner(avoids strlen) by checking dtype first on most OS'es
+                    skip_dot_or_dot_dot_entries!(drnt, continue);
+                    // avoids using strlen/strcmo on the pointer (avoids unnecessary non inlineable function calls)
                     return Some(self.construct_direntry(drnt));
                 }
                 None // signal end
@@ -761,7 +768,7 @@ macro_rules! impl_dirent_constructor {
     ($type:ty) => {
         impl DirentConstructor for $type {
             #[inline]
-            fn path_buffer(&mut self) -> &mut Vec<core::mem::MaybeUninit<u8>> {
+            fn path_buffer(&mut self) -> &mut Vec<::core::mem::MaybeUninit<u8>> {
                 &mut self.path_buffer
             }
 

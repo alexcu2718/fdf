@@ -175,7 +175,7 @@ impl SearchConfig {
         let (file_nm, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
             let patt = patt_ref.as_ref();
             let file_name_only = if patt.contains('/') {
-                false // Over ride because if it's got a slash, it's gotta be a full path
+                false // Override because if it's got a slash, it's gotta be a full path
             } else {
                 filenameonly
             };

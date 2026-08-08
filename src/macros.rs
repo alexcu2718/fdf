@@ -1,106 +1,3 @@
-#[macro_export]
-/**
- A helper macro to safely access dirent(64 on linux)'s
-  fields of a `libc::dirent`/`libc::dirent64` aka 'dirent-type' struct by offset.
-
-  # Safety
-  - The caller must ensure that the pointer is valid and points to a 'dirent-type' struct.
-  - The field name must be a valid field of the 'dirent-type' struct.
-
-  # Field Aliases
-  - On BSD systems (FreeBSD, OpenBSD, etc ), `d_ino` is aliased to `d_fileno`
-  - On Linux, `d_reclen` is used to access the record length directly,
-  - On MacOS/BSD, `d_namlen` is used to access the name length directly,
-  # Usage
-  ```ignore
-  let entry_ptr: *const libc::dirent = ...; // Assume this is a valid pointer to a dirent struct
-  let d_name_ptr:*const _ = access_dirent!(entry_ptr, d_name);
-  let d_reclen:usize = access_dirent!(entry_ptr, d_reclen);
-
-  let d_namlen:usize = access_dirent!(entry_ptr, d_namlen);
-  // ^This is a special case for BSD and MacOS, where d_namlen is available
-  let d_ino :u64= access_dirent!(entry_ptr, d_ino); // This
-  ```
-*/
-macro_rules! access_dirent {
-    // Special case for `d_reclen`
-    ($entry_ptr:expr, d_reclen) => {{
-        // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_reclen as usize // /return usize
-    }};
-     // Special case for `d_namlen` - only available on systems that have this field
-    ($entry_ptr:expr, d_namlen) => {{
-        #[cfg(has_d_namlen)]
-        {
-            // SAFETY: Caller must ensure pointer is valid
-            (*$entry_ptr).d_namlen as usize
-        }
-
-        #[cfg(not(has_d_namlen))]
-        {
-            compile_error!("d_namlen field is not available on this platform - use d_reclen or strlen instead")
-        }
-    }};
-
-
-    ($entry_ptr:expr, d_off) => {{
-        // SAFETY: Caller must ensure pointer is valid
-        (*$entry_ptr).d_off
-    }};
-    ($entry_ptr:expr,d_name) => {{
-         // See reference https://github.com/rust-lang/rust/blob/8712e4567551a2714efa66dac204ec7137bc5605/library/std/src/sys/fs/unix.rs#L740
-         (&raw const (*$entry_ptr).d_name).cast::<_>() //we have to have treat  pointer  differently because it's not guaranteed to actually be [0,256] (can't be worked with by value!)
-    }};
-
-         ($entry_ptr:expr, d_type) => {{
-         #[cfg(not(has_d_type))]
-        {
-            libc::DT_UNKNOWN // Return D_TYPE unknown on these OS'es, because the struct does not hold the type!
-            // https://github.com/rust-lang/rust/blob/d85276b256a8ab18e03b6394b4f7a7b246176db7/library/std/src/sys/fs/unix.rs#L314
-        }
-        #[cfg(has_d_type)]
-
-        {
-            (*$entry_ptr).d_type
-        }}};
-      // Handle inode number field with aliasing for BSD systems
-    ($entry_ptr:expr, d_ino) => {{
-
-
-
-
-
-        #[cfg(all(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly"
-        ),has_d_ino))]
-        {
-            // SAFETY: Caller must ensure pointer is valid
-             (*$entry_ptr).d_fileno as u64
-        }
-
-        #[cfg(all(not(any(
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "dragonfly"
-        )),has_d_ino))]
-        {
-            // SAFETY: Caller must ensure pointer is valid
-             (*$entry_ptr).d_ino as _
-        }
-
-        #[cfg(not(has_d_ino))]
-        {
-            0
-        }
-    }};
-
-
-}
-
 ///A macro to safely access stat entries in a filesystem independent way
 // TODO! add other fields as appropriate (this could be pretty long)
 // will be public when kinks are worked out
@@ -113,7 +10,8 @@ macro_rules! access_stat {
 
         #[cfg(not(target_os = "netbsd"))]
         {
-            $stat_struct.st_mtime_nsec as _
+            $stat_struct.st_mtime_nsec as u32 // always make to u32 because the excess precision is 'pretty useless' for the precision required
+            // noone cares about nano seconds
         }
     }};
 
@@ -247,14 +145,14 @@ macro_rules! const_assert {
     ($cond:expr $(,)?) => {
         const _: () = {
             if !$cond {
-                core::panic!(concat!("const assertion failed: ", core::stringify!($cond)));
+                ::core::panic!(concat!("const assertion failed: ", ::core::stringify!($cond)));
             }
         };
     };
     ($cond:expr, $($arg:tt)+) => {
         const _: () = {
             if !$cond {
-                core::panic!($($arg)+);
+                ::core::panic!($($arg)+);
             }
         };
     };
@@ -263,17 +161,6 @@ macro_rules! const_assert {
 /**
  An optimised macro for skipping "." and ".." directory entries
 
- This macro employs several heuristics to efficiently skip the common "." and ".."
- entries present in every directory. The approach reduces unnecessary work during
- directory traversal and improves CPU branch prediction behaviour.
-
-
- Why this matters( a lot of complexity!)
- - These checks are performed for EVERY entry during traversal.
- - Standard traversal code often relies on `strcmp` or `strlen`; this approach
-   avoids those calls where possible.
- - Improved branch prediction provides cumulative performance benefits
-   across large directory trees.
 */
 macro_rules! skip_dot_or_dot_dot_entries {
     ($entry:expr, $action:expr) => {{
@@ -286,9 +173,9 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(has_d_namlen)]
             {
                 // d_namlen fast path
-                let namelen = access_dirent!($entry, d_namlen);
+                let namelen =  $entry.d_namlen();
                 if namelen <= 2 {
-                    let f2b: [u8; 2] = *access_dirent!($entry, d_name);
+                    let f2b: [u8; 2] = *$entry.d_name().cast();
                     if f2b[0] == b'.' {
                         match (namelen, f2b[1]) {
                             (1, _) | (2, b'.') => $action,
@@ -302,7 +189,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
                 // Generic fallback: inspect name bytes only.
                 // This is safe because the dirent is always padded to reach a minimum struct size of 24/32 etc
                 // basically meaning the first few bytes are always in bounds.
-                let f3b: [u8; 3] = *access_dirent!($entry, d_name);
+                let f3b: [u8; 3] = *$entry.d_name().cast();
                 if f3b[0] == b'.' {
                     match f3b[1..] {
                         [b'\0', _] | [b'.', b'\0'] => $action,
@@ -364,26 +251,26 @@ macro_rules! const_from_env {
 
                 let s_bytes = s.as_bytes();
                 if s_bytes.len() == 0 {
-                    core::panic!(core::concat!("Empty environment variable: ", core::stringify!($env)));
+                    ::core::panic!(::core::concat!("Empty environment variable: ", ::core::stringify!($env)));
                 }
 
                 if !s_bytes.is_ascii(){
-                    core::panic!(core::concat!("Non ASCII characters in", core::stringify!($env)));
+                    ::core::panic!(::core::concat!("Non ASCII characters in", ::core::stringify!($env)));
                 }
 
 
 
 
 
-                const TYPE_OF:&str=core::stringify!($t);
+                const TYPE_OF:&str=::core::stringify!($t);
 
                 const TYPE_OF_AS_BYTES:&[u8]=TYPE_OF.as_bytes();
 
-                $crate::const_assert!(!core::matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
-                $crate::const_assert!(!core::matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
+                $crate::const_assert!(!::core::matches!(TYPE_OF_AS_BYTES,b"f128"),"f128 not tested(due to experimental nature)");
+                $crate::const_assert!(!::core::matches!(TYPE_OF_AS_BYTES,b"f16"),"f16 not tested(due to experimental nature)");
                 // Eq is not supported in const yet matches is, weird. annoying work around.
-                core::assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),core::concat!("Negative detected in unsigned env var ",stringify!($env)));
-                $crate::const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,core::concat!("Negative default not allowed for ", stringify!($default)));
+                ::core::assert!(!(s_bytes[0]==b'-' && TYPE_OF_AS_BYTES[0]==b'u'),::core::concat!("Negative detected in unsigned env var ",stringify!($env)));
+                $crate::const_assert!(TYPE_OF_AS_BYTES[0] != b'u' || $default >= <$t>::MIN,::core::concat!("Negative default not allowed for ", stringify!($default)));
 
                 // Detect if we're parsing a float type
                 const IS_FLOAT: bool = TYPE_OF_AS_BYTES[0]==b'f';
@@ -417,11 +304,11 @@ macro_rules! const_from_env {
                             }
                             b'.' => {
                                 if in_fraction {
-                                    core::panic!(core::concat!("Multiple decimal points in: ", core::stringify!($env)));
+                                    ::core::panic!(::core::concat!("Multiple decimal points in: ", ::core::stringify!($env)));
                                 }
                                 in_fraction = true;
                             }
-                            _ => core::panic!(core::concat!("Invalid float value in: ", core::stringify!($env))),
+                            _ => ::core::panic!(::core::concat!("Invalid float value in: ", ::core::stringify!($env))),
                         }
                         i += 1;
                     }
@@ -445,7 +332,7 @@ macro_rules! const_from_env {
                             b'0'..=b'9' => {
                                 n = n * TEN + (b - b'0') as $t;
                             }
-                            _ => core::panic!(core::concat!("Invalid numeric value in: ", core::stringify!($env))),
+                            _ => ::core::panic!(::core::concat!("Invalid numeric value in: ", ::core::stringify!($env))),
                         }
                         i += 1;
                     }
@@ -458,7 +345,7 @@ macro_rules! const_from_env {
                 }
             }
 
-            match core::option_env!($env) {
+            match ::core::option_env!($env) {
                 Some(val) => parse_env(val),
                 None => $default as _,
             }
@@ -477,7 +364,7 @@ macro_rules! return_os_error {
 macro_rules! stat_syscall {
     // For fstatat with flags
     ($syscall:ident, $fd:expr, $path:expr, $flags:expr) => {{
-        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
         let res = unsafe {
@@ -498,7 +385,7 @@ macro_rules! stat_syscall {
     }};
       // For fstatat with flags - returns FileType directly (kinda like an internal black magic tool for me to save writing so much duplicate code)
      ($syscall:ident, $fd:expr, $path:expr, $flags:expr,DTYPE) => {{
-        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
         let res = unsafe {
@@ -522,7 +409,7 @@ macro_rules! stat_syscall {
 
     // For stat/lstat with path pointer
     ($syscall:ident, $path_ptr:expr) => {{
-        let mut stat_buf = core::mem::MaybeUninit::<libc::stat>::uninit();
+        let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: We know the path is valid because internally it's a cstr
         let res = unsafe { $syscall($path_ptr, stat_buf.as_mut_ptr()) };
 

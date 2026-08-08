@@ -10,7 +10,8 @@ macro_rules! access_stat {
 
         #[cfg(not(target_os = "netbsd"))]
         {
-            $stat_struct.st_mtime_nsec as _
+            $stat_struct.st_mtime_nsec as u32 // always make to u32 because the excess precision is 'pretty useless' for the precision required
+            // noone cares about nano seconds
         }
     }};
 

@@ -3,7 +3,6 @@
 use crate::{
     SearchConfigError, TraversalError,
     fs::{DirEntry, FileType},
-    util::BytePath,
 };
 use compile_time_ls_colours::file_type_colour;
 
@@ -219,12 +218,33 @@ where
         }
     }
 }
+#[inline]
+// little niche optimisation stuff here. Just to make coloured printing  of extensions quite efficient :)
+//ignore this silly hard to read code.
+fn _extension(dent: &DirEntry) -> Option<&[u8]> {
+    // POSIX filenames are non-empty.
+    let filename = dent.file_name();
+    let len = filename.len();
+
+    /* 0 conveniently represents both:
+      no dot present
+      so not  leading dot, EG. ".bashrc"
+     Neither is  an extension on it's own.
+    */
+    let dot = crate::util::memrchr(b'.', filename).unwrap_or(0);
+    let ext_start = dot + 1;
+    // little branchless unreadery here sorry, it was fun to write!
+    let has_extension: bool = (dot != 0) & (ext_start != len);
+    // too lazy to finish this bit off though.
+    has_extension.then_some(&filename[ext_start..])
+    // TODO refactor this when off the train..
+}
 
 #[inline]
 fn extension_colour(entry: &DirEntry) -> &[u8] {
     match entry.file_type {
         FileType::RegularFile | FileType::Unknown => {
-            BytePath::extension(entry) // Use the trait to do this, since root will never be sent down the iterator
+            _extension(entry) // Use the trait to do this, since root will never be sent down the iterator
                 .map_or(RESET, |pos| file_type_colour!(pos))
         }
         FileType::Directory => file_type_colour!(directory),

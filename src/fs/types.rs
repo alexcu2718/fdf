@@ -18,7 +18,13 @@ pub type Result<T> = core::result::Result<T, DirEntryError>;
 
    Aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
 */
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, { BUFFER_SIZE >> 3 }>;
+const _: () = assert!(
+    BUFFER_SIZE.is_multiple_of(8),
+    "Simplifies the problem, keeps alignment of dirents"
+);
+#[allow(clippy::integer_division_remainder_used)]
+#[allow(clippy::integer_division)] // no loss of precision
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, { BUFFER_SIZE / 8 }>; // showing example above
 
 /// A safe abstraction around file descriptors for internal IO
 #[derive(Debug)]

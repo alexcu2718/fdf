@@ -164,9 +164,6 @@ pub(crate) trait BytePath<T>
 where
     T: Deref<Target = [u8]>,
 {
-    /// Returns the extension if available
-    fn extension(&self) -> Option<&[u8]>;
-
     /// Gets index of filename component start
     fn file_name_index(&self) -> usize;
 }
@@ -175,26 +172,6 @@ impl<T> BytePath<T> for T
 where
     T: Deref<Target = [u8]>,
 {
-    #[inline]
-    fn extension(&self) -> Option<&[u8]> {
-        // Restrict the search to the filename, ignoring dots in any parent directories.
-        let filename = match memrchr(b'/', self) {
-            Some(pos) => self.get(pos + 1..)?,
-            None => self,
-        };
-
-        let len = filename.len();
-        if unlikely(len <= 1) {
-            return None;
-        }
-        #[allow(clippy::indexing_slicing)] // panic free (asm checked)
-        // skip the starting character if it's a hidden file
-        let search_range = &filename[..len - 1];
-        let pos = memrchr(b'.', search_range)?;
-
-        filename.get(pos + 1..)
-    }
-
     /// Get the length of the basename of a path (up to and including the last '/')
     /// Returns 0 for length 1 byte paths
     #[inline]

@@ -15,7 +15,8 @@ Windows support requires a significant rewrite and is planned for post-1.0.
 cargo install fdf
 cargo install --git https://github.com/alexcu2718/fdf
 # cargo add fdf
-# I don't recommend using as a library until 1.0, sorry!
+# I don't recommend using as a library until 1.0, sorry!, the API will have warts and I may refactor the whole god damn thing as I get to windows.
+# Primarily a CLI tool until 1.0!!!
 ## Additionally specify  --no-default-features to remove mimalloc dependency
 ```
 
@@ -62,7 +63,7 @@ Other POSIX operating systems, such as AIX, are currently untested(read: probabl
 
 The project includes comprehensive testing with 100+ Rust (including doctests) tests and 15+ correctness benchmarks comparing against fd.
 
-Miri validation (Rust's undefined behaviour detector) is not practical here due to the extensive libc usage, so validation relies on intensive testing and Valgrind. See [scripts/valgrind-test.sh](./scripts/valgrind-test.sh).
+Miri is not practical here due to the extensive libc usage, so validation relies on intensive testing and Valgrind. See [scripts/valgrind-test.sh](./scripts/valgrind-test.sh).
 
 - Rust tests: [Available here](./src/test.rs)
 - Shell scripts clone the LLVM repository to provide an accurate testing environment
@@ -84,6 +85,8 @@ This runs the internal library tests, CLI tests, and benchmarks.
 ## Performance Benchmarks
 
 The benchmarks are repeatable using the testing code above and cover file type filtering, extension matching, file sizes, and several other scenarios. The following results were gathered on Linux against local directories and the LLVM repository and summarised from hyperfine output.
+
+Easily repeatable examples found in ['./scripts'](./scripts) and ['./fd_benchmarks'](./fd_benchmarks)
 
 ```bash
 | Test Case                                                              | fdf Mean        | fd Mean         | Speedup   | Relative        |
@@ -155,10 +158,10 @@ Eg this is demonstrated here,
 
 - **A custom written crossbeam workstealing parallel traversal algorithm**
 
-### Constant-Time Directory Entry Processing
+### Constant-Time Directory Strlen
 
-The following function provides an elegant solution to avoid branch mispredictions/SIMD instructions during directory entry parsing (a performance-critical loop):
-
+The following function provides an elegant solution to avoid strlen on `d_name` but achieving it so with a rather evil trick, it's not all like this!
+I just found it cool.
 Check source code for further explanation [in utils.rs](./src/util/utils.rs#340)\*\*
 
 <!-- markdownlint-disable-next-line MD033 -->
@@ -213,24 +216,22 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
 ## Why?
 
-I started this project because I found find slow and wanted to learn how to interface directly with the kernel.
-What began as a small experiment became a practical tool for exploring low-level systems work.
+I started this project because I honestly got sick of windows being so slow, so naturally when transitioning to linux (funny story),
+I wanted something that found the stuff I needed instantly, find was slow, so I started to make it in rust, do it better.
+Then partway through I discover that `fd` existed, oh well, actually no, I got so offended by how slow searching is for random stuff that I just kept going.
+It taught me a lot, that's the main reason I continued, I only really look at this when I have a cool idea or I'm quite bored.
+So development is not guaranteed especially with a hectic life :@.
 
 ### Performance Motivation
 
-Rust's std::fs has inefficiencies for this workload, including extra allocation, file descriptor handling overhead, repeated strlen work, and readdir-based traversal. Rewriting those paths with libc allowed tighter control over traversal costs and was a useful learning exercise.
-
-The standard library can also keep file descriptors open until the last reference to an inner `ReadDir` disappears, which can become limiting.
-
-It also tends to rely heavily on `stat`-style calls, which is costly in traversal-heavy workloads.
-
-See [fd_benchmarks/syscalltest.sh](./fd_benchmarks/syscalltest.sh) for a rough syscall comparison.
+Rust's std::fs has inefficiencies for this workload, primarily by choice of excessive heap allocation/syscalls which I understand makes it much easier to write
+cross platform code, for better or worse (worse..) it is wiser to build a lower abstraction framework to achieve this. It's not very fun. Cross compatibility is awful at this level hence why I am procastinating windows (I should really write a rationale doc...)
 
 ### Development Philosophy
 
 **Feature stability before breakage - I won't push breaking changes or advertise this anywhere until I've got a good baseline.**
 
-**Open to contributions - Once the codebase stabilises, contributions are welcome.**
+**Open to contributions/Requests(mostly).**
 
 In short, this project explores performance, low-level programming, and practical tooling.
 
@@ -493,17 +494,15 @@ Options:
 
 #### 2. Allocation-Optimised Iterator Adaptor
 
-- Implement a filtering mechanism that avoids unnecessary directory allocations.
-- Achieved via a closure-based approach triggered during `readdir` or `getdents` calls.
-- Although the cost of allocations doesn't seem too bad, I will look at this again at some point.
-- Maybe achieved via a lending iterator type approach? See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)
+- Implement a filtering mechanism that avoids unnecessary directory allocations See [link for reference](https://docs.rs/lending-iterator/latest/lending_iterator/)
 
 #### 3. Additional Ideas
 
 - Implement features such as ownership tracking.
 - Maybe use `NO_ATIME` to avoid disk writes, this has a lot of drawbacks however.
 - Write my sorting algorithm with parallelism, currently it's single threaded, not a big issue for small results but if you want to sort your entire filesystem then you're much better off just piping the results to `sort` (hence why it's not been optimised much)
-- Do some testing of statx vs fstat, This is only available on   Linux >=4.11, it's pretty easy to implement as [seen here](https://github.com/rust-lang/rust/blob/b6a3d7965e2c5de79378a88a3f28a6f1b73fbb16/library/std/src/sys/fs/unix.rs#L177)
+- Do some testing of statx vs fstat--- NO BAD IDEA, it's slower than fstat, only marginally and makes the code a lot worse to write for *no real* advantage,
+well except if you want 64bit `st_ntime`
 
 #### 4. macOS optimisations
 

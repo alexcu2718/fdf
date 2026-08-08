@@ -1585,11 +1585,9 @@ impl DirEntry {
     pub fn modified_time(&self) -> Result<DateTime<Utc>> {
         let statted = self.get_lstat()?;
 
-        DateTime::from_timestamp(
-            access_stat!(statted, st_mtime),
-            access_stat!(statted, st_mtimensec),
-        )
-        .ok_or(DirEntryError::TimeError)
+        let modified_nano: u32 = access_stat!(statted, st_mtimensec);
+        DateTime::from_timestamp(access_stat!(statted, st_mtime), modified_nano)
+            .ok_or(DirEntryError::TimeError)
     }
 
     /// Returns last modification time in UTC, resolving relative to `opt_fd` when provided.

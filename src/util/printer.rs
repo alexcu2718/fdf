@@ -1,4 +1,3 @@
-#![expect(clippy::indexing_slicing, reason = "trivially in bounds")]
 #![allow(clippy::missing_inline_in_public_items)]
 use crate::{
     SearchConfigError, TraversalError,
@@ -222,30 +221,42 @@ where
 // little niche optimisation stuff here. Just to make coloured printing  of extensions quite efficient :)
 //ignore this silly hard to read code.
 fn _extension(dent: &DirEntry) -> Option<&[u8]> {
-    // POSIX filenames are non-empty.
-    let filename = dent.file_name();
+    let mut filename = dent.file_name();
     let len = filename.len();
 
-    /* 0 conveniently represents both:
-      no dot present
-      so not  leading dot, EG. ".bashrc"
-     Neither is  an extension on it's own.
-    */
-    let dot = crate::util::memrchr(b'.', filename).unwrap_or(0);
-    let ext_start = dot + 1;
-    // little branchless unreadery here sorry, it was fun to write!
-    let has_extension: bool = (dot != 0) & (ext_start != len);
-    // too lazy to finish this bit off though.
-    has_extension.then_some(&filename[ext_start..])
-    // TODO refactor this when off the train..
-}
+    // SAFETY: POSIX filenames are non-empty.
+    let last = unsafe { *filename.get_unchecked(len - 1) };
 
+    let trim = usize::from((last == b'.') & (len > 1));
+    let end = len - trim;
+
+    // Byte zero cannot introduce an extension.
+    // SAFETY: 1 <= end <= len.
+    filename = unsafe { filename.get_unchecked(1..end) };
+
+    /*
+     Both failure cases become:
+
+         ext_start == filename.len()
+
+     no dot:
+         map_or(len, ...)
+
+    trailing dot:
+         dot + 1 == len
+    */
+    let ext_start = crate::util::memrchr(b'.', filename).map_or(filename.len(), |dot| dot + 1);
+
+    // SAFETY: ext_start <= filename.len().
+    let ext = unsafe { filename.get_unchecked(ext_start..) };
+
+    (ext_start != filename.len()).then_some(ext)
+}
 #[inline]
 fn extension_colour(entry: &DirEntry) -> &[u8] {
     match entry.file_type {
         FileType::RegularFile | FileType::Unknown => {
-            _extension(entry) // Use the trait to do this, since root will never be sent down the iterator
-                .map_or(RESET, |pos| file_type_colour!(pos))
+            _extension(entry).map_or(RESET, |pos| file_type_colour!(pos))
         }
         FileType::Directory => file_type_colour!(directory),
         FileType::Symlink => match entry.is_traversible_cache.get() {
@@ -261,6 +272,7 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
 
 /// A convenient function to print results
 #[inline]
+#[expect(clippy::indexing_slicing, reason = "trivially in bounds")]
 fn write_nocolour<W, I>(
     writer: &mut W,
     iter_paths: I,
@@ -276,7 +288,7 @@ where
     // Every path is guaranteed to start with `./` when the root was `./`.
     let start = usize::from(strip_leading_dot_slash) * 2;
     let prefix = PREFIXES[usize::from(quoted)];
-    let suffixes = [PLAIN_SUFFIXES, NULL_SUFFIXES][usize::from(null_terminated)];
+    let suffixes = [PLAIN_SUFFIXES, NULL_SUFFIXES][usize::from(null_terminated)]; // trivially in bounds
 
     for path in iter_paths {
         // SAFETY: when strip_leading_dot_slash is true the root was `./`, so every
@@ -293,6 +305,7 @@ where
 }
 
 #[inline]
+#[expect(clippy::indexing_slicing, reason = "trivially in bounds")]
 fn write_coloured<W, I>(
     writer: &mut W,
     iter_paths: I,

@@ -4,7 +4,7 @@
 
 fdf is a high-performance POSIX file finder written in Rust with extensive C FFI.
 
-A faster alternative to tools such as `fd`/`find`/`bfs`, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks show fdf running at least 2x faster than comparable tools in most cases, achieved through low-level optimisation, SIMD techniques, and direct syscalls where possible.
+A faster alternative to tools such as `fd`/`find`/`bfs`, with a focus on speed, efficiency, and cross-platform compatibility. Benchmarks show fdf running roughly >=2x faster than comparable tools in most cases, achieved through low-level optimisation, SIMD/SWAR techniques, and direct syscalls where possible.
 
 > **Note:** This project will be renamed before 1.0, currently leaning towards '`frep`' as the name.
 Windows support requires a significant rewrite and is planned for post-1.0.
@@ -33,6 +33,8 @@ Additional Note: If you use MacOS on native hardware and know your stuff, please
 
 ### Fully Supported and CI Tested
 
+(I don't use any inline assembly so other architectures ie Linux/FreeBSD aarch64 should work fine, will add to CI in future!)
+
 - Linux (x86_64, s390x (Big endian), Alpine( MUSL libc))
 - macOS (Intel and Apple Silicon)
 - FreeBSD (x86_64)
@@ -47,8 +49,6 @@ Additional Note: If you use MacOS on native hardware and know your stuff, please
 
 - 32-bit Linux
 
-Other POSIX operating systems, such as AIX, are currently untested(read: probably broken).
-
 ### Not Yet Supported
 
 - **Windows**: Requires significant rewrite due to architectural differences with libc. Planned once the POSIX feature set is stable.
@@ -57,7 +57,9 @@ Other POSIX operating systems, such as AIX, are currently untested(read: probabl
 
 ### Probably Broken
 
-- MacOSx 32bit (granted the last 32bit OSx was released in 2009, suffice to say, I don't really care but would possibly tick it off if I get *very* bored)
+- MacOSx 32bit (granted the last 32bit OSx was released in 2009, I would possibly tick it off if I get *very* bored)
+
+- Other Niche Operating systems like Fuschia (granted, they probably won't support Rust 2024).
 
 ## Testing
 
@@ -151,10 +153,6 @@ Eg this is demonstrated here,
 
 - **Reverse engineered MacOS syscalls(`__getdirentries64`) to exploit early EOF and no unnecessary stat/pthread_mutex calls at [link here](./src/fs/iter.rs#460) and [this link for syscall implementation](./src/util/utils.rs#85)
   (Also works on FreeBSD)**
-
-- **memrchr optimisation with 20%~ improvement on stdlib (SWAR optimisation)**
-
-- **An optimised gitignore parser with 5x fewer stat64/statx calls**.
 
 - **A custom written crossbeam workstealing parallel traversal algorithm**
 
@@ -257,7 +255,7 @@ Ultimately, these are an extremely fringe usecase and I think it is beyond point
 
 ### Platform Expansion
 
-**Windows Support**: Acknowledged as a significant undertaking an almost entire separate codebase(portability ain't fun), but valuable for both usability and learning Windows internals.
+**Windows Support**: Post 1.0.
 
 ## Installation and Usage
 
@@ -289,9 +287,10 @@ echo 'eval "$(fdf --generate zsh)"' >> ~/.zshrc
 
 # For Bash
 echo 'eval "$(fdf --generate bash)"' >> ~/.bashrc
+```
 
+```text
 ## Options
-
 Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
 Arguments:
@@ -315,7 +314,7 @@ Options:
           An example command would be `fdf -HI -e  c '^str' /
 
   -j, --threads <THREAD_NUM>
-          Number of threads to use, defaults to available threads available on your computer
+          Number of threads to use, defaults to available threads available on your computer (or 4 on MacOS)
 
   -a, --absolute-path
           Starts with the directory entered being resolved to full
@@ -331,6 +330,9 @@ Options:
 
   -n, --max-results <TOP_N>
           Retrieves the first eg 10 results, 'fdf  -n 10 '.cache' /
+
+  -1
+          Alias for '-n 1', retrieves only the first result (not deterministic)
 
   -d, --depth <DEPTH>
           Retrieves only traverse to x depth

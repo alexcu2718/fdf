@@ -109,6 +109,12 @@ struct Args {
     )]
     top_n: Option<usize>,
     #[arg(
+        short = '1',
+        help = "Alias for '-n 1', retrieves only the first result (not deterministic)",
+        conflicts_with = "top_n"
+    )]
+    top_1: bool,
+    #[arg(
         short = 'd',
         long = "depth",
         alias = "max-depth",
@@ -322,6 +328,8 @@ fn main() -> Result<(), SearchConfigError> {
         return Ok(());
     }
 
+    let top_n = if args.top_1 { Some(1) } else { args.top_n };
+
     let path: OsString = args.directory.unwrap_or_else(|| ".".into());
     // Only strip `./` when the root is actually `.` or `./`; that is the only case
     // where every emitted path is guaranteed to carry that prefix (safety invariant).
@@ -367,13 +375,7 @@ fn main() -> Result<(), SearchConfigError> {
     let errors = finder.error_store();
 
     if let Some(exec) = args.exec.as_deref() {
-        run_exec_search(
-            finder.traverse()?,
-            exec,
-            args.sort,
-            args.top_n,
-            strip_cwd_prefix,
-        )?;
+        run_exec_search(finder.traverse()?, exec, args.sort, top_n, strip_cwd_prefix)?;
 
         if args.show_errors {
             print_collected_errors(errors.as_deref());
@@ -384,7 +386,7 @@ fn main() -> Result<(), SearchConfigError> {
 
     finder
         .build_printer()?
-        .limit(args.top_n)
+        .limit(top_n)
         .sort(args.sort)
         .null_terminated(args.print0)
         .nocolour(args.no_colour)

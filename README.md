@@ -290,7 +290,6 @@ echo 'eval "$(fdf --generate bash)"' >> ~/.bashrc
 ```
 
 ```text
-## Options
 Usage: fdf [OPTIONS] [PATTERN] [PATH]
 
 Arguments:
@@ -330,9 +329,6 @@ Options:
 
   -n, --max-results <TOP_N>
           Retrieves the first eg 10 results, 'fdf  -n 10 '.cache' /
-
-  -1
-          Alias for '-n 1', retrieves only the first result (not deterministic)
 
   -d, --depth <DEPTH>
           Retrieves only traverse to x depth
@@ -481,6 +477,7 @@ Options:
 
   -V, --version
           Print version
+
 ```
 
 ### Potential Future Enhancements

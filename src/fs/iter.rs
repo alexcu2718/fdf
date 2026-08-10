@@ -438,7 +438,7 @@ impl GetDents {
     /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
     pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
 
-    #[inline]
+    #[inline(never)]
     #[allow(clippy::missing_assert_message)] // for cleaner code.
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
@@ -448,6 +448,7 @@ impl GetDents {
         }
 
         const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
+        debug_assert!(SyscallBuffer::new().as_ptr().cast::<u64>().is_aligned());
 
         #[cfg(has_eof_trick)]
         /*
@@ -517,7 +518,7 @@ impl GetDents {
         */
         #[cfg(has_eof_trick)]
         {
-            assert!(Self::BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick"); // #define GETDIRENTRIES64_EXTENDED_BUFSIZE  1024
+            const { assert!(Self::BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick") }; // #define GETDIRENTRIES64_EXTENDED_BUFSIZE  1024
             // Here we mirror macos check for flags.
             #[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
             compile_error!("THIS OPTIMISATION IS ONLY AVAILABLE ON 64-BIT MACOS"); // if accidentally enabled later down the line.
@@ -543,45 +544,9 @@ impl GetDents {
             self.end_of_stream = !is_more_remaining //gosh this a lot simpler isnt it.
         }
 
-        /*
-        Example of syscall differences( also note the lack of fstatfs64 and semwait signal!)
-        macOS is only virtualised via qemu,
-         λ  sudo dtruss -c fd -HI . ~ 2>&1 | tail -n 15
+        self.remaining_bytes = remaining_bytes.max(0).cast_unsigned(); // all negatives mapped to 0.
 
-        stat64                                         13
-        sysctl                                         13
-        ulock_wait2                                    13
-        ulock_wake                                     13
-        psynch_mutexdrop                               20
-        psynch_mutexwait                               20
-        sigaltstack                                    20
-        mprotect                                       26
-        write                                         364
-        madvise                                       527
-        fstatfs64                                    1728
-        close_nocancel                               1729
-        open_nocancel                                1736
-        getdirentries64                              1823
-
-
-        λ  sudo dtruss -c fdf -HI . ~ 2>&1 | tail -n 15
-
-        bsdthread_terminate                             8
-        stat64                                          8
-        thread_selfid                                   9
-        close                                          10
-        sysctl                                         11
-        mmap                                           15
-        munmap                                         16
-        mprotect                                       25
-        sigaltstack                                    27
-        write                                          71
-        madvise                                       143
-        close_nocancel                               1556
-        openat_nocancel                              1557
-        getdirentries64                              1760 */
-        self.remaining_bytes = remaining_bytes.cast_unsigned() * usize::from(is_more_remaining);
-        // probably irrelevant as will *likely* compile to a cmov but being too lazy to check
+        //(becomes a cmove)
 
         self.offset = 0; //return the offset back to 0 as now the buffer is cleared
 

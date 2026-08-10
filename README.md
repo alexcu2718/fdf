@@ -133,15 +133,15 @@ Symlink resolution in my method differs from fd and find. Although I generally a
 
 When following symlinks, behaviour will vary slightly. For example, fd can enter infinite loops with recursive symlinks
 (see recursive_symlink_fs_test.sh) [Available here](./scripts/recursive_symlink_fs_test.sh)
-whereas my implementation prevents hangs. It may, however, return more results than expected (because I do not deduplicate)
+whereas my implementation prevents hangs.
 
 To avoid issues, use --same-file-system when traversing symlinks. This ensures traversal terminates safely even in complex directories such as ~/.steam, ~/.wine, /sys, and /proc.
 
 Extension matching is not using a regex, if you wish to search for regex ends, just use EG: '.tmp$' in your search regex
 
-I also do not deduplicate symlinks, as this would require basically calling a lot of unnecessary stat calls.
+I do not deduplicate symlinks BECAUSE this would require basically calling a lot of unnecessary stat calls.
 
-Eg this is demonstrated here,
+This is demonstrated here,
 
 ![alt text](image.png)
 
@@ -171,8 +171,7 @@ Check source code for further explanation [in utils.rs](./src/util/utils.rs#340)
 // SIMD within a register, so no architecture dependence
 //http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm
 pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
-    use core::mem::offset_of;
-    use core::num::NonZeroU64;
+    use core::{mem::offset_of, num::NonZeroU64};
     /*The only unsafe action is dereferencing the pointer; This MUST be validated beforehand */
     const LO_U64: u64 = 0x0101_0101_0101_0101;
     const HI_U64: u64 = 0x8080_8080_8080_8080;
@@ -241,7 +240,7 @@ Notably I modified it because it's quite old and has dependencies I was able to 
 (I have emailed and received approval from the author above)
 
 I've also done so for some SWAR tricks from the standard library [(see link)](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161) which is implemented at the [following link](./src/util/memchr_derivations.rs)
-I additionally emailed the author of memchr and got some nice tips, great guy, someone I respect whole heartedly!
+I additionally emailed the author of memchr and got some nice tips, great guy!.
 
 ## Future Plans
 
@@ -250,8 +249,6 @@ I additionally emailed the author of memchr and got some nice tips, great guy, s
 **API cleanup, currently the CLI is the main focus but I'd like to fix that eventually!**
 
 **POSIX Compliance**: Mostly done, I don't expect to extend this beyond Linux/BSD/MacOS/Illumos/Solaris/Android (the other ones are embedded mostly, correct me if i'm wrong!), I have tentative work for other OS'es, it may support NuttX/few others but completely untested.
-
-Ultimately, these are an extremely fringe usecase and I think it is beyond pointless to focus on these.
 
 ### Platform Expansion
 

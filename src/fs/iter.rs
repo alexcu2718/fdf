@@ -438,7 +438,7 @@ impl GetDents {
     /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
     pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
 
-    #[inline(never)]
+    #[inline]
     #[allow(clippy::missing_assert_message)] // for cleaner code.
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream

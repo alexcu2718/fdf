@@ -147,6 +147,7 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
     ```
 */
 #[derive(Clone)] //could probably implement a more specialised clone.
+#[repr(C)] // 0 cost to use this but helps FFI
 pub struct DirEntry {
     /// Path to the entry, stored as a Boxed `CStr`
     /// This allows easy C ffi by just calling `.as_ptr()`
@@ -159,21 +160,19 @@ pub struct DirEntry {
     //        this an unsized type. Essentially `sizeof(&CStr)` should be the
     //        same as `sizeof(&c_char)` but `CStr` should be an unsized type.
      */
-    /// File type (file, directory, symlink, etc.).
-    pub(crate) file_type: FileType, //1 byte
-
     /// Inode number of the file.
     pub(crate) inode: u64, //8 bytes
     /// Depth of the directory entry relative to the root.
     pub(crate) depth: u32, //4bytes
+    /// File type (file, directory, symlink, etc.).
+    pub(crate) file_type: FileType, //1 byte
+    /// `None` means not computed yet, `Some(bool)` means cached result.
+    pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
 
     /// Offset in the path buffer where the file name starts.
     ///
     /// This helps quickly extract the file name from the full path.
     pub(crate) file_name_index: usize, //8 bytes
-    ///
-    /// `None` means not computed yet, `Some(bool)` means cached result.
-    pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
 } //38 bytes, rounded to 40
 
 // TODO add extra metadata from stat calls if available to avoid doing, ie like st_mode etc.

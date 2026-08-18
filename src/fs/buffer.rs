@@ -4,7 +4,7 @@ use core::mem::MaybeUninit;
 use core::ops::{Add, Div, Mul, Sub};
 use core::slice::SliceIndex;
 mod sealed {
-    /// Sealed trait pattern to restrict `ValueType` implementation to i8 and u8 only
+    /// Sealed trait pattern to restrict `ValueType`
     pub trait Sealed {}
     impl Sealed for i8 {}
     impl Sealed for u8 {}
@@ -16,7 +16,7 @@ mod sealed {
     impl Sealed for u32 {}
 }
 
-/// Marker trait for valid buffer value types (i8 and u8)
+/// Marker trait for valid buffer value types
 ///
 /// This trait ensures type safety while allowing the buffer to work with both
 /// signed and unsigned byte types, which are equivalent for raw memory operations.

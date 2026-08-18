@@ -122,7 +122,7 @@ const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
 
 /// Returns the last index matching the byte `x` in `text`.
 #[must_use]
-#[inline]
+#[inline(never)]
 pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // Scan for a single byte value by reading two `usize` words at a time.
     // Split `text` in three parts:
@@ -134,11 +134,12 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     let start_ptr = text.as_ptr();
 
-    // Bytes until the next usize-aligned address.
-    let bytes_to_alignment = start_ptr.addr().wrapping_neg() & const { USIZE_BYTES - 1 };
-    let min_aligned_offset = bytes_to_alignment.min(len);
-    let remaining = len - min_aligned_offset;
-    let max_aligned_offset = min_aligned_offset + (remaining & !const { 2 * USIZE_BYTES - 1 }); //avoid division lints :(
+    const ALIGN_MASK: usize = USIZE_BYTES - 1;
+    const BLOCK_MASK: usize = 2 * USIZE_BYTES - 1;
+
+    let prefix = start_ptr.addr().wrapping_neg() & ALIGN_MASK;
+    let min_aligned_offset = prefix.min(len);
+    let max_aligned_offset = min_aligned_offset + (len.saturating_sub(prefix) & !BLOCK_MASK);
     // classic align in C AKA
     // #define  align_up(x) (x & ~(sizeof(size_t)-1)) //(MUST be power of 2 )
 
@@ -155,9 +156,9 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // define a simple function to avoid repetitive code.
     #[inline]
     const unsafe fn check_usize(strptr: *const u8, offset: usize, mask: usize) -> Option<usize> {
-        debug_assert!(offset.is_multiple_of(USIZE_BYTES), "TRIVIAL CHECK");
         // SAFETY: Always in bounds+aligned so read is valid.
         let upper_or_lower = unsafe { strptr.add(offset).cast::<usize>().read() ^ mask };
+        // mask to turn all matching bytes to 0 and 0's to `x`
 
         #[cfg(target_endian = "big")]
         let maybe_match = contains_zero_byte(upper_or_lower);

@@ -81,18 +81,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 use crate::fs::ReadDir;
 use crate::fs::{FileDes, FileType, types::Result};
 use crate::{DirEntryError, util::BytePath as _};
-use chrono::{DateTime, Utc};
 use core::cell::Cell;
-use core::ffi::{CStr, c_char};
+use core::ffi::{CStr, c_char, c_int};
 use core::fmt;
 
+use chrono::{DateTime, Utc};
 use libc::{
-    AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, R_OK, W_OK, X_OK, access, faccessat, fstatat, lstat,
-    realpath, stat,
+    AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK,
+    X_OK, access, faccessat, fstatat, lstat, realpath, stat,
 };
 
 #[cfg(target_os = "android")]
-const AT_EACCESS: core::ffi::c_int = 0; // android being weird, again....
+const AT_EACCESS: c_int = 0; // android being weird, again....
 
 #[cfg(not(target_os = "android"))]
 use libc::AT_EACCESS;
@@ -354,7 +354,7 @@ impl DirEntry {
         // We could do this with a kernel query to see if it has it, then save the result in an atomicbool
         // However, I am being lazy.
 
-        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY;
+        const FLAGS: c_int = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK | O_RDONLY;
 
         // Linux specific notes:
         // Note, we cannot use `libc::O_NOATIME` because  certain files (ie under root)
@@ -380,8 +380,8 @@ impl DirEntry {
     /// Uses `openat(2)/openat_nocancel` to avoid a full path resolution — the kernel resolves the name
     /// relative to `parent_fd` directly.  The same flags as [`Self::open`] are used.
     #[inline]
-    pub(crate) fn open_at(parent_fd: i32, child_name: &core::ffi::CStr) -> Result<FileDes> {
-        const FLAGS: i32 = libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NONBLOCK | libc::O_RDONLY;
+    pub(crate) fn open_at(parent_fd: i32, child_name: &CStr) -> Result<FileDes> {
+        const FLAGS: c_int = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK | O_RDONLY;
         #[cfg(not(target_os = "macos"))]
         // SAFETY: child_name is null-terminated; parent_fd is a valid open directory fd.
         let fd = unsafe { libc::openat(parent_fd, child_name.as_ptr(), FLAGS) };
@@ -627,9 +627,12 @@ impl DirEntry {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents64;
         const BUF_SIZE: usize = 512; //pretty arbitrary.
+        const DENT_SIZE: usize = core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8); // ALWAYS THE LAST ELEMENT, FIND MIN STRUCT SIZE.
+        const { assert!(DENT_SIZE >= 16 && DENT_SIZE <= 32, "showing below works") };
         // On Linux it's 24, on solaris it's 24/32
         // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
         const MINIMUM_DIRENT_SIZE: isize = 32;
+
         debug_assert!(
             self.file_type == FileType::Directory || self.file_type == FileType::Symlink,
             " Only expect dirs/symlinks to pass through this private func"
@@ -1358,9 +1361,10 @@ impl DirEntry {
     #[inline]
     #[must_use]
     pub const fn is_hidden(&self) -> bool {
-        // SAFETY: file_name_index is guaranteed to be within bounds
+        // SAFETY: file_name_index is guaranteed to be within bounds, no alignmen requirement.
         // and we're using pointer arithmetic which is const-compatible (slight const hack)
         unsafe { self.file_name_ptr().cast::<u8>().read() == b'.' }
+        // We need to cast explicitly because pointers are either i8/u8=>we need u8
     }
 
     /**
@@ -1397,7 +1401,7 @@ impl DirEntry {
             "Indexing should always be within bounds"
         );
 
-        if self.len() == 1 && self.as_bytes() == b"/" {
+        if self.as_bytes() == b"/" {
             return b"/";
         }
 
@@ -1440,30 +1444,27 @@ impl DirEntry {
         let filename = self.file_name();
         let len = filename.len();
 
-        #[cold] //help branch predictor
-        #[inline(never)]
-        const fn len_one<'arbit>() -> Option<&'arbit [u8]> {
-            None
+        // Any extension needs to be at least len 3  EG: "a.a".
+        if crate::util::unlikely(len < 3) {
+            return None;
         }
 
-        if len <= 1 {
-            return len_one();
-        }
-
-        // Search for the last dot in the filename, excluding the last character ('.''s dont count if they're the final character)
-        // SAFETY: len is guaranteed within bounds
-        let search_range = unsafe { &filename.get_unchecked(..len.saturating_sub(1)) };
+        /* Exclude:
+         byte 0, so ".foo" does not count
+         AND
+         the final byte, so "foo." does not count
+        */
+        // SAFETY: len >= 3.
+        let search_range = unsafe { filename.get_unchecked(1..len - 1) };
 
         crate::util::memrchr(b'.', search_range).map(|pos| {
-            // SAFETY:
-            // - `pos` comes from `memrchr` which searches within `search_range`
-            // - `search_range` is a subslice of `filename` (specifically `filename[..len-1]`)
-            // - Therefore `pos` is a valid index in `filename`
-            // - `pos + 1` is guaranteed to be ≤ len-1, so `pos + 1..` is a valid range
-            unsafe { filename.get_unchecked(pos + 1..) }
+            // `pos` is relative to filename[1..], so the actual dot is
+            // at pos + 1, and the extension starts at pos + 2.
+            //
+            // SAFETY: memrchr found the dot before the final byte.
+            unsafe { filename.get_unchecked(pos + 2..) }
         })
     }
-
     /**
     Creates a new [`DirEntry`] from the given path.
 

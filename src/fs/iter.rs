@@ -14,7 +14,7 @@ use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::mem::MaybeUninit;
-use core::ptr::NonNull;
+use core::ptr::{NonNull, slice_from_raw_parts};
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
 /**
  POSIX-compliant directory iterator using libc's readdir
@@ -87,8 +87,10 @@ impl ReadDir {
         // Mutate the buffer to contain the full path, then add a null terminator and record the new length
         // We use this length to index to get the filename (store full path -> index to get filename)
 
-        // SAFETY: the fd was opened  with `O_DIRECTORY`, this  is guaranteed to be valid.
-        let dir = unsafe { NonNull::new_unchecked(libc::fdopendir(fd.0)) };
+        //SAFETY: No safety required.
+        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.0) }) else {
+            return_os_error!()
+        };
         debug_assert!(fd.is_open(), "We expect it to be open");
 
         Ok(Self {
@@ -224,12 +226,11 @@ pub(crate) trait DirentConstructor {
         (buffer, base_len)
     }
 
-    #[cold]
     #[inline(never)]
     fn reserve_for_long_name(&mut self, required_len: usize) {
         let path_buffer = self.path_buffer();
         let current_len = path_buffer.len();
-        path_buffer.reserve_exact(required_len - current_len);
+        path_buffer.reserve(required_len - current_len);
         // SAFETY: we reserved enough capacity and bytes in the extended range
         // are immediately written by `copy_to_nonoverlapping`.
         unsafe { path_buffer.set_len(required_len) };
@@ -242,7 +243,6 @@ pub(crate) trait DirentConstructor {
     */
     #[inline]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
-        use core::ptr::slice_from_raw_parts;
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
         let d_name: *const u8 = unsafe { drnt.d_name().cast() };
         // SAFETY: as above
@@ -278,7 +278,7 @@ pub(crate) trait DirentConstructor {
         let base_len = self.file_index();
         let required_len = base_len + name_len;
 
-        if required_len > self.total_capacity() {
+        if crate::util::unlikely(required_len > self.total_capacity()) {
             self.reserve_for_long_name(required_len);
         }
         let buf_ptr: *mut u8 = self.path_buffer().as_mut_ptr().cast();
@@ -361,6 +361,7 @@ impl GetDents {
     #[rustfmt::skip]
     /// Convenience function for pointer arithmetic on the buffer
     pub(crate) const unsafe fn get_next_pointer(&mut self) -> Unique<dirent64> {
+        #[cfg(not(all(target_os="macos",target_pointer_width="32")))] // macos  32bit has 4 byte alignment
         debug_assert!(
             self.offset.is_multiple_of(8),
             "offset should always be multiple of 8"

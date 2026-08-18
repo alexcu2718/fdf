@@ -2,7 +2,6 @@ use core::fmt::{Debug, Display};
 use core::marker::Copy;
 use core::mem::MaybeUninit;
 use core::ops::{Add, Div, Mul, Sub};
-use core::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
 mod sealed {
     /// Sealed trait pattern to restrict `ValueType` implementation to i8 and u8 only
@@ -91,36 +90,10 @@ impl ValueType for u32 {}
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T, const SIZE: usize>
 where
-    T: ValueType, // Only generic over i8 and u8!
+    T: ValueType,
 {
     // Generic over size.
     pub(crate) data: MaybeUninit<[T; SIZE]>,
-}
-
-impl<T, const SIZE: usize, Idx> Index<Idx> for AlignedBuffer<T, SIZE>
-where
-    T: ValueType,
-    Idx: SliceIndex<[T]>,
-{
-    type Output = Idx::Output;
-
-    #[inline]
-    fn index(&self, index: Idx) -> &Self::Output {
-        // SAFETY: The buffer must initialised
-        unsafe { self.assume_init().get_unchecked(index) }
-    }
-}
-
-impl<T, const SIZE: usize, Idx> IndexMut<Idx> for AlignedBuffer<T, SIZE>
-where
-    T: ValueType,
-    Idx: SliceIndex<[T]>,
-{
-    #[inline]
-    fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
-        // SAFETY: The buffer must be initialised before access
-        unsafe { self.assume_init_mut().get_unchecked_mut(index) }
-    }
 }
 
 impl<T> Default for AlignedBuffer<T, { crate::fs::types::BUFFER_SIZE }>
@@ -288,7 +261,7 @@ where
      before calling this method. Accessing uninitialised memory is undefined behavior.
     */
     #[inline]
-    const unsafe fn assume_init(&self) -> &[T; SIZE] {
+    pub const unsafe fn assume_init(&self) -> &[T; SIZE] {
         // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { self.data.assume_init_ref() }
     }
@@ -301,7 +274,7 @@ where
      before calling this method. Accessing uninitialised memory is undefined behavior
     */
     #[inline]
-    const unsafe fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
+    pub const unsafe fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
         // SAFETY: Caller must ensure the buffer is fully initialised
         unsafe { self.data.assume_init_mut() }
     }

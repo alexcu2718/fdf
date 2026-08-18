@@ -15,15 +15,14 @@ memrchr is significantly changed from stdlib implementation to use a more effici
 */
 
 use core::num::NonZeroUsize;
+const USIZE_BYTES: usize = size_of::<usize>();
 #[inline]
 const fn repeat_u8(x: u8) -> usize {
-    usize::from_ne_bytes([x; size_of::<usize>()])
+    usize::from_ne_bytes([x; USIZE_BYTES])
 }
 
 const LO_USIZE: usize = repeat_u8(0x01);
 const HI_USIZE: usize = repeat_u8(0x80);
-
-const USIZE_BYTES: usize = size_of::<usize>();
 
 // I am simply too lazy to comment all of these, it turns out a nice optimisation existed for memrchr
 // I have done so, it seems the same optimisation is available for memchr but I need to work on the details
@@ -78,8 +77,9 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
 
     // Classic SWAR: may contain false positives due to cross-byte borrow.
     // However considering that we want to check *as quickly* as possible, this is ideal.
-
     let mut classic = input.wrapping_sub(LO_USIZE) & !input & HI_USIZE;
+    // We don't use the big endian formula because we need `!input` in scope
+    // which allows for CSE in this expression
     if classic == 0 {
         return None;
     }
@@ -117,7 +117,7 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
 // Only for BE
 const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
     // Classic HASZERO trick. (Mycroft)
-    NonZeroUsize::new(input.wrapping_sub(LO_USIZE) & (!input) & HI_USIZE)
+    NonZeroUsize::new(input.wrapping_sub(LO_USIZE) & HI_USIZE & !input)
 }
 
 /// Returns the last index matching the byte `x` in `text`.
@@ -132,79 +132,67 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     let len = text.len();
 
-    let ptr = text.as_ptr();
+    let start_ptr = text.as_ptr();
 
-    let (min_aligned_offset, max_aligned_offset) = {
-        // We call this just to obtain the length of the prefix and suffix.
-
-        // In the middle we always process two chunks at once.
-
-        // SAFETY: transmuting `[u8]` to `[usize]` is safe except for size differences
-
-        // which are handled by `align_to`.
-
-        let (prefix, _, suffix) = unsafe { text.align_to::<(usize, usize)>() };
-
-        (prefix.len(), len - suffix.len())
-    };
+    // Bytes until the next usize-aligned address.
+    let bytes_to_alignment = start_ptr.addr().wrapping_neg() & const { USIZE_BYTES - 1 };
+    let min_aligned_offset = bytes_to_alignment.min(len);
+    let remaining = len - min_aligned_offset;
+    let max_aligned_offset = min_aligned_offset + (remaining & !const { 2 * USIZE_BYTES - 1 }); //avoid division lints :(
+    // classic align in C AKA
+    // #define  align_up(x) (x & ~(sizeof(size_t)-1)) //(MUST be power of 2 )
 
     let mut offset = max_aligned_offset;
 
-    let start = text.as_ptr();
     let tail_len = len - offset; // tail is [offset, len)
     // SAFETY: trivially within bounds
-    if let Some(i) = unsafe { rposition_byte_len(start.add(offset), tail_len, x) } {
+    if let Some(i) = unsafe { rposition_byte_len(start_ptr.add(offset), tail_len, x) } {
         return Some(offset + i);
     }
 
-    // Search the body of the text, make sure we don't cross min_aligned_offset.
-
-    // offset is always aligned, so just testing `>` is sufficient and avoids possible
-
-    // overflow.
-
     let repeated_x = repeat_u8(x);
 
-    while offset > min_aligned_offset {
-        // SAFETY: offset starts at len - suffix.len(), as long as it is greater than
-        // min_aligned_offset (prefix.len()) the remaining distance is at least 2 * chunk_bytes.
-        // SAFETY: the body is trivially aligned due to align_to, avoid the cost of unaligned reads(same as memchr/memrchr in STD)
-        let lower = unsafe { ptr.add(offset - 2 * USIZE_BYTES).cast::<usize>().read() };
-        // SAFETY: as above
-        let upper = unsafe { ptr.add(offset - USIZE_BYTES).cast::<usize>().read() };
-
-        // Break if there is a matching byte.
-        // **CHECK UPPER FIRST**
-        //XOR to turn the matching bytes to NUL
-        // This swar algorithm has the benefit of not propagating 0xFF rightwards/leftwards after a match is found
+    // define a simple function to avoid repetitive code.
+    #[inline]
+    const unsafe fn check_usize(strptr: *const u8, offset: usize, mask: usize) -> Option<usize> {
+        debug_assert!(offset.is_multiple_of(USIZE_BYTES), "TRIVIAL CHECK");
+        // SAFETY: Always in bounds+aligned so read is valid.
+        let upper_or_lower = unsafe { strptr.add(offset).cast::<usize>().read() ^ mask };
 
         #[cfg(target_endian = "big")]
-        let maybe_match_upper = contains_zero_byte(upper ^ repeated_x);
+        let maybe_match = contains_zero_byte(upper_or_lower);
         #[cfg(target_endian = "little")]
         // because of borrow issues propagating to LSB we need to do a fix for LE, not for BE though, slight win?!
-        let maybe_match_upper = contains_zero_byte_borrow_fix(upper ^ repeated_x);
+        let maybe_match = contains_zero_byte_borrow_fix(upper_or_lower);
 
-        if let Some(num) = maybe_match_upper {
+        if let Some(num) = maybe_match {
             let zero_byte_pos = find_last_nul(num);
 
-            return Some(offset - USIZE_BYTES + zero_byte_pos);
+            return Some(offset + zero_byte_pos);
+        }
+        None
+    }
+
+    /*
+    Search the body of the text, make sure we don't cross min_aligned_offset.
+    offset is always aligned, so just testing `>` is sufficient and avoids possible overflow.
+    */
+
+    while offset > min_aligned_offset {
+        offset -= USIZE_BYTES;
+
+        // SAFETY: the body is trivially aligned due to align_to, avoid the cost of unaligned reads(same as memchr/memrchr in STD)
+        if let Some(valid) = unsafe { check_usize(start_ptr, offset, repeated_x) } {
+            return Some(valid);
         }
 
-        #[cfg(target_endian = "big")]
-        let maybe_match_lower = contains_zero_byte(lower ^ repeated_x);
-        #[cfg(target_endian = "little")]
-        let maybe_match_lower = contains_zero_byte_borrow_fix(lower ^ repeated_x);
-
-        if let Some(num) = maybe_match_lower {
-            // replace this function
-            let zero_byte_pos = find_last_nul(num);
-
-            return Some(offset - 2 * USIZE_BYTES + zero_byte_pos);
+        offset -= USIZE_BYTES;
+        // SAFETY: as above
+        if let Some(valid) = unsafe { check_usize(start_ptr, offset, repeated_x) } {
+            return Some(valid);
         }
-
-        offset -= 2 * USIZE_BYTES;
     }
     // The character we were looking for didn't appear in the aligned body, do a simple loop to check the head segment.
     // SAFETY: trivially within bounds
-    unsafe { rposition_byte_len(start, offset, x) }
+    unsafe { rposition_byte_len(start_ptr, offset, x) }
 }

@@ -133,7 +133,7 @@ impl<T: ?Sized> Unique<T> {
     /// requirements for a reference.
     #[inline]
     #[must_use]
-    pub const unsafe fn as_ref(&self) -> &T {
+    pub const unsafe fn as_ref<'ptr>(&self) -> &'ptr T {
         // SAFETY: the caller must guarantee that `self` meets all the
         // requirements for a reference.
         unsafe { &*self.as_ptr() }
@@ -185,6 +185,7 @@ impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
         unique.0
     }
 }
+
 impl Unique<dirent64> {
     #[inline]
     #[must_use]

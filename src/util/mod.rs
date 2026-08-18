@@ -38,7 +38,7 @@ pub use utils::getdirentries64;
 #[cfg(target_os = "macos")]
 pub(crate) use utils::openat_nocancel;
 
-pub(crate) use utils::BytePath;
 pub use utils::dirent_name_length;
+pub(crate) use utils::{BytePath, unlikely};
 
 pub use printer::PrinterBuilder;

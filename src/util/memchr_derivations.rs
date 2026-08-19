@@ -44,11 +44,6 @@ const fn find_last_nul(num: NonZeroUsize) -> usize {
 }
 
 /// Returns the last index matching the byte `x` in `text`.
-///
-/// This is an optimised version of memrchr. As part of a *potential* commit towards stdlib.
-//# References
-// - [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
-// - [Original memrchr implementation ](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161)
 #[inline]
 // Check assembly to see if we need this Adrian, you did it lol.
 // 1 fewer instruction using this, need to look at more.
@@ -68,47 +63,52 @@ const unsafe fn rposition_byte_len(base: *const u8, len: usize, needle: u8) -> O
 #[cfg(target_endian = "little")]
 #[must_use]
 const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
-    // Hybrid approach:
-    // 1) Use the classic SWAR test as a cheap early-out for the common case
-    //    where there are no zero bytes.
-    // 2) If the classic test indicates a possible match, compute a borrow/carry-
-    //    safe mask that cannot produce cross-byte false positives. This matters
-    //    for reverse search where we pick the *last* match.
+    /*
+    Hybrid approach:
+    1) Use the classic SWAR test as a cheap early-out for the common case
+       where there are no zero bytes.
+    2) If the classic test indicates a possible match, compute a borrow/carry-
+       safe mask that cannot produce cross-byte false positives. This matters
+       for reverse search where we pick the *last* match.
 
-    // Classic SWAR: may contain false positives due to cross-byte borrow.
-    // However considering that we want to check *as quickly* as possible, this is ideal.
+    Classic SWAR: may contain false positives due to cross-byte borrow.
+    However considering that we want to check *as quickly* as possible, this is ideal.
+    */
     let mut classic = input.wrapping_sub(LO_USIZE) & !input & HI_USIZE;
     // We don't use the big endian formula because we need `!input` in scope
     // which allows for CSE in this expression
     if classic == 0 {
         return None;
     }
-    // This function occurs a branch here contains zero byte doesn't, it delegates the branch
-    // to the memchr(on LE) (or opposite on BE) function, this is okay because a *branch still occurs*
+    /*
+    This function occurs a branch here contains zero byte doesn't, it delegates the branch
+    to the memchr(on LE) (or opposite on BE) function, this is okay because a *branch still occurs*
 
-    // Borrow-safe (carry-safe) SWAR:
-    //
-    // The classic HASZERO mask is perfect for a boolean “any zero byte?” check, but the *per-byte* mask
-    // can contain extra 0x80 bits when the subtraction `input - 0x01..` borrows across byte lanes.
-    // That’s a problem here because we don’t just test “non-zero?” — we feed the mask into
-    // `leading_zeros`/`trailing_zeros` to pick an actual byte index.
-    //
-    // Example (two adjacent bytes, lowest first):
-    // - `input = [0x00, 0x01]`
-    // - subtracting `0x01..` borrows from the `0x00` byte into the next byte, so the classic mask may
-    //   report both bytes as candidates even though only the first byte is truly zero.
-    //
-    // `!input << 7` moves each byte’s low bit into that byte’s 0x80 position; bytes with LSB=1 (notably
-    // 0x01, which is the common “borrow false-positive” case) get their candidate bit cleared.
-    // Due to CSE, `!input` is reused (EG on X86_64, register RDI is reused)
-    // Explanation further on https://github.com/gituser12981u2/memchr_stuff/blob/main/src/memchr_new.rs (my own work)
+    Borrow-safe (carry-safe) SWAR:
+
+    The classic HASZERO mask is perfect for a boolean “any zero byte?” check, but the *per-byte* mask
+    can contain extra 0x80 bits when the subtraction `input - 0x01..` borrows across byte lanes.
+    That’s a problem here because we don’t just test “non-zero?” — we feed the mask into
+    `leading_zeros`/`trailing_zeros` to pick an actual byte index.
+
+    Example (two adjacent bytes, lowest first):
+    - `input = [0x00, 0x01]`
+    - subtracting `0x01..` borrows from the `0x00` byte into the next byte, so the classic mask may
+      report both bytes as candidates even though only the first byte is truly zero.
+
+    `!input << 7` moves each byte’s low bit into that byte’s 0x80 position; bytes with LSB=1 (notably
+    0x01, which is the common “borrow false-positive” case) get their candidate bit cleared.
+    Due to CSE, `!input` is reused (EG on X86_64, register RDI is reused)
+    Explanation further on https://github.com/gituser12981u2/memchr_stuff/blob/main/src/memchr_new.rs
+    */
     classic &= !input << 7;
-
-    // SAFETY: `classic != 0` implies there is at least one real zero byte
-    // somewhere in the word (false positives only occur alongside a real zero
-    // due to borrow propagation), so `zero_mask` must be non-zero.
-    // Use this to get smarter intrinsic (aka ctlz/cttz non_zero)
-    // Note: Debug assertions check zero_mask!=0 so check tests for comprehensive validation
+    /*
+    SAFETY: `classic != 0` implies there is at least one real zero byte
+    somewhere in the word (false positives only occur alongside a real zero
+    due to borrow propagation), so `zero_mask` must be non-zero.
+    Use this to get smarter intrinsic (aka ctlz/cttz non_zero)
+    Note: Debug assertions check zero_mask!=0 so check tests for comprehensive validation
+    */
     Some(unsafe { NonZeroUsize::new_unchecked(classic) })
 }
 
@@ -120,9 +120,15 @@ const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
     NonZeroUsize::new(input.wrapping_sub(LO_USIZE) & HI_USIZE & !input)
 }
 
+// This is an optimised version of memrchr. As part of a *potential* commit towards stdlib.
+
 /// Returns the last index matching the byte `x` in `text`.
+///
+///# References
+///- [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
+///- [Original memrchr implementation ](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161)
 #[must_use]
-#[inline(never)]
+#[inline]
 pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // Scan for a single byte value by reading two `usize` words at a time.
     // Split `text` in three parts:

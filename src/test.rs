@@ -13,7 +13,6 @@ mod tests {
     use super::*;
     use crate::filters::{SizeFilter, TimeFilter};
     use crate::fs::{DirEntry, FileType};
-    use crate::util::BytePath;
     use crate::walk::Finder;
     use chrono::{Duration as ChronoDuration, Utc};
     use env_home::env_home_dir;

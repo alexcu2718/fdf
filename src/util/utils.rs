@@ -1,8 +1,5 @@
 use crate::dirent64;
-use crate::util::memchr_derivations::memrchr;
-use core::ffi::CStr;
-use core::ffi::{c_char, c_int, c_void};
-use core::ops::Deref;
+use core::ffi::{CStr, c_char, c_int, c_void};
 /**
   Wrapper for direct getdents syscalls
 
@@ -159,32 +156,16 @@ pub(crate) const fn unlikely(b: bool) -> bool {
     }
     b
 }
-/// A private trait for types that dereference to a byte slice (`[u8]`) representing file paths.
-pub(crate) trait BytePath<T>
-where
-    T: Deref<Target = [u8]>,
-{
-    /// Gets index of filename component start
-    fn file_name_index(&self) -> usize;
-}
 
-impl<T> BytePath<T> for T
-where
-    T: Deref<Target = [u8]>,
-{
-    /// Get the length of the basename of a path (up to and including the last '/')
-    /// Returns 0 for length 1 byte paths
-    #[inline]
-    fn file_name_index(&self) -> usize {
-        // (every file path going in here has at least a '/' inside it), this is a special case for root/'.'
-        if unlikely(self.len() == 1) {
-            return 0;
-        }
-
-        debug_assert!(!self.is_empty(), "should never be empty");
-        debug_assert!(!self.ends_with(b"/"), "file path ends with a slash!");
-        memrchr(b'/', self).map_or(1, |pos| pos + 1)
+#[inline]
+pub(crate) fn file_name_index(path: &[u8]) -> usize {
+    // the entries going into this are filepaths, therefore they must have length 1
+    if unlikely(path.len() == 1) {
+        return 0;
     }
+    debug_assert!(!path.is_empty(), "should never be empty");
+    debug_assert!(!path.ends_with(b"/"), "file path ends with a slash!"); //debug asserts for development
+    crate::util::memrchr(b'/', path).map_or(1, |pos| pos + 1)
 }
 
 #[inline]
@@ -258,6 +239,7 @@ My Cat Diavolo is cute.
  # Safety
  The caller must ensure:
  `dirent` is a valid, non-null pointer to a `libc::dirent64/libc::dirent`.
+ The minimum reclen is 24, which on a non-corrupted filesystem is perfectly reasonable, if you have a corrupted filesystem, good luck!
 
  # Performance
  This is almost always faster(by a significant amount) than strlen for dirents, expect in the case of trivially short names (potentially)
@@ -370,7 +352,6 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         Multiplying by 0 or 1 applies the mask conditionally without branching. */
         let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64); // (should use select unpredictable here if it was const)
         // This generates a conditional move under the hood.
-        //let mask = 0u64.wrapping_sub((reclen == 24) as u64) & MASK; // or equivalently this, LLVM should compile to cmov on all platforms
         // instead of going through a 'mul' op
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.

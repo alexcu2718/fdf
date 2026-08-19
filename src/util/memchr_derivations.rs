@@ -129,7 +129,7 @@ const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
 ///- [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
 ///- [Original memrchr implementation ](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161)
 #[must_use]
-#[inline(never)]
+#[inline]
 pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // Scan for a single byte value by reading two `usize` words at a time.
     // Split `text` in three parts:

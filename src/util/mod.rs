@@ -39,6 +39,6 @@ pub use utils::getdirentries64;
 pub(crate) use utils::openat_nocancel;
 
 pub use utils::dirent_name_length;
-pub(crate) use utils::{BytePath, unlikely};
+pub(crate) use utils::{file_name_index, unlikely};
 
 pub use printer::PrinterBuilder;

@@ -16,6 +16,7 @@ memrchr is significantly changed from stdlib implementation to use a more effici
 
 use core::num::NonZeroUsize;
 const USIZE_BYTES: usize = size_of::<usize>();
+const USIZE_MINUS_1: usize = USIZE_BYTES - 1;
 #[inline]
 const fn repeat_u8(x: u8) -> usize {
     usize::from_ne_bytes([x; USIZE_BYTES])
@@ -34,12 +35,12 @@ const HI_USIZE: usize = repeat_u8(0x80);
 const fn find_last_nul(num: NonZeroUsize) -> usize {
     #[cfg(target_endian = "big")]
     {
-        USIZE_BYTES - 1 - ((num.trailing_zeros()) >> 3) as usize
+        USIZE_MINUS_1 - ((num.trailing_zeros()) >> 3) as usize
     }
 
     #[cfg(target_endian = "little")]
     {
-        USIZE_BYTES - 1 - ((num.leading_zeros()) >> 3) as usize
+        USIZE_MINUS_1 - ((num.leading_zeros()) >> 3) as usize
     }
 }
 
@@ -128,7 +129,7 @@ const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
 ///- [Stanford Bit Twiddling Hacks find 0 byte ](http://www.icodeguru.com/Embedded/Hacker%27s-Delight/043.htm)
 ///- [Original memrchr implementation ](https://doc.rust-lang.org/src/core/slice/memchr.rs.html#111-161)
 #[must_use]
-#[inline]
+#[inline(never)]
 pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // Scan for a single byte value by reading two `usize` words at a time.
     // Split `text` in three parts:
@@ -136,18 +137,18 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // - body, scanned by 2 words at a time,
     // - the first remaining bytes, < 2 word size.
 
-    let len = text.len();
-
-    let start_ptr = text.as_ptr();
-
-    const ALIGN_MASK: usize = USIZE_BYTES - 1;
     const BLOCK_MASK: usize = 2 * USIZE_BYTES - 1;
 
-    let prefix = start_ptr.addr().wrapping_neg() & ALIGN_MASK;
+    let len = text.len();
+    let start_ptr = text.as_ptr();
+    // massaging the assembly on this was an absolute pain, I tried to write it as close to the required assembly as possible
+    // This saves approximately 5 instructions(compared to align_to), well on x86_64, I'm not digging deeper than that!
+    // distance from `start_ptr` to the next word-aligned address.
+    let prefix = start_ptr.addr().wrapping_neg() & USIZE_MINUS_1;
+    // clamp the aligned start to the end of `text` for short inputs.
     let min_aligned_offset = prefix.min(len);
-    let max_aligned_offset = min_aligned_offset + (len.saturating_sub(prefix) & !BLOCK_MASK);
-    // classic align in C AKA
-    // #define  align_up(x) (x & ~(sizeof(size_t)-1)) //(MUST be power of 2 )
+    // extend from the aligned start by as many complete two-word blocks as fit.
+    let max_aligned_offset = min_aligned_offset + (len.saturating_sub(prefix) & !BLOCK_MASK); // the + turns into a | because of the shaved bits.
 
     let mut offset = max_aligned_offset;
 

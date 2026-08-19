@@ -78,9 +78,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 */
 
-use crate::fs::ReadDir;
-use crate::fs::{FileDes, FileType, types::Result};
-use crate::{DirEntryError, util::BytePath as _};
+use crate::DirEntryError;
+use crate::fs::{FileDes, FileType, ReadDir, types::Result};
 use core::cell::Cell;
 use core::ffi::{CStr, c_char, c_int};
 use core::fmt;
@@ -397,7 +396,7 @@ impl DirEntry {
     /// Returns a [`ReadDir`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
     #[inline]
     #[allow(unused)] // for esoteric platforms
-    pub(crate) fn readdir_from_fd(&self, fd: FileDes) -> ReadDir {
+    pub(crate) fn readdir_from_fd(&self, fd: FileDes) -> Result<ReadDir> {
         ReadDir::from_fd(fd, self)
     }
 
@@ -555,6 +554,10 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
+    // THIS HACK HERE IS SO UGLY IM SO SORRY
+    // BASICALLY IF non getdents supported then from_fd for `ReadDir` can fail because it relies on fdopendir
+    // fdopendir can fail due to bad alloc and some other weird edge cases
+    // As this is an ugly implementation detail, may refactor this to be a bit nicer.
     pub(crate) fn is_empty_at(&self, opt_fd: Option<&FileDes>) -> bool {
         match self.file_type {
             FileType::RegularFile => opt_fd.map_or_else(
@@ -564,6 +567,17 @@ impl DirEntry {
                         .is_ok_and(|statted| statted.st_size == 0)
                 },
             ),
+
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "linux",
+                target_os = "android",
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd",
+                target_os = "illumos",
+                target_os = "solaris"
+            ))]
             FileType::Directory => opt_fd.map_or_else(
                 || self.is_empty(),
                 |parent_fd| {
@@ -573,6 +587,27 @@ impl DirEntry {
                         .is_some_and(|mut entries| entries.next().is_none())
                 },
             ),
+
+            #[cfg(not(any(
+                target_os = "macos",
+                target_os = "linux",
+                target_os = "android",
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd",
+                target_os = "illumos",
+                target_os = "solaris"
+            )))]
+            FileType::Directory => opt_fd.map_or_else(
+                || self.is_empty(),
+                |parent_fd| {
+                    Self::open_at(parent_fd.0, self.file_name_cstr())
+                        .ok()
+                        .and_then(|dir_fd| read_direntries_from_fd!(self, dir_fd).ok())
+                        .is_some_and(|entries| entries.is_ok_and(|mut x| x.next().is_none()))
+                },
+            ),
+
             _ => false,
         }
     }
@@ -945,14 +980,14 @@ impl DirEntry {
     #[allow(clippy::cast_possible_truncation)]
     pub fn to_full_path(&self) -> Result<Self> {
         self.get_realpath(|full_path| {
-            let file_name_index = full_path.to_bytes().file_name_index();
-
             let (file_type, ino) = if self.is_symlink() {
                 let statted = self.get_stat()?; // only call stat if it's a symlink, because I don't deduplicate normal files, this works well for symlinks
                 (FileType::from_stat(&statted), access_stat!(statted, st_ino))
             } else {
                 (self.file_type(), self.ino())
             };
+
+            let file_name_index = crate::util::file_name_index(full_path.to_bytes());
 
             Ok(Self {
                 path: full_path.into(),
@@ -1533,7 +1568,7 @@ impl DirEntry {
         // extract information from successful stat
         let get_stat = stat_syscall!(lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
         let inode = access_stat!(get_stat, st_ino);
-        let file_name_index = path_ref.file_name_index();
+        let file_name_index = crate::util::file_name_index(path_ref);
         let file_type = FileType::from_stat(&get_stat);
         Ok(Self {
             path: cstring.into(),

@@ -1,14 +1,3 @@
-#[cfg(any(
-    target_os = "macos",
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
-use crate::fs::types::SyscallBuffer;
 use crate::fs::{DirEntry, FileDes, FileType, Result};
 use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
@@ -107,18 +96,20 @@ impl ReadDir {
     /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
     /// full-path resolution for the child directory.
     #[inline]
-    pub(crate) fn from_fd(fd: FileDes, dir_path: &DirEntry) -> Self {
+    pub(crate) fn from_fd(fd: FileDes, dir_path: &DirEntry) -> Result<Self> {
         let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
         // SAFETY: caller provides a valid directory fd; fdopendir takes ownership.
-        let dir = unsafe { NonNull::new_unchecked(libc::fdopendir(fd.0)) };
+        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.0) }) else {
+            return_os_error!()
+        };
         debug_assert!(fd.is_open(), "We expect it to be open");
-        Self {
+        Ok(Self {
             dir,
             path_buffer,
             file_name_index,
             parent_depth: dir_path.depth,
             fd,
-        }
+        })
     }
 }
 
@@ -231,7 +222,7 @@ pub(crate) trait DirentConstructor {
         let path_buffer = self.path_buffer();
         let current_len = path_buffer.len();
         path_buffer.reserve(required_len - current_len);
-        // SAFETY: we reserved enough capacity and bytes in the extended range
+        // SAFETY: we reserved+(some extra, we assume weird fs here, like reiser or openzfs ) enough capacity and bytes in the extended range
         // are immediately written by `copy_to_nonoverlapping`.
         unsafe { path_buffer.set_len(required_len) };
     }
@@ -323,7 +314,7 @@ pub struct GetDents {
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// typically using the best calculated  buffer sizes, optimised for typical directory traversal (derived from syscall tracing)
-    pub(crate) syscall_buffer: SyscallBuffer,
+    pub(crate) syscall_buffer: crate::fs::SyscallBuffer,
     /// buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     pub(crate) path_buffer: Vec<MaybeUninit<u8>>,
@@ -437,7 +428,7 @@ impl GetDents {
 
     /// A constant representing the maximum size of the internal Stack based buffer on this platform
     /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
-    pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
+    pub const BUFFER_SIZE: usize = crate::fs::SyscallBuffer::BUFFER_SIZE;
 
     #[inline]
     #[allow(clippy::missing_assert_message)] // for cleaner code.
@@ -449,7 +440,7 @@ impl GetDents {
         }
 
         const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
-        debug_assert!(SyscallBuffer::new().as_ptr().cast::<u64>().is_aligned());
+        // syscall buffer is guaranteed to be aligned to 8, check the implementation.
 
         #[cfg(has_eof_trick)]
         /*
@@ -605,7 +596,7 @@ impl GetDents {
 
         Ok(Self {
             fd,
-            syscall_buffer: SyscallBuffer::new(),
+            syscall_buffer: crate::fs::SyscallBuffer::new(),
             path_buffer,
             file_name_index,
             parent_depth: dir.depth,
@@ -629,7 +620,7 @@ impl GetDents {
         let (path_buffer, file_name_index) = Self::init_from_path(dir);
         Self {
             fd,
-            syscall_buffer: SyscallBuffer::new(),
+            syscall_buffer: crate::fs::SyscallBuffer::new(),
             path_buffer,
             file_name_index,
             parent_depth: dir.depth,

@@ -987,7 +987,7 @@ impl DirEntry {
                 (self.file_type(), self.ino())
             };
 
-            let file_name_index = crate::util::file_name_index(full_path.to_bytes());
+            let file_name_index = Self::_file_name_index(full_path.to_bytes());
 
             Ok(Self {
                 path: full_path.into(),
@@ -1117,6 +1117,18 @@ impl DirEntry {
     #[inline]
     pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
         stat_syscall!(fstatat, fd.0, self.file_name_ptr(), AT_SYMLINK_NOFOLLOW)
+    }
+
+    #[inline]
+    /// stupid internal helper with few use cases.
+    fn _file_name_index(path: &[u8]) -> usize {
+        // the entries going into this are filepaths, therefore they must have length 1
+        if crate::util::unlikely(path.len() == 1) {
+            return 0;
+        }
+        debug_assert!(!path.is_empty(), "should never be empty");
+        debug_assert!(!path.ends_with(b"/"), "file path ends with a slash!"); //debug asserts for development
+        crate::util::memrchr(b'/', path).map_or(1, |pos| pos + 1)
     }
 
     /**
@@ -1568,7 +1580,7 @@ impl DirEntry {
         // extract information from successful stat
         let get_stat = stat_syscall!(lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
         let inode = access_stat!(get_stat, st_ino);
-        let file_name_index = crate::util::file_name_index(path_ref);
+        let file_name_index = Self::_file_name_index(path_ref);
         let file_type = FileType::from_stat(&get_stat);
         Ok(Self {
             path: cstring.into(),

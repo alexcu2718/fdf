@@ -158,17 +158,6 @@ pub(crate) const fn unlikely(b: bool) -> bool {
 }
 
 #[inline]
-pub(crate) fn file_name_index(path: &[u8]) -> usize {
-    // the entries going into this are filepaths, therefore they must have length 1
-    if unlikely(path.len() == 1) {
-        return 0;
-    }
-    debug_assert!(!path.is_empty(), "should never be empty");
-    debug_assert!(!path.ends_with(b"/"), "file path ends with a slash!"); //debug asserts for development
-    crate::util::memrchr(b'/', path).map_or(1, |pos| pos + 1)
-}
-
-#[inline]
 #[must_use]
 /**
  Returns the length of `dirent64` / `dirent` `d_name` without the trailing null byte.
@@ -232,7 +221,7 @@ My Cat Diavolo is cute.
  Returns the length of a `dirent64' /`dirent`  d_name` string in constant time using
  SWAR (SIMD within a register) bit tricks (equivalent to `libc::strlen`, does NOT include the null terminator)
 
- This function avoids branching and SIMD instructions, achieving O(1) time
+ This function avoids branching and SIMD instructions, achieving O(1) time (Well, nearly, slight cache effects but mostly unmeasurable)
  by reading the final 8 bytes of the structure and applying bit-masking
  operations to locate the null terminator.
 
@@ -242,8 +231,8 @@ My Cat Diavolo is cute.
  The minimum reclen is 24, which on a non-corrupted filesystem is perfectly reasonable, if you have a corrupted filesystem, good luck!
 
  # Performance
- This is almost always faster(by a significant amount) than strlen for dirents, expect in the case of trivially short names (potentially)
-On some systems
+ This is almost always faster(by a significant amount) than strlen for dirents, I have benchmarked it and it's in the cargo bench.
+ Mostly because strlen requires a non inlineable function call to libc so even for trivial lengths, the call overhead will dominate.
 
  # Example
  ```
@@ -338,21 +327,32 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
 
         // Create a mask for the first 3 bytes in the case where reclen==24, this handles the big endian case too.
-
-        const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
         /* When the record length is 24/`MIN_DIRENT_SIZE`, the kernel may insert nulls before d_name.
         Which will exist on index's 16/17/18  the d_name starts at 19, so anything before is invalid anyway.
-        The index 16/17 will contain the reclen, eg, for 24 it will simply be [24,0]
+        The index 16/17 will contain the reclen, eg, for 24 it will simply be [24,0], if 256 it'll be [0,1]
         the index 18 will contain the d_type, if it's unknown, then it'll be 0
 
+        Mask them out to avoid false detection of a terminator.*/
 
+        /*
+            This hacky expression generates a 24-bit mask without using a comparison or branch.
 
+            For the minimum valid directory-entry size(24), subtracting 25 underflows by one.
+            Because the subtraction is wrapping and performed as a u64, the result becomes u64::MAX:
 
-        Mask them out to avoid false detection of a terminator.
-        Multiplying by 0 or 1 applies the mask conditionally without branching. */
-        let mask: u64 = MASK * ((reclen == MIN_DIRENT_SIZE) as u64); // (should use select unpredictable here if it was const)
-        // This generates a conditional move under the hood.
-        // instead of going through a 'mul' op
+            shifting this right by 40 bits leaves exactly the low 24 bits set:
+        */
+        let mask = (reclen as u64).wrapping_sub(25) >> 40;
+        #[cfg(target_endian = "big")]
+        #[expect(clippy::shadow_reuse, reason = "BE needs shifting")]
+        let mask = mask << 40; // There may be a smarter way but I got too lazy to figure that out for this niche of a use case
+
+        debug_assert!(
+            reclen == 24 && mask == u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0])
+                || mask == 0 && reclen != 24,
+            "Checking condition holds"
+        );
+
         /*
          Apply the mask to ignore non-name bytes while preserving name bytes.
          Result:
@@ -385,7 +385,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         because although rep bsf is microcoded to tzcnt (if supported), it still has to do an unnecessary 0 check here
          */
 
-        //SAFETY: The u64 can never be all 0's post-mask
+        //SAFETY: The u64 can never be all 0's post-mask because the last word ALWAYS contains at least one NUL, which become 0x80
         #[cfg(target_endian = "little")]
         let masked_word = unsafe {
             NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64)
@@ -436,16 +436,16 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 /*
      assembly output: x86_64 with BMI/other optimisations
 
+
+fdf::util::utils::dirent_const_time_strlen:
         movzx eax, word ptr [rdi + 16]
-        xor ecx, ecx
-        cmp rax, 24
-        mov edx, 16777215
-        cmovne rdx, rcx  <--- conditional move, no branch
-        or rdx, qword ptr [rdi + rax - 8]
-        movabs rcx, -72340172838076673 // Loading this constant with be amortised due to inlining (havent checked for stack spillage, eh, unavoidable if so anyways.)
-        add rcx, rdx
-        andn rcx, rdx, rcx
-        movabs rdx, -9187201950435737472 // as above.
+        lea rcx, [rax - 25]
+        shr rcx, 40
+        or rcx, qword ptr [rdi + rax - 8]
+        movabs rdx, -72340172838076673  ;Loading this constant with be amortised due to inlining (havent checked for stack spillage, eh, unavoidable if so anyways.)
+        add rdx, rcx
+        andn rcx, rcx, rdx
+        movabs rdx, -9187201950435737472
         and rdx, rcx
         tzcnt rcx, rdx
         shr ecx, 3
@@ -455,93 +455,21 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
 Without BMI
 
-     movzx eax, word ptr [rdi + 16]
-        xor ecx, ecx
-        cmp rax, 24
-        mov edx, 16777215
-        cmovne rdx, rcx
-        or rdx, qword ptr [rdi + rax - 8]
-        movabs rcx, -72340172838076673
-        add rcx, rdx
-        not rdx
-        and rcx, rdx
-        movabs rdx, -9187201950435737472
+       movzx eax, word ptr [rdi + 16]
+        lea rcx, [rax - 25]
+        shr rcx, 40
+        or rcx, qword ptr [rdi + rax - 8]
+        movabs rdx, -72340172838076673
+        add rdx, rcx
+        not rcx
         and rdx, rcx
-        rep bsf rcx, rdx   <---- rep bsf is encoded to tzcnt on most x86_64 cpu's supporting it
+        movabs rcx, -9187201950435737472
+        and rcx, rdx
+        rep bsf rcx, rcx
         shr ecx, 3
         add rax, rcx
         add rax, -27
         ret
 
-
-*/
-
-/*
-
-// Works on 32bit too, surprisingly!
-
-// C implementation (so people can understand it better)
-
-https://godbolt.org/z/9YM4xqx5s
-
-#if defined(__linux__) && defined(__LP64__)
-uint32_t dirent_const_time(const struct dirent *drnt) {
-#define DIRENT_HEADER_START (offsetof(struct dirent, d_name))
-
-#define MIN_DIRENT_SIZE (((DIRENT_HEADER_START) + 7) & ~7)
-#define HI_U64 0x8080808080808080ULL
-#define LO_U64 0x0101010101010101ULL
-
-#if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-#define MASK 0x0000000000FFFFFFULL
-#else
-#define MASK 0xFFFFFF0000000000ULL
-#endif
-
-  const uint32_t reclen = drnt->d_reclen;
-  const uint64_t mask = MASK * (uint64_t)(reclen == MIN_DIRENT_SIZE);
-  uint64_t last_word = *(uint64_t *)((uint8_t *)(drnt) + (reclen - 8));
-  last_word |= mask;
-
-#if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-  const uint64_t masked_lasked_word =
-      (last_word - LO_U64) & ~last_word & HI_U64;
-  const uint32_t byte_pos = __builtin_ctzll(masked_lasked_word) >> 3;
-#else
-  const uint64_t masked_lasked_word =
-      ((~last_word & ~HI_U64) + LO_U64) & (~last_word & HI_U64);
-  const uint32_t byte_pos = __builtin_clzll(masked_lasked_word) >> 3;
-#endif
-
-  return reclen - DIRENT_HEADER_START + byte_pos - 8;
-}
-#else
-#error "dirent_const_time is only supported on linux in this simplified example (and GCC/Clang, you'll need to use different intrinsics for MSVC (irrelevant cos wont work on windows lol)"
-#endif
-*/
-
-/*
-C version assembly
-(Only distinction is we don't use LEA is due to LLVM vs GCC compiler model, I should look into this one day!)
-
-
-
-dirent_const_time:
-        movzx   ecx, WORD PTR [rdi+16]
-        xor     edx, edx
-        mov     eax, 16777215
-        cmp     rcx, 24
-        cmove   rdx, rax
-        or      rdx, QWORD PTR [rdi-8+rcx]
-        movabs  rax, -72340172838076673
-        add     rax, rdx
-        not     rdx
-        and     rax, rdx
-        movabs  rdx, -9187201950435737472
-        and     rax, rdx
-        rep bsf eax, eax
-        shr     rax, 3
-        lea     rax, [rcx-27+rax]
-        ret
 
 */

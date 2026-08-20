@@ -3,57 +3,58 @@
 #![allow(clippy::restriction)]
 #![allow(clippy::nursery)]
 
-use core::mem::offset_of;
-use core::num::NonZeroU64;
+use core::{mem::offset_of, num::NonZeroU64};
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use std::hint::black_box;
 
+const MAX_DIRENT_SIZE: usize = 2000; // 'officially' its 256
+#[allow(non_camel_case_types)]
+type dirent64 = LibcDirent64;
+
 /// Modified version to work for this test function(copy pasted really)
-///
-/// # Safety
-/// - `dirent` must be non-null and properly aligned for `LibcDirent64`
-/// - `dirent` must point to a valid `LibcDirent64` structure as provided by the OS,
-///   and the memory must be readable for at least `(*dirent).d_reclen` bytes.
-/// - `(*dirent).d_reclen` must be at least `MINIMUM_DIRENT_SIZE` and a multiple of 8, as guaranteed by the kernel for valid `dirent64` records.
-/// - The buffer must not be mutated while this function is executing.
 #[inline]
-pub const unsafe fn dirent_const_time_strlen(dirent: *const LibcDirent64) -> usize {
-    const DIRENT_HEADER_START: usize = offset_of!(LibcDirent64, d_name);
-    const MINIMUM_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
-    const LO_U64: u64 = 0x0101_0101_0101_0101;
-    const HI_U64: u64 = 0x8080_8080_8080_8080;
-    let reclen = unsafe { (*dirent).d_reclen } as usize;
-    /*
-      Read the last 8 bytes of the struct as a u64.
-      This works because dirents are always 8-byte aligned.
-    */
-    // SAFETY: We're indexing in bounds within the pointer (it is guaranteed aligned by the kernel)
-    // and alignment is guranteed by the kernel
-    let mut last_word: u64 = unsafe { dirent.byte_add(reclen - 8).cast::<u64>().read() };
+pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
+    // On these systems where we need a bit of 'black magic' (no d_namlen field)
 
-    const MASK: u64 = u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    // Offset from the start of the struct to the beginning of d_name.
+    const DIRENT_HEADER_START: usize = offset_of!(dirent64, d_name);
+    // Access the last field and then round up to find the minimum struct size
+    const MIN_DIRENT_SIZE: usize = DIRENT_HEADER_START.next_multiple_of(8);
+    // Compile time assert to immediately cancel the build if invalidated
+    const { assert!(MIN_DIRENT_SIZE == 24, "dirent min size must be 24!") };
+    const LO_U64: u64 = !0 / 0xFF;
+    const HI_U64: u64 = LO_U64 * 0x80;
 
-    let mask: u64 = MASK * ((reclen == MINIMUM_DIRENT_SIZE) as u64);
+    /*  SAFETY: `dirent` is valid by precondition */
+    let reclen = unsafe { (*drnt).d_reclen } as usize;
+
+    let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
+
+    let mask = (reclen as u64).wrapping_sub(25) >> 40;
+    #[cfg(target_endian = "big")]
+    #[expect(clippy::shadow_reuse, reason = "BE needs shifting")]
+    let mask = mask << 40; // There may be a smarter way but I got too lazy to figure that out for this niche of a use case
 
     last_word |= mask;
 
+    //SAFETY: The u64 can never be all 0's post-mask because the last word ALWAYS contains at least one NUL, which become 0x80
     #[cfg(target_endian = "little")]
-    //SAFETY: The u64 can never be all 0's post-SWAR
-    let zero_bit =
+    let masked_word =
         unsafe { NonZeroU64::new_unchecked(last_word.wrapping_sub(LO_U64) & !last_word & HI_U64) };
-    //http://0x80.pl/notesen/2016-11-28-simd-strfind.html#algorithm-1-generic-simd
+
     #[cfg(target_endian = "big")]
-    //SAFETY: The u64 can never be all 0's post-SWAR
-    let zero_bit = unsafe {
+    //SAFETY: as in LE version.
+    let masked_word = unsafe {
         NonZeroU64::new_unchecked(
             (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
         )
     };
+
     // Find the position of the null terminator
     #[cfg(target_endian = "little")]
-    let byte_pos = (zero_bit.trailing_zeros() >> 3) as usize;
+    let byte_pos = (masked_word.trailing_zeros() >> 3) as usize;
     #[cfg(target_endian = "big")]
-    let byte_pos = (zero_bit.leading_zeros() >> 3) as usize;
+    let byte_pos = (masked_word.leading_zeros() >> 3) as usize;
 
     reclen - DIRENT_HEADER_START + byte_pos - 8
 }
@@ -65,20 +66,23 @@ pub struct LibcDirent64 {
     pub d_off: u64,
     pub d_reclen: u16,
     pub d_type: u8,
-    pub d_name: [u8; 256],
+    pub d_name: [u8; MAX_DIRENT_SIZE],
 }
 
 const fn calculate_min_reclen(name_len: usize) -> u16 {
-    const HEADER_SIZE: usize = offset_of!(LibcDirent64, d_name);
+    const HEADER_SIZE: usize = offset_of!(dirent64, d_name);
     let total_size = HEADER_SIZE + name_len + 1;
     total_size.next_multiple_of(8) as _
     //reclen follows specification: must be multiple of 8 and at least 24 bytes but we calculate the reclen based on the name length
     //this works because it's given the same representation in memory so repr C will ensure the layout is compatible
 }
 
-fn make_dirent(name: &str) -> LibcDirent64 {
+fn make_dirent(name: &str) -> dirent64 {
     let bytes = name.as_bytes();
-    assert!(bytes.len() < 256, "Name too long for dirent structure");
+    assert!(
+        bytes.len() < MAX_DIRENT_SIZE,
+        "Name too long for dirent structure"
+    );
 
     let min_reclen = calculate_min_reclen(bytes.len());
     let mut entry = LibcDirent64 {
@@ -86,7 +90,7 @@ fn make_dirent(name: &str) -> LibcDirent64 {
         d_off: 0,
         d_reclen: min_reclen,
         d_type: 0,
-        d_name: [0; 256],
+        d_name: [0; MAX_DIRENT_SIZE],
     };
 
     let (name_bytes, tail) = entry.d_name.split_at_mut(bytes.len());
@@ -100,21 +104,31 @@ fn make_dirent(name: &str) -> LibcDirent64 {
 }
 
 fn bench_strlen(c: &mut Criterion) {
-    let length_groups = [
-        ("tiny (1-4)", "a"),
-        ("small (5-16)", "file.txtth6"),
-        ("medium (17-64)", "config_files/settings/default.json"),
-        (
-            "large (65-128)",
-            "very_long_directory_name/with_subfolders/and_a_very_long_filename.txt",
-        ),
-        ("xlarge (129-255)", &"a".repeat(200)),
-        ("max length (255)", &"b".repeat(255)),
+    let mut length_groups = vec![
+        ("length=1", "a".to_owned()),
+        ("length=16", "b".repeat(16)),
+        ("length=32", "c".repeat(32)),
+        ("length=64", "y".repeat(64)),
+        ("length=128 ", "a".repeat(128)),
+        ("length=200", "b".repeat(200)),
+        ("length=255", "b".repeat(255)),
     ];
+
+    if MAX_DIRENT_SIZE > 300 {
+        length_groups.push(("length=320", "c".repeat(320)))
+    }
+
+    if MAX_DIRENT_SIZE > 520 {
+        length_groups.push(("length=512", "o".repeat(512)))
+    }
+
+    if MAX_DIRENT_SIZE > 1040 {
+        length_groups.push(("length=1024", "o".repeat(1024)))
+    }
 
     let all_entries: Vec<_> = length_groups
         .iter()
-        .map(|entry| make_dirent(entry.1))
+        .map(|entry| make_dirent(&entry.1))
         .collect();
 
     //  make separate benchmark groups one at a time
@@ -122,7 +136,7 @@ fn bench_strlen(c: &mut Criterion) {
         let mut group = c.benchmark_group("strlen_by_length");
 
         for (size_name, name) in length_groups {
-            let entry = make_dirent(name);
+            let entry = make_dirent(&name);
             let byte_len = name.len();
 
             group.throughput(Throughput::Bytes(byte_len as u64));

@@ -172,13 +172,15 @@ jobs:
         uses: vmactions/solaris-vm@v1
         with:
           usesh: true
-          mem: 2048
+          mem: 6144
+          cpu: 2
           release: "11.4-gcc-14"
           prepare: |
             curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/psumbera/rustup/refs/heads/solaris-rustup/rustup-init.sh | sh -s -- -y
             echo '. ~/.cargo/env' >> ~/.profile
           run: |
             . ~/.cargo/env
+            export CARGO_BUILD_JOBS=2
             cargo build --verbose
             cargo test --verbose
             cargo build --release --verbose

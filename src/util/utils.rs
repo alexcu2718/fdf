@@ -349,7 +349,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
         debug_assert!(
             reclen == 24 && mask == u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0])
-                || mask == 0,
+                || mask == 0 && reclen != 24,
             "Checking condition holds"
         );
 

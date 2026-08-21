@@ -30,11 +30,11 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
     let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
 
+    #[cfg(target_endian = "little")]
     let mask = (reclen as u64).wrapping_sub(25) >> 40;
-    #[cfg(target_endian = "big")]
-    #[expect(clippy::shadow_reuse, reason = "BE needs shifting")]
-    let mask = mask << 40; // There may be a smarter way but I got too lazy to figure that out for this niche of a use case
 
+    #[cfg(target_endian = "big")]
+    let mask = (reclen as u64).wrapping_sub(25) & 0xFFFF_FF00_0000_0000;
     last_word |= mask;
 
     //SAFETY: The u64 can never be all 0's post-mask because the last word ALWAYS contains at least one NUL, which become 0x80

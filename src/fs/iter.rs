@@ -310,7 +310,7 @@ High-throughput directory iterator backed by `getdents` or `getdirentries`,
 ))]
 pub struct GetDents {
     /// File descriptor of the open directory, wrapped in a `New Type`, does not implement Drop(maydo at later point),
-    /// The iterator closes the file descriptor upon this struct beying dropped.
+    /// The iterator closes the file descriptor upon this struct being dropped.
     pub(crate) fd: FileDes,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// typically using the best calculated  buffer sizes, optimised for typical directory traversal (derived from syscall tracing)

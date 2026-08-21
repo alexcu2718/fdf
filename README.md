@@ -194,10 +194,17 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         This works because dirents are always 8-byte aligned. (it is guaranteed aligned by the kernel) */
         let mut last_word: u64 = unsafe { drnt.byte_add(reclen - 8).cast::<u64>().read() };
 
+        #[cfg(target_endian = "little")]// MIN dirent size is 24, it is alwats a multiple of 8, 24 wraps, >=32 Doesn't
         let mask = (reclen as u64).wrapping_sub(25) >> 40;// Check implementation for explanation, HORRIBLE!
-
+        // BE the bits in the correct position however we only want the first 3 bytes.
         #[cfg(target_endian = "big")]
-        let mask = mask << 40; //// There may be a smarter way but I got too lazy to figure that out for this niche of a use case
+        let mask = (reclen as u64).wrapping_sub(25) & 0xFFFF_FF00_0000_0000;
+
+        debug_assert!( // handy debug test, explains what the above means!
+            reclen == 24 && mask == u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0])
+                || mask == 0 && reclen != 24,
+            "Checking condition holds"
+        );
 
         //Apply the mask to ignore non-name bytes while preserving name bytes.
         last_word |= mask;

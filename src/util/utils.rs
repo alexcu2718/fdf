@@ -342,12 +342,15 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
 
             shifting this right by 40 bits leaves exactly the low 24 bits set:
         */
+        #[cfg(target_endian = "little")]
         let mask = (reclen as u64).wrapping_sub(25) >> 40;
-        #[cfg(target_endian = "big")]
-        #[expect(clippy::shadow_reuse, reason = "BE needs shifting")]
-        let mask = mask << 40; // There may be a smarter way but I got too lazy to figure that out for this niche of a use case
 
+        // Big endian has the bits in the correct position however we only want the first 3 bytes.
+        #[cfg(target_endian = "big")]
+        let mask = (reclen as u64).wrapping_sub(25) & 0xFFFF_FF00_0000_0000; // Could cast to a u32, shift by 8 then cast back to u64 but that's horrible
+        // not checking the asm on that...
         debug_assert!(
+            // handy debug test, explains what the above means!
             reclen == 24 && mask == u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0])
                 || mask == 0 && reclen != 24,
             "Checking condition holds"

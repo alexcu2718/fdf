@@ -1,10 +1,7 @@
-use crate::{
-    SearchConfig,
-    fs::{DirEntry, FileDes},
-};
+use crate::{SearchConfig, fs::DirEntry};
 
 /// Filter function type for directory entries,
 pub type FilterType =
-    fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>, Option<&FileDes>) -> bool;
+    fn(&SearchConfig, &DirEntry, Option<DirEntryFilter>, Option<std::os::fd::BorrowedFd>) -> bool;
 /// Generic filter function type for directory entries
 pub type DirEntryFilter = fn(&DirEntry) -> bool;

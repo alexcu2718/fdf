@@ -1,5 +1,7 @@
 use crate::dirent64;
 use core::ffi::{CStr, c_char, c_int, c_void};
+
+const _: () = assert!(libc::INT_MAX == i32::MAX, "Trivial assert"); //paranoia
 /**
   Wrapper for direct getdents syscalls
 
@@ -13,12 +15,12 @@ use core::ffi::{CStr, c_char, c_int, c_void};
  - Requires valid open directory descriptor
  - Buffer must be valid for writes of `buffer_size` bytes
  - Buffer must be aligned to 8 bytes.
+  - Buffer size must be less than `i32::MAX`
 
  # Returns
  - Positive: Number of bytes read
  - 0: End of directory
  - Negative: Error code (set errno and check)
- - Buffer size must be less than `i32::MAX`
 
    This function is only available on Linux/Android/OpenBSD/NetBSD/Illumos/Solaris.
 */
@@ -32,7 +34,6 @@ use core::ffi::{CStr, c_char, c_int, c_void};
     target_os = "solaris"
 ))]
 pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize) -> isize {
-    const { assert!(libc::INT_MAX == i32::MAX, "Trivial assert") }; //paranoia
     debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in getdents64");
     debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
 
@@ -48,19 +49,22 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
         target_os = "netbsd"
     ))]
     {
+        //https://man.netbsd.org/getdents.2
+        //https://docs.oracle.com/cd/E86824_01/html/E54765/getdents-2.html
+
         //Link the function, we can't use the direct syscall because BSD's dont allow it.
         unsafe extern "C" {
             //TODO add dragonfly here(?) TODO once they support Rust 2024
             #[cfg_attr(target_os = "netbsd", link_name = "__getdents30")] //special case for NetBSD
             //#[cfg_attr(any(target_os = "linux", target_os = "android"),link_name = "getdents64")]
             // ^ how to link on Linux, not sure if this works on android though., too lazy to test.
-            fn getdents(fd: c_int, dirp: *mut c_void, count: usize) -> isize;
+            fn getdents(fd: c_int, dirp: *mut c_void, count: usize) -> c_int;
         }
         // SAFETY: non required except buffer length must not exceed the provided size, then we get accessing out of bounds memory...
-        unsafe { getdents(fd, buffer_ptr, buffer_size) }
+        unsafe { getdents(fd, buffer_ptr, buffer_size) as _ } //upcast to isize to make the API easier.
     }
 
-    // SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
+    //SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[expect(clippy::cast_possible_truncation, reason = "clong is isize on Unix")]
     unsafe {
@@ -100,7 +104,6 @@ pub unsafe fn getdirentries64(
     nbytes: usize,
     basep: *mut libc::off_t,
 ) -> isize {
-    const { assert!(libc::INT_MAX == i32::MAX, "Trivial assert") }; // me being overly paranoid.
     debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in GDE64");
     debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
     debug_assert!(
@@ -119,7 +122,7 @@ pub unsafe fn getdirentries64(
             buf: *mut c_void,
             nbytes: usize,
             basep: *mut libc::off_t,
-        ) -> isize;
+        ) -> isize; //TODO check mac32 bit, probably can ignore for now.
     } // as above
     // By doing this, we avoid fstatf64 calls and a thread mutex enforced by readdir (completely not needed for single thread reading)
     // IT MAKES NO SENSE to parallelise readdir, it's fundamentally a sequential operation unless you're doing some really wacky stuff.

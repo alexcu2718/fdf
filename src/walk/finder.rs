@@ -1,6 +1,6 @@
 use crate::{
     DirEntryError, FilesystemIOError, SearchConfig, SearchConfigError, TraversalError,
-    fs::{DirEntry, FileDes, FileType},
+    fs::{DirEntry, FileType},
     util::PrinterBuilder,
     walk::{DirEntryFilter, FilterType, finder_builder::FinderBuilder},
 };
@@ -13,6 +13,7 @@ use crossbeam_channel::{Receiver, SendError, Sender, bounded};
 use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use dashmap::DashSet;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use std::os::fd::{AsRawFd as _, BorrowedFd};
 use std::{
     ffi::OsStr,
     path::Path,
@@ -382,7 +383,7 @@ impl Finder {
 
     /// Determines if a directory should be traversed and caches the result
     #[inline]
-    fn should_traverse(&self, dir: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+    fn should_traverse(&self, dir: &DirEntry, opt_fd: Option<BorrowedFd>) -> bool {
         match dir.file_type {
             // Regular directory - always traversible
             FileType::Directory => true,
@@ -406,7 +407,7 @@ impl Finder {
 
     /// Applies custom file filtering logic
     #[inline]
-    fn file_filter(&self, dir: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+    fn file_filter(&self, dir: &DirEntry, opt_fd: Option<BorrowedFd>) -> bool {
         (self.file_filter)(&self.search_config, dir, self.custom_filter, opt_fd)
     }
 
@@ -615,7 +616,11 @@ impl Finder {
         // Otherwise use readdir
         match read_direntries!(dir) {
             Ok(entries) => {
-                let opt_fd = Some(&FileDes(entries.fd.0)); //dirty hack, need to revisit my approach
+                let raw_fd = entries.fd.as_raw_fd();
+                // SAFETY: `raw_fd` stays valid for the loop body since `entries` (and its owned fd) outlives it;
+                // constructing the `BorrowedFd` this way (instead of borrowing `entries.fd` directly) avoids
+                // holding a borrow of `entries` across the `for entry in entries` move below.
+                let opt_fd = Some(unsafe { BorrowedFd::borrow_raw(raw_fd) }); //dirty hack, need to revisit my approach
                 // I need to figure out how to use 'openat' style on opening queued file descriptors
                 // Unfortunately queueing file descriptors will fail once file descriptors go past ulimit
                 // but they won't for consequent file descriptors

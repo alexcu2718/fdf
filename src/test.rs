@@ -1338,8 +1338,7 @@ mod tests {
 
         let _ = File::create(dir.join("regular.txt"));
         let entries = dir_entry.readdir().unwrap();
-        let file_des = entries.dirfd();
-        assert!(file_des.is_open());
+
         let entries_collected: Vec<_> = entries.collect();
 
         assert_eq!(entries_collected.len(), 1);
@@ -1357,8 +1356,6 @@ mod tests {
 
         let _ = File::create(dir.join("regular.txt"));
         let entries = dir_entry.getdents().unwrap();
-        let file_des = entries.dirfd();
-        assert!(file_des.is_open());
         let entries_collected: Vec<_> = entries.collect();
 
         assert_eq!(entries_collected.len(), 1);

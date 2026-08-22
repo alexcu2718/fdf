@@ -1,10 +1,15 @@
-use crate::fs::FileDes;
 use core::ffi::CStr;
 use libc::{
     AT_SYMLINK_FOLLOW, AT_SYMLINK_NOFOLLOW, DT_BLK, DT_CHR, DT_DIR, DT_FIFO, DT_LNK, DT_REG,
     DT_SOCK, DT_UNKNOWN, S_IFMT, fstatat, mode_t,
 };
-use std::{os::unix::fs::FileTypeExt as _, path::Path};
+use std::{
+    os::{
+        fd::{AsRawFd as _, BorrowedFd},
+        unix::fs::FileTypeExt as _,
+    },
+    path::Path,
+};
 
 /**
 Represents the type of a file in the filesystem
@@ -115,8 +120,14 @@ impl FileType {
         */
     #[inline]
     #[must_use]
-    pub fn from_fd_no_follow(fd: &FileDes, filename: &CStr) -> Self {
-        stat_syscall!(fstatat, fd.0, filename.as_ptr(), AT_SYMLINK_NOFOLLOW, DTYPE)
+    pub fn from_fd_no_follow(fd: BorrowedFd, filename: &CStr) -> Self {
+        stat_syscall!(
+            fstatat,
+            fd.as_raw_fd(),
+            filename.as_ptr(),
+            AT_SYMLINK_NOFOLLOW,
+            DTYPE
+        )
     }
 
     /**
@@ -141,8 +152,14 @@ impl FileType {
     */
     #[inline]
     #[must_use]
-    pub fn from_fd_follow(fd: &FileDes, filename: &CStr) -> Self {
-        stat_syscall!(fstatat, fd.0, filename.as_ptr(), AT_SYMLINK_FOLLOW, DTYPE)
+    pub fn from_fd_follow(fd: BorrowedFd, filename: &CStr) -> Self {
+        stat_syscall!(
+            fstatat,
+            fd.as_raw_fd(),
+            filename.as_ptr(),
+            AT_SYMLINK_FOLLOW,
+            DTYPE
+        )
     }
 
     /// Returns true if this represents a directory  (cost free check)

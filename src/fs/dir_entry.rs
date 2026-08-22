@@ -79,16 +79,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 */
 
 use crate::DirEntryError;
-use crate::fs::{FileDes, FileType, ReadDir, types::Result};
+use crate::fs::{FileType, ReadDir, types::Result};
+use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ffi::{CStr, c_char, c_int};
 use core::fmt;
-
-use chrono::{DateTime, Utc};
 use libc::{
     AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK,
     X_OK, access, faccessat, fstatat, lstat, realpath, stat,
 };
+use std::os::fd::{AsRawFd as _, BorrowedFd, FromRawFd as _, OwnedFd};
 
 #[cfg(target_os = "android")]
 const AT_EACCESS: c_int = 0; // android being weird, again....
@@ -290,14 +290,14 @@ impl DirEntry {
     }
 
     #[inline]
-    pub(crate) fn is_executable_at(&self, opt_fd: Option<&FileDes>) -> bool {
+    pub(crate) fn is_executable_at(&self, opt_fd: Option<BorrowedFd>) -> bool {
         // X_OK is the execute permission, requires access call
         // SAFETY: All pointers are valid C strings from DirEntry internals.
         self.is_regular_file()
             && unsafe {
                 opt_fd.map_or_else(
                     || faccessat(AT_FDCWD, self.as_ptr(), X_OK, AT_EACCESS) == 0,
-                    |fd| faccessat(fd.0, self.file_name_ptr(), X_OK, AT_EACCESS) == 0,
+                    |fd| faccessat(fd.as_raw_fd(), self.file_name_ptr(), X_OK, AT_EACCESS) == 0,
                 )
             }
     }
@@ -345,7 +345,7 @@ impl DirEntry {
      - `O_RDONLY`: Indicate read only access
 
     */
-    pub(crate) fn open(&self) -> Result<FileDes> {
+    pub(crate) fn open(&self) -> Result<OwnedFd> {
         // TODO investigate openat2 benefits (RESOLVE_NO_MAGICLINKS? good for excluding /proc)
         // There's additional flags
         //https://github.com/BurntSushi/ripgrep/issues/1333
@@ -370,8 +370,8 @@ impl DirEntry {
         if fd < 0 {
             return_os_error!()
         }
-
-        Ok(FileDes(fd))
+        // SAFETY: Checked for negative ret values
+        Ok(unsafe { OwnedFd::from_raw_fd(fd) })
     }
 
     /// Opens a child directory by name relative to an already-open parent directory fd.
@@ -379,24 +379,27 @@ impl DirEntry {
     /// Uses `openat(2)/openat_nocancel` to avoid a full path resolution — the kernel resolves the name
     /// relative to `parent_fd` directly.  The same flags as [`Self::open`] are used.
     #[inline]
-    pub(crate) fn open_at(parent_fd: i32, child_name: &CStr) -> Result<FileDes> {
+    pub(crate) fn open_at(parent_fd: BorrowedFd, child_name: &CStr) -> Result<OwnedFd> {
         const FLAGS: c_int = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK | O_RDONLY;
         #[cfg(not(target_os = "macos"))]
         // SAFETY: child_name is null-terminated; parent_fd is a valid open directory fd.
-        let fd = unsafe { libc::openat(parent_fd, child_name.as_ptr(), FLAGS) };
+        let fd = unsafe { libc::openat(parent_fd.as_raw_fd(), child_name.as_ptr(), FLAGS) };
         #[cfg(target_os = "macos")]
         // SAFETY: as above
-        let fd = unsafe { crate::util::openat_nocancel(parent_fd, child_name.as_ptr(), FLAGS) };
+        let fd = unsafe {
+            crate::util::openat_nocancel(parent_fd.as_raw_fd(), child_name.as_ptr(), FLAGS)
+        };
         if fd < 0 {
             return_os_error!()
         }
-        Ok(FileDes(fd))
+        // SAFETY: checked for negative ret values
+        Ok(unsafe { OwnedFd::from_raw_fd(fd) })
     }
 
     /// Returns a [`ReadDir`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
     #[inline]
     #[allow(unused)] // for esoteric platforms
-    pub(crate) fn readdir_from_fd(&self, fd: FileDes) -> Result<ReadDir> {
+    pub(crate) fn readdir_from_fd(&self, fd: OwnedFd) -> Result<ReadDir> {
         ReadDir::from_fd(fd, self)
     }
 
@@ -412,7 +415,7 @@ impl DirEntry {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    pub(crate) fn getdents_from_fd(&self, fd: FileDes) -> crate::fs::GetDents {
+    pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> crate::fs::GetDents {
         crate::fs::GetDents::from_fd(fd, self)
     }
 
@@ -558,7 +561,7 @@ impl DirEntry {
     // BASICALLY IF non getdents supported then from_fd for `ReadDir` can fail because it relies on fdopendir
     // fdopendir can fail due to bad alloc and some other weird edge cases
     // As this is an ugly implementation detail, may refactor this to be a bit nicer.
-    pub(crate) fn is_empty_at(&self, opt_fd: Option<&FileDes>) -> bool {
+    pub(crate) fn is_empty_at(&self, opt_fd: Option<BorrowedFd>) -> bool {
         match self.file_type {
             FileType::RegularFile => opt_fd.map_or_else(
                 || self.file_size().is_ok_and(|size| size == 0),
@@ -577,11 +580,11 @@ impl DirEntry {
                 target_os = "netbsd",
                 target_os = "illumos",
                 target_os = "solaris"
-            ))]
+            ))] //Could add mac/freebsd here
             FileType::Directory => opt_fd.map_or_else(
                 || self.is_empty(),
                 |parent_fd| {
-                    Self::open_at(parent_fd.0, self.file_name_cstr())
+                    Self::open_at(parent_fd, self.file_name_cstr())
                         .ok()
                         .and_then(|dir_fd| read_direntries_from_fd!(self, dir_fd).ok())
                         .is_some_and(|mut entries| entries.next().is_none())
@@ -601,7 +604,7 @@ impl DirEntry {
             FileType::Directory => opt_fd.map_or_else(
                 || self.is_empty(),
                 |parent_fd| {
-                    Self::open_at(parent_fd.0, self.file_name_cstr())
+                    Self::open_at(parent_fd, self.file_name_cstr())
                         .ok()
                         .and_then(|dir_fd| read_direntries_from_fd!(self, dir_fd).ok())
                         .is_some_and(|entries| entries.is_ok_and(|mut x| x.next().is_none()))
@@ -657,7 +660,8 @@ impl DirEntry {
         target_os = "solaris",
         target_os = "illumos"
     ))]
-    /// Specialisation for empty checks on linux/android/netbsd (avoid a heap alloc)
+    /// Specialisation for empty checks on linux/android/netbsd/etc (avoid a heap alloc)
+    // could add mac/freebsd here?
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents64;
@@ -676,12 +680,12 @@ impl DirEntry {
         if let Ok(fd) = dirfd {
             let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
             // SAFETY: guaranteed open, valid ptr etc.
-            let dents = unsafe { getdents64(fd.0, syscall_buffer.as_mut_ptr().cast(), BUF_SIZE) };
+            let dents =
+                unsafe { getdents64(fd.as_raw_fd(), syscall_buffer.as_mut_ptr().cast(), BUF_SIZE) };
 
-            // SAFETY: Closed only once confirmed open
-            unsafe { libc::close(fd.0) };
             // if empty, then only 2 entries expected, . and .., this means only 64 or below (or neg if errors, who cares.)
             return dents <= 2 * MINIMUM_DIRENT_SIZE;
+            // dirfd now gets dropped because it's an `OwnedFd` which has RAII
         }
         false //return false is open fails
     }
@@ -1115,8 +1119,13 @@ impl DirEntry {
     Returns `DirEntryError::IOError` if the stat operation fails
     */
     #[inline]
-    pub fn get_lstatat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(fstatat, fd.0, self.file_name_ptr(), AT_SYMLINK_NOFOLLOW)
+    pub fn get_lstatat(&self, fd: BorrowedFd) -> Result<stat> {
+        stat_syscall!(
+            fstatat,
+            fd.as_raw_fd(),
+            self.file_name_ptr(),
+            AT_SYMLINK_NOFOLLOW
+        )
     }
 
     #[inline]
@@ -1203,8 +1212,8 @@ impl DirEntry {
 
     */
     #[inline]
-    pub fn get_statat(&self, fd: &FileDes) -> Result<stat> {
-        stat_syscall!(fstatat, fd.0, self.file_name_ptr(), 0)
+    pub fn get_statat(&self, fd: BorrowedFd) -> Result<stat> {
+        stat_syscall!(fstatat, fd.as_raw_fd(), self.file_name_ptr(), 0)
     }
 
     /// Cost free conversion to bytes (because it is already is bytes)
@@ -1313,7 +1322,7 @@ impl DirEntry {
     }
 
     #[inline]
-    pub(crate) fn check_symlink_traversibility_at(&self, opt_fd: Option<&FileDes>) -> bool {
+    pub(crate) fn check_symlink_traversibility_at(&self, opt_fd: Option<BorrowedFd>) -> bool {
         debug_assert!(
             self.file_type() == FileType::Symlink,
             "we only expect symlinks to use this function(hence private)"
@@ -1644,7 +1653,7 @@ impl DirEntry {
         clippy::cast_possible_truncation,
         reason = "needs to be in u32 for chrono"
     )]
-    pub(crate) fn modified_time_at(&self, opt_fd: Option<&FileDes>) -> Result<DateTime<Utc>> {
+    pub(crate) fn modified_time_at(&self, opt_fd: Option<BorrowedFd>) -> Result<DateTime<Utc>> {
         let statted = opt_fd.map_or_else(|| self.get_lstat(), |fd| self.get_lstatat(fd))?;
 
         DateTime::from_timestamp(

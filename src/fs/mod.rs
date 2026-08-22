@@ -19,7 +19,7 @@ pub use file_type::FileType;
 ))]
 pub use iter::GetDents;
 pub use iter::ReadDir;
-pub use types::{FileDes, Result};
+pub use types::Result;
 
 #[cfg(any(
     target_os = "linux",

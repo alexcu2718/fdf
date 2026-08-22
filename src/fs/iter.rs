@@ -1,10 +1,13 @@
-use crate::fs::{DirEntry, FileDes, FileType, Result};
+use crate::fs::{DirEntry, FileType, Result};
 use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
-use core::mem::MaybeUninit;
+#[allow(unused)]
+use core::mem::{ManuallyDrop, MaybeUninit};
 use core::ptr::{NonNull, slice_from_raw_parts};
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
+#[allow(unused)]
+use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -24,7 +27,9 @@ pub struct ReadDir {
     /// Depth of this directory relative to traversal root
     pub(crate) parent_depth: u32,
     /// The file descriptor of this directory, for use in calls like openat/statat etc.
-    pub(crate) fd: FileDes,
+    pub(crate) fd: ManuallyDrop<OwnedFd>, //We need ManuallyDrop because the `DIR` owns the descriptor!
+                                          // We never close it though, just we want it's deref traits to match the `GetDents`
+                                          // There's probably a better way but I'm gonna ignore that for now.
 }
 
 impl ReadDir {
@@ -77,17 +82,16 @@ impl ReadDir {
         // We use this length to index to get the filename (store full path -> index to get filename)
 
         //SAFETY: No safety required.
-        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.0) }) else {
+        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.as_raw_fd()) }) else {
             return_os_error!()
         };
-        debug_assert!(fd.is_open(), "We expect it to be open");
 
         Ok(Self {
             dir,
             path_buffer,
             file_name_index,
             parent_depth: dir_path.depth, //inherit depth
-            fd,
+            fd: ManuallyDrop::new(fd),
         })
     }
 
@@ -96,19 +100,19 @@ impl ReadDir {
     /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
     /// full-path resolution for the child directory.
     #[inline]
-    pub(crate) fn from_fd(fd: FileDes, dir_path: &DirEntry) -> Result<Self> {
+    pub(crate) fn from_fd(fd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
         let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
         // SAFETY: caller provides a valid directory fd; fdopendir takes ownership.
-        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.0) }) else {
+        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.as_raw_fd()) }) else {
             return_os_error!()
         };
-        debug_assert!(fd.is_open(), "We expect it to be open");
+
         Ok(Self {
             dir,
             path_buffer,
             file_name_index,
             parent_depth: dir_path.depth,
-            fd,
+            fd: ManuallyDrop::new(fd),
         })
     }
 }
@@ -120,13 +124,11 @@ impl Drop for ReadDir {
 
     File descriptors are limited system resources, so proper cleanup
     is essential.
+
+    We need to drop here but not in `Getdents` because the DIR owns the file descriptor (and associated heap alloc etc).
     */
     #[inline]
     fn drop(&mut self) {
-        debug_assert!(
-            self.fd.is_open(),
-            "We expect the file descriptor to be open before closing"
-        );
         // SAFETY: only closing HERE
         #[cfg(not(debug_assertions))]
         unsafe {
@@ -164,7 +166,7 @@ pub(crate) trait DirentConstructor {
     /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
     fn parent_depth(&self) -> u32;
     /// Returns the file descriptor for the current directory being read
-    fn file_descriptor(&self) -> &FileDes;
+    fn file_descriptor(&self) -> BorrowedFd<'_>;
     /// Returns total allocated capacity of the buffer.
     fn total_capacity(&self) -> usize;
 
@@ -249,7 +251,7 @@ pub(crate) trait DirentConstructor {
         let file_type: FileType = match FileType::from_dtype(unsafe { drnt.d_type() }) {
             FileType::Unknown => stat_syscall!(
                 fstatat,
-                self.file_descriptor().0, //borrow before mutably borrowing the path buffer
+                self.file_descriptor().as_raw_fd(), //borrow before mutably borrowing the path buffer
                 d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
                 AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
                 DTYPE
@@ -260,7 +262,7 @@ pub(crate) trait DirentConstructor {
         #[cfg(not(has_d_type))] // Have to make a syscall on these systems alas
         let file_type = stat_syscall!(
             fstatat,
-            self.file_descriptor().0, //borrow before mutably borrowing the path buffer
+            self.file_descriptor().as_raw_fd(), //borrow before mutably borrowing the path buffer
             d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
             AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
             DTYPE
@@ -309,9 +311,8 @@ High-throughput directory iterator backed by `getdents` or `getdirentries`,
     target_os = "macos"
 ))]
 pub struct GetDents {
-    /// File descriptor of the open directory, wrapped in a `New Type`, does not implement Drop(maydo at later point),
-    /// The iterator closes the file descriptor upon this struct being dropped.
-    pub(crate) fd: FileDes,
+    /// The (owned) File descriptor of the open directory, closed when the iterator is dropped.
+    pub(crate) fd: OwnedFd,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// typically using the best calculated  buffer sizes, optimised for typical directory traversal (derived from syscall tracing)
     pub(crate) syscall_buffer: crate::fs::SyscallBuffer,
@@ -374,7 +375,7 @@ impl GetDents {
 
     #[inline]
     #[must_use]
-    /// Returns the current offset into the internal [`SyscallBuffer`]
+    /// Returns the current offset into the internal (stack) buffer.
     pub const fn offset(&self) -> usize {
         self.offset
     }
@@ -400,14 +401,14 @@ impl GetDents {
     pub fn getdents(&mut self) -> isize {
         #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
         {
-            self.syscall_buffer.getdents(&self.fd)
+            self.syscall_buffer.getdents(self.fd.as_fd())
         }
         #[cfg(any(target_os = "macos", target_os = "freebsd"))]
         {
             //SAFETY: passing a valid buffer to an open file descriptor and base pointer
             unsafe {
                 self.syscall_buffer
-                    .getdirentries64(&self.fd, &mut self.base_pointer)
+                    .getdirentries64(self.fd.as_fd(), &mut self.base_pointer)
             }
         }
     }
@@ -590,7 +591,6 @@ impl GetDents {
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
         let fd = dir.open()?; //getting the file descriptor
-        debug_assert!(fd.is_open(), "We expect it to always be open");
 
         let (path_buffer, file_name_index) = Self::init_from_path(dir);
 
@@ -615,8 +615,7 @@ impl GetDents {
     / Used internally only due to non-enforceable invariants
      */
     #[inline]
-    pub(crate) fn from_fd(fd: FileDes, dir: &DirEntry) -> Self {
-        debug_assert!(fd.is_open(), "We expect it to always be open");
+    pub(crate) fn from_fd(fd: OwnedFd, dir: &DirEntry) -> Self {
         let (path_buffer, file_name_index) = Self::init_from_path(dir);
         Self {
             fd,
@@ -629,40 +628,6 @@ impl GetDents {
             end_of_stream: false,
             #[cfg(any(target_os = "macos", target_os = "freebsd"))]
             base_pointer: 0,
-        }
-    }
-}
-
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "freebsd",
-    target_os = "macos"
-))]
-impl Drop for GetDents {
-    /**
-      Drops the iterator, closing the file descriptor.
-      we need to close the file descriptor when the iterator is dropped to avoid resource leaks.
-    */
-    #[inline]
-    fn drop(&mut self) {
-        debug_assert!(
-            self.fd.is_open(),
-            "We expect the file descriptor to be open before closing"
-        );
-        // SAFETY: only closing HERE
-        #[cfg(not(debug_assertions))]
-        unsafe {
-            libc::close(self.fd.0)
-        };
-        // SAFETY: As above
-        #[cfg(debug_assertions)]
-        unsafe {
-            assert!(libc::close(self.fd.0) == 0, "fd was not closed in getdents")
         }
     }
 }
@@ -694,8 +659,8 @@ macro_rules! impl_iterator_public_methods {
             */
             #[inline]
             #[must_use]
-            pub const fn dirfd(&self) -> &$crate::fs::FileDes {
-                &self.fd
+            pub fn dirfd(&self) -> ::std::os::fd::BorrowedFd<'_> {
+                self.fd.as_fd()
             }
 
             #[inline]
@@ -740,8 +705,8 @@ macro_rules! impl_dirent_constructor {
             }
 
             #[inline]
-            fn file_descriptor(&self) -> &$crate::fs::FileDes {
-                &self.fd
+            fn file_descriptor(&self) -> ::std::os::fd::BorrowedFd<'_> {
+                self.fd.as_fd()
             }
             #[inline]
             fn total_capacity(&self) -> usize {

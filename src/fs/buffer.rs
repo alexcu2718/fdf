@@ -3,6 +3,8 @@ use core::marker::Copy;
 use core::mem::MaybeUninit;
 use core::ops::{Add, Div, Mul, Sub};
 use core::slice::SliceIndex;
+#[allow(unused)]
+use std::os::fd::{AsRawFd as _, BorrowedFd};
 mod sealed {
     /// Sealed trait pattern to restrict `ValueType`
     pub trait Sealed {}
@@ -179,9 +181,11 @@ where
         target_os = "solaris",
         target_os = "illumos"
     ))]
-    pub fn getdents(&mut self, fd: &crate::fs::FileDes) -> isize {
+    pub fn getdents(&mut self, fd: BorrowedFd) -> isize {
         // SAFETY: we're passing a valid buffer
-        unsafe { crate::util::getdents64(fd.0, self.as_mut_ptr().cast(), Self::BUFFER_SIZE) }
+        unsafe {
+            crate::util::getdents64(fd.as_raw_fd(), self.as_mut_ptr().cast(), Self::BUFFER_SIZE)
+        }
     }
 
     /// Executes the `getdirentries64` system call
@@ -207,11 +211,11 @@ where
     ///  Only Available on macOS and FreeBSD (with dragonfly to be expected in future update)
     #[inline]
     #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-    pub unsafe fn getdirentries64(&mut self, fd: &crate::fs::FileDes, basep: &mut i64) -> isize {
+    pub unsafe fn getdirentries64(&mut self, fd: BorrowedFd, basep: &mut i64) -> isize {
         // SAFETY: we're passing a valid buffer and valid base pointer
         unsafe {
             crate::util::getdirentries64(
-                fd.0,
+                fd.as_raw_fd(),
                 self.as_mut_ptr().cast(),
                 Self::BUFFER_SIZE,
                 core::ptr::from_mut(basep),

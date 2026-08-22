@@ -1,14 +1,14 @@
 use crate::SearchConfigError;
 use crate::filters::{FileTypeFilter, SizeFilter, TimeFilter};
-use crate::fs::{DirEntry, FileDes, FileType};
+use crate::fs::{DirEntry, FileType};
 use crate::util::glob_to_regex;
 use core::num::NonZeroU32;
 use core::ops::Deref;
 use core::time::Duration;
 use regex::bytes::{Regex, RegexBuilder};
+use std::os::fd::BorrowedFd;
 use std::time::UNIX_EPOCH;
 use thread_local::ThreadLocal;
-
 pub struct TLSRegex {
     base: Regex,
     local: ThreadLocal<Regex>,
@@ -360,7 +360,7 @@ impl SearchConfig {
     #[inline]
     #[must_use]
     #[allow(clippy::cast_sign_loss)] // Sign loss does not matter here
-    pub(crate) fn matches_size_at(&self, entry: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+    pub(crate) fn matches_size_at(&self, entry: &DirEntry, opt_fd: Option<BorrowedFd>) -> bool {
         let Some(filter_size) = self.size_filter else {
             return true; // No filter means always match
         };
@@ -426,7 +426,7 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
-    pub(crate) fn matches_type_at(&self, entry: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+    pub(crate) fn matches_type_at(&self, entry: &DirEntry, opt_fd: Option<BorrowedFd>) -> bool {
         let Some(type_filter) = self.type_filter else {
             return true;
         };
@@ -465,7 +465,7 @@ impl SearchConfig {
 
     #[inline]
     #[must_use]
-    pub(crate) fn matches_time_at(&self, entry: &DirEntry, opt_fd: Option<&FileDes>) -> bool {
+    pub(crate) fn matches_time_at(&self, entry: &DirEntry, opt_fd: Option<BorrowedFd>) -> bool {
         let Some(time_filter) = self.time_filter else {
             return true; // No filter means always match
         };

@@ -580,7 +580,7 @@ impl DirEntry {
                 target_os = "netbsd",
                 target_os = "illumos",
                 target_os = "solaris"
-            ))]
+            ))] //Could add mac/freebsd here
             FileType::Directory => opt_fd.map_or_else(
                 || self.is_empty(),
                 |parent_fd| {
@@ -660,7 +660,8 @@ impl DirEntry {
         target_os = "solaris",
         target_os = "illumos"
     ))]
-    /// Specialisation for empty checks on linux/android/netbsd (avoid a heap alloc)
+    /// Specialisation for empty checks on linux/android/netbsd/etc (avoid a heap alloc)
+    // could add mac/freebsd here?
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
         use crate::util::getdents64;
@@ -684,6 +685,7 @@ impl DirEntry {
 
             // if empty, then only 2 entries expected, . and .., this means only 64 or below (or neg if errors, who cares.)
             return dents <= 2 * MINIMUM_DIRENT_SIZE;
+            // dirfd now gets dropped because it's an `OwnedFd` which has RAII
         }
         false //return false is open fails
     }

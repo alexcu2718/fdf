@@ -85,18 +85,12 @@ impl ValueType for u32 {}
 
  // The buffer maintains proper alignment for syscalls
  //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
- assert!(buffer.as_ptr().cast::<usize>().addr().is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
+ assert!(buffer.as_ptr().addr().is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
  ```
 */
-#[derive(Debug)]
+#[derive(Debug)] // dont derive copy, we want to only hold it in the stack frame and NEVER implicitly copy.
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
-pub struct AlignedBuffer<T, const SIZE: usize>
-where
-    T: ValueType,
-{
-    // Generic over size.
-    pub(crate) data: MaybeUninit<[T; SIZE]>,
-}
+pub struct AlignedBuffer<T: ValueType, const SIZE: usize>(pub(crate) MaybeUninit<[T; SIZE]>);
 
 impl<T> Default for AlignedBuffer<T, { crate::fs::types::BUFFER_SIZE }>
 where
@@ -105,9 +99,9 @@ where
     #[inline]
     /// Defaults to the recommended buffer size for getdents(64)/getdirentries(64) on your OS.
     fn default() -> Self {
-        Self {
-            data: MaybeUninit::new([T::default(); crate::fs::types::BUFFER_SIZE]),
-        }
+        Self(MaybeUninit::new(
+            [T::default(); crate::fs::types::BUFFER_SIZE],
+        ))
     }
 }
 
@@ -124,9 +118,7 @@ where
     #[must_use]
     #[inline]
     pub const fn new() -> Self {
-        Self {
-            data: MaybeUninit::uninit(),
-        }
+        Self(MaybeUninit::uninit())
     }
     /// Returns the size of which this buffer was created by (counted in raw bytes)
     pub const BUFFER_SIZE: usize = size_of::<T>() * SIZE;
@@ -135,14 +127,14 @@ where
     #[inline]
     #[must_use]
     pub const fn as_mut_ptr(&mut self) -> *mut T {
-        self.data.as_mut_ptr().cast()
+        self.0.as_mut_ptr().cast()
     }
 
     /// Returns a const pointer to the buffer's data
     #[inline]
     #[must_use]
     pub const fn as_ptr(&self) -> *const T {
-        self.data.as_ptr().cast()
+        self.0.as_ptr().cast()
     }
 
     /**
@@ -155,7 +147,7 @@ where
     #[inline]
     pub const unsafe fn as_slice(&self) -> &[T] {
         // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.data.assume_init_ref() }
+        unsafe { self.0.assume_init_ref() }
     }
     /**
      Returns a mutable slice of the buffer's contents
@@ -167,7 +159,7 @@ where
     #[inline]
     pub const unsafe fn as_mut_slice(&mut self) -> &mut [T] {
         // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.data.assume_init_mut() }
+        unsafe { self.0.assume_init_mut() }
     }
 
     /// Executes the getdents(64) system call using <unistd.h>/direct `libc` syscalls
@@ -211,7 +203,7 @@ where
     ///  Only Available on macOS and FreeBSD (with dragonfly to be expected in future update)
     #[inline]
     #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-    pub unsafe fn getdirentries64(&mut self, fd: BorrowedFd, basep: &mut i64) -> isize {
+    pub unsafe fn getdirentries64(&mut self, fd: BorrowedFd, basep: &mut libc::off_t) -> isize {
         // SAFETY: we're passing a valid buffer and valid base pointer
         unsafe {
             crate::util::getdirentries64(
@@ -267,7 +259,7 @@ where
     #[inline]
     pub const unsafe fn assume_init(&self) -> &[T; SIZE] {
         // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.data.assume_init_ref() }
+        unsafe { self.0.assume_init_ref() }
     }
 
     /**
@@ -280,6 +272,6 @@ where
     #[inline]
     pub const unsafe fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
         // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.data.assume_init_mut() }
+        unsafe { self.0.assume_init_mut() }
     }
 }

@@ -2,7 +2,6 @@ use core::fmt::{Debug, Display};
 use core::marker::Copy;
 use core::mem::MaybeUninit;
 use core::ops::{Add, Div, Mul, Sub};
-use core::slice::SliceIndex;
 #[allow(unused)]
 use std::os::fd::{AsRawFd as _, BorrowedFd};
 mod sealed {
@@ -55,60 +54,20 @@ impl ValueType for u32 {}
  initialisation before accessing the contents. All unsafe methods document
  their safety requirements.
 
- # Examples
- ```
- use fdf::fs::AlignedBuffer;
 
- // Create a new aligned buffer
- // Purposely set a non-aligned amount to show alignment is forced.
- let mut buffer = AlignedBuffer::<u8, 1026>::new(); //You should really use 1024 here.
-
- // Initialise the buffer with data
- let data = b"Hello, World!";
- unsafe {
-     // Copy data into the buffer
-     core::ptr::copy_nonoverlapping(
-         data.as_ptr(),
-         buffer.as_mut_ptr(),
-         data.len()
-     );
-
-     // Access the initialised data
-     let slice = buffer.get_unchecked(0..data.len());
-     assert_eq!(slice, data);
-
-     // Modify the buffer contents
-     let mut_slice = buffer.get_unchecked_mut(0..data.len());
-     mut_slice[0] = b'h'; // Change 'H' to 'h'
-     assert_eq!(&mut_slice[0..5], b"hello");
- }
-
- // The buffer maintains proper alignment for syscalls
- //Protip: NEVER cast a ptr to a usize unless you're extremely sure of what you're doing!
- assert!(buffer.as_ptr().addr().is_multiple_of(8),"We expect the buffer to be aligned to 8 bytes")
- ```
 */
 #[derive(Debug)] // dont derive copy, we want to only hold it in the stack frame and NEVER implicitly copy.
 #[repr(C, align(8))] // Ensure 8-byte alignment,uninitialised memory isn't a concern because it's always actually initialised before use.
 pub struct AlignedBuffer<T: ValueType, const SIZE: usize>(pub(crate) MaybeUninit<[T; SIZE]>);
 
-impl<T> Default for AlignedBuffer<T, { crate::fs::types::BUFFER_SIZE }>
-where
-    T: ValueType,
-{
+impl<T: ValueType, const SIZE: usize> Default for AlignedBuffer<T, SIZE> {
     #[inline]
-    /// Defaults to the recommended buffer size for getdents(64)/getdirentries(64) on your OS.
     fn default() -> Self {
-        Self(MaybeUninit::new(
-            [T::default(); crate::fs::types::BUFFER_SIZE],
-        ))
+        Self::new()
     }
 }
 
-impl<T, const SIZE: usize> AlignedBuffer<T, SIZE>
-where
-    T: ValueType,
-{
+impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     /**
     Creates a new uninitialised aligned buffer
 
@@ -127,39 +86,14 @@ where
     #[inline]
     #[must_use]
     pub const fn as_mut_ptr(&mut self) -> *mut T {
-        self.0.as_mut_ptr().cast()
+        (&raw mut self.0).cast()
     }
 
     /// Returns a const pointer to the buffer's data
     #[inline]
     #[must_use]
     pub const fn as_ptr(&self) -> *const T {
-        self.0.as_ptr().cast()
-    }
-
-    /**
-     Returns a slice of the buffer's contents
-
-     # Safety
-     The buffer must be fully initialised before calling this method.
-     Accessing uninitialised memory is undefined behavior.
-    */
-    #[inline]
-    pub const unsafe fn as_slice(&self) -> &[T] {
-        // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.0.assume_init_ref() }
-    }
-    /**
-     Returns a mutable slice of the buffer's contents
-
-     # Safety
-     The buffer must be fully initialised before calling this method.
-     Accessing uninitialised memory is undefined behavior.
-    */
-    #[inline]
-    pub const unsafe fn as_mut_slice(&mut self) -> &mut [T] {
-        // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.0.assume_init_mut() }
+        (&raw const self.0).cast()
     }
 
     /// Executes the getdents(64) system call using <unistd.h>/direct `libc` syscalls
@@ -213,40 +147,6 @@ where
                 core::ptr::from_mut(basep),
             )
         }
-    }
-
-    /**
-     Returns a reference to a subslice without doing bounds checking
-
-     # Safety
-
-     The caller must ensure:
-     - The buffer is fully initialised
-     - The range is within the bounds of the buffer (0..SIZE)
-     - The range does not access uninitialised memory
-    */
-    #[inline]
-    pub unsafe fn get_unchecked<R>(&self, range: R) -> &R::Output
-    where
-        R: SliceIndex<[T]>,
-    {
-        // SAFETY: Caller must ensure the buffer is initialised and range is valid
-        unsafe { self.as_slice().get_unchecked(range) }
-    }
-
-    /**
-    Returns a mutable reference to a subslice without doing bounds checking
-
-    # Safety
-    The range must be within initialised portion of the buffer
-    */
-    #[inline]
-    pub unsafe fn get_unchecked_mut<R>(&mut self, range: R) -> &mut R::Output
-    where
-        R: SliceIndex<[T]>,
-    {
-        // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.as_mut_slice().get_unchecked_mut(range) }
     }
 
     /**

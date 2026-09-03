@@ -68,6 +68,7 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[expect(clippy::cast_possible_truncation, reason = "clong is isize on Unix")]
     unsafe {
+        const { assert!(size_of::<libc::c_long>() == size_of::<isize>(), "trivial") }
         libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _
     } // We can do similar linking for getdents64 but prefer not to use the indirection if can be avoided.
 }

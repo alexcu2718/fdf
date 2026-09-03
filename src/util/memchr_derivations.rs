@@ -44,22 +44,6 @@ const fn find_last_nul(num: NonZeroUsize) -> usize {
     }
 }
 
-/// Returns the last index matching the byte `x` in `text`.
-#[inline]
-// Check assembly to see if we need this Adrian, you did it lol.
-// 1 fewer instruction using this, need to look at more.
-const unsafe fn rposition_byte_len(base: *const u8, len: usize, needle: u8) -> Option<usize> {
-    let mut i = len;
-    while i != 0 {
-        i -= 1;
-        // SAFETY: trivially within bounds
-        if unsafe { base.add(i).read() } == needle {
-            return Some(i);
-        }
-    }
-    None
-}
-
 #[inline]
 #[cfg(target_endian = "little")]
 #[must_use]
@@ -115,13 +99,12 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
 
 #[inline]
 #[cfg(target_endian = "big")]
-// Only for BE
 const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
     // Classic HASZERO trick. (Mycroft)
     NonZeroUsize::new(input.wrapping_sub(LO_USIZE) & HI_USIZE & !input)
 }
 
-// This is an optimised version of memrchr. As part of a *potential* commit towards stdlib.
+// This is an optimised version of memrchr
 
 /// Returns the last index matching the byte `x` in `text`.
 ///
@@ -138,69 +121,194 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // - the first remaining bytes, < 2 word size.
 
     const BLOCK_MASK: usize = 2 * USIZE_BYTES - 1;
+    let slen = text.len();
+    let start = text.as_ptr();
+    // Number of bytes to reach the next `2*usize` boundary.
+    let prefix = start.align_offset(const { 2 * USIZE_BYTES });
 
-    let len = text.len();
-    let start_ptr = text.as_ptr();
-    // massaging the assembly on this was an absolute pain, I tried to write it as close to the required assembly as possible
-    // This saves approximately 5 instructions(compared to align_to), well on x86_64, I'm not digging deeper than that!
-    // distance from `start_ptr` to the next word-aligned address.
-    let prefix = start_ptr.addr().wrapping_neg() & USIZE_MINUS_1;
-    // clamp the aligned start to the end of `text` for short inputs.
-    let min_aligned_offset = prefix.min(len);
-    // extend from the aligned start by as many complete two-word blocks as fit.
-    let max_aligned_offset = min_aligned_offset + (len.saturating_sub(prefix) & !BLOCK_MASK); // the + turns into a | because of the shaved bits.
+    // First 2-register-aligned offset, clamped for short inputs.
+    let aligned_start = prefix.min(slen);
 
-    let mut offset = max_aligned_offset;
+    // End of the largest 2-register-aligned region,slen>=aligned_start, never wraps
+    let aligned_end = aligned_start + ((slen - aligned_start) & !BLOCK_MASK);
+    // Simple scalar byte scan lambda, avoid iterator overhead.(Reverse iterators optimise quite badly plus we're specialising this by
+    //specialising this, because we use the base_ptr and do basic pointer arithmetic, we can just already use existing registers(holding the base_ptr)
+    let rposition_byte = |base: *const u8, len: usize| -> Option<usize> {
+        // SAFETY: inbounds.
+        let mut s = unsafe { base.add(len) };
+        while s != base {
+            // don't use >/>=, more assembly
+            // SAFETY: s remains in [base, base + len).; Always s>base, never null,
+            s = unsafe { s.sub(1) };
+            // SAFETY: inbounds always
+            if unsafe { s.read() } == x {
+                //SAFETY:s >= start_ptr ; use direct pointer arithmetic instead of instantiating a loop counter
+                return Some(unsafe { s.offset_from_unsigned(start) });
+            }
+        }
 
-    let tail_len = len - offset; // tail is [offset, len)
+        None
+        // equivalent expression, creates too  unoptimal asm.
+        // unsafe {
+        //     core::slice::from_raw_parts(base, len)
+        //         .iter()
+        //         .rfind(|y| **y == x) // fun pointer stuff lol.
+        //         .map(|x| core::ptr::from_ref(x).byte_offset_from_unsigned(start))
+        // }
+    };
+
     // SAFETY: trivially within bounds
-    if let Some(i) = unsafe { rposition_byte_len(start_ptr.add(offset), tail_len, x) } {
-        return Some(offset + i);
+    // tail is [offset, slen)
+    if let Some(i) = rposition_byte(unsafe { start.add(aligned_end) }, slen - aligned_end) {
+        return Some(i);
     }
+    let mut offset = aligned_end;
 
     let repeated_x = repeat_u8(x);
 
-    // define a simple function to avoid repetitive code.
-    #[inline]
-    const unsafe fn check_usize(strptr: *const u8, offset: usize, mask: usize) -> Option<usize> {
-        // SAFETY: Always in bounds+aligned so read is valid.
-        let upper_or_lower = unsafe { strptr.add(offset).cast::<usize>().read() ^ mask };
-        // mask to turn all matching bytes to 0 and 0's to `x`
+    // define another simple lambda  to avoid repetitive code.
+    let check_usize = |strptr: *const usize| {
+        // cast the upper/lower to a usize, we did all the math to make sure we're only reading aligned chunks,
+        // we could simplify this with a deref but I want the code to be specifically indicating aigned reads (pedantic aside, just taste)
+        // SAFETY: aligned+inbounds; read the pointer and XOR mask to set matching bits to 0 (and 0's to x)
+        let upper_or_lower = unsafe { strptr.read() } ^ repeated_x;
 
         #[cfg(target_endian = "big")]
         let maybe_match = contains_zero_byte(upper_or_lower);
         #[cfg(target_endian = "little")]
         // because of borrow issues propagating to LSB we need to do a fix for LE, not for BE though, slight win?!
         let maybe_match = contains_zero_byte_borrow_fix(upper_or_lower);
-
         if let Some(num) = maybe_match {
             let zero_byte_pos = find_last_nul(num);
-
-            return Some(offset + zero_byte_pos);
+            //specifically use pointer arithmetic directly, it optimises nicer quite often, a lot less data depencies!
+            // SAFETY: strptr>=start_ptr by definition; calculate distance from current pointer to base ptr, then add the zero_byte_pos and boom.
+            return Some(unsafe { strptr.byte_offset_from_unsigned(start) } + zero_byte_pos);
         }
         None
-    }
-
+    };
     /*
-    Search the body of the text, make sure we don't cross min_aligned_offset.
+    Search the body of the text, make sure we don't cross aligned_start.
     offset is always aligned, so just testing `>` is sufficient and avoids possible overflow.
+    NBD: using  = optimises worse but is equivalent.
     */
 
-    while offset > min_aligned_offset {
+    while offset > aligned_start {
         offset -= USIZE_BYTES;
+        // SAFETY: always in bounds, checking invariants.
+        unsafe { debug_assert!(start.add(offset).cast::<usize>().is_aligned(), "check") };
 
-        // SAFETY: the body is trivially aligned due to align_to, avoid the cost of unaligned reads(same as memchr/memrchr in STD)
-        if let Some(valid) = unsafe { check_usize(start_ptr, offset, repeated_x) } {
+        // SAFETY: Trivially inbounds+aligned reading upper word avoid the cost of unaligned reads(same as memchr/memrchr in STD)
+        if let Some(valid) = unsafe { check_usize(start.byte_add(offset).cast::<usize>()) } {
             return Some(valid);
         }
 
         offset -= USIZE_BYTES;
         // SAFETY: as above
-        if let Some(valid) = unsafe { check_usize(start_ptr, offset, repeated_x) } {
+        if let Some(valid) = unsafe { check_usize(start.byte_add(offset).cast::<usize>()) } {
             return Some(valid);
         }
     }
+    debug_assert!(offset == aligned_start, "test"); // they're always equal, but llvm optimisesr better using offset instead of aligned start because it repurposes a register
     // The character we were looking for didn't appear in the aligned body, do a simple loop to check the head segment.
-    // SAFETY: trivially within bounds
-    unsafe { rposition_byte_len(start_ptr, offset, x) }
+    rposition_byte(start, offset)
 }
+
+// a sketch i liked
+// #[must_use]
+// #[inline(never)]
+// pub fn memchr(x: u8, text: &[u8]) -> Option<usize> {
+//     // Scan for a single byte value by reading two `usize` words at a time.
+//     //
+//     // Split `text` into three parts:
+//     // - prefix: bytes before the first `usize`-aligned address,
+//     // - body: aligned `usize` words, scanned two words at a time,
+//     // - suffix: the remaining bytes, fewer than two `usize` words.
+
+//     const BLOCK_MASK: usize = 2 * USIZE_BYTES - 1;
+
+//     let slen = text.len();
+//     let start = text.as_ptr();
+
+//     // Number of bytes to reach the next `usize` boundary.
+//     let prefix = start.align_offset(2 * USIZE_BYTES);
+
+//     // First word-aligned offset, clamped for short inputs.
+//     let aligned_start = prefix.min(slen);
+
+//     // End of the largest region containing a whole number of two-word blocks.
+//     //
+//     // `slen >= aligned_start`, so the subtraction cannot underflow.
+//     // The addition cannot wrap because the result is <= `slen`.
+//     let aligned_end = aligned_start + ((slen - aligned_start) & !BLOCK_MASK);
+
+//     let position_byte = |base: *const u8, len: usize| -> Option<usize> {
+//         let end = unsafe { base.add(len) };
+//         let mut s = base;
+
+//         while s != end {
+//             // SAFETY: `s` is always in `[base, end)`, so this read is in bounds.
+//             if unsafe { s.read() } == x {
+//                 // SAFETY: `s` is within the original `text`, so the distance
+//                 // from `start` is in bounds and represents an index into `text`.
+//                 return Some(unsafe { s.byte_offset_from_unsigned(start) });
+//             }
+
+//             // SAFETY: `s != end`, so advancing by one remains within the
+//             // allocation represented by `text`.
+//             s = unsafe { s.add(1) };
+//         }
+
+//         None
+//     };
+
+//     // Scan the unaligned prefix.
+//     if let Some(i) = position_byte(start, aligned_start) {
+//         return Some(i);
+//     }
+
+//     let repeated_x = repeat_u8(x);
+
+//     let check_usize = |strptr: *const usize| -> Option<usize> {
+//         // SAFETY: callers only pass a `usize`-aligned pointer into the
+//         // fully-aligned body, with a complete `usize` word remaining.
+//         let upper_or_lower = unsafe { strptr.read() } ^ repeated_x;
+
+//         #[cfg(target_endian = "big")]
+//         let maybe_match = contains_zero_byte_borrow_fix(upper_or_lower);
+
+//         #[cfg(target_endian = "little")]
+//         let maybe_match = contains_zero_byte(upper_or_lower);
+
+//         if let Some(num) = maybe_match {
+//             let zero_byte_pos = find_first_nul(num);
+
+//             // SAFETY: `strptr` points into `text` at or after `start`.
+//             // `zero_byte_pos` is an offset within the word just read.
+//             return Some(unsafe { strptr.byte_offset_from_unsigned(start) } + zero_byte_pos);
+//         }
+
+//         None
+//     };
+
+//     let mut offset = aligned_start;
+
+//     // Scan the aligned body two words at a time.
+//     while offset < aligned_end {
+//         // First word.
+//         if let Some(valid) = unsafe { check_usize(start.byte_add(offset).cast::<usize>()) } {
+//             return Some(valid);
+//         }
+
+//         offset += USIZE_BYTES;
+
+//         // Second word.
+//         if let Some(valid) = unsafe { check_usize(start.byte_add(offset).cast::<usize>()) } {
+//             return Some(valid);
+//         }
+
+//         offset += USIZE_BYTES;
+//     }
+
+//     // Scan the remaining < 2 * USIZE_BYTES bytes.
+//     position_byte(unsafe { start.byte_add(offset) }, slen - offset)
+// }

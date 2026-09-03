@@ -68,6 +68,7 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[expect(clippy::cast_possible_truncation, reason = "clong is isize on Unix")]
     unsafe {
+        const { assert!(size_of::<libc::c_long>() == size_of::<isize>(), "trivial") }
         libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _
     } // We can do similar linking for getdents64 but prefer not to use the indirection if can be avoided.
 }
@@ -170,7 +171,7 @@ pub(crate) const fn unlikely(b: bool) -> bool {
  `libc::strlen` on `d_name`. This will *always* take the most optimal route.
 
  # Safety
- - `drnt` must be a valid, non-null pointer to a `dirent` / `dirent64` whose `d_name`
+ - `drnt` must be a valid, aligned, non-null pointer to a `dirent` / `dirent64` whose `d_name`
    field is properly null-terminated within the record.
  - The pointer must remain valid for the duration of the call.
  - dirent64 must be kernel provided, so from 'readdir(64)' or appropriate `syscall`
@@ -195,6 +196,8 @@ pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
 
 /**
 A convenience const function which is *just* a fancy call to your libc's strlen.
+
+Same requirements as [`CStr::from_ptr`]
 */
 #[inline(always)]
 #[expect(clippy::inline_always, reason = "Allow codegen to see strlen")]
@@ -230,7 +233,7 @@ My Cat Diavolo is cute.
 
  # Safety
  The caller must ensure:
- `dirent` is a valid, non-null pointer to a `libc::dirent64/libc::dirent`.
+ `dirent` is a valid, aligned,non-null pointer to a `libc::dirent64/libc::dirent`.
  The minimum reclen is 24, which on a non-corrupted filesystem is perfectly reasonable, if you have a corrupted filesystem, good luck!
 
  # Performance

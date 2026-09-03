@@ -104,9 +104,33 @@ mod tests {
         }
     }
 
+    #[test]
+    fn tmemrchr_aligned() {
+        let iter = (1..=100).map(|i| generate_random_byte_strings(100, i, DETERMINISTIC));
+        let random_chars = 0..=u8::MAX;
+        for item in iter {
+            for string in item {
+                let mut slice = string.as_slice();
+                let is_aligned = string.as_ptr().cast::<usize>().is_aligned();
+                let len = string.len();
+
+                if is_aligned && len >= 1 {
+                    //
+                    let random = rng().random_range(1..align_of::<usize>());
+                    slice = &slice[random.min(len)..len];
+                }
+                for byte in random_chars.clone() {
+                    test_memrchr(byte, slice)
+                }
+            }
+        }
+    }
+
     fn test_memrchr(search: u8, sl: &[u8]) {
         let realans = sl.iter().rposition(|b| *b == search);
         let memrchrtest = crate::util::memrchr(search, sl);
+        //  let test2 = crate::util::memrchr2(search, sl);
+        //assert!(realans == test2.map(|x| x));
         assert!(
             memrchrtest == realans,
             "test failed in memrchr: expected {realans:?}, got {memrchrtest:?} for byte {search:#04x}\n

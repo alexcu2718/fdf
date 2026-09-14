@@ -15,6 +15,8 @@ mod sealed {
     impl Sealed for isize {}
     impl Sealed for i32 {}
     impl Sealed for u32 {}
+    impl Sealed for i16 {}
+    impl Sealed for u16 {}
 }
 
 /// Marker trait for valid buffer value types
@@ -76,6 +78,7 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     */
     #[must_use]
     #[inline]
+    #[track_caller]
     pub const fn new() -> Self {
         Self(MaybeUninit::uninit())
     }
@@ -97,7 +100,7 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     }
 
     /// Executes the getdents(64) system call using <unistd.h>/direct `libc` syscalls
-    /// Supproted on Linux/Android/OpenBSD/NetBSD
+    /// Supported on Linux/Android/OpenBSD/NetBSD/Solaris/Illumos
     #[inline]
     #[cfg(any(
         target_os = "linux",

@@ -113,8 +113,8 @@ fn bench_strlen(c: &mut Criterion) {
         ("length=200", "b".repeat(200)),
         ("length=255", "b".repeat(255)),
     ];
-
-    if MAX_DIRENT_SIZE > 300 {
+    // randomly chosen sensible numbers, didnt care to think about arithmetic much.
+    if MAX_DIRENT_SIZE > 330 {
         length_groups.push(("length=320", "c".repeat(320)))
     }
 

@@ -3,30 +3,17 @@ use crate::DirEntryError;
 ///Generic result type for directory entry operations
 pub type Result<T> = core::result::Result<T, DirEntryError>;
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "solaris",
-    target_os = "illumos"
-))]
+const _: () = assert!(
+    BUFFER_SIZE.is_multiple_of(8),
+    "Simplifies the problem, keeps alignment of dirents"
+);
 /**
    Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
 
    Aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
 */
-const _: () = assert!(
-    BUFFER_SIZE.is_multiple_of(8),
-    "Simplifies the problem, keeps alignment of dirents"
-);
-#[allow(clippy::integer_division_remainder_used)]
-#[allow(clippy::integer_division)] // no loss of precision
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, { BUFFER_SIZE / 8 }>; // showing example above
+pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, { BUFFER_SIZE.div_euclid(8) }>; // showing example above
 
-/// A safe abstraction aro
 #[cfg(all(target_os = "android", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 4200;
 

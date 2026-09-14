@@ -80,7 +80,6 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     #[inline]
     #[track_caller]
     pub const fn new() -> Self {
-        const { assert!(SIZE.is_multiple_of(8), "`SIZE` must be a multiple of 8 ") };
         Self(MaybeUninit::uninit())
     }
     /// Returns the size of which this buffer was created by (counted in raw bytes)

@@ -140,13 +140,13 @@ mod tests {
     }
 
     const fn dirent_reclen_for_name_len(name_len: usize) -> u16 {
-        debug_assert!(name_len <= 255);
+        assert!(name_len <= 255);
         let header_start = core::mem::offset_of!(Dirent64, d_name);
         // +1 for the required null terminator
         let min_len = header_start + name_len + 1;
         // `dirent_const_time_strlen` assumes 8-byte alignment / `d_reclen` multiples of 8.
         let reclen = min_len.next_multiple_of(8);
-        debug_assert!(reclen <= u16::MAX as usize);
+        assert!(reclen <= u16::MAX as usize);
         reclen as u16
     }
 

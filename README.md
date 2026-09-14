@@ -57,7 +57,7 @@ Additional Note: If you use MacOS on native hardware and know your stuff, please
 
 ### Probably Broken
 
-- MacOSx 32bit (granted the last 32bit OSx was released in 2009, I would possibly tick it off if I get *very* bored)
+- MacOSx 32bit (granted the last 32bit OSx was released in 2009, The last supported release was rust 1.4.0, this isn't happening!)
 
 - Other Niche Operating systems like Fuschia (granted, they probably won't support Rust 2024).
 

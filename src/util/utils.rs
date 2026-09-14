@@ -178,14 +178,14 @@ pub(crate) const fn unlikely(b: bool) -> bool {
 */
 pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
-    #[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
-    {
+    if cfg!(any(
+        target_os = "linux",
+        target_os = "android",
+        has_d_namlen
+    )) {
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { dirent_const_time_strlen(drnt) }
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "android", has_d_namlen)))]
-    {
+    } else {
         // The above has the same assembly as below but the below is allowed in const context.
         // SAFETY: `dirent` must be checked before hand to not be null
         unsafe { strlen((&raw const (*drnt).d_name).cast()) }
@@ -200,6 +200,7 @@ A convenience const function which is *just* a fancy call to your libc's strlen.
 Same requirements as [`CStr::from_ptr`]
 */
 #[inline(always)]
+#[track_caller]
 #[expect(clippy::inline_always, reason = "Allow codegen to see strlen")]
 pub(crate) const unsafe fn strlen(x: *const c_char) -> usize {
     // SAFETY: user has to check whether pointer is null
@@ -207,9 +208,6 @@ pub(crate) const unsafe fn strlen(x: *const c_char) -> usize {
     // equivalent assembly to
     // unsafe{libc::strlen(x)}
 }
-
-#[allow(clippy::undocumented_unsafe_blocks)] //stupid lints.
-const _: () = assert!(unsafe { strlen(c"hello".as_ptr()) } == 5, "removing lint");
 
 // this only fails on solaris/illumos when going from root, WHY???? that makes no sense. I had to remove solaris/illumos support for this function.
 // I never came across the issue simply because I never tried searching from root on my VM, until today...
@@ -295,6 +293,7 @@ My Cat Diavolo is cute.
 */
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
+#[track_caller]
 // we can add more systems here but they're obscure, ie hermit/fuschia etc
 // given I lack tests for these, I will only add if needed. Fuschia/Hermit/bunch of others will likely work
 // but it's a pain to make a VM, they probably don't support rust 2024 either...
@@ -351,7 +350,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         #[cfg(target_endian = "little")]
         let mask = (reclen as u64).wrapping_sub(25) >> 40;
 
-        // Big endian has the bits in the correct position however we only want the first 3 bytes.
+        // Big endian has the bits in the correct position however we only want the first 3 bytes. The reclen value
+        // for anything >=24, so 32,40 etc,.. will be poison the mask, at the LSB.
         #[cfg(target_endian = "big")]
         let mask = (reclen as u64).wrapping_sub(25) & 0xFFFF_FF00_0000_0000; // Could cast to a u32, shift by 8 then cast back to u64 but that's horrible
         // not checking the asm on that...

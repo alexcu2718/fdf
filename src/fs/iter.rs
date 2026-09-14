@@ -4,7 +4,7 @@ use core::cell::Cell;
 use core::ffi::CStr;
 #[allow(unused)]
 use core::mem::{ManuallyDrop, MaybeUninit};
-use core::ptr::{NonNull, slice_from_raw_parts};
+use core::ptr::NonNull;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
 #[allow(unused)]
 use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
@@ -211,6 +211,7 @@ pub(crate) trait DirentConstructor {
             path.as_ptr()
                 .copy_to_nonoverlapping(buffer.as_mut_ptr().cast(), base_len)
         };
+        // buffer.copy_from_slice(unsafe { &*((&raw const *path) as *const [MaybeUninit<u8>]) });
 
         // SAFETY: In-bounds because total_capacity = dirlen + FAST_PATH_DIRENT_LENGTH + needs_slash (0/1)
         unsafe { buffer.get_unchecked_mut(base_len).write(b'/') };
@@ -237,13 +238,13 @@ pub(crate) trait DirentConstructor {
     #[inline]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
-        let d_name: *const u8 = unsafe { drnt.d_name().cast() };
+        let d_name_cstr: &[u8] = unsafe { drnt.d_name_cstr().to_bytes_with_nul() };
+        let d_name: *const u8 = d_name_cstr.as_ptr();
         // SAFETY: as above
         let d_ino = unsafe { drnt.d_ino() }; // Returns 0 if d_ino isn't defined on your system
 
-        // SAFETY: as above
-        //Add 1 to include the null terminator
-        let name_len = unsafe { drnt.name_length() + 1 }; //technically should be a u16 but we need it for indexing :(
+        //includes the null terminator
+        let name_len = d_name_cstr.len(); //technically should be a u16 but we need it for indexing :(
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
@@ -274,15 +275,26 @@ pub(crate) trait DirentConstructor {
         if crate::util::unlikely(required_len > self.total_capacity()) {
             self.reserve_for_long_name(required_len);
         }
-        let buf_ptr: *mut u8 = self.path_buffer().as_mut_ptr().cast();
-        // Get the portion of the buffer that goes past the last slash
-        // SAFETY: The `base_len` is guaranteed to be a valid index into `path_buffer`
-        let name_portion = unsafe { buf_ptr.byte_add(base_len) };
 
-        // SAFETY: `d_name` and `name_portion` don't overlap (different memory regions(stack vs heap)), inbounds, alignment trivial
-        unsafe { d_name.copy_to_nonoverlapping(name_portion, name_len) };
+        let buf_ptr: &mut [MaybeUninit<u8>] = self.path_buffer().as_mut_slice();
+        // Get the portion of the buffer that goes past the last slash, up to the name+NUL
+        // SAFETY: `base_len..required_len` is guaranteed to be a valid range into `path_buffer`
+        let name_portion = unsafe { buf_ptr.get_unchecked_mut(base_len..required_len) };
+
+        // SAFETY: transmuting &[u8] to &[MaybeUnit<u8>] is always valid
+        // Copy name into the uninit memory.
+        unsafe {
+            name_portion.copy_from_slice(&*((&raw const *d_name_cstr) as *const [MaybeUninit<u8>]))
+        };
+        //^this is a memcpy.
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
-        let full_path = unsafe { &*(slice_from_raw_parts(buf_ptr, required_len) as *const CStr) };
+        // Now the slice initialised up to `required_len`
+        let full_path = unsafe {
+            CStr::from_bytes_with_nul_unchecked(core::slice::from_raw_parts(
+                buf_ptr.as_ptr().cast(),
+                required_len,
+            ))
+        };
         //truncate the buffer to the first null terminator of the full path
 
         (full_path, d_ino, file_type)
@@ -639,11 +651,11 @@ macro_rules! impl_iterator_public_methods {
             type Item = $crate::fs::DirEntry;
 
             #[inline]
-            fn next(&mut self) -> Option<Self::Item> {
+            fn next(&mut self) -> ::core::option::Option<Self::Item> {
                 // SAFETY: the underlying fd/directory stream is kept open and valid for the lifetime of `self`
                 while let Some(drnt) = unsafe { self.get_next_entry() } {
                     skip_dot_or_dot_dot_entries!(drnt, continue);
-                    // avoids using strlen/strcmo on the pointer (avoids unnecessary non inlineable function calls)
+                    // avoids using strlen/strcmp on the pointer (avoids unnecessary non inlineable function calls)
                     return Some(self.construct_direntry(drnt));
                 }
                 None // signal end
@@ -690,7 +702,7 @@ macro_rules! impl_dirent_constructor {
     ($type:ty) => {
         impl DirentConstructor for $type {
             #[inline]
-            fn path_buffer(&mut self) -> &mut Vec<::core::mem::MaybeUninit<u8>> {
+            fn path_buffer(&mut self) -> &mut ::std::vec::Vec<::core::mem::MaybeUninit<u8>> {
                 &mut self.path_buffer
             }
 

@@ -178,20 +178,19 @@ pub(crate) const fn unlikely(b: bool) -> bool {
 */
 pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
-    if cfg!(any(
-        target_os = "linux",
-        target_os = "android",
-        has_d_namlen
-    )) {
-        // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { dirent_const_time_strlen(drnt) }
-    } else {
-        // The above has the same assembly as below but the below is allowed in const context.
-        // SAFETY: `dirent` must be checked before hand to not be null
-        unsafe { strlen((&raw const (*drnt).d_name).cast()) }
-        //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
-        // EG for NTFS it can be up to 512 bytes
+    #[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
+    // SAFETY: `dirent` must be checked before hand to not be null
+    unsafe {
+        dirent_const_time_strlen(drnt)
     }
+    #[cfg(not(any(target_os = "linux", target_os = "android", has_d_namlen)))]
+    // The above has the same assembly as below but the below is allowed in const context.
+    // SAFETY: `dirent` must be checked before hand to not be null
+    unsafe {
+        strlen((&raw const (*drnt).d_name).cast())
+    }
+    //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
+    // EG for NTFS it can be up to 512 bytes
 }
 
 /**
@@ -201,6 +200,7 @@ Same requirements as [`CStr::from_ptr`]
 */
 #[inline(always)]
 #[track_caller]
+#[allow(unused)]
 #[expect(clippy::inline_always, reason = "Allow codegen to see strlen")]
 pub(crate) const unsafe fn strlen(x: *const c_char) -> usize {
     // SAFETY: user has to check whether pointer is null

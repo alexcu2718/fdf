@@ -157,9 +157,11 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
                     (num.leading_zeros() >> 3) as usize
                 };
 
+            debug_assert_eq!(start.addr(), ptr.addr(), "causes an optimisation below!");
             //specifically use pointer arithmetic directly, it optimises nicer quite often, a lot less data depencies!
             // ptr>=start_ptr by definition; calculate distance from current pointer to base ptr then add zero byte pos and offset and easy.
             return Some(ptr.addr() - start.addr() + offset_from_base + zero_byte_pos);
+
             //encourage the optimiser by reformulating this.
         }
         None

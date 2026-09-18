@@ -167,8 +167,8 @@ pub(crate) trait DirentConstructor {
     fn parent_depth(&self) -> u32;
     /// Returns the file descriptor for the current directory being read
     fn file_descriptor(&self) -> BorrowedFd<'_>;
-    /// Returns total allocated capacity of the buffer.
-    fn total_capacity(&self) -> usize;
+    /// Total allocated size of the internal vector that holds the path buffer
+    fn allocated_size(&self) -> usize;
 
     #[inline]
     /// Constructs a `DirEntry` from a raw directory entry pointer
@@ -186,38 +186,36 @@ pub(crate) trait DirentConstructor {
     }
 
     #[inline]
+    #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn init_from_path(path: &[u8]) -> (Vec<MaybeUninit<u8>>, usize) {
-        let mut base_len = path.len();
+        let mut len = path.len();
         let needs_slash = usize::from(path != b"/");
         /*
-        Fast-path filename capacity (+NUL is included in `name_len` during append).
+        Fast-path filename capacity (+NUL is included in the filename during append).
         Longer names take the cold slow-path reserve in `construct_path`.
         Most filepaths will never be longer than this. In the odd-case they are, it's really rare
         with no negligible affect otherwise
         */
         const FAST_PATH_DIRENT_LENGTH: usize = 256;
-        let total_capacity = base_len + FAST_PATH_DIRENT_LENGTH + needs_slash;
+        let total_capacity = len + FAST_PATH_DIRENT_LENGTH + needs_slash;
 
         let mut buffer: Vec<MaybeUninit<u8>> = Vec::with_capacity(total_capacity);
-
         // SAFETY: we immediately write the bytes we read from and later overwrite filename bytes.
+        // The memory remains uninitialised though but we track capacity via its len, as len==capacity.
         unsafe { buffer.set_len(total_capacity) };
 
-        /*  Copy directory path with non-overlapping copy for maximum performance (this is internally a `memcpy`)
-         SAFETY: Always in bounds, trivial alignment
+        //SAFETY: always true, allow compiler to elide panics
+        unsafe { core::hint::assert_unchecked(buffer.len() > len) };
 
-        */
-        unsafe {
-            path.as_ptr()
-                .copy_to_nonoverlapping(buffer.as_mut_ptr().cast(), base_len)
-        };
-        // buffer.copy_from_slice(unsafe { &*((&raw const *path) as *const [MaybeUninit<u8>]) });
+        // (this is internally a `memcpy`)
+        // SAFETY: safe to Yransmute &[u8] to &[MaybeUnit<u8>]
+        buffer[..len].copy_from_slice(unsafe { &*((&raw const *path) as *const [_]) });
 
-        // SAFETY: In-bounds because total_capacity = dirlen + FAST_PATH_DIRENT_LENGTH + needs_slash (0/1)
-        unsafe { buffer.get_unchecked_mut(base_len).write(b'/') };
+        // In-bounds always
+        buffer[len].write(b'/');
 
-        base_len += needs_slash;
-        (buffer, base_len)
+        len += needs_slash;
+        (buffer, len)
     }
 
     #[inline(never)]
@@ -239,7 +237,7 @@ pub(crate) trait DirentConstructor {
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
         let d_name_cstr: &[u8] = unsafe { drnt.d_name_cstr().to_bytes_with_nul() };
-        let d_name: *const u8 = d_name_cstr.as_ptr();
+
         // SAFETY: as above
         let d_ino = unsafe { drnt.d_ino() }; // Returns 0 if d_ino isn't defined on your system
 
@@ -253,8 +251,8 @@ pub(crate) trait DirentConstructor {
             FileType::Unknown => stat_syscall!(
                 fstatat,
                 self.file_descriptor().as_raw_fd(), //borrow before mutably borrowing the path buffer
-                d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
-                AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+                drnt.d_name().cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+                AT_SYMLINK_NOFOLLOW,  // dont follow, to keep same semantics as readdir/getdents
                 DTYPE
             ),
             not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
@@ -264,34 +262,32 @@ pub(crate) trait DirentConstructor {
         let file_type = stat_syscall!(
             fstatat,
             self.file_descriptor().as_raw_fd(), //borrow before mutably borrowing the path buffer
-            d_name.cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
-            AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+            drnt.d_name().cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
+            AT_SYMLINK_NOFOLLOW,  // dont follow, to keep same semantics as readdir/getdents
             DTYPE
         );
 
         let base_len = self.file_index();
         let required_len = base_len + name_len;
-
-        if crate::util::unlikely(required_len > self.total_capacity()) {
+        if crate::util::unlikely(required_len > self.allocated_size()) {
             self.reserve_for_long_name(required_len);
         }
 
-        let buf_ptr: &mut [MaybeUninit<u8>] = self.path_buffer().as_mut_slice();
+        let buffer: &mut [MaybeUninit<u8>] = self.path_buffer(); //auto deref
+
         // Get the portion of the buffer that goes past the last slash, up to the name+NUL
         // SAFETY: `base_len..required_len` is guaranteed to be a valid range into `path_buffer`
-        let name_portion = unsafe { buf_ptr.get_unchecked_mut(base_len..required_len) };
+        let name_portion = unsafe { buffer.get_unchecked_mut(base_len..required_len) };
 
         // SAFETY: transmuting &[u8] to &[MaybeUnit<u8>] is always valid
         // Copy name into the uninit memory.
-        unsafe {
-            name_portion.copy_from_slice(&*((&raw const *d_name_cstr) as *const [MaybeUninit<u8>]))
-        };
+        name_portion.copy_from_slice(unsafe { &*((&raw const *d_name_cstr) as *const [_]) });
         //^this is a memcpy.
         // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
         // Now the slice initialised up to `required_len`
         let full_path = unsafe {
             CStr::from_bytes_with_nul_unchecked(core::slice::from_raw_parts(
-                buf_ptr.as_ptr().cast(),
+                buffer.as_ptr().cast(),
                 required_len,
             ))
         };
@@ -551,8 +547,6 @@ impl GetDents {
 
         self.remaining_bytes = remaining_bytes.max(0).cast_unsigned(); // all negatives mapped to 0.
 
-        //(becomes a cmove)
-
         self.offset = 0; //return the offset back to 0 as now the buffer is cleared
 
         // Return true only if we successfully read non-zero bytes
@@ -707,6 +701,11 @@ macro_rules! impl_dirent_constructor {
             }
 
             #[inline]
+            fn allocated_size(&self) -> usize {
+                self.path_buffer.len()
+            }
+
+            #[inline]
             fn file_index(&self) -> usize {
                 self.file_name_index
             }
@@ -719,10 +718,6 @@ macro_rules! impl_dirent_constructor {
             #[inline]
             fn file_descriptor(&self) -> ::std::os::fd::BorrowedFd<'_> {
                 self.fd.as_fd()
-            }
-            #[inline]
-            fn total_capacity(&self) -> usize {
-                self.path_buffer.len()
             }
         }
     };

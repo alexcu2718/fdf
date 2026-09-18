@@ -192,6 +192,20 @@ impl AsRef<[u8]> for DirEntry {
     }
 }
 
+impl AsRef<CStr> for DirEntry {
+    #[inline]
+    fn as_ref(&self) -> &CStr {
+        self.as_cstr()
+    }
+}
+
+impl AsRef<OsStr> for DirEntry {
+    #[inline]
+    fn as_ref(&self) -> &OsStr {
+        self.as_os_str()
+    }
+}
+
 impl<'drnt> From<&'drnt DirEntry> for &'drnt CStr {
     #[inline]
     fn from(entry: &'drnt DirEntry) -> &'drnt CStr {
@@ -222,6 +236,20 @@ impl TryFrom<&[u8]> for DirEntry {
     }
 }
 
+impl PartialEq<[u8]> for DirEntry {
+    #[inline]
+    fn eq(&self, other: &[u8]) -> bool {
+        self.as_bytes() == other
+    }
+}
+
+impl PartialEq<OsStr> for DirEntry {
+    #[inline]
+    fn eq(&self, other: &OsStr) -> bool {
+        self.as_os_str() == other
+    }
+}
+
 impl TryFrom<&OsStr> for DirEntry {
     type Error = DirEntryError;
 
@@ -237,6 +265,8 @@ impl AsRef<Path> for DirEntry {
         self.as_path()
     }
 }
+
+// }
 
 impl fmt::Debug for DirEntry {
     #[allow(clippy::missing_inline_in_public_items)]
@@ -1457,7 +1487,7 @@ impl DirEntry {
             "Indexing should always be within bounds"
         );
 
-        if self.as_bytes() == b"/" {
+        if self == b"/".as_ref() {
             return b"/";
         }
 
@@ -1496,6 +1526,7 @@ impl DirEntry {
      ```
     */
     #[inline]
+    #[expect(clippy::indexing_slicing, reason = "inbounds")]
     pub fn extension(&self) -> Option<&[u8]> {
         let filename = self.file_name();
         let len = filename.len();
@@ -1510,10 +1541,9 @@ impl DirEntry {
          AND
          the final byte, so "foo." does not count
         */
-        // SAFETY: len >= 3.
-        let search_range = unsafe { filename.get_unchecked(1..len - 1) };
 
-        crate::util::memrchr(b'.', search_range).map(|pos| {
+        crate::util::memrchr(b'.', &filename[1..len - 1]).map(|pos| {
+            //bounds elided
             // `pos` is relative to filename[1..], so the actual dot is
             // at pos + 1, and the extension starts at pos + 2.
             //

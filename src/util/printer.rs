@@ -217,47 +217,13 @@ where
         }
     }
 }
-#[inline]
-// little niche optimisation stuff here. Just to make coloured printing  of extensions quite efficient :)
-//ignore this silly hard to read code.
-fn _extension(dent: &DirEntry) -> Option<&[u8]> {
-    let mut filename = dent.file_name();
-    let len = filename.len();
 
-    // SAFETY: POSIX filenames are non-empty.
-    let last = unsafe { *filename.get_unchecked(len - 1) };
-
-    let trim = usize::from((last == b'.') & (len > 1));
-    let end = len - trim;
-
-    // Byte zero cannot introduce an extension.
-    // SAFETY: 1 <= end <= len.
-    filename = unsafe { filename.get_unchecked(1..end) };
-
-    /*
-     Both failure cases become:
-
-         ext_start == filename.len()
-
-     no dot:
-         map_or(len, ...)
-
-    trailing dot:
-         dot + 1 == len
-    */
-    let ext_start = crate::util::memrchr(b'.', filename).map_or(filename.len(), |dot| dot + 1);
-
-    // SAFETY: ext_start <= filename.len().
-    let ext = unsafe { filename.get_unchecked(ext_start..) };
-
-    (ext_start != filename.len()).then_some(ext)
-}
 #[inline]
 fn extension_colour(entry: &DirEntry) -> &[u8] {
     match entry.file_type {
-        FileType::RegularFile | FileType::Unknown => {
-            _extension(entry).map_or(RESET, |pos| file_type_colour!(pos))
-        }
+        FileType::RegularFile | FileType::Unknown => entry
+            .extension()
+            .map_or(RESET, |pos| file_type_colour!(pos)),
         FileType::Directory => file_type_colour!(directory),
         FileType::Symlink => match entry.is_traversible_cache.get() {
             Some(true) => file_type_colour!(directory),

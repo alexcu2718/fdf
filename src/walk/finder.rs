@@ -136,7 +136,7 @@ struct WorkItem {
 }
 
 struct IgnoreContext {
-    parent: Option<Arc<IgnoreContext>>,
+    parent: Option<Arc<Self>>,
     matcher: Option<Arc<Gitignore>>,
     repo_active: bool,
 }

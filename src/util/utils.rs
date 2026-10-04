@@ -1,7 +1,6 @@
 use crate::dirent64;
 use core::ffi::{CStr, c_char, c_int, c_void};
 
-const _: () = assert!(libc::INT_MAX == i32::MAX, "Trivial assert"); //paranoia
 /**
   Wrapper for direct getdents syscalls
 
@@ -39,7 +38,7 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
 
     //https://github.com/bminor/glibc/blob/04e750e75b73957cf1c791535a3f4319534a52fc/sysdeps/unix/sysv/linux/getdents64.c#L30
     debug_assert!(
-        buffer_size <= libc::INT_MAX as _,
+        buffer_size <= c_int::MAX as _,
         "buffer_size passed to getdents64 too big"
     );
     #[cfg(any(

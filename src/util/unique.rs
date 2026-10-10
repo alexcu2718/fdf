@@ -23,7 +23,8 @@ use core::ffi::CStr;
 use core::ffi::c_char;
 use core::fmt;
 use core::marker::PhantomData;
-use core::ptr::NonNull;
+use core::num::NonZeroUsize;
+use core::ptr::{NonNull, slice_from_raw_parts};
 /// A wrapper around a raw non-null `*const T` that indicates that the possessor
 /// of this wrapper owns the referent. Usefor building abstractions like
 /// `Box<T>`, `Vec<T>`, `String`, and `HashMap<K, V>`.
@@ -79,9 +80,22 @@ impl<T: Sized> Unique<T> {
     #[inline]
     #[must_use]
     pub const fn dangling() -> Self {
-        // SAFETY: mem::align_of() returns a valid, non-null pointer. The
-        // conditions to call new_unchecked() are thus respected.
-        unsafe { Self::new_unchecked(core::ptr::dangling_mut::<T>()) }
+        Self::from_non_null(NonNull::dangling())
+    }
+}
+
+#[allow(clippy::multiple_inherent_impl)]
+impl<T> Unique<T> {
+    #[inline]
+    #[must_use]
+    pub fn is_aligned(self) -> bool {
+        self.as_ptr().is_aligned()
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_aligned_to<U>(self) -> bool {
+        self.cast::<U>().is_aligned()
     }
 }
 
@@ -96,6 +110,45 @@ impl<T: ?Sized> Unique<T> {
         debug_assert!(!ptr.is_null(), "Pointer is null in Unique::new_unchecked");
         // SAFETY: the caller must guarantee that `ptr` is non-null.
         unsafe { Self(NonNull::new_unchecked(ptr.cast_mut()), PhantomData) }
+    }
+    #[inline]
+    #[must_use]
+    /// <https://doc.rust-lang.org/beta/std/ptr/struct.NonNull.html#method.byte_add>
+    ///
+    /// # Safety
+    ///
+    /// Same requirements as [`NonNull::byte_add`].
+    pub const unsafe fn byte_add(self, amt: usize) -> Self {
+        // SAFETY: same requirements as normal byte add, checked by caller.
+        unsafe { Self::from_non_null(self.0.byte_add(amt)) }
+    }
+
+    #[inline]
+    #[must_use]
+    /// <https://doc.rust-lang.org/beta/std/ptr/struct.NonNull.html#method.byte_sub>
+    ///
+    /// # Safety
+    ///
+    /// Same requirements as [`NonNull::byte_sub`].
+    pub const unsafe fn byte_sub(self, amt: usize) -> Self {
+        // SAFETY: same requirements as normal byte_sub, checked by caller
+        unsafe { Self::from_non_null(self.0.byte_sub(amt)) }
+    }
+
+    #[inline]
+    pub const fn from_ref(reference: &T) -> Self {
+        Self::from_non_null(NonNull::from_ref(reference))
+    }
+
+    #[inline]
+    pub const fn from_mut_ref(reference: &mut T) -> Self {
+        Self::from_non_null(NonNull::from_mut(reference))
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn addr(self) -> NonZeroUsize {
+        self.0.addr()
     }
 
     /// Creates a new `Unique` if `ptr` is non-null.
@@ -123,6 +176,18 @@ impl<T: ?Sized> Unique<T> {
         self.0
     }
 
+    #[inline]
+    #[must_use]
+    pub const fn from_non_null(ptr: NonNull<T>) -> Self {
+        // SAFETY: trivial.
+        unsafe { Self::new_unchecked(ptr.as_ptr()) }
+    }
+
+    // #[inline]
+    // pub const fn add<U>(self, amt: usize) -> Unique<U> {
+    //     unsafe { Unique(self.0.add(amt).as_ptr().cast()) }
+    // }
+
     /// Dereferences the content.
     ///
     /// The resulting lifetime is bound to self so this behaves "as if"
@@ -133,7 +198,7 @@ impl<T: ?Sized> Unique<T> {
     /// requirements for a reference.
     #[inline]
     #[must_use]
-    pub const unsafe fn as_ref<'ptr>(&self) -> &'ptr T {
+    pub const unsafe fn as_ref<'ptr>(self) -> &'ptr T {
         // SAFETY: the caller must guarantee that `self` meets all the
         // requirements for a reference.
         unsafe { &*self.as_ptr() }
@@ -171,11 +236,17 @@ impl<T: ?Sized> fmt::Pointer for Unique<T> {
     }
 }
 
+impl<T: ?Sized> From<&T> for Unique<T> {
+    #[inline]
+    fn from(reference: &T) -> Self {
+        Self::from_ref(reference)
+    }
+}
+
 impl<T: ?Sized> From<&mut T> for Unique<T> {
     #[inline]
     fn from(reference: &mut T) -> Self {
-        // SAFETY: A mutable reference cannot be null
-        unsafe { Self::new_unchecked(&raw mut *reference) }
+        Self::from_mut_ref(reference)
     }
 }
 
@@ -291,10 +362,8 @@ impl Unique<dirent64> {
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
     pub const unsafe fn d_name_cstr<'pointer>(self) -> &'pointer CStr {
-        use core::ptr::slice_from_raw_parts;
         // SAFETY: caller must ensure the invariants
-        let as_slice: *const [c_char] =
-            unsafe { slice_from_raw_parts(self.d_name(), self.name_length() + 1) }; // add  1 to include terminal
+        let as_slice = unsafe { slice_from_raw_parts(self.d_name(), self.name_length() + 1) }; // add  1 to include terminal
         // SAFETY:  has it's null terminator included, and no interior nulls..
         unsafe { &*(as_slice as *const CStr) }
     }

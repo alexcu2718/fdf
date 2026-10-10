@@ -1,10 +1,8 @@
 #![allow(clippy::missing_inline_in_public_items)]
 use crate::{
-    SearchConfigError,
-    config,
+    SearchConfigError, config,
     filters::{FileTypeFilter, SizeFilter, TimeFilter},
     fs::DirEntry,
-    //  util::IgnoreMatcher,
     walk::{DirEntryFilter, FilterType, finder::Finder},
 };
 
@@ -228,9 +226,8 @@ impl FinderBuilder {
     /// Set how many threads to use, defaults to max
     #[must_use]
     pub const fn thread_count(mut self, threads: Option<NonZeroUsize>) -> Self {
-        match threads {
-            Some(num) => self.thread_count = num,
-            None => return self,
+        if let Some(num) = threads {
+            self.thread_count = num;
         }
 
         self

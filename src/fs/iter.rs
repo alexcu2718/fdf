@@ -208,8 +208,7 @@ pub(crate) trait DirentConstructor {
         unsafe { core::hint::assert_unchecked(buffer.len() > len) };
 
         // (this is internally a `memcpy`)
-        // SAFETY: safe to Yransmute &[u8] to &[MaybeUnit<u8>]
-        buffer[..len].copy_from_slice(unsafe { &*((&raw const *path) as *const [_]) });
+        buffer[..len].write_copy_of_slice(path);
 
         // In-bounds always
         buffer[len].write(b'/');
@@ -234,9 +233,12 @@ pub(crate) trait DirentConstructor {
     returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
     #[inline]
+    #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
         let d_name_cstr: &[u8] = unsafe { drnt.d_name_cstr().to_bytes_with_nul() };
+
+        debug_assert!(drnt.is_aligned(), "drnt not aligned(report this)");
 
         // SAFETY: as above
         let d_ino = unsafe { drnt.d_ino() }; // Returns 0 if d_ino isn't defined on your system
@@ -273,24 +275,25 @@ pub(crate) trait DirentConstructor {
             self.reserve_for_long_name(required_len);
         }
 
-        let buffer: &mut [MaybeUninit<u8>] = self.path_buffer(); //auto deref
+        // SAFETY: trivial, name_len=>1 (POSIX standard) and required len checked above.
+        unsafe {
+            core::hint::assert_unchecked(
+                required_len <= self.path_buffer().len() && required_len > base_len,
+            )
+        }
+
+        // Get the amount of the buffer we wish to initialise.
+        let buffer = &mut self.path_buffer()[..required_len];
 
         // Get the portion of the buffer that goes past the last slash, up to the name+NUL
-        // SAFETY: `base_len..required_len` is guaranteed to be a valid range into `path_buffer`
-        let name_portion = unsafe { buffer.get_unchecked_mut(base_len..required_len) };
+        let name_portion = &mut buffer[base_len..required_len];
 
-        // SAFETY: transmuting &[u8] to &[MaybeUnit<u8>] is always valid
         // Copy name into the uninit memory.
-        name_portion.copy_from_slice(unsafe { &*((&raw const *d_name_cstr) as *const [_]) });
+        name_portion.write_copy_of_slice(d_name_cstr);
         //^this is a memcpy.
-        // SAFETY: the buffer is guaranteed null terminated and we're accessing in bounds
-        // Now the slice initialised up to `required_len`
-        let full_path = unsafe {
-            CStr::from_bytes_with_nul_unchecked(core::slice::from_raw_parts(
-                buffer.as_ptr().cast(),
-                required_len,
-            ))
-        };
+        // SAFETY: the buffer is guaranteed null terminated(copying a null terminated string)
+        // &CStr is a &[u8]/&[i8] underneath.
+        let full_path = unsafe { &*((&raw const *buffer) as *const CStr) };
         //truncate the buffer to the first null terminator of the full path
 
         (full_path, d_ino, file_type)
@@ -358,25 +361,25 @@ pub struct GetDents {
 ))]
 impl GetDents {
     #[inline]
-    #[rustfmt::skip]
     /// Convenience function for pointer arithmetic on the buffer
     pub(crate) const unsafe fn get_next_pointer(&mut self) -> Unique<dirent64> {
-        #[cfg(not(all(target_os="macos",target_pointer_width="32")))] // macos  32bit has 4 byte alignment
         debug_assert!(
             self.offset.is_multiple_of(8),
             "offset should always be multiple of 8"
-        );
-        // SAFETY:  internal use only, the `offset` parameter is always within bounds of the buffer.
+        ); // doesn't apply for mac 32bit but not compatible with rust 2024 anywway.
+
+        // SAFETY: inbounds.
         let drnt = unsafe {
-            Unique::new_unchecked(self.syscall_buffer.as_ptr()
-                    .byte_add(self.offset)
-                    .cast::<dirent64>(),
-            )
+            Unique::from_ref(&self.syscall_buffer)
+                .byte_add(self.offset)
+                .cast::<dirent64>()
         };
+
+        // debug_assert!(drnt.is_aligned());
         // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
         // SAFETY: we just obtained this pointer, safe to obtain this value
         // we trust the reclen is kernel provided and must be >=24
-        self.offset += unsafe{ drnt.d_reclen()};
+        self.offset += unsafe { drnt.d_reclen() };
 
         drnt
     }
@@ -702,7 +705,10 @@ macro_rules! impl_dirent_constructor {
 
             #[inline]
             fn allocated_size(&self) -> usize {
-                self.path_buffer.len()
+                let allocated_sz = self.path_buffer.len();
+                ::core::debug_assert!(allocated_sz <= self.path_buffer.capacity(), "");
+                // trivial check, this should always be true, debug invariant.
+                allocated_sz
             }
 
             #[inline]

@@ -17,14 +17,12 @@ memrchr is significantly changed from stdlib implementation to use a more effici
 use core::num::NonZeroUsize;
 const USIZE_BYTES: usize = size_of::<usize>();
 const LO_USIZE: usize = usize::MAX.div_euclid(0xFF); //avoid a lint check, divides perfectly., gives constant 0x0101 etc.
-const HI_USIZE: usize = LO_USIZE << 7;
+const HI_USIZE: usize = LO_USIZE * 0x80;
 
 // I am simply too lazy to comment all of these, it turns out a nice optimisation existed for memrchr
 // I have done so, it seems the same optimisation is available for memchr but I need to work on the details
 // Once done, I'll add it to the stdlib as a PR potentially
 // https://github.com/gituser12981u2/memchr_stuff/blob/big_endian_fix/src/memchr_new.rs
-
-// simplifying functioon
 
 #[inline]
 #[must_use]
@@ -102,18 +100,16 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     // - body, scanned by 2 words at a time,
     // - the first remaining bytes, < 2 word size.
 
-    const BLOCK_MASK: usize = 2 * USIZE_BYTES - 1;
     let slen = text.len();
     let start = text.as_ptr();
     // Number of bytes to reach the next `2*usize` boundary.
     let prefix = start.align_offset(const { 2 * USIZE_BYTES });
-    //debug_assert!(prefix == start.addr().wrapping_neg() & BLOCK_MASK);
 
     // First 2-register-aligned offset, clamped for short inputs.
     let aligned_start = prefix.min(slen);
 
     // End of the largest 2-register-aligned region,slen>=aligned_start, never wraps
-    let aligned_end = aligned_start + ((slen - aligned_start) & !BLOCK_MASK);
+    let aligned_end = aligned_start + ((slen - aligned_start) & const { !(2 * USIZE_BYTES - 1) });
     // Simple scalar byte scan lambda, avoid iterator overhead.(Reverse iterators optimise quite badly plus we're specialising this by
     //specialising this, because we use the base_ptr and do basic pointer arithmetic, we can just already use existing registers(holding the base_ptr)
     // SAFETY: trivial, allows compiler to elide panic branch, this is always true.
@@ -174,13 +170,13 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     while offset > aligned_start {
         offset -= USIZE_BYTES;
-        if let Some(valid) = check_usize(start, offset) {
-            return Some(valid);
+        if let length @ Some(_) = check_usize(start, offset) {
+            return length;
         }
 
         offset -= USIZE_BYTES;
-        if let Some(valid) = check_usize(start, offset) {
-            return Some(valid);
+        if let length @ Some(_) = check_usize(start, offset) {
+            return length;
         }
     }
     debug_assert!(offset == aligned_start, "test"); // they're always equal, but llvm optimisesr better using offset instead of aligned start because it repurposes a register

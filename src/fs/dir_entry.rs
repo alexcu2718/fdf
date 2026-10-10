@@ -90,13 +90,13 @@ use libc::{
 };
 use std::os::fd::{AsRawFd as _, BorrowedFd, FromRawFd as _, OwnedFd};
 
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
+
 #[cfg(target_os = "android")]
 const AT_EACCESS: c_int = 0; // android being weird, again....
 
 #[cfg(not(target_os = "android"))]
 use libc::AT_EACCESS;
-
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
 
 //TODO, test #[align(64)] to check for presence of false sharing/perf improvements
 // If so, add extra relevant metadata to the struct...

@@ -33,7 +33,7 @@ Additional Note: If you use MacOS on native hardware and know your stuff, please
 
 ### Fully Supported and CI Tested
 
-(I don't use any inline assembly so other architectures ie Linux/FreeBSD aarch64 should work fine, will add to CI in future!)
+(I don't use any inline assembly so other architectures ie Linux/FreeBSD aarch64 *should* work fine, will add to CI in future!)
 
 - Linux (x86_64, s390x (Big endian), Alpine( MUSL libc))
 - macOS (Intel and Apple Silicon)
@@ -57,9 +57,9 @@ Additional Note: If you use MacOS on native hardware and know your stuff, please
 
 ### Probably Broken
 
-- MacOSx 32bit (granted the last 32bit OSx was released in 2009, The last supported release was rust 1.4.0, this isn't happening!)
+- Totally broken: MacOSx 32bit (granted the last 32bit OSx was released in 2009, The last supported release was rust 1.4.0, this isn't happening!)
 
-- Other Niche Operating systems like Fuschia (granted, they probably won't support Rust 2024).
+- Unknown: Other Niche Operating systems like Fuschia (granted, they probably won't support Rust 2024).
 
 ## Testing
 

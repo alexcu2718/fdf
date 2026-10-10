@@ -362,7 +362,7 @@ impl SearchConfig {
     #[allow(clippy::cast_sign_loss)] // Sign loss does not matter here
     pub(crate) fn matches_size_at(&self, entry: &DirEntry, opt_fd: Option<BorrowedFd>) -> bool {
         let Some(filter_size) = self.size_filter else {
-            return true; // No filter means always match
+            return true; // No filter means always match Option<std::os::fd::BorrowedFd>
         };
 
         match entry.file_type {

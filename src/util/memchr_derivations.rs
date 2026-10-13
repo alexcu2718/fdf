@@ -14,10 +14,16 @@ memrchr is significantly changed from stdlib implementation to use a more effici
 
 */
 
-use core::num::NonZeroUsize;
+use core::num::NonZero;
 const USIZE_BYTES: usize = size_of::<usize>();
 const LO_USIZE: usize = usize::MAX.div_euclid(0xFF); //avoid a lint check, divides perfectly., gives constant 0x0101 etc.
 const HI_USIZE: usize = LO_USIZE * 0x80;
+/// <https://github.com/virtyaluk/Bit-Twiddling-Hacks#determine-if-a-word-has-a-zero-byte>
+macro_rules! mycroft {
+    ($num:expr) => {
+        ($num.wrapping_sub(LO_USIZE) & HI_USIZE & !$num)
+    };
+}
 
 // I am simply too lazy to comment all of these, it turns out a nice optimisation existed for memrchr
 // I have done so, it seems the same optimisation is available for memchr but I need to work on the details
@@ -26,7 +32,7 @@ const HI_USIZE: usize = LO_USIZE * 0x80;
 
 #[inline]
 #[must_use]
-const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
+const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZero<usize>> {
     /*
     Hybrid approach:
     1) Use the classic SWAR test as a cheap early-out for the common case
@@ -38,7 +44,7 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
     Classic SWAR: may contain false positives due to cross-byte borrow.
     However considering that we want to check *as quickly* as possible, this is ideal.
     */
-    let mut classic = input.wrapping_sub(LO_USIZE) & !input & HI_USIZE;
+    let mut classic = mycroft!(input);
     // We don't use the big endian formula because we need `!input` in scope
     // which allows for CSE in this expression
     if classic == 0 {
@@ -47,6 +53,7 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
     /*
     This function occurs a branch here contains zero byte doesn't, it delegates the branch
     to the memchr(on LE) (or opposite on BE) function, this is okay because a *branch still occurs*
+
 
     Borrow-safe (carry-safe) SWAR:
 
@@ -65,7 +72,9 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
     Due to CSE, `!input` is reused (EG on X86_64, register RDI is reused)
     Explanation further on https://github.com/gituser12981u2/memchr_stuff/blob/main/src/memchr_new.rs
     */
-    classic &= !input << 7;
+    classic &= !(input << 7);
+    // nvm scratch that, gives better assembly with this other expression, weird!!!!!!!!
+    // classic &= !input << 7;
     /*
     SAFETY: `classic != 0` implies there is at least one real zero byte
     somewhere in the word (false positives only occur alongside a real zero
@@ -73,13 +82,7 @@ const fn contains_zero_byte_borrow_fix(input: usize) -> Option<NonZeroUsize> {
     Use this to get smarter intrinsic (aka ctlz/cttz non_zero)
     Note: Debug assertions(in std) check zero_mask!=0 so check tests for comprehensive validation
     */
-    Some(unsafe { NonZeroUsize::new_unchecked(classic) })
-}
-
-#[inline]
-const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
-    // Classic HASZERO trick. (Mycroft)
-    NonZeroUsize::new(input.wrapping_sub(LO_USIZE) & HI_USIZE & !input)
+    Some(unsafe { NonZero::new_unchecked(classic) })
 }
 
 // This is an optimised version of memrchr
@@ -94,6 +97,8 @@ const fn contains_zero_byte(input: usize) -> Option<NonZeroUsize> {
 #[track_caller]
 #[expect(clippy::indexing_slicing, reason = "panic free")]
 pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
+    const SIZE: usize = 2 * USIZE_BYTES;
+    const { assert!(SIZE.is_multiple_of(USIZE_BYTES), "trivial") }
     // Scan for a single byte value by reading two `usize` words at a time.
     // Split `text` in three parts:
     // - unaligned tail, after the last word aligned address in text,
@@ -103,13 +108,13 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     let slen = text.len();
     let start = text.as_ptr();
     // Number of bytes to reach the next `2*usize` boundary.
-    let prefix = start.align_offset(const { 2 * USIZE_BYTES });
+    let prefix = start.align_offset(SIZE);
 
     // First 2-register-aligned offset, clamped for short inputs.
     let aligned_start = prefix.min(slen);
 
     // End of the largest 2-register-aligned region,slen>=aligned_start, never wraps
-    let aligned_end = aligned_start + ((slen - aligned_start) & const { !(2 * USIZE_BYTES - 1) });
+    let aligned_end = aligned_start + ((slen - aligned_start) & const { !(SIZE - 1) });
     // Simple scalar byte scan lambda, avoid iterator overhead.(Reverse iterators optimise quite badly plus we're specialising this by
     //specialising this, because we use the base_ptr and do basic pointer arithmetic, we can just already use existing registers(holding the base_ptr)
     // SAFETY: trivial, allows compiler to elide panic branch, this is always true.
@@ -119,66 +124,54 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     if let Some(byte_ptr) = text[aligned_end..].iter().rfind(|b| **b == x) {
         // the address of byte_ptr is always greater than start, finding this distance is exactly `x`'s position
         // find the address of the pointer that dereferenced to x, then get distance from start pointer
-        return Some((&raw const *byte_ptr).addr() - start.addr());
-        // equivalently you can
-        // text[aligned_end..].iter().rposition(|b| *b==x).map(|y| y+aligned_end) to find pos then add to aligned_end
-        // however this optimises worse!
+        return Some((&raw const *byte_ptr).addr() - start.addr()); //optimises better than rposition.
     }
 
     let mut offset = aligned_end;
 
-    let repeated_x = usize::from_ne_bytes([x; USIZE_BYTES]); //broadcast x to all 4/2 nibble positions (or 1 if 16bit is ever possible)
+    let repeated_x = (x as usize) * LO_USIZE; //broadcast x to all 4/2 nibble positions (or 1 if 16bit is ever possible)
 
     // define simple lambda  to avoid repetitive code.
-    let check_usize = |ptr: *const u8, offset_from_base: usize| {
+    let find_last = |offset_: usize| -> Option<u32> {
         //avoid aliasing with offset
         // ptr add,cast the upper/lower to a usize, we did all the math to make sure we're only reading aligned chunks,
         // we could simplify this with a deref but I want the code to be specifically indicating aigned reads (pedantic aside, just taste)
         // SAFETY: aligned+inbounds; add offset,read the pointer and XOR mask to set matching bits to 0 (and 0's to x)
-        let upper_or_lower =
-            unsafe { ptr.byte_add(offset_from_base).cast::<usize>().read() } ^ repeated_x;
-
-        let maybe_match = if cfg!(target_endian = "big") {
+        let upper_or_lower = unsafe { start.add(offset_).cast::<usize>().read() } ^ repeated_x;
+        const BITSMINUS1: u32 = usize::BITS - 1;
+        if cfg!(target_endian = "big") {
             //compile time if
-            contains_zero_byte(upper_or_lower)
+            // fancy BE formula
+            NonZero::new(mycroft!(upper_or_lower))
+                .map(|y| (y.trailing_zeros() >> 3) ^ const { BITSMINUS1 >> 3 }) // (tz >> 3) ^ 7 on 64-bit, ^ 3 on 32-bit)
         } else {
             contains_zero_byte_borrow_fix(upper_or_lower)
-        };
-
-        if let Some(num) = maybe_match {
-            let zero_byte_pos = const { USIZE_BYTES - 1 }
-                - if cfg!(target_endian = "big") {
-                    (num.trailing_zeros() >> 3) as usize
-                } else {
-                    (num.leading_zeros() >> 3) as usize
-                };
-
-            debug_assert_eq!(start.addr(), ptr.addr(), "causes an optimisation below!");
-            //specifically use pointer arithmetic directly, it optimises nicer quite often, a lot less data depencies!
-            // ptr>=start_ptr by definition; calculate distance from current pointer to base ptr then add zero byte pos and offset and easy.
-            return Some(ptr.addr() - start.addr() + offset_from_base + zero_byte_pos);
-
-            //encourage the optimiser by reformulating this.
+                .map(|y| (BITSMINUS1 - y.leading_zeros()) >> 3)
         }
-        None
     };
     /*
     Search the body of the text, make sure we don't cross aligned_start.
     offset is always aligned, so just testing `>` is sufficient and avoids possible overflow.
     NBD: using  = optimises worse but is equivalent.
     */
-
-    while offset > aligned_start {
-        offset -= USIZE_BYTES;
-        if let length @ Some(_) = check_usize(start, offset) {
-            return length;
+    // this is formulated in a very obtuse way, sorry, massaging assembly.
+    if let Some(zero_byte_pos) = 'search: {
+        while offset > aligned_start {
+            offset -= USIZE_BYTES;
+            if let hit @ Some(_) = find_last(offset) {
+                break 'search hit;
+            }
+            offset -= USIZE_BYTES;
+            if let hit @ Some(_) = find_last(offset) {
+                break 'search hit;
+            }
         }
-
-        offset -= USIZE_BYTES;
-        if let length @ Some(_) = check_usize(start, offset) {
-            return length;
-        }
+        None
+    } {
+        // add offset to the zero byte bos in THIS part, not in the loop!
+        return Some(offset + zero_byte_pos as usize);
     }
+
     debug_assert!(offset == aligned_start, "test"); // they're always equal, but llvm optimisesr better using offset instead of aligned start because it repurposes a register
     // The character we were looking for didn't appear in the aligned body, do a simple loop to check the head segment.
     text[..offset].iter().rposition(|b| *b == x)

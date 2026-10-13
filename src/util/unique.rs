@@ -17,14 +17,16 @@ Edited slightly, essentially providing a type safe wrapper to inforce internal i
 //!
 //! Look at the [`Unique` definition](crate::fdf) for more info.
 #![allow(clippy::missing_inline_in_public_items)]
+#![expect(clippy::inline_always, reason = "just a wrapper")]
 use crate::dirent64;
 use core::convert::From;
-use core::ffi::CStr;
-use core::ffi::c_char;
+use core::ffi::{CStr, c_char};
 use core::fmt;
 use core::marker::PhantomData;
 use core::num::NonZeroUsize;
-use core::ptr::{NonNull, slice_from_raw_parts};
+use core::ptr::NonNull;
+use core::slice::from_raw_parts;
+
 /// A wrapper around a raw non-null `*const T` that indicates that the possessor
 /// of this wrapper owns the referent. Usefor building abstractions like
 /// `Box<T>`, `Vec<T>`, `String`, and `HashMap<K, V>`.
@@ -67,7 +69,13 @@ unsafe impl<T: Send + ?Sized> Send for Unique<T> {}
 /// `Unique` must enforce it.
 unsafe impl<T: Sync + ?Sized> Sync for Unique<T> {}
 
-impl<T: Sized> Unique<T> {
+impl<T> Unique<T> {
+    #[inline(always)]
+    #[must_use]
+    pub fn is_aligned(self) -> bool {
+        self.as_non_null().is_aligned()
+    }
+
     /// Creates a new `Unique` that is dangling, but well-aligned.
     ///
     /// This is useful for initializing types which lazily allocate, like
@@ -77,22 +85,13 @@ impl<T: Sized> Unique<T> {
     /// a `T`, which means this must not be used as a "not yet initialized"
     /// sentinel value. Types that lazily allocate must track initialization by
     /// some other means.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn dangling() -> Self {
         Self::from_non_null(NonNull::dangling())
     }
-}
 
-#[allow(clippy::multiple_inherent_impl)]
-impl<T> Unique<T> {
-    #[inline]
-    #[must_use]
-    pub fn is_aligned(self) -> bool {
-        self.as_ptr().is_aligned()
-    }
-
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn is_aligned_to<U>(self) -> bool {
         self.cast::<U>().is_aligned()
@@ -105,13 +104,13 @@ impl<T: ?Sized> Unique<T> {
     /// # Safety
     ///
     /// `ptr` must be non-null.
-    #[inline]
+    #[inline(always)]
     pub const unsafe fn new_unchecked(ptr: *const T) -> Self {
         debug_assert!(!ptr.is_null(), "Pointer is null in Unique::new_unchecked");
         // SAFETY: the caller must guarantee that `ptr` is non-null.
-        unsafe { Self(NonNull::new_unchecked(ptr.cast_mut()), PhantomData) }
+        unsafe { Self::from_non_null(NonNull::new_unchecked(ptr.cast_mut())) }
     }
-    #[inline]
+    #[inline(always)]
     #[must_use]
     /// <https://doc.rust-lang.org/beta/std/ptr/struct.NonNull.html#method.byte_add>
     ///
@@ -120,10 +119,10 @@ impl<T: ?Sized> Unique<T> {
     /// Same requirements as [`NonNull::byte_add`].
     pub const unsafe fn byte_add(self, amt: usize) -> Self {
         // SAFETY: same requirements as normal byte add, checked by caller.
-        unsafe { Self::from_non_null(self.0.byte_add(amt)) }
+        unsafe { Self::from_non_null(self.as_non_null().byte_add(amt)) }
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
     /// <https://doc.rust-lang.org/beta/std/ptr/struct.NonNull.html#method.byte_sub>
     ///
@@ -132,61 +131,53 @@ impl<T: ?Sized> Unique<T> {
     /// Same requirements as [`NonNull::byte_sub`].
     pub const unsafe fn byte_sub(self, amt: usize) -> Self {
         // SAFETY: same requirements as normal byte_sub, checked by caller
-        unsafe { Self::from_non_null(self.0.byte_sub(amt)) }
+        unsafe { Self::from_non_null(self.as_non_null().byte_sub(amt)) }
     }
 
-    #[inline]
-    pub const fn from_ref(reference: &T) -> Self {
-        Self::from_non_null(NonNull::from_ref(reference))
+    #[inline(always)]
+    pub const fn from_ref(reff: &T) -> Self {
+        Self::from_non_null(NonNull::from_ref(reff))
     }
 
-    #[inline]
-    pub const fn from_mut_ref(reference: &mut T) -> Self {
-        Self::from_non_null(NonNull::from_mut(reference))
+    #[inline(always)]
+    pub const fn from_mut_ref(mreff: &mut T) -> Self {
+        Self::from_ref(mreff)
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn addr(self) -> NonZeroUsize {
-        self.0.addr()
+        self.as_non_null().addr()
     }
 
     /// Creates a new `Unique` if `ptr` is non-null.
-    #[inline]
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    #[inline(always)]
     pub const fn new(ptr: *const T) -> Option<Self> {
-        if ptr.is_null() {
-            None
-        } else {
-            // SAFETY: The pointer has already been checked and is not null.
-            Some(unsafe { Self::new_unchecked(ptr) })
+        // manual map(const)
+        match NonNull::new(ptr.cast_mut()) {
+            Some(num) => Some(Self(num, PhantomData)),
+            _ => None,
         }
     }
 
     /// Acquires the underlying `*const` pointer.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn as_ptr(self) -> *const T {
-        self.0.as_ptr().cast_const()
+        self.0.as_ptr()
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
-    pub const fn as_non_null_ptr(self) -> NonNull<T> {
+    pub const fn as_non_null(self) -> NonNull<T> {
         self.0
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn from_non_null(ptr: NonNull<T>) -> Self {
-        // SAFETY: trivial.
-        unsafe { Self::new_unchecked(ptr.as_ptr()) }
+        Self(ptr, PhantomData)
     }
-
-    // #[inline]
-    // pub const fn add<U>(self, amt: usize) -> Unique<U> {
-    //     unsafe { Unique(self.0.add(amt).as_ptr().cast()) }
-    // }
 
     /// Dereferences the content.
     ///
@@ -196,7 +187,7 @@ impl<T: ?Sized> Unique<T> {
     /// # Safety
     /// the caller must guarantee that this object meets all the meets all the
     /// requirements for a reference.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const unsafe fn as_ref<'ptr>(self) -> &'ptr T {
         // SAFETY: the caller must guarantee that `self` meets all the
@@ -205,18 +196,17 @@ impl<T: ?Sized> Unique<T> {
     }
 
     /// Casts to a pointer of another type.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn cast<U>(self) -> Unique<U> {
-        // SAFETY: Unique::new_unchecked() creates a new unique and needs
         // the given pointer to not be null.
         // Since we are passing self as a pointer, it cannot be null.
-        unsafe { Unique::new_unchecked(self.as_ptr().cast()) }
+        Unique::from_non_null(self.as_non_null().cast())
     }
 }
 
 impl<T: ?Sized> Clone for Unique<T> {
-    #[inline]
+    #[inline(always)]
     fn clone(&self) -> Self {
         *self
     }
@@ -237,28 +227,28 @@ impl<T: ?Sized> fmt::Pointer for Unique<T> {
 }
 
 impl<T: ?Sized> From<&T> for Unique<T> {
-    #[inline]
+    #[inline(always)]
     fn from(reference: &T) -> Self {
         Self::from_ref(reference)
     }
 }
 
 impl<T: ?Sized> From<&mut T> for Unique<T> {
-    #[inline]
+    #[inline(always)]
     fn from(reference: &mut T) -> Self {
         Self::from_mut_ref(reference)
     }
 }
 
 impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
-    #[inline]
+    #[inline(always)]
     fn from(unique: Unique<T>) -> Self {
-        unique.0
+        unique.as_non_null()
     }
 }
 
 impl Unique<dirent64> {
-    #[inline]
+    #[inline(always)]
     #[must_use]
     /// Returns the inode of the `dirent64`, returns 0 if `d_ino` is not a struct member on your OS.
     /// # Safety
@@ -301,7 +291,7 @@ impl Unique<dirent64> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
     /// Returns the libc equivalent of the type as eg `DT_BLK`  from libc
     /// Follow the link  for [GNU documentation ](<https://ftp.gnu.org/old-gnu/Manuals/glibc-2.2.3/html_node/libc_260.html>)
@@ -322,7 +312,7 @@ impl Unique<dirent64> {
     }
 
     #[must_use]
-    #[inline]
+    #[inline(always)]
     #[cfg(has_d_namlen)]
     /// Returns the `d_namlen` if the member exists on your system
     /// # Safety
@@ -333,7 +323,7 @@ impl Unique<dirent64> {
     }
 
     #[must_use]
-    #[inline]
+    #[inline(always)]
     #[cfg(not(has_d_namlen))]
     #[deprecated(
         note = "`d_namlen` does not exist on this platform's `dirent`; use `name_length()` instead, which is portable"
@@ -347,28 +337,29 @@ impl Unique<dirent64> {
     }
 
     #[must_use]
-    #[inline]
+    #[inline(always)]
     /// Returns a slice reference to the `d_name`, not including null terminator.
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
     pub const unsafe fn d_name_slice<'pointer>(self) -> &'pointer [u8] {
         // SAFETY: Caller must not invalidate the invariant.
-        unsafe { core::slice::from_raw_parts(self.d_name().cast(), self.name_length()) }
+        unsafe { from_raw_parts(self.d_name().cast(), self.name_length()) }
     }
 
     #[must_use]
-    #[inline]
+    #[inline(always)]
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
     pub const unsafe fn d_name_cstr<'pointer>(self) -> &'pointer CStr {
         // SAFETY: caller must ensure the invariants
-        let as_slice = unsafe { slice_from_raw_parts(self.d_name(), self.name_length() + 1) }; // add  1 to include terminal
+        let slice: &[u8] = unsafe { from_raw_parts(self.d_name().cast(), self.name_length() + 1) }; // add  1 to include terminal
+
         // SAFETY:  has it's null terminator included, and no interior nulls..
-        unsafe { &*(as_slice as *const CStr) }
+        unsafe { CStr::from_bytes_with_nul_unchecked(slice) } //equivalent if you cast it.
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
     #[cfg(has_d_reclen)] // Overly paranoid, I want to know what builds fail.
     /// Returns the `d_reclen` member as a usize.
@@ -381,11 +372,13 @@ impl Unique<dirent64> {
         // although most systems should have this struct member.
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
     // can be anything from [c_char;3] to [c_char;1024] or whatever. It's a VLA.
     /**
-    Access the pointer to `d_name`, note that `d-name` is not a [ `c_char` ;256] array, it can be greater,
+    Access the pointer to `d_name`,
+
+    Note that `d-name` is not a [ `c_char` ;256] array, it can be greater,
     So careful attention has to be paid
 
      # Safety
@@ -396,7 +389,7 @@ impl Unique<dirent64> {
         unsafe { (&raw const (*self.as_ptr()).d_name).cast() }
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
     /// Returns the length of the `d_name` but, like strlen, it doesn't include the null terminator.
     /// # Safety

@@ -1,7 +1,7 @@
 [package]
 name = "fdf"
 version = "0.9.7"
-rust-version = "1.94.0"
+rust-version = "1.95.0"
 edition = "2024"
 license = "MIT OR Apache-2.0 OR MPL-2.0"
 description = "A fast, multi-threaded filesystem search tool with regex/glob support and extremely pretty colours!"
@@ -12,23 +12,23 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
 [build-dependencies]
-libc = { version = "0.2.186" }
-cc = "1.2.60"
+libc = { version = "0.2.190" }
+cc = "1.8.0"
 
 [dependencies]
-chrono = { version = "0.4.44", default-features = false, features = ["std"] }
-clap = { version = "4.6.1", features = ["derive"] }
-clap_complete = "4.6.2"
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+clap = { version = "4.6.7", features = ["derive"] }
+clap_complete = "4.6.11"
 compile_time_ls_colours = { version = "0.5.1", features = ["phf"] }
 crossbeam-deque = "0.8.6"
 crossbeam-channel = "0.5.14"
 dashmap = { version = "6.1.0", features = ["inline"] }
-libc = "0.2.185"
-regex = { version = "1.12.2", features = ["perf", "perf-dfa-full"] }
-ignore = { version = "0.4.24", features = ["simd-accel"] }
-thread_local = "1.1.9"
+libc = "0.2.190"
+regex = { version = "1.13.1", features = ["perf", "perf-dfa-full"] }
+ignore = { version = "0.4.33", features = ["simd-accel"] }
+thread_local = "1.1.10"
 [target.'cfg(any(target_os = "linux",target_os="macos",target_os="android"))'.dependencies]
-mimalloc = { version = "0.1.49", optional = true, features = [
+mimalloc = { version = "0.1.52", optional = true, features = [
   "extended",
 ] } #dont enable v3, it causes weird shit with extra syscalls.
 

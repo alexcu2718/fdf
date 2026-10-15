@@ -485,7 +485,7 @@ impl SearchConfig {
     #[must_use]
     pub fn matches_path(&self, dir: &DirEntry, full_path: bool) -> bool {
         // Use arithmetic to avoid branching costs.
-        let index_amount = core::hint::select_unpredictable(full_path, dir.file_name_index(), 0);
+        let index_amount = core::hint::select_unpredictable(full_path, 0, dir.file_name_index());
 
         // SAFETY: we are always indexing within bounds.
         let candidate = unsafe { dir.get_unchecked(index_amount..) };

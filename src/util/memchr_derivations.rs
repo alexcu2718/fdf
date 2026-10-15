@@ -140,11 +140,12 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
         let upper_or_lower = unsafe { start.add(offset_).cast::<usize>().read() } ^ repeated_x;
         const BITSMINUS1: u32 = usize::BITS - 1;
         if cfg!(target_endian = "big") {
-            //compile time if
-            // fancy BE formula
-            NonZero::new(mycroft!(upper_or_lower))
-                .map(|y| (y.trailing_zeros() >> 3) ^ const { BITSMINUS1 >> 3 }) // (tz >> 3) ^ 7 on 64-bit, ^ 3 on 32-bit)
+            // BE: the last byte in memory is the least significant one,
+            // so the "last match" is the lowest set bit
+            NonZero::new(mycroft!(upper_or_lower)).map(|y| (BITSMINUS1 - y.trailing_zeros()) >> 3)
         } else {
+            // LE: the last byte in memory is the most significant one,
+            // so the "last match" is the highest set bit
             contains_zero_byte_borrow_fix(upper_or_lower)
                 .map(|y| (BITSMINUS1 - y.leading_zeros()) >> 3)
         }

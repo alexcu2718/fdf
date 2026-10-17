@@ -301,10 +301,10 @@ impl core::fmt::Display for FileType {
     }
 }
 
-impl From<libc::stat> for FileType {
-    /// Converts a `libc::stat` directly to a `FileType`
+impl From<&libc::stat> for FileType {
+    /// Converts a borrowed `libc::stat` to a `FileType`
     #[inline]
-    fn from(stat: libc::stat) -> Self {
-        Self::from_stat(&stat)
+    fn from(stat: &libc::stat) -> Self {
+        Self::from_stat(stat)
     }
 }

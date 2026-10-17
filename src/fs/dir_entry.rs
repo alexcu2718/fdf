@@ -166,7 +166,7 @@ pub struct DirEntry {
     /// File type (file, directory, symlink, etc.).
     pub(crate) file_type: FileType, //1 byte
     /// `None` means not computed yet, `Some(bool)` means cached result.
-    pub(crate) is_traversible_cache: Cell<Option<bool>>, //1byte
+    pub(crate) is_cached_traversable: Cell<Option<bool>>, //1byte
 
     /// Offset in the path buffer where the file name starts.
     ///
@@ -278,7 +278,7 @@ impl fmt::Debug for DirEntry {
             .field("file_type", &self.file_type)
             .field("file_name_index", &self.file_name_index)
             .field("inode", &self.inode)
-            .field("traversible_cache", &self.is_traversible_cache)
+            .field("traversible_cache", &self.is_cached_traversable)
             .finish()
     }
 }
@@ -703,7 +703,7 @@ impl DirEntry {
         const MINIMUM_DIRENT_SIZE: isize = 32;
 
         debug_assert!(
-            self.file_type == FileType::Directory || self.file_type == FileType::Symlink,
+            self.file_type.is_dir() || self.file_type.is_symlink(),
             " Only expect dirs/symlinks to pass through this private func"
         );
         let dirfd = self.open();
@@ -1016,7 +1016,7 @@ impl DirEntry {
         self.get_realpath(|full_path| {
             let (file_type, ino) = if self.is_symlink() {
                 let statted = self.get_stat()?; // only call stat if it's a symlink, because I don't deduplicate normal files, this works well for symlinks
-                (FileType::from_stat(&statted), access_stat!(statted, st_ino))
+                (FileType::from(&statted), access_stat!(statted, st_ino))
             } else {
                 (self.file_type(), self.ino())
             };
@@ -1029,7 +1029,7 @@ impl DirEntry {
                 inode: ino,
                 depth: self.depth,
                 file_name_index,
-                is_traversible_cache: Cell::new(Some(file_type == FileType::Directory)),
+                is_cached_traversable: Cell::new(Some(file_type.is_dir())),
             })
         })
     }
@@ -1322,56 +1322,56 @@ impl DirEntry {
     /// Checks if the file is a directory or symlink (but internally a directory)
     #[inline]
     #[must_use]
-    pub fn is_traversible(&self) -> bool {
+    pub fn is_traversable(&self) -> bool {
         match self.file_type {
             FileType::Directory => true,
-            FileType::Symlink => self.check_symlink_traversibility(), // we essentially use a cache to avoid recalling this for subsequent calls, see below.
+            FileType::Symlink => self.check_symlink_traversablility(), // we essentially use a cache to avoid recalling this for subsequent calls, see below.
             _ => false,
         }
     }
 
     /// Checks if a symlink points to a traversible directory, caching the result.
     #[inline]
-    pub(crate) fn check_symlink_traversibility(&self) -> bool {
+    pub(crate) fn check_symlink_traversablility(&self) -> bool {
         debug_assert!(
-            self.file_type() == FileType::Symlink,
+            self.file_type().is_symlink(),
             "we only expect symlinks to use this function(hence private)"
         );
         // Return cached result if available
-        if let Some(cached) = self.is_traversible_cache.get() {
+        if let Some(cached) = self.is_cached_traversable.get() {
             return cached;
         }
 
         // Compute and cache the result
         let is_traversible = self
             .get_stat()
-            .is_ok_and(|entry| FileType::from_stat(&entry) == FileType::Directory);
+            .is_ok_and(|entry| FileType::from(&entry).is_dir());
 
-        self.is_traversible_cache.set(Some(is_traversible));
+        self.is_cached_traversable.set(Some(is_traversible));
         is_traversible
     }
 
     #[inline]
     pub(crate) fn check_symlink_traversibility_at(&self, opt_fd: Option<BorrowedFd>) -> bool {
         debug_assert!(
-            self.file_type() == FileType::Symlink,
+            self.file_type().is_symlink(),
             "we only expect symlinks to use this function(hence private)"
         );
         // Return cached result if available
-        if let Some(cached) = self.is_traversible_cache.get() {
+        if let Some(cached) = self.is_cached_traversable.get() {
             return cached;
         }
 
         // Compute and cache the result
         let is_traversible = opt_fd.map_or_else(
-            || self.check_symlink_traversibility(),
+            || self.check_symlink_traversablility(),
             |fd| {
                 self.get_statat(fd)
-                    .is_ok_and(|entry| FileType::from_stat(&entry) == FileType::Directory)
+                    .is_ok_and(|entry| FileType::from(&entry).is_dir())
             },
         );
 
-        self.is_traversible_cache.set(Some(is_traversible));
+        self.is_cached_traversable.set(Some(is_traversible));
         is_traversible
     }
 
@@ -1620,14 +1620,14 @@ impl DirEntry {
         let get_stat = stat_syscall!(lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
         let inode = access_stat!(get_stat, st_ino);
         let file_name_index = Self::_file_name_index(path_ref);
-        let file_type = FileType::from_stat(&get_stat);
+        let file_type = FileType::from(&get_stat);
         Ok(Self {
             path: cstring.into(),
             file_type,
             inode,
             depth: 0,
             file_name_index,
-            is_traversible_cache: Cell::new(None), //no need to check(we'd need to call stat instead!)
+            is_cached_traversable: Cell::new(None), //no need to check(we'd need to call stat instead!)
         })
     }
 

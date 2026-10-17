@@ -1,5 +1,35 @@
 #!/usr/bin/env bash
 
+# This script parses the Markdown tables produced by `hyperfine --export-markdown`.
+# The column layout of that export changed in hyperfine 2.0.0 (Command | Mean | Min | Max | Relative
+# became Command | Mean [metric] | Change | Factor), so a minimum version is required here.
+MIN_HYPERFINE_VERSION="2.0.0"
+
+version_ge() {
+    # true (0) if $1 >= $2
+    [ "$1" = "$2" ] && return 0
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+}
+
+check_hyperfine_version() {
+    if ! command -v hyperfine >/dev/null 2>&1; then
+        echo "Error: hyperfine is not installed. This script requires hyperfine >= ${MIN_HYPERFINE_VERSION}." >&2
+        echo "       Install it from https://github.com/sharkdp/hyperfine#installation" >&2
+        exit 1
+    fi
+
+    local installed_version
+    installed_version=$(hyperfine --version | awk '{print $2}')
+
+    if ! version_ge "$installed_version" "$MIN_HYPERFINE_VERSION"; then
+        echo "Error: found hyperfine ${installed_version}, but this script requires hyperfine >= ${MIN_HYPERFINE_VERSION}." >&2
+        echo "       was introduced in hyperfine 2.0.0 and is incompatible with older 1.x exports." >&2
+        echo "       Please upgrade hyperfine: https://github.com/sharkdp/hyperfine#installation" >&2
+        exit 1
+    fi
+}
+
+check_hyperfine_version
 
 cd "$(dirname "$0" )" || exit
 cd ..
@@ -51,21 +81,34 @@ function mean_value(s,    parts) {
     if ($0 ~ /\|:/) {
         next
     }
-    if ($0 ~ /Command.*Mean.*Min.*Max.*Relative/) {
+    if ($0 ~ /Command.*Mean.*Change.*Factor/) {
         next
     }
 
+    # hyperfine >= 2.0.0 markdown rows look like:
+    # | `command` | mean ± stddev | change | factor |
+    # Splitting on a bare "|" (rather than " | ") keeps empty cells (e.g. the
+    # Change/Factor columns on the reference row) from swallowing neighbouring fields.
+    # Benchmarked commands can themselves contain a literal escaped pipe (e.g. a regex
+    # pattern with "\|"), so mask those before splitting and restore them afterwards.
     line = $0
-    gsub(/^\|[ ]*/, "", line)
-    gsub(/[ ]*\|[ ]*$/, "", line)
-    n = split(line, fields, " \\| ")
+    gsub(/\\\|/, "\001", line)
+    n = split(line, fields, "|")
+    for (i = 1; i <= n; i++) {
+        gsub(/\001/, "\\|", fields[i])
+    }
     if (n < 5) {
         next
     }
 
-    command = trim(fields[1])
-    mean = trim(fields[2])
-    relative = trim(fields[5])
+    command = trim(fields[2])
+    mean = trim(fields[3])
+    change = trim(fields[4])
+    factor = trim(fields[5])
+    relative = change
+    if (factor != "") {
+        relative = relative " " factor
+    }
     is_cold_cache_file = (FILENAME ~ /cold-cache/)
     case_label = case_label_from_filename(FILENAME)
 

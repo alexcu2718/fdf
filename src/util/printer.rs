@@ -225,7 +225,7 @@ fn extension_colour(entry: &DirEntry) -> &[u8] {
             .extension()
             .map_or(RESET, |pos| file_type_colour!(pos)),
         FileType::Directory => file_type_colour!(directory),
-        FileType::Symlink => match entry.is_traversible_cache.get() {
+        FileType::Symlink => match entry.is_cached_traversable.get() {
             Some(true) => file_type_colour!(directory),
             _ => file_type_colour!(symlink),
         },

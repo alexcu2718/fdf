@@ -289,7 +289,7 @@ impl Finder {
         // Construct starting entry
         let entry = DirEntry::new(self.root_dir()).map_err(SearchConfigError::TraversalError)?;
 
-        if entry.is_traversible() {
+        if entry.is_traversable() {
             let finder = Arc::new(self);
             injector.push(WorkItem {
                 dir: entry,
@@ -382,22 +382,20 @@ impl Finder {
     }
 
     /// Determines if a directory should be traversed and caches the result
+    /// Determines if a directory should be traversed and caches the result
     #[inline]
     fn should_traverse(&self, dir: &DirEntry, opt_fd: Option<BorrowedFd>) -> bool {
-        match dir.file_type {
-            // Regular directory - always traversible
-            FileType::Directory => true,
+        match (dir.file_type, self.is_following_symlinks()) {
+            // Regular directory - always traversable
+            (FileType::Directory, _) => true,
 
-            // Symlink - check if we should follow and if it points to a directory(the result is cached so the call isn't required each time.)
-            FileType::Symlink if self.search_config.follow_symlinks => {
-                dir.check_symlink_traversibility_at(opt_fd)
-            }
+            // Symlink - follow only if enabled and it points to a directory (result is cached)
+            (FileType::Symlink, true) => dir.check_symlink_traversibility_at(opt_fd),
 
-            // All other file types or symlinks we don't follow
+            // Everything else, including symlinks we don't follow
             _ => false,
         }
     }
-
     /// Filters out hidden files if configured to do so
     #[inline]
     const fn keep_hidden(&self, dir: &DirEntry) -> bool {
@@ -430,37 +428,62 @@ impl Finder {
     }
 
     #[inline]
+    fn has_git_dir(filedes: BorrowedFd) -> bool {
+        use libc::fstatat;
+        const GITDIR: &[u8] = b".git\0";
+
+        let result: Result<libc::stat, DirEntryError> = stat_syscall!(
+            fstatat,
+            filedes.as_raw_fd(),
+            GITDIR.as_ptr().cast(),
+            libc::AT_SYMLINK_NOFOLLOW
+        );
+
+        // A `.git` file (worktrees/submodules) also marks a repo, so accept any existing entry
+        // except a symlink; directories are the common case.
+        result.is_ok_and(|st| {
+            let ft = FileType::from_stat(&st);
+            ft.is_dir() || ft.is_regular_file()
+        })
+    }
+
+    #[inline]
+    const fn is_gitignore_enabled(&self) -> bool {
+        self.search_config.respect_gitignore
+    }
+
+    #[inline]
+    const fn is_following_symlinks(&self) -> bool {
+        self.search_config.follow_symlinks
+    }
+
+    #[inline]
     fn build_ignore_context(
         &self,
         dir: &DirEntry,
+        filedes: BorrowedFd,
         parent: Arc<IgnoreContext>,
     ) -> Arc<IgnoreContext> {
         debug_assert!(
-            dir.is_traversible(),
+            dir.is_traversable(),
             "we expect this entry to be traversible"
         );
-        if !self.search_config.respect_gitignore {
+        if !self.is_gitignore_enabled() {
             return parent;
         }
 
-        let repo_active = parent.repo_active
-            || dir
-                .as_path()
-                .join(".git")
-                .symlink_metadata()
-                .is_ok_and(|x| x.is_dir());
-        let local_matcher = if repo_active {
-            Self::parse_gitignore_file(dir.as_path())
-        } else {
-            None
-        };
+        let repo_active = parent.repo_active || Self::has_git_dir(filedes);
+
+        let local_matcher = repo_active
+            .then(|| Self::parse_gitignore_file(dir.as_path()))
+            .flatten();
 
         IgnoreContext::child(parent, local_matcher, repo_active)
     }
 
     #[inline]
     fn is_gitignored(&self, dir: &DirEntry, ctx: &Arc<IgnoreContext>) -> bool {
-        if !self.search_config.respect_gitignore
+        if !self.is_gitignore_enabled()
             || (!ctx.repo_active && self.custom_ignore_matchers.is_empty())
         {
             return false;
@@ -505,7 +528,7 @@ impl Finder {
             self.inode_cache.as_ref().map_or_else(
                 || {
                     // Fast path: only calls stat IFF self.starting_filesystem is Some
-                    debug_assert!(!self.search_config.follow_symlinks,"we expect follow symlinks to be disabled when following this path");
+                    debug_assert!(!self.is_following_symlinks(),"we expect follow symlinks to be disabled when following this path");
 
 
                     self.starting_filesystem.is_none_or(|start_dev| {
@@ -514,7 +537,7 @@ impl Finder {
                     })
                 },
                 |cache| {
-                    debug_assert!(self.search_config.follow_symlinks,"we expect follow symlinks to be enabled when following this path");
+                    debug_assert!(self.is_following_symlinks(),"we expect follow symlinks to be enabled when following this path");
 
 
                     dir.get_stat().is_ok_and(|stat| {
@@ -531,11 +554,11 @@ impl Finder {
         // self.search_config.follow_symlinks <=> inode_cache is some
         FileType::Symlink
             if self.inode_cache.as_ref().is_some_and(|cache| {
-                debug_assert!(self.search_config.follow_symlinks,"we expect follow symlinks to be enabled when following this path");
+                debug_assert!(self.is_following_symlinks(),"we expect follow symlinks to be enabled when following this path");
 
 
                 dir.get_stat().is_ok_and(|stat| {
-                    FileType::from_stat(&stat) == FileType::Directory &&
+                    FileType::from_stat(&stat).is_dir() &&
                     // Check filesystem boundary
                     self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
                     // Check if we've already traversed this inode
@@ -553,7 +576,7 @@ impl Finder {
 
     #[inline]
     fn matches_ignore_path(&self, dir: &DirEntry) -> bool {
-        self.search_config.matches_ignore_path(dir.as_bytes())
+        self.search_config.matches_ignore_path(dir.as_ref())
     }
 
     #[inline]
@@ -603,8 +626,6 @@ impl Finder {
             return; // Check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info
         }
 
-        let current_ignore_ctx = self.build_ignore_context(&dir, parent_ignore_ctx);
-
         let should_send_dir_or_symlink = self.should_send_dir(&dir); // If we've gotten here, the dir must be a directory!
 
         if !self.handle_depth_limit(&dir, should_send_dir_or_symlink, sender, ctx) {
@@ -616,15 +637,17 @@ impl Finder {
         // Otherwise use readdir
         match read_direntries!(dir) {
             Ok(entries) => {
-                let raw_fd = entries.fd.as_raw_fd();
                 // SAFETY: `raw_fd` stays valid for the loop body since `entries` (and its owned fd) outlives it;
                 // constructing the `BorrowedFd` this way (instead of borrowing `entries.fd` directly) avoids
                 // holding a borrow of `entries` across the `for entry in entries` move below.
-                let opt_fd = Some(unsafe { BorrowedFd::borrow_raw(raw_fd) }); //dirty hack, need to revisit my approach
+                let raw_fd = unsafe { BorrowedFd::borrow_raw(entries.fd.as_raw_fd()) };
+                let opt_fd = Some(raw_fd); //dirty hack, need to revisit my approach
+
                 // I need to figure out how to use 'openat' style on opening queued file descriptors
                 // Unfortunately queueing file descriptors will fail once file descriptors go past ulimit
                 // but they won't for consequent file descriptors
                 // I can see *why* the std library did it the way it did, I should research how walkdir handles it.
+                let current_ignore_ctx = self.build_ignore_context(&dir, raw_fd, parent_ignore_ctx);
                 for entry in entries {
                     if !self.keep_hidden(&entry)
                         || self.matches_ignore_path(&entry)

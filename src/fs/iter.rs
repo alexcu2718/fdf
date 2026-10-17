@@ -181,7 +181,7 @@ pub(crate) trait DirentConstructor {
             inode,
             depth: self.parent_depth() + 1,
             file_name_index: self.file_index(),
-            is_traversible_cache: Cell::new(None), // Lazy cache for traversal checks
+            is_cached_traversable: Cell::new(None), // Lazy cache for traversal checks
         }
     }
 

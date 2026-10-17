@@ -1016,7 +1016,7 @@ impl DirEntry {
         self.get_realpath(|full_path| {
             let (file_type, ino) = if self.is_symlink() {
                 let statted = self.get_stat()?; // only call stat if it's a symlink, because I don't deduplicate normal files, this works well for symlinks
-                (FileType::from_stat(&statted), access_stat!(statted, st_ino))
+                (FileType::from(&statted), access_stat!(statted, st_ino))
             } else {
                 (self.file_type(), self.ino())
             };
@@ -1345,7 +1345,7 @@ impl DirEntry {
         // Compute and cache the result
         let is_traversible = self
             .get_stat()
-            .is_ok_and(|entry| FileType::from_stat(&entry).is_dir());
+            .is_ok_and(|entry| FileType::from(&entry).is_dir());
 
         self.is_cached_traversable.set(Some(is_traversible));
         is_traversible
@@ -1367,7 +1367,7 @@ impl DirEntry {
             || self.check_symlink_traversablility(),
             |fd| {
                 self.get_statat(fd)
-                    .is_ok_and(|entry| FileType::from_stat(&entry).is_dir())
+                    .is_ok_and(|entry| FileType::from(&entry).is_dir())
             },
         );
 
@@ -1620,7 +1620,7 @@ impl DirEntry {
         let get_stat = stat_syscall!(lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
         let inode = access_stat!(get_stat, st_ino);
         let file_name_index = Self::_file_name_index(path_ref);
-        let file_type = FileType::from_stat(&get_stat);
+        let file_type = FileType::from(&get_stat);
         Ok(Self {
             path: cstring.into(),
             file_type,

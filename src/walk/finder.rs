@@ -5,6 +5,7 @@ use crate::{
     walk::{DirEntryFilter, FilterType, finder_builder::FinderBuilder},
 };
 use core::{
+    ffi::CStr,
     mem,
     num::NonZeroUsize,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -429,20 +430,20 @@ impl Finder {
 
     #[inline]
     fn has_git_dir(filedes: BorrowedFd) -> bool {
-        use libc::fstatat;
-        const GITDIR: &[u8] = b".git\0";
+        use libc::{AT_SYMLINK_NOFOLLOW, fstatat, stat};
+        const GITDIR: &CStr = c".git";
 
-        let result: Result<libc::stat, DirEntryError> = stat_syscall!(
+        let result: Result<stat, DirEntryError> = stat_syscall!(
             fstatat,
             filedes.as_raw_fd(),
-            GITDIR.as_ptr().cast(),
-            libc::AT_SYMLINK_NOFOLLOW
+            GITDIR.as_ptr(),
+            AT_SYMLINK_NOFOLLOW
         );
 
         // A `.git` file (worktrees/submodules) also marks a repo, so accept any existing entry
         // except a symlink; directories are the common case.
         result.is_ok_and(|st| {
-            let ft = FileType::from_stat(&st);
+            let ft = FileType::from(&st);
             ft.is_dir() || ft.is_regular_file()
         })
     }
@@ -557,12 +558,12 @@ impl Finder {
                 debug_assert!(self.is_following_symlinks(),"we expect follow symlinks to be enabled when following this path");
 
 
-                dir.get_stat().is_ok_and(|stat| {
-                    FileType::from_stat(&stat).is_dir() &&
+                dir.get_stat().is_ok_and(|statted| {
+                    FileType::from(&statted).is_dir() &&
                     // Check filesystem boundary
-                    self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
+                    self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(statted, st_dev)) &&
                     // Check if we've already traversed this inode
-                    cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
+                    cache.insert((access_stat!(statted, st_dev), access_stat!(statted, st_ino)))
                 })
             }) =>
         {

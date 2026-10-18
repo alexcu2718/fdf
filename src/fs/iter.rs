@@ -197,7 +197,7 @@ pub(crate) trait DirentConstructor {
         Most filepaths will never be longer than this. In the odd-case they are, it's really rare
         with no negligible affect otherwise
         */
-        let mut len = path.len();
+        let len = path.len();
         const FAST_PATH_DIRENT_LENGTH: usize = 256;
         let total_capacity = len + FAST_PATH_DIRENT_LENGTH + needs_slash;
 
@@ -215,8 +215,8 @@ pub(crate) trait DirentConstructor {
         // In-bounds always
         buffer[len].write(b'/');
 
-        len += needs_slash;
-        (buffer, len)
+        let initialised_to = len + needs_slash;
+        (buffer, initialised_to)
         /* for 'len' we only read up to len bytes, so inc the ase it's not a directory, we intentionally omit the last slash by truncation.*/
     }
 

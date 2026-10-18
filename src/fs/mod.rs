@@ -7,7 +7,7 @@ mod types;
 pub use buffer::{AlignedBuffer, ValueType};
 
 #[cfg(target_os = "android")]
-pub(crate) const AT_EACCESS: c_int = 0; // android being weird, again....
+pub(crate) const AT_EACCESS: libc::c_int = 0; // android being weird, again....
 #[cfg(not(target_os = "android"))]
 pub(crate) use libc::AT_EACCESS;
 

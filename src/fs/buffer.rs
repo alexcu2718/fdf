@@ -36,6 +36,8 @@ impl ValueType for usize {}
 impl ValueType for isize {}
 impl ValueType for i32 {}
 impl ValueType for u32 {}
+impl ValueType for i16 {}
+impl ValueType for u16 {}
 
 /**
  A optimised, aligned buffer for system call operations
@@ -80,6 +82,8 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     #[inline]
     #[track_caller]
     pub const fn new() -> Self {
+        const { assert!(Self::BUFFER_SIZE < i32::MAX as _, " `SIZE` => i32::MAX ") };
+        // thanks to monomorphisation this should highlight the error fine.
         Self(MaybeUninit::uninit())
     }
     /// Returns the size of which this buffer was created by (counted in raw bytes)
@@ -122,7 +126,7 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     ///
     /// On success, the return value is the number of bytes written into this buffer.
     /// A return value of `0` indicates end-of-directory. Negative values indicate an
-    /// OS error as returned by the underlying syscall wrapper.
+    /// OS error as returned by the underlying syscall wrapper. (Check [`libc::errno`])
     ///
     /// Caveats
     /// - This method is `unsafe` because the kernel only initialises the first `n`
@@ -150,31 +154,5 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
                 core::ptr::from_mut(basep),
             )
         }
-    }
-
-    /**
-     Assumes the buffer is initialised and returns a reference to the contents
-
-     # Safety
-     The caller must guarantee the entire buffer has been properly initialised
-     before calling this method. Accessing uninitialised memory is undefined behavior.
-    */
-    #[inline]
-    pub const unsafe fn assume_init(&self) -> &[T; SIZE] {
-        // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.0.assume_init_ref() }
-    }
-
-    /**
-     Assumes the buffer is initialised and returns a mutable reference to the contents
-
-     # Safety
-     The caller must guarantee the entire buffer has been properly initialised
-     before calling this method. Accessing uninitialised memory is undefined behavior
-    */
-    #[inline]
-    pub const unsafe fn assume_init_mut(&mut self) -> &mut [T; SIZE] {
-        // SAFETY: Caller must ensure the buffer is fully initialised
-        unsafe { self.0.assume_init_mut() }
     }
 }

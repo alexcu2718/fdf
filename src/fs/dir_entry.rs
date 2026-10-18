@@ -79,24 +79,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 */
 
 use crate::DirEntryError;
+use crate::fs::AT_EACCESS;
 use crate::fs::{FileType, ReadDir, types::Result};
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ffi::{CStr, c_char, c_int};
 use core::fmt;
-use libc::{
-    AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK,
-    X_OK, access, faccessat, fstatat, lstat, realpath, stat,
-};
+use libc::{AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY};
 use std::os::fd::{AsRawFd as _, BorrowedFd, FromRawFd as _, OwnedFd};
-
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
-
-#[cfg(target_os = "android")]
-const AT_EACCESS: c_int = 0; // android being weird, again....
-
-#[cfg(not(target_os = "android"))]
-use libc::AT_EACCESS;
 
 //TODO, test #[align(64)] to check for presence of false sharing/perf improvements
 // If so, add extra relevant metadata to the struct...
@@ -316,18 +307,21 @@ impl DirEntry {
     pub fn is_executable(&self) -> bool {
         // X_OK is the execute permission, requires access call
         // SAFETY: We know the path is valid because internally it's a cstr
-        self.is_regular_file() && unsafe { access(self.as_ptr(), X_OK) == 0 }
+        self.is_regular_file() && unsafe { libc::access(self.as_ptr(), libc::X_OK) == 0 }
     }
 
     #[inline]
     pub(crate) fn is_executable_at(&self, opt_fd: Option<BorrowedFd>) -> bool {
+        use libc::{AT_FDCWD, X_OK};
         // X_OK is the execute permission, requires access call
         // SAFETY: All pointers are valid C strings from DirEntry internals.
         self.is_regular_file()
             && unsafe {
                 opt_fd.map_or_else(
-                    || faccessat(AT_FDCWD, self.as_ptr(), X_OK, AT_EACCESS) == 0,
-                    |fd| faccessat(fd.as_raw_fd(), self.file_name_ptr(), X_OK, AT_EACCESS) == 0,
+                    || libc::faccessat(AT_FDCWD, self.as_ptr(), X_OK, AT_EACCESS) == 0,
+                    |fd| {
+                        libc::faccessat(fd.as_raw_fd(), self.file_name_ptr(), X_OK, AT_EACCESS) == 0
+                    },
                 )
             }
     }
@@ -943,7 +937,7 @@ impl DirEntry {
         F: Fn(&CStr) -> Result<T>,
     {
         // SAFETY: realpath mallocs a null-terminated string that must be freed, the pointer is null terminated
-        let ptr = unsafe { realpath(self.as_ptr(), core::ptr::null_mut()) };
+        let ptr = unsafe { libc::realpath(self.as_ptr(), core::ptr::null_mut()) };
 
         if ptr.is_null() {
             return_os_error!()
@@ -1099,7 +1093,7 @@ impl DirEntry {
     #[inline]
     pub fn is_readable(&self) -> bool {
         // SAFETY: The path is guaranteed to be a be null terminated
-        unsafe { access(self.as_ptr(), R_OK) == 0 }
+        unsafe { libc::access(self.as_ptr(), libc::R_OK) == 0 }
     }
 
     /**
@@ -1119,7 +1113,7 @@ impl DirEntry {
         //maybe i can automatically exclude certain files from this check to
         //then reduce my syscall total, would need to read into some documentation. zadrot ebaniy
         // SAFETY: The path is guaranteed to be a null terminated
-        unsafe { access(self.as_ptr(), W_OK) == 0 }
+        unsafe { libc::access(self.as_ptr(), libc::W_OK) == 0 }
     }
 
     /**
@@ -1130,7 +1124,7 @@ impl DirEntry {
     #[inline]
     pub fn exists(&self) -> bool {
         // SAFETY: The path is guaranteed to be null terminated
-        unsafe { access(self.as_ptr(), F_OK) == 0 }
+        unsafe { libc::access(self.as_ptr(), F_OK) == 0 }
     }
 
     /**
@@ -1149,9 +1143,9 @@ impl DirEntry {
     Returns `DirEntryError::IOError` if the stat operation fails
     */
     #[inline]
-    pub fn get_lstatat(&self, fd: BorrowedFd) -> Result<stat> {
+    pub fn get_lstatat(&self, fd: BorrowedFd) -> Result<libc::stat> {
         stat_syscall!(
-            fstatat,
+            libc::fstatat,
             fd.as_raw_fd(),
             self.file_name_ptr(),
             AT_SYMLINK_NOFOLLOW
@@ -1169,6 +1163,24 @@ impl DirEntry {
         debug_assert!(!path.ends_with(b"/"), "file path ends with a slash!"); //debug asserts for development
         crate::util::memrchr(b'/', path).map_or(1, |pos| pos + 1)
     }
+
+    // #[inline]
+    // pub fn join(&self, x: &CStr) -> Box<[u8]> {
+    //     use core::mem::MaybeUninit;
+    //     let first_path = self.as_bytes();
+    //     let total_len_needed = first_path.len() + x.count_bytes() + 1; // we need a null terminator and a slash.
+    //     let mut vecced: Vec<MaybeUninit<u8>> = Vec::with_capacity(total_len_needed);
+
+    //     unsafe { vecced.set_len(total_len_needed) }
+    //     vecced[..self.len() - 1].write_copy_of_slice(self.as_bytes());
+    //     vecced[self.len()].write(b'/');
+    //     vecced[self.len() + 1..].write_copy_of_slice(x.to_bytes_with_nul());
+
+    //     let omg:Box<MaybeUninit<u8>>=vecced.into();
+
+    //     todo!()
+
+    // }
 
     /**
 
@@ -1193,8 +1205,8 @@ impl DirEntry {
     A `stat` structure containing file metadata on success.
     */
     #[inline]
-    pub fn get_lstat(&self) -> Result<stat> {
-        stat_syscall!(lstat, self.as_ptr())
+    pub fn get_lstat(&self) -> Result<libc::stat> {
+        stat_syscall!(libc::lstat, self.as_ptr())
     }
 
     /**
@@ -1220,9 +1232,9 @@ impl DirEntry {
     A `stat` structure containing file metadata on success.
     */
     #[inline]
-    pub fn get_stat(&self) -> Result<stat> {
+    pub fn get_stat(&self) -> Result<libc::stat> {
         // Simple wrapper to avoid code duplication so I can use the private method within the crate
-        stat_syscall!(stat, self.as_ptr())
+        stat_syscall!(libc::stat, self.as_ptr())
     }
 
     /**
@@ -1242,8 +1254,8 @@ impl DirEntry {
 
     */
     #[inline]
-    pub fn get_statat(&self, fd: BorrowedFd) -> Result<stat> {
-        stat_syscall!(fstatat, fd.as_raw_fd(), self.file_name_ptr(), 0)
+    pub fn get_statat(&self, fd: BorrowedFd) -> Result<libc::stat> {
+        stat_syscall!(libc::fstatat, fd.as_raw_fd(), self.file_name_ptr(), 0)
     }
 
     /// Cost free conversion to bytes (because it is already is bytes)
@@ -1616,11 +1628,12 @@ impl DirEntry {
 
         let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::NulError)?;
 
-        // extract information from successful stat
-        let get_stat = stat_syscall!(lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
-        let inode = access_stat!(get_stat, st_ino);
         let file_name_index = Self::_file_name_index(path_ref);
+        // extract information from successful statg
+        let get_stat: libc::stat =
+            stat_syscall!(libc::lstat, cstring.as_ptr()).map_err(DirEntryError::IOError)?;
         let file_type = FileType::from(&get_stat);
+        let inode = access_stat!(get_stat, st_ino);
         Ok(Self {
             path: cstring.into(),
             file_type,

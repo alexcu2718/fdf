@@ -2,12 +2,14 @@ use crate::fs::{DirEntry, FileType, Result};
 use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
+use core::hint::assert_unchecked;
 #[allow(unused)]
 use core::mem::{ManuallyDrop, MaybeUninit};
 use core::ptr::NonNull;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
 #[allow(unused)]
 use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
+
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -188,7 +190,6 @@ pub(crate) trait DirentConstructor {
     #[inline]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn init_from_path(path: &[u8]) -> (Vec<MaybeUninit<u8>>, usize) {
-        let mut len = path.len();
         let needs_slash = usize::from(path != b"/");
         /*
         Fast-path filename capacity (+NUL is included in the filename during append).
@@ -196,6 +197,7 @@ pub(crate) trait DirentConstructor {
         Most filepaths will never be longer than this. In the odd-case they are, it's really rare
         with no negligible affect otherwise
         */
+        let mut len = path.len();
         const FAST_PATH_DIRENT_LENGTH: usize = 256;
         let total_capacity = len + FAST_PATH_DIRENT_LENGTH + needs_slash;
 
@@ -205,7 +207,7 @@ pub(crate) trait DirentConstructor {
         unsafe { buffer.set_len(total_capacity) };
 
         //SAFETY: always true, allow compiler to elide panics
-        unsafe { core::hint::assert_unchecked(buffer.len() > len) };
+        unsafe { assert_unchecked(buffer.len() > len) };
 
         // (this is internally a `memcpy`)
         buffer[..len].write_copy_of_slice(path);
@@ -215,6 +217,7 @@ pub(crate) trait DirentConstructor {
 
         len += needs_slash;
         (buffer, len)
+        /* for 'len' we only read up to len bytes, so inc the ase it's not a directory, we intentionally omit the last slash by truncation.*/
     }
 
     #[inline(never)]
@@ -271,22 +274,20 @@ pub(crate) trait DirentConstructor {
 
         let base_len = self.file_index();
         let required_len = base_len + name_len;
+        //SAFETY: trivial, name_len=>1 (POSIX standard) ; ALLOWS US TO ELIDE BOUNDS CHECKS
+        unsafe { assert_unchecked(required_len > base_len) };
         if crate::util::unlikely(required_len > self.allocated_size()) {
             self.reserve_for_long_name(required_len);
         }
 
-        // SAFETY: trivial, name_len=>1 (POSIX standard) and required len checked above.
-        unsafe {
-            core::hint::assert_unchecked(
-                required_len <= self.path_buffer().len() && required_len > base_len,
-            )
-        }
+        // SAFETY: required len checked above. (as self.path_buffer().capacity()=={...}.len())
+        unsafe { assert_unchecked(required_len <= self.path_buffer().len()) }
 
         // Get the amount of the buffer we wish to initialise.
         let buffer = &mut self.path_buffer()[..required_len];
 
         // Get the portion of the buffer that goes past the last slash, up to the name+NUL
-        let name_portion = &mut buffer[base_len..required_len];
+        let name_portion = &mut buffer[base_len..];
 
         // Copy name into the uninit memory.
         name_portion.write_copy_of_slice(d_name_cstr);
@@ -364,14 +365,14 @@ impl GetDents {
     /// Convenience function for pointer arithmetic on the buffer
     pub(crate) const unsafe fn get_next_pointer(&mut self) -> Unique<dirent64> {
         debug_assert!(
-            self.offset.is_multiple_of(8),
+            self.offset().is_multiple_of(8),
             "offset should always be multiple of 8"
         ); // doesn't apply for mac 32bit but not compatible with rust 2024 anywway.
 
         // SAFETY: inbounds.
         let drnt = unsafe {
             Unique::from_ref(&self.syscall_buffer)
-                .byte_add(self.offset)
+                .byte_add(self.offset())
                 .cast::<dirent64>()
         };
 
@@ -412,7 +413,7 @@ impl GetDents {
     pub fn getdents(&mut self) -> isize {
         #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
         {
-            self.syscall_buffer.getdents(self.fd.as_fd())
+            self.syscall_buffer.getdents(self.fd.as_fd()) // awkward syntax to avoid borrow issues.
         }
         #[cfg(any(target_os = "macos", target_os = "freebsd"))]
         {
@@ -443,7 +444,6 @@ impl GetDents {
     pub const BUFFER_SIZE: usize = crate::fs::SyscallBuffer::BUFFER_SIZE;
 
     #[inline]
-    #[allow(clippy::missing_assert_message)] // for cleaner code.
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
         // Early return if we've already reached end of stream
 
@@ -626,6 +626,7 @@ impl GetDents {
     #[inline]
     pub(crate) fn from_fd(fd: OwnedFd, dir: &DirEntry) -> Self {
         let (path_buffer, file_name_index) = Self::init_from_path(dir);
+
         Self {
             fd,
             syscall_buffer: crate::fs::SyscallBuffer::new(),
@@ -670,6 +671,13 @@ macro_rules! impl_iterator_public_methods {
             #[must_use]
             pub fn dirfd(&self) -> ::std::os::fd::BorrowedFd<'_> {
                 self.fd.as_fd()
+            }
+
+            #[inline]
+            #[must_use]
+            /// Grab the raw `Fd` directly, usually to call [`std::os::fd::BorrowedFd::borrow_raw`]
+            pub fn rawfd(&self) -> ::std::os::fd::RawFd {
+                self.fd.as_raw_fd()
             }
 
             #[inline]

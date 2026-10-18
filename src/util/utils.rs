@@ -7,21 +7,28 @@ use core::ffi::{CStr, c_char, c_int, c_void};
 
  # Arguments
  - `fd`: Open directory file descriptor
- - `buffer_ptr`: Raw pointer to output buffer
- - `buffer_size`: Size of output buffer in bytes
+ - `bufptr`: Raw pointer to output buffer
+ - `buf_ize`: Size of output buffer in bytes
 
  # Safety
  - Requires valid open directory descriptor
- - Buffer must be valid for writes of `buffer_size` bytes
- - Buffer must be aligned to 8 bytes.
-  - Buffer size must be less than `i32::MAX`
+ - `bufptr` must be valid for writes of `bufsize` bytes
+ - `bufptr` must be aligned to 8 bytes.
+ - `bufsize` must be less than `i32::MAX `
 
  # Returns
  - Positive: Number of bytes read
  - 0: End of directory
- - Negative: Error code (set errno and check)
+ - Negative: On failure this returns `-1` and sets the calling thread's `errno`. You can check with  [`std::io::Error::last_os_error`]
 
-   This function is only available on Linux/Android/OpenBSD/NetBSD/Illumos/Solaris.
+ # Platform support
+
+  Only available on Linux, Android, OpenBSD, NetBSD, illumos, and Solaris.
+  # References
+  * [glibc `getdents64`, source of the `bufsize` limit](https://github.com/bminor/glibc/blob/04e750e75b73957cf1c791535a3f4319534a52fc/sysdeps/unix/sysv/linux/getdents64.c#L30)
+  * [NetBSD `getdents(2)`](https://man.netbsd.org/getdents.2)
+  * [illumos/Solaris `getdents(2)`](https://docs.oracle.com/cd/E86824_01/html/E54765/getdents-2.html)
+
 */
 #[inline]
 #[cfg(any(
@@ -32,15 +39,10 @@ use core::ffi::{CStr, c_char, c_int, c_void};
     target_os = "illumos",
     target_os = "solaris"
 ))]
-pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize) -> isize {
-    debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in getdents64");
-    debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
-
-    //https://github.com/bminor/glibc/blob/04e750e75b73957cf1c791535a3f4319534a52fc/sysdeps/unix/sysv/linux/getdents64.c#L30
-    debug_assert!(
-        buffer_size <= c_int::MAX as _,
-        "buffer_size passed to getdents64 too big"
-    );
+pub unsafe fn getdents64(fd: c_int, bufptr: *mut c_void, bufsize: usize) -> isize {
+    debug_assert!(!bufptr.is_null(), "Buffer  is null in getdents64");
+    debug_assert!(bufptr.cast::<u64>().is_aligned(), "Buf not aligned to 8");
+    debug_assert!(bufsize <= c_int::MAX as _, "bufsize passed to GD64 too big");
     #[cfg(any(
         target_os = "openbsd",
         target_os = "solaris",
@@ -48,9 +50,6 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
         target_os = "netbsd"
     ))]
     {
-        //https://man.netbsd.org/getdents.2
-        //https://docs.oracle.com/cd/E86824_01/html/E54765/getdents-2.html
-
         //Link the function, we can't use the direct syscall because BSD's dont allow it.
         unsafe extern "C" {
             //TODO add dragonfly here(?) TODO once they support Rust 2024
@@ -60,7 +59,7 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
             fn getdents(fd: c_int, dirp: *mut c_void, count: usize) -> c_int;
         }
         // SAFETY: non required except buffer length must not exceed the provided size, then we get accessing out of bounds memory...
-        unsafe { getdents(fd, buffer_ptr, buffer_size) as _ } //upcast to isize to make the API easier.
+        unsafe { getdents(fd, bufptr, bufsize) as _ } //upcast to isize to make the API easier.
     }
 
     //SAFETY: Syscall has no other implicit safety requirements beyond pointer validity(and precursor conditions met.)
@@ -68,48 +67,49 @@ pub unsafe fn getdents64(fd: c_int, buffer_ptr: *mut c_void, buffer_size: usize)
     #[expect(clippy::cast_possible_truncation, reason = "clong is isize on Unix")]
     unsafe {
         const { assert!(size_of::<libc::c_long>() == size_of::<isize>(), "trivial") }
-        libc::syscall(libc::SYS_getdents64, fd, buffer_ptr, buffer_size) as _
+        libc::syscall(libc::SYS_getdents64, fd, bufptr, bufsize) as _
     } // We can do similar linking for getdents64 but prefer not to use the indirection if can be avoided.
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[inline]
 /**
-  Wrapper for direct getdirentries(64) syscalls
+Wrapper for direct getdirentries(64) syscalls
 
- # Arguments
+# Arguments
  - `fd`: Open directory file descriptor
- - `buffer_ptr`: Raw pointer to output buffer
+ - `bufptr`: Raw pointer to output buffer
  - `nbytes`: Size of output buffer in bytes
  - `basep`: Pointer to location where telldir position is stored
 
- # Safety
+# Safety
  - Requires valid open directory descriptor
- - Buffer must be valid for writes of `nbytes` bytes
- - basep must point to valid memory for `libc::off_t`
- - Buffer must be aligned to 8 bytes.
+ - `bufptr` must be valid for writes of `nbytes` bytes
+ - `basep`` must point to valid memory for `libc::off_t` (Can be stack allocated)
+ - `bufptr` must be aligned to 8 bytes.
 
- # Returns
+# Returns
  - Positive: Number of bytes read
  - 0: End of directory
- - Negative: Error code (check errno)
- - Buffer size must be less than `i32::MAX`
+ - Negative: On failure this returns `-1` , You can check the variant with  [`std::io::Error::last_os_error`]
 
+# Platform support
 
- This function is only available on macOS/FreeBSD
+  Only available on macOS and FreeBSD.
+
+# References
+
+  * [Apple Libc `opendir.c` (usage of `__getdirentries64`)](https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L334)
+  * [FreeBSD `getdirentries(2)`](https://man.freebsd.org/cgi/man.cgi?getdirentries(2))
 */
 pub unsafe fn getdirentries64(
     fd: c_int,
-    buffer_ptr: *mut c_void,
+    bufptr: *mut c_void,
     nbytes: usize,
     basep: *mut libc::off_t,
 ) -> isize {
-    debug_assert!(!buffer_ptr.is_null(), "Buffer  is null in GDE64");
-    debug_assert!(buffer_ptr.addr().is_multiple_of(8), "Buf not aligned to 8");
-    debug_assert!(
-        nbytes <= libc::INT_MAX as _,
-        "Buffer passed to getdirentries64 too big"
-    );
+    debug_assert!(!bufptr.is_null(), "Buffer  is null in GDE64");
+    debug_assert!(bufptr.cast::<u64>().is_aligned(), "Buf not aligned to 8");
     // link to libc
     unsafe extern "C" {
         #[cfg_attr(
@@ -128,7 +128,7 @@ pub unsafe fn getdirentries64(
     // IT MAKES NO SENSE to parallelise readdir, it's fundamentally a sequential operation unless you're doing some really wacky stuff.
     // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L334
     // SAFETY: As specified above
-    unsafe { getdirentries(fd, buffer_ptr, nbytes, basep) }
+    unsafe { getdirentries(fd, bufptr, nbytes, basep) }
 }
 
 /*
@@ -179,17 +179,14 @@ pub const unsafe fn dirent_name_length(drnt: *const dirent64) -> usize {
     debug_assert!(!drnt.is_null(), "dirent is null in name length calculation");
     #[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
     // SAFETY: `dirent` must be checked before hand to not be null
-    unsafe {
-        dirent_const_time_strlen(drnt)
-    }
+    let ret = unsafe { dirent_const_time_strlen(drnt) };
     #[cfg(not(any(target_os = "linux", target_os = "android", has_d_namlen)))]
     // The above has the same assembly as below but the below is allowed in const context.
     // SAFETY: `dirent` must be checked before hand to not be null
-    unsafe {
-        strlen((&raw const (*drnt).d_name).cast())
-    }
+    let ret = unsafe { strlen((&raw const (*drnt).d_name).cast()) };
     //Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length/unsized array)
     // EG for NTFS it can be up to 512 bytes
+    ret
 }
 
 /**
@@ -355,7 +352,6 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         let mask = (reclen as u64).wrapping_sub(25) & 0xFFFF_FF00_0000_0000; // Could cast to a u32, shift by 8 then cast back to u64 but that's horrible
         // not checking the asm on that...
         debug_assert!(
-            // handy debug test, explains what the above means!
             reclen == 24 && mask == u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0])
                 || mask == 0 && reclen != 24,
             "Checking condition holds"
@@ -409,7 +405,7 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         //SAFETY: as in LE version.
         let masked_word = unsafe {
             NonZeroU64::new_unchecked(
-                (!last_word & !HI_U64).wrapping_add(LO_U64) & (!last_word & HI_U64),
+                (!last_word & !HI_U64).wrapping_add(LO_U64) & !last_word & HI_U64,
             )
         };
 
@@ -420,15 +416,6 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         let byte_pos = (masked_word.leading_zeros() >> 3) as usize;
 
         //check final calculation
-        debug_assert!(
-            reclen - DIRENT_HEADER_START +byte_pos -8
-                //SAFETY: should never matter because debug assert checks pointer validity above.
-                    == unsafe{strlen((&raw const (*drnt).d_name).cast()) },
-            // Use raw const to take a pointer because the `d_name` isn't guaranteed to be [c_char;256] (variable length array)
-            // We use this method as workaround specifically because `from_ptr` is const
-            // (We could've also used a while loop but that's even more verbose and makes this more complicated....)
-            "const swar dirent length calculation failed!"
-        );
         /*
          Final calculation:
          reclen - DIRENT_HEADER_START = total space available for name
@@ -437,7 +424,14 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         Example: If null is at position 2 in the last word, we only count those 2 bytes
         from that word toward the total string length.
         */
-        reclen - DIRENT_HEADER_START + byte_pos - 8
+
+        let ret = reclen - DIRENT_HEADER_START + byte_pos - 8;
+        debug_assert!(
+            //SAFETY: should never matter because debug assert checks pointer validity above.
+            ret == unsafe { strlen((&raw const (*drnt).d_name).cast()) },
+            "const swar dirent length calculation failed!"
+        );
+        ret
     }
 }
 

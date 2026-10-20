@@ -292,7 +292,7 @@ impl Finder {
     # Errors
     Returns `Err(SearchConfigError)` if:
     - The root path cannot be converted to a `DirEntry` (`TraversalError`)
-    - The root directory is not traversible (`NotADirectory`)
+    - The root directory is not traversable (`NotADirectory`)
     - The root directory is inaccessible due to permissions (`TraversalError`)
 
 
@@ -300,7 +300,7 @@ impl Finder {
     - Uses a bounded channel to provide backpressure when the consumer slows down
     - Entries are sent in batches to minimise channel contention
     - Traversal runs in parallel using fixed worker threads
-    */
+    */ //TODO! more accurate error stuff
     #[inline]
     pub fn traverse(
         self,
@@ -418,7 +418,6 @@ impl Finder {
     }
 
     /// Determines if a directory should be traversed and caches the result
-    /// Determines if a directory should be traversed and caches the result
     #[inline]
     fn should_traverse(&self, dir: &DirEntry, opt_fd: Option<BorrowedFd>) -> bool {
         match (dir.file_type, self.is_following_symlinks()) {
@@ -446,9 +445,27 @@ impl Finder {
     }
 
     #[inline]
-    fn parse_gitignore_file(base_dir: &Path) -> Option<Arc<Gitignore>> {
+    fn check_exists(filedes: BorrowedFd, filename: &CStr) -> bool {
+        // SAFETY: null terminated
+        unsafe {
+            libc::faccessat(
+                filedes.as_raw_fd(),
+                filename.as_ptr(),
+                libc::F_OK,
+                libc::AT_SYMLINK_NOFOLLOW,
+            ) == 0
+        }
+    }
+
+    #[inline]
+    fn parse_gitignore_file(base_dir: &Path, filedes: BorrowedFd) -> Option<Arc<Gitignore>> {
+        if !Self::check_exists(filedes, c".gitignore") {
+            return None;
+        }
+
         let ignore_file = base_dir.join(".gitignore");
         let mut builder = GitignoreBuilder::new(base_dir);
+        // the add method incurs a syscall to `libc::open`, this incurs path resolution also.
         let _ = builder.add(ignore_file);
 
         builder.build().ok().map(Arc::new)
@@ -465,22 +482,17 @@ impl Finder {
 
     #[inline]
     fn has_git_dir(filedes: BorrowedFd) -> bool {
-        const GITDIR: &CStr = c".git";
-        //mulling over this.
-        // Use faccessat as a cheaper call (it's cheaper than fstat)
-        // since most directories won't have a git dir, we save on the morexpensive syscall.
-        // let check_exists =
-        //     // AFETY: guaranteed null terminated.
-        //     unsafe { libc::faccessat(filedes.as_raw_fd(), GITDIR.as_ptr(), libc::X_OK, AT_SYMLINK_NOFOLLOW) } == 0;
+        const GITFILE: &CStr = c".git";
 
-        // if !check_exists {
-        //     return false;
-        // }
+        // Use faccessat as a cheaper call (it's cheaper than fstat)
+        if !Self::check_exists(filedes, GITFILE) {
+            return false;
+        }
 
         let result: Result<libc::stat, DirEntryError> = stat_syscall!(
             libc::fstatat,
             filedes.as_raw_fd(),
-            GITDIR.as_ptr(),
+            GITFILE.as_ptr(),
             libc::AT_SYMLINK_NOFOLLOW
         );
 
@@ -515,10 +527,10 @@ impl Finder {
         );
 
         let parent = mparent?;
-        let repo_active = parent.repo_active || Self::has_git_dir(filedes);
+        let repo_active = parent.repo_active || Self::has_git_dir(filedes); //
 
         let local_matcher = repo_active
-            .then(|| Self::parse_gitignore_file(dir.as_path()))
+            .then(|| Self::parse_gitignore_file(dir.as_path(), filedes))
             .flatten();
 
         Some(IgnoreContext::child(parent, local_matcher, repo_active))
@@ -707,8 +719,7 @@ impl Finder {
                         continue;
                     }
 
-                    let should_traverse = self.should_traverse(&entry, opt_fd);
-                    if should_traverse {
+                    if self.should_traverse(&entry, opt_fd) {
                         if !ctx.enqueue_dir(entry, current_ignore_ctx.as_ref()) {
                             return;
                         }

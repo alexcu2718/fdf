@@ -269,7 +269,7 @@ impl Finder {
                         )),
                     })
                     .collect()
-            })
+            }) // very inefficient but quite frankly the error path is very cold
     }
 
     /// Returns the shared traversal error storage when error collection is enabled.
@@ -446,15 +446,8 @@ impl Finder {
 
     #[inline]
     fn check_exists(filedes: BorrowedFd, filename: &CStr) -> bool {
-        // OpenBSD's `faccessat` seems to bug out
-        // but doesn't matter, we always check eventually via symlink_no_follow for dir/files, it basically never exists anways
-        #[cfg(target_os = "openbsd")]
-        const FLAGS: libc::c_int = 0;
-        #[cfg(not(target_os = "openbsd"))]
-        const FLAGS: libc::c_int = libc::AT_SYMLINK_NOFOLLOW;
-
         // SAFETY: null terminated
-        unsafe { libc::faccessat(filedes.as_raw_fd(), filename.as_ptr(), libc::F_OK, FLAGS) == 0 }
+        unsafe { libc::faccessat(filedes.as_raw_fd(), filename.as_ptr(), libc::F_OK, 0) == 0 }
     }
 
     #[inline]

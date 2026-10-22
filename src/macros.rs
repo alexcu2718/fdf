@@ -173,7 +173,7 @@ macro_rules! skip_dot_or_dot_dot_entries {
             #[cfg(has_d_namlen)]
             {
                 // d_namlen fast path
-                let namelen =  $entry.d_namlen();
+                let namelen = $entry.d_namlen();
                 if namelen <= 2 {
                     let f2b: [u8; 2] = *$entry.d_name().cast();
                     if f2b[0] == b'.' {
@@ -363,18 +363,11 @@ macro_rules! return_os_error {
 /// Macro for safely calling stat-like functions and handling the result, I might make it public?
 macro_rules! stat_syscall {
     // For fstatat with flags
-    ($syscall:ident, $fd:expr, $path:expr, $flags:expr) => {{
+    ($syscall:path, $fd:expr, $path:expr, $flags:expr) => {{
         let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
-        let res = unsafe {
-            $syscall(
-                $fd,
-                $path,
-                stat_buf.as_mut_ptr(),
-                $flags,
-            )
-        };
+        let res = unsafe { $syscall($fd, $path, stat_buf.as_mut_ptr(), $flags) };
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know the stat structure has been properly initialised
@@ -383,19 +376,12 @@ macro_rules! stat_syscall {
             Err(std::io::Error::last_os_error().into())
         }
     }};
-      // For fstatat with flags - returns FileType directly (kinda like an internal black magic tool for me to save writing so much duplicate code)
-     ($syscall:ident, $fd:expr, $path:expr, $flags:expr,DTYPE) => {{
+    // For fstatat with flags - returns FileType directly (kinda like an internal black magic tool for me to save writing so much duplicate code)
+    ($syscall:path, $fd:expr, $path:expr, $flags:expr,DTYPE) => {{
         let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
-        let res = unsafe {
-            $syscall(
-                $fd,
-                $path,
-                stat_buf.as_mut_ptr(),
-                $flags,
-            )
-        };
+        let res = unsafe { $syscall($fd, $path, stat_buf.as_mut_ptr(), $flags) };
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know it's been initialised properly
@@ -405,10 +391,8 @@ macro_rules! stat_syscall {
         }
     }};
 
-
-
     // For stat/lstat with path pointer
-    ($syscall:ident, $path_ptr:expr) => {{
+    ($syscall:path, $path_ptr:expr) => {{
         let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: We know the path is valid because internally it's a cstr
         let res = unsafe { $syscall($path_ptr, stat_buf.as_mut_ptr()) };
@@ -420,6 +404,4 @@ macro_rules! stat_syscall {
             Err(std::io::Error::last_os_error().into())
         }
     }};
-
-
 }

@@ -452,13 +452,15 @@ impl Finder {
 
     #[inline]
     fn parse_gitignore_file(base_dir: &Path, filedes: BorrowedFd) -> Option<Arc<Gitignore>> {
+        // Use a cheaper way to check if it exists
         if !Self::check_exists(filedes, c".gitignore") {
             return None;
         }
+        // the below code creates a heap allocation just to open the file, then calls `libc::open` (unix) with a full path (extra time taken to walk the path,
+        // then most calls fail)
 
         let ignore_file = base_dir.join(".gitignore");
         let mut builder = GitignoreBuilder::new(base_dir);
-        // the add method incurs a syscall to `libc::open`, this incurs path resolution also.
         let _ = builder.add(ignore_file);
 
         builder.build().ok().map(Arc::new)
@@ -476,11 +478,6 @@ impl Finder {
     #[inline]
     fn has_git_dir(filedes: BorrowedFd) -> bool {
         const GITFILE: &CStr = c".git";
-
-        // Use faccessat as a cheaper call (it's cheaper than fstat)
-        if !Self::check_exists(filedes, GITFILE) {
-            return false;
-        }
 
         let result: Result<libc::stat, DirEntryError> = stat_syscall!(
             libc::fstatat,
@@ -530,7 +527,7 @@ impl Finder {
     }
 
     #[inline]
-    fn is_gitignored(&self, dir: &DirEntry, mctx: Option<&Arc<IgnoreContext>>) -> bool {
+    fn _is_gitignored(&self, dir: &DirEntry, mctx: Option<&Arc<IgnoreContext>>) -> bool {
         // AXIOMATICALLY: if ctx is Some, gitignore is enabled and the repo is active
         let Some(ctx) = mctx else {
             return false;
@@ -559,6 +556,47 @@ impl Finder {
 
             let next_parent = node.parent.clone();
             current.clone_from(&next_parent);
+        }
+
+        false
+    }
+
+    #[inline]
+    fn is_gitignored(
+        &self,
+        dir: &DirEntry,
+        mctx: Option<&Arc<IgnoreContext>>,
+        is_dir: bool,
+    ) -> bool {
+        // If ctx is Some, gitignore is enabled.
+        let Some(ctx) = mctx else {
+            return false;
+        };
+        debug_assert!(
+            self.is_gitignore_enabled(),
+            "ctx present but gitignore disabled"
+        );
+
+        // Nothing to match against: no active repo and no custom --ignore-file matchers.
+        if !ctx.repo_active && self.custom_ignore_matchers.is_empty() {
+            return false;
+        }
+
+        let mut node: Option<&IgnoreContext> = Some(ctx);
+
+        // Walk child -> root by reference. The closest matcher with a decisive
+        // (ignore or whitelist) result wins, like git's precedence rules.
+        while let Some(n) = node {
+            if let Some(matcher) = n.matcher.as_deref() {
+                let matched = matcher.matched(dir, is_dir);
+                if matched.is_whitelist() {
+                    return false;
+                }
+                if matched.is_ignore() {
+                    return true;
+                }
+            }
+            node = n.parent.as_deref();
         }
 
         false
@@ -676,7 +714,7 @@ impl Finder {
         let (dir, parent_ignore_ctx): (DirEntry, _) = work_item.get_context(); // ensure types stay in right order.
         debug_assert!(dir.is_traversable(), "dev test");
         if self.matches_ignore_path(&dir)
-            || self.is_gitignored(&dir, parent_ignore_ctx.as_ref())
+            || self.is_gitignored(&dir, parent_ignore_ctx.as_ref(), true)
             || !self.directory_or_symlink_filter(&dir)
         // Check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info
         {
@@ -707,7 +745,11 @@ impl Finder {
                 for entry in entries {
                     if !self.keep_hidden(&entry)
                         || self.matches_ignore_path(&entry)
-                        || self.is_gitignored(&entry, current_ignore_ctx.as_ref())
+                        || self.is_gitignored(
+                            &entry,
+                            current_ignore_ctx.as_ref(),
+                            self.should_traverse(&entry, opt_fd),
+                        )
                     {
                         continue;
                     }

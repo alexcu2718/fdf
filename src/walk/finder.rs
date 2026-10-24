@@ -527,41 +527,6 @@ impl Finder {
     }
 
     #[inline]
-    fn _is_gitignored(&self, dir: &DirEntry, mctx: Option<&Arc<IgnoreContext>>) -> bool {
-        // AXIOMATICALLY: if ctx is Some, gitignore is enabled and the repo is active
-        let Some(ctx) = mctx else {
-            return false;
-        };
-        debug_assert!(self.is_gitignore_enabled(), "dev test");
-
-        // AXIOMATICALLY IF CTX is SOME then repo is active
-        if !ctx.repo_active && self.custom_ignore_matchers.is_empty() {
-            return false;
-        }
-
-        let mut current = Some(Arc::clone(ctx));
-        let is_dir = self.should_traverse(dir, None);
-
-        while let Some(node) = current.as_ref() {
-            if let Some(matcher) = node.matcher.as_ref() {
-                let matched = matcher.matched(dir.as_path(), is_dir);
-                if matched.is_whitelist() {
-                    return false;
-                }
-
-                if matched.is_ignore() {
-                    return true;
-                }
-            }
-
-            let next_parent = node.parent.clone();
-            current.clone_from(&next_parent);
-        }
-
-        false
-    }
-
-    #[inline]
     fn is_gitignored(
         &self,
         dir: &DirEntry,

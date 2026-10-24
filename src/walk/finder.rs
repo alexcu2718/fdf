@@ -166,35 +166,24 @@ impl IgnoreContext {
     }
 }
 
+#[inline]
 fn find_task(
     local: &Worker<WorkItem>,
     injector: &Injector<WorkItem>,
     stealers: &[Stealer<WorkItem>],
 ) -> Option<WorkItem> {
-    if let Some(task) = local.pop() {
-        return Some(task);
-    }
-
-    loop {
-        match injector.steal_batch_and_pop(local) {
-            Steal::Success(task) => return Some(task),
-            Steal::Retry => continue,
-            Steal::Empty => {}
-        }
-
-        let mut retry = false;
-        for stealer in stealers {
-            match stealer.steal() {
-                Steal::Success(task) => return Some(task),
-                Steal::Retry => retry = true,
-                Steal::Empty => {}
-            }
-        }
-
-        if !retry {
-            return None;
-        }
-    }
+    // Fast path: our own queue.
+    local.pop().or_else(|| {
+        // Slow path: keep trying until we get a definitive answer
+        // (a task, or "nothing anywhere available"), retrying only on contention.
+        core::iter::repeat_with(|| {
+            injector
+                .steal_batch_and_pop(local)
+                .or_else(|| stealers.iter().map(Stealer::steal).collect())
+        })
+        .find(|steal| !steal.is_retry())
+        .and_then(Steal::success)
+    })
 }
 struct WorkerContext<'ctx> {
     local: &'ctx Worker<WorkItem>,

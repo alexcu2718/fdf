@@ -506,11 +506,16 @@ impl Finder {
         );
 
         let parent = mparent?;
-        let repo_active = parent.repo_active || Self::has_git_dir(filedes); //
+        let repo_active = parent.repo_active || Self::has_git_dir(filedes);
 
         let local_matcher = repo_active
             .then(|| Self::parse_gitignore_file(dir.as_path(), filedes))
             .flatten();
+
+        // Nothing new at this level: reuse the parent instead of allocating another node.
+        if local_matcher.is_none() && repo_active == parent.repo_active {
+            return Some(parent);
+        }
 
         Some(IgnoreContext::child(parent, local_matcher, repo_active))
     }

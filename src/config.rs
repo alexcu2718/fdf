@@ -365,7 +365,7 @@ impl SearchConfig {
             return true; // No filter means always match Option<std::os::fd::BorrowedFd>
         };
 
-        match entry.file_type {
+        match entry.file_type() {
             FileType::RegularFile => opt_fd.map_or_else(
                 || {
                     entry
@@ -385,13 +385,13 @@ impl SearchConfig {
                 || {
                     entry.exists()
                         && entry.get_stat().is_ok_and(|statted| {
-                            FileType::from_stat(&statted) == FileType::RegularFile
+                            FileType::from_stat(&statted).is_regular_file()
                                 && filter_size.is_within_size(statted.st_size as _)
                         })
                 },
                 |fd| {
                     entry.get_statat(fd).is_ok_and(|statted| {
-                        FileType::from_stat(&statted) == FileType::RegularFile
+                        FileType::from_stat(&statted).is_regular_file()
                             && filter_size.is_within_size(statted.st_size as _)
                     })
                 },

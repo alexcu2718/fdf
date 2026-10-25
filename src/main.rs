@@ -323,6 +323,12 @@ fn main() -> Result<(), SearchConfigError> {
     }
 
     let path: OsString = args.directory.unwrap_or_else(|| ".".into());
+    // Fail early with a clear error if the start path is missing or inaccessible
+    #[expect(clippy::print_stderr, reason = "obvious")]
+    if let Err(e) = std::fs::read_dir(&path) {
+        eprintln!("fdf: cannot access '{}': {e}", path.to_string_lossy());
+        std::process::exit(1);
+    }
     // Only strip `./` when the root is actually `.` or `./`; that is the only case
     // where every emitted path is guaranteed to carry that prefix (safety invariant).
     let root_is_cwd = matches!(path.as_bytes(), b"." | b"./");

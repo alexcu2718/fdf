@@ -616,12 +616,12 @@ impl GetDents {
         })
     }
     /**
-    / Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
-    /
-    / Used when the caller already holds an fd obtained via `openat`, avoiding a second
-    / full-path resolution for the child directory.
-    / Used internally only due to non-enforceable invariants
-     */
+     Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
+
+     Used when the caller already holds an fd obtained via `openat`, avoiding a second
+     full-path resolution for the child directory.
+     Used internally only due to non-enforceable invariants
+    */
     #[inline]
     pub(crate) fn from_fd(fd: OwnedFd, dir: &DirEntry) -> Self {
         let (path_buffer, file_name_index) = Self::init_from_path(dir);

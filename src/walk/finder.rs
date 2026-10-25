@@ -282,7 +282,6 @@ impl Finder {
     Returns `Err(SearchConfigError)` if:
     - The root path cannot be converted to a `DirEntry` (`TraversalError`)
     - The root directory is not traversable (`NotADirectory`)
-    - The root directory is inaccessible due to permissions (`TraversalError`)
 
 
     # Performance Notes
@@ -696,20 +695,16 @@ impl Finder {
                 // but they won't for consequent file descriptors
                 // I can see *why* the std library did it the way it did, I should research how walkdir handles it.
                 let current_ignore_ctx = Self::build_ignore_context(&dir, fd, parent_ignore_ctx);
-
                 for entry in entries {
-                    if !self.keep_hidden(&entry)
-                        || self.matches_ignore_path(&entry)
-                        || self.is_gitignored(
-                            &entry,
-                            current_ignore_ctx.as_ref(),
-                            self.should_traverse(&entry, opt_fd),
-                        )
-                    {
+                    if !self.keep_hidden(&entry) || self.matches_ignore_path(&entry) {
+                        continue;
+                    }
+                    let traversable = self.should_traverse(&entry, opt_fd);
+                    if self.is_gitignored(&entry, current_ignore_ctx.as_ref(), traversable) {
                         continue;
                     }
 
-                    if self.should_traverse(&entry, opt_fd) {
+                    if traversable {
                         if !ctx.enqueue_dir(entry, current_ignore_ctx.as_ref()) {
                             return;
                         }
@@ -721,20 +716,14 @@ impl Finder {
                         return;
                     }
                 }
-
-                // Checking if we should send directories
-                if should_send_dir_or_symlink && sender.send(dir).is_err() {
-                    ctx.signal_shutdown();
-                }
             }
             Err(error) => {
-                if let Some(errors_arc) = self.errors.as_ref() {
-                    // This will only show errors if collect errors is enabled
-                    // Generally I don't like this approach due to the locking it can cause
-                    // However, errors are VERY small typically hence this create negligible issues.
-                    if let Ok(mut errors) = errors_arc.lock() {
-                        errors.push(TraversalError { dir, error });
-                    }
+                // Only collected when error collection is enabled. Locking here is
+                // acceptable: the error path is cold and entries are tiny.
+                if let Some(store) = self.errors.as_ref()
+                    && let Ok(mut errors) = store.lock()
+                {
+                    errors.push(TraversalError { dir, error });
                 }
             }
         }

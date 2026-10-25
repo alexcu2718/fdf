@@ -310,70 +310,68 @@ impl Finder {
         }
         let stealers_shared = Arc::new(stealers);
 
-        // Construct starting entry
         let entry = DirEntry::new(self.root_dir()).map_err(SearchConfigError::TraversalError)?;
 
-        if entry.is_traversable() {
-            let is_git_ignored_enabled = self.is_gitignore_enabled();
-            let finder = Arc::new(self);
-            injector.push(WorkItem {
-                dir: entry,
-                ignore_ctx: is_git_ignored_enabled.then(|| finder.initial_ignore_context()),
-            });
+        if !entry.is_traversable() {
+            return Err(SearchConfigError::NotADirectory);
+        }
 
-            for (index, worker) in workers.into_iter().enumerate() {
-                let finder_shared = Arc::clone(&finder);
-                let sender_shared = sender.clone();
-                let pending_shared = Arc::clone(&pending);
-                let shutdown_flag_shared = Arc::clone(&shutdown_flag);
-                let injector_shared = Arc::clone(&injector);
-                let stealers_pool = Arc::clone(&stealers_shared);
+        let is_git_ignore_enabled = self.is_gitignore_enabled();
+        let finder = Arc::new(self);
 
-                thread::spawn(move || {
-                    let mut batch_sender = BatchSender::new(sender_shared, RESULT_BATCH_LIMIT);
-                    let mut local_stealers =
-                        Vec::with_capacity(stealers_pool.len().saturating_sub(1));
-                    for (idx, stealer) in stealers_pool.iter().enumerate() {
-                        if idx != index {
-                            local_stealers.push(stealer.clone());
-                        }
+        injector.push(WorkItem {
+            dir: entry,
+            ignore_ctx: is_git_ignore_enabled.then(|| finder.initial_ignore_context()),
+        });
+
+        for (index, worker) in workers.into_iter().enumerate() {
+            let finder_shared = Arc::clone(&finder);
+            let sender_shared = sender.clone();
+            let pending_shared = Arc::clone(&pending);
+            let shutdown_flag_shared = Arc::clone(&shutdown_flag);
+            let injector_shared = Arc::clone(&injector);
+            let stealers_pool = Arc::clone(&stealers_shared);
+
+            thread::spawn(move || {
+                let mut batch_sender = BatchSender::new(sender_shared, RESULT_BATCH_LIMIT);
+
+                let local_stealers: Vec<_> = stealers_pool
+                    .iter()
+                    .enumerate()
+                    .filter(|&(idx, _)| idx != index)
+                    .map(|(_, stealer)| stealer.clone())
+                    .collect();
+
+                loop {
+                    let shutting_down = shutdown_flag_shared.load(Ordering::Relaxed);
+
+                    if shutting_down && worker.is_empty() && injector_shared.is_empty() {
+                        break;
                     }
 
-                    loop {
-                        if shutdown_flag_shared.load(Ordering::Relaxed)
-                            && worker.is_empty()
-                            && injector_shared.is_empty()
-                        {
+                    let Some(work_item) = find_task(&worker, &injector_shared, &local_stealers)
+                    else {
+                        if shutting_down {
                             break;
                         }
+                        thread::yield_now();
+                        continue;
+                    };
 
-                        let Some(work_item) = find_task(&worker, &injector_shared, &local_stealers)
-                        else {
-                            if shutdown_flag_shared.load(Ordering::Relaxed) {
-                                break;
-                            }
-                            thread::yield_now();
-                            continue;
-                        };
+                    let _pending_guard = PendingGuard::new(&pending_shared, &shutdown_flag_shared);
 
-                        let _pending_guard =
-                            PendingGuard::new(&pending_shared, &shutdown_flag_shared);
+                    let ctx = WorkerContext {
+                        local: &worker,
+                        pending: &pending_shared,
+                        shutdown_flag: &shutdown_flag_shared,
+                    };
 
-                        let ctx = WorkerContext {
-                            local: &worker,
-                            pending: &pending_shared,
-                            shutdown_flag: &shutdown_flag_shared,
-                        };
-
-                        finder_shared.process_directory(work_item, &mut batch_sender, &ctx);
-                    }
-                });
-            }
-
-            Ok(receiver.into_iter().flatten())
-        } else {
-            Err(SearchConfigError::NotADirectory)
+                    finder_shared.process_directory(work_item, &mut batch_sender, &ctx);
+                }
+            });
         }
+
+        Ok(receiver.into_iter().flatten())
     }
 
     /**
@@ -482,8 +480,6 @@ impl Finder {
             ft.is_dir() || ft.is_regular_file()
         })
     }
-    // Use faccessat as a cheaper call (it's cheaper than fstat)
-    // since most directories won't have a git dir, we save on the morexpensive syscall.
     #[inline]
     const fn is_gitignore_enabled(&self) -> bool {
         self.search_config.respect_gitignore

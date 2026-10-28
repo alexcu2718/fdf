@@ -588,8 +588,9 @@ impl GetDents {
         // Advance past this entry.
         // SAFETY: we just obtained this pointer, so reading d_reclen is valid.
         let reclen = unsafe { drnt.d_reclen() };
-        debug_assert!(reclen >= 24, "Expected reclen to >=24, it is '{reclen}'");
-        // We trust reclen is kernel-provided and >= 24.
+        // We trust reclen is kernel-provided and >= 24 On linux/android
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        debug_assert!(reclen >= 24, "expected reclen >=24, it is `{reclen}`");
         self.offset += reclen;
 
         Some(drnt)

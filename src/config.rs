@@ -155,7 +155,7 @@ impl SearchConfig {
         clippy::too_many_arguments,
         reason = "Internal convenience"
     )]
-    pub(crate) fn new<ToStr: AsRef<str>>(
+    pub(crate) fn new<ToStr>(
         pattern: Option<&ToStr>, // ultimately this is CLI internal only
         hide_hidden: bool,
         case_insensitive: bool,
@@ -171,7 +171,10 @@ impl SearchConfig {
         respect_gitignore: bool,
         ignore_patterns: Vec<String>,
         ignore_glob_patterns: Vec<String>,
-    ) -> core::result::Result<Self, SearchConfigError> {
+    ) -> core::result::Result<Self, SearchConfigError>
+    where
+        ToStr: AsRef<str>,
+    {
         let (file_nm, pattern_to_use) = if let Some(patt_ref) = pattern.as_ref() {
             let patt = patt_ref.as_ref();
             let file_name_only = if patt.contains('/') {
@@ -287,7 +290,10 @@ impl SearchConfig {
     /// Evaluates a custom predicate function against a path
     #[inline]
     #[must_use]
-    pub fn matches_with<F: Fn(&[u8]) -> bool>(&self, path: &[u8], predicate: F) -> bool {
+    pub fn matches_with<F>(&self, path: &[u8], predicate: F) -> bool
+    where
+        F: Fn(&[u8]) -> bool,
+    {
         predicate(path)
     }
 
@@ -342,8 +348,7 @@ impl SearchConfig {
         match entry.file_type {
             FileType::RegularFile => entry
                 .file_size()
-                .ok()
-                .is_some_and(|sz| filter_size.is_within_size(sz)),
+                .is_ok_and(|sz| filter_size.is_within_size(sz)),
             //Check if it exists first, then call stat..
             FileType::Symlink => {
                 entry.exists()
@@ -370,14 +375,12 @@ impl SearchConfig {
                 || {
                     entry
                         .file_size()
-                        .ok()
-                        .is_some_and(|sz| filter_size.is_within_size(sz))
+                        .is_ok_and(|sz| filter_size.is_within_size(sz))
                 },
                 |fd| {
                     entry
                         .get_lstatat(fd)
-                        .ok()
-                        .is_some_and(|statted| filter_size.is_within_size(statted.st_size as _))
+                        .is_ok_and(|statted| filter_size.is_within_size(statted.st_size as _))
                 },
             ),
             // Check if it exists first, then call stat..

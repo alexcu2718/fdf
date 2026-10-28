@@ -254,7 +254,10 @@ impl FileType {
     #[must_use]
     #[inline]
     #[allow(clippy::filetype_is_file)] //dumb lint
-    pub fn from_path<P: AsRef<Path>>(path_start: P) -> Self {
+    pub fn from_path<P>(path_start: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
         Path::new(path_start.as_ref())
             .symlink_metadata()
             .map_or(Self::Unknown, |metadata| match metadata.file_type() {

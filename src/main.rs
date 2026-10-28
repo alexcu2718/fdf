@@ -16,8 +16,6 @@ use std::process::Command;
 #[cfg(all(
     any(target_os = "linux", target_os = "android", target_os = "macos"),
     not(miri),
-    not(debug_assertions),
-    not(test), // make testing cheaper
     feature = "mimalloc",
 ))]
 //miri doesnt support custom allocators in the event i one day make FFI safe sims, UNLIKELY!

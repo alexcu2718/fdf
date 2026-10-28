@@ -56,7 +56,10 @@ pub struct FinderBuilder {
 }
 
 impl FinderBuilder {
-    pub(crate) fn new<A: AsRef<OsStr>>(root: A) -> Self {
+    pub(crate) fn new<A>(root: A) -> Self
+    where
+        A: AsRef<OsStr>,
+    {
         const MIN_THREADS: NonZeroUsize = NonZeroUsize::MIN;
         let num_threads = std::thread::available_parallelism().unwrap_or(MIN_THREADS);
         Self {
@@ -87,7 +90,10 @@ impl FinderBuilder {
 
     /// Set the search pattern (regex or glob)
     #[must_use]
-    pub fn pattern<P: AsRef<str>>(mut self, pattern: P) -> Self {
+    pub fn pattern<P>(mut self, pattern: P) -> Self
+    where
+        P: AsRef<str>,
+    {
         self.pattern = Some(pattern.as_ref().into());
         self
     }
@@ -124,7 +130,10 @@ impl FinderBuilder {
     /// `-e rs` and `-e .rs` both match `*.rs`, and `-e '.'` matches files
     /// whose name ends with a dot (empty extension after the dot).
     #[must_use]
-    pub fn extension<C: AsRef<str>>(mut self, extension: C) -> Self {
+    pub fn extension<C>(mut self, extension: C) -> Self
+    where
+        C: AsRef<str>,
+    {
         let input = extension.as_ref().as_bytes();
         // Strip one leading dot so that `-e rs` and `-e .rs` are equivalent,
         // and `-e '.'` stores Some(b"") which matches filenames ending in '.'.

@@ -362,30 +362,6 @@ pub struct GetDents {
 ))]
 impl GetDents {
     #[inline]
-    /// Convenience function for pointer arithmetic on the buffer
-    pub(crate) const unsafe fn get_next_pointer(&mut self) -> Unique<dirent64> {
-        debug_assert!(
-            self.offset().is_multiple_of(8),
-            "offset should always be multiple of 8"
-        ); // doesn't apply for mac 32bit but not compatible with rust 2024 anywway.
-
-        // SAFETY: inbounds.
-        let drnt = unsafe {
-            Unique::from_ref(&self.syscall_buffer)
-                .byte_add(self.offset())
-                .cast::<dirent64>()
-        };
-
-        // debug_assert!(drnt.is_aligned());
-        // increment the offset by the size of the dirent structure (reclen=size of dirent struct in bytes)
-        // SAFETY: we just obtained this pointer, safe to obtain this value
-        // we trust the reclen is kernel provided and must be >=24
-        self.offset += unsafe { drnt.d_reclen() };
-
-        drnt
-    }
-
-    #[inline]
     #[must_use]
     /// Returns the current offset into the internal (stack) buffer.
     pub const fn offset(&self) -> usize {
@@ -483,6 +459,15 @@ impl GetDents {
         let remaining_bytes = self.getdents();
 
         let is_more_remaining = remaining_bytes.is_positive();
+
+        // if remaining_bytes < 0
+        //     && std::io::Error::last_os_error()
+        //         .raw_os_error()
+        //         .is_some_and(|c| c == libc::EINTR || c==libc::E)
+        // {
+        //     //let erro=std::io::Error::r
+        //     eprintln!("GOT AN INTERRUPTED ERROR HHMM");
+        // }
 
         /*
         https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/readdir.c
@@ -589,9 +574,23 @@ impl GetDents {
                 return None;
             }
         }
+
         // We have data in buffer, get next entry
-        // SAFETY: the buffer is not empty and therefore has remaining bytes to be read and is properly aligned
-        let drnt = unsafe { self.get_next_pointer() };
+        // SAFETY: the buffer is not empty, so there are remaining bytes to read,
+        // the offset is in bounds, and the buffer is properly aligned.
+        let drnt = unsafe {
+            Unique::from_ref(&self.syscall_buffer)
+                .byte_add(self.offset())
+                .cast::<dirent64>()
+        };
+        debug_assert!(drnt.is_aligned(), "Expected to be aligned, report this");
+
+        // Advance past this entry.
+        // SAFETY: we just obtained this pointer, so reading d_reclen is valid.
+        let reclen = unsafe { drnt.d_reclen() };
+        debug_assert!(reclen >= 24, "Expected reclen to >=24, it is '{reclen}'");
+        // We trust reclen is kernel-provided and >= 24.
+        self.offset += reclen;
 
         Some(drnt)
     }

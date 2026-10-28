@@ -224,7 +224,10 @@ impl Finder {
     /// Create a new Finder instance.
     #[must_use]
     #[inline]
-    pub fn init<A: AsRef<OsStr>>(root: A) -> FinderBuilder {
+    pub fn init<A>(root: A) -> FinderBuilder
+    where
+        A: AsRef<OsStr>,
+    {
         FinderBuilder::new(root)
     }
 

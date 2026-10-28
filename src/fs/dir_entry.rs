@@ -1320,7 +1320,10 @@ impl DirEntry {
     /// Applies a filter condition
     #[inline]
     #[must_use]
-    pub fn filter<F: Fn(&Self) -> bool>(&self, func: F) -> bool {
+    pub fn filter<F>(&self, func: F) -> bool
+    where
+        F: Fn(&Self) -> bool,
+    {
         func(self)
     }
 
@@ -1614,7 +1617,10 @@ impl DirEntry {
     ```
     */
     #[inline]
-    pub fn new<T: AsRef<OsStr>>(path: T) -> Result<Self> {
+    pub fn new<T>(path: T) -> Result<Self>
+    where
+        T: AsRef<OsStr>,
+    {
         // It doesn't really matter if this constructor is 'expensive' mostly because the iterator constructs
         // this without lstat.
         let mut path_ref = path.as_ref().as_bytes();

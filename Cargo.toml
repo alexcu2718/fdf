@@ -12,8 +12,8 @@ categories = ["filesystem", "command-line-utilities", "concurrency"]
 
 
 [build-dependencies]
-libc = { version = "0.2.190" }
-cc = "1.8.0"
+libc = { version = "0.2.191" }
+cc = "1.10.0"
 
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
@@ -23,9 +23,9 @@ compile_time_ls_colours = { version = "0.5.1", features = ["phf"] }
 crossbeam-deque = "0.8.8"
 crossbeam-channel = "0.5.17"
 dashmap = { version = "6.2.1", features = ["inline"] }
-libc = "0.2.190"
+libc = "0.2.191"
 regex = { version = "1.13.1", features = ["perf", "perf-dfa-full"] }
-ignore = { version = "0.4.33", features = ["simd-accel"] }
+ignore = { version = "0.4.34", features = ["simd-accel"] }
 thread_local = "1.1.10"
 [target.'cfg(any(target_os = "linux",target_os="macos",target_os="android"))'.dependencies]
 mimalloc = { version = "0.1.52", optional = true, features = [

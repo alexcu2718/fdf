@@ -140,7 +140,7 @@ impl<T: ?Sized> Unique<T> {
     }
 
     #[inline(always)]
-    pub const fn from_mut_ref(mreff: &mut T) -> Self {
+    pub const fn from_mut(mreff: &mut T) -> Self {
         Self::from_non_null(NonNull::from_mut(mreff))
     }
 
@@ -236,7 +236,7 @@ impl<T: ?Sized> From<&T> for Unique<T> {
 impl<T: ?Sized> From<&mut T> for Unique<T> {
     #[inline(always)]
     fn from(reference: &mut T) -> Self {
-        Self::from_mut_ref(reference)
+        Self::from_mut(reference)
     }
 }
 

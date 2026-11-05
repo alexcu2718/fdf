@@ -236,7 +236,7 @@ pub(crate) trait DirentConstructor {
 
     returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
-    #[inline(never)]
+    #[inline]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
@@ -443,15 +443,6 @@ impl GetDents {
 
         let is_more_remaining = remaining_bytes.is_positive();
 
-        // if remaining_bytes < 0
-        //     && std::io::Error::last_os_error()
-        //         .raw_os_error()
-        //         .is_some_and(|c| c == libc::EINTR || c==libc::E)
-        // {
-        //     //let erro=std::io::Error::r
-        //     eprintln!("GOT AN INTERRUPTED ERROR HHMM");
-        // }
-
         /*
         https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/readdir.c
           Only macOS has this optimisation, the other platforms do not, if macos does not have this, default to checking for 0 ret value
@@ -599,12 +590,12 @@ impl GetDents {
         })
     }
     /**
-    / Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
-    /
-    / Used when the caller already holds an fd obtained via `openat`, avoiding a second
-    / full-path resolution for the child directory.
-    / Used internally only due to non-enforceable invariants
-     */
+    Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
+
+    Used when the caller already holds an fd obtained via `openat`, avoiding a second
+    full-path resolution for the child directory.
+    Used internally only due to non-enforceable invariants
+    */
     #[inline]
     pub(crate) fn from_fd(fd: OwnedFd, dir: &DirEntry) -> Self {
         let (path_buffer, file_name_index) = Self::init_from_path(dir);

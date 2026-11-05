@@ -115,8 +115,7 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
 
     // End of the largest 2-register-aligned region,slen>=aligned_start, never wraps
     let aligned_end = aligned_start + ((slen - aligned_start) & const { !(SIZE - 1) });
-    // Simple scalar byte scan lambda, avoid iterator overhead.(Reverse iterators optimise quite badly plus we're specialising this by
-    //specialising this, because we use the base_ptr and do basic pointer arithmetic, we can just already use existing registers(holding the base_ptr)
+    // Simple scalar byte scan, because we use the base_ptr and do basic pointer arithmetic, we can just already use existing registers(holding the base_ptr)
     // SAFETY: trivial, allows compiler to elide panic branch, this is always true.
     unsafe { core::hint::assert_unchecked(aligned_end <= slen) };
 
@@ -132,22 +131,21 @@ pub fn memrchr(x: u8, text: &[u8]) -> Option<usize> {
     let repeated_x = (x as usize) * LO_USIZE; //broadcast x to all 4/2 nibble positions (or 1 if 16bit is ever possible)
 
     // define simple lambda  to avoid repetitive code.
-    let find_last = |offset_: usize| -> Option<u32> {
+    let find_last = |offset_: usize| -> Option<_> {
         //avoid aliasing with offset
         // ptr add,cast the upper/lower to a usize, we did all the math to make sure we're only reading aligned chunks,
         // we could simplify this with a deref but I want the code to be specifically indicating aigned reads (pedantic aside, just taste)
         // SAFETY: aligned+inbounds; add offset,read the pointer and XOR mask to set matching bits to 0 (and 0's to x)
         let upper_or_lower = unsafe { start.add(offset_).cast::<usize>().read() } ^ repeated_x;
-        const BITSMINUS1: u32 = usize::BITS - 1;
+        const ADJUST: u32 = usize::BITS - 1;
         if cfg!(target_endian = "big") {
             // BE: the last byte in memory is the least significant one,
             // so the "last match" is the lowest set bit
-            NonZero::new(mycroft!(upper_or_lower)).map(|y| (BITSMINUS1 - y.trailing_zeros()) >> 3)
+            NonZero::new(mycroft!(upper_or_lower)).map(|y| (ADJUST - y.trailing_zeros()) >> 3)
         } else {
             // LE: the last byte in memory is the most significant one,
             // so the "last match" is the highest set bit
-            contains_zero_byte_borrow_fix(upper_or_lower)
-                .map(|y| (BITSMINUS1 - y.leading_zeros()) >> 3)
+            contains_zero_byte_borrow_fix(upper_or_lower).map(|y| (ADJUST - y.leading_zeros()) >> 3)
         }
     };
     /*

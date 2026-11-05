@@ -405,10 +405,10 @@ impl DirEntry {
     #[inline]
     pub(crate) fn open_at(parent_fd: BorrowedFd, child_name: &CStr) -> Result<OwnedFd> {
         const FLAGS: c_int = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK | O_RDONLY;
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
         // SAFETY: child_name is null-terminated; parent_fd is a valid open directory fd.
         let fd = unsafe { libc::openat(parent_fd.as_raw_fd(), child_name.as_ptr(), FLAGS) };
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
         // SAFETY: as above
         let fd = unsafe {
             crate::util::openat_nocancel(parent_fd.as_raw_fd(), child_name.as_ptr(), FLAGS)
@@ -595,16 +595,7 @@ impl DirEntry {
                 },
             ),
 
-            #[cfg(any(
-                target_os = "macos",
-                target_os = "linux",
-                target_os = "android",
-                target_os = "freebsd",
-                target_os = "openbsd",
-                target_os = "netbsd",
-                target_os = "illumos",
-                target_os = "solaris"
-            ))] //Could add mac/freebsd here
+            #[cfg(has_faster_readdir)]
             FileType::Directory => opt_fd.map_or_else(
                 || self.is_empty(),
                 |parent_fd| {
@@ -615,16 +606,7 @@ impl DirEntry {
                 },
             ),
 
-            #[cfg(not(any(
-                target_os = "macos",
-                target_os = "linux",
-                target_os = "android",
-                target_os = "freebsd",
-                target_os = "openbsd",
-                target_os = "netbsd",
-                target_os = "illumos",
-                target_os = "solaris"
-            )))]
+            #[cfg(not(has_faster_readdir))]
             FileType::Directory => opt_fd.map_or_else(
                 || self.is_empty(),
                 |parent_fd| {
@@ -694,6 +676,7 @@ impl DirEntry {
         const { assert!(DENT_SIZE >= 16 && DENT_SIZE <= 32, "showing below works") };
         // On Linux it's 24, on solaris it's 24/32
         // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
+        //on openbsd it's 16, ugh, TODO think
         const MINIMUM_DIRENT_SIZE: isize = 32;
 
         debug_assert!(
@@ -705,7 +688,7 @@ impl DirEntry {
             let mut syscall_buffer = AlignedBuffer::<u8, BUF_SIZE>::new();
             // SAFETY: guaranteed open, valid ptr etc.
             let dents =
-                unsafe { getdents64(fd.as_raw_fd(), syscall_buffer.as_mut_ptr().cast(), BUF_SIZE) };
+                unsafe { getdents64(fd.as_raw_fd(), (&raw mut syscall_buffer).cast(), BUF_SIZE) };
 
             // if empty, then only 2 entries expected, . and .., this means only 64 or below (or neg if errors, who cares.)
             return dents <= 2 * MINIMUM_DIRENT_SIZE;

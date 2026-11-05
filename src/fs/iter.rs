@@ -7,6 +7,7 @@ use core::hint::assert_unchecked;
 use core::mem::{ManuallyDrop, MaybeUninit};
 use core::ptr::NonNull;
 use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
+use std::os::fd::RawFd;
 #[allow(unused)]
 use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
 
@@ -167,10 +168,10 @@ pub(crate) trait DirentConstructor {
     ///
     /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
     fn parent_depth(&self) -> u32;
-    /// Returns the file descriptor for the current directory being read
-    fn file_descriptor(&self) -> BorrowedFd<'_>;
     /// Total allocated size of the internal vector that holds the path buffer
     fn allocated_size(&self) -> usize;
+    /// Returns the `RawFd`
+    fn raw_fd(&self) -> RawFd;
 
     #[inline]
     /// Constructs a `DirEntry` from a raw directory entry pointer
@@ -235,7 +236,7 @@ pub(crate) trait DirentConstructor {
 
     returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
     */
-    #[inline]
+    #[inline(never)]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
@@ -248,29 +249,29 @@ pub(crate) trait DirentConstructor {
 
         //includes the null terminator
         let name_len = d_name_cstr.len(); //technically should be a u16 but we need it for indexing :(
+        // make a lambda which we only call  if the `drnt` doesn't give us the dtype.
+        let stat_call = || {
+            stat_syscall!(
+                fstatat,
+                self.raw_fd(), //borrow before mutably borrowing the path buffer
+                drnt.d_name(),
+                AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+                DTYPE
+            )
+        };
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
         // SAFETY: same conditions for the d/name etc
-        let file_type: FileType = match FileType::from_dtype(unsafe { drnt.d_type() }) {
-            FileType::Unknown => stat_syscall!(
-                fstatat,
-                self.file_descriptor().as_raw_fd(), //borrow before mutably borrowing the path buffer
-                drnt.d_name().cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
-                AT_SYMLINK_NOFOLLOW,  // dont follow, to keep same semantics as readdir/getdents
-                DTYPE
-            ),
-            not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
+        let file_type: FileType = unsafe {
+            match FileType::from_dtype(drnt.d_type()) {
+                FileType::Unknown => stat_call(),
+                not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
+            }
         };
 
         #[cfg(not(has_d_type))] // Have to make a syscall on these systems alas
-        let file_type = stat_syscall!(
-            fstatat,
-            self.file_descriptor().as_raw_fd(), //borrow before mutably borrowing the path buffer
-            drnt.d_name().cast(), //cast into i8 (depending on architecture, pointers are either i8/u8)
-            AT_SYMLINK_NOFOLLOW,  // dont follow, to keep same semantics as readdir/getdents
-            DTYPE
-        );
+        let file_type = stat_call();
 
         let base_len = self.file_index();
         let required_len = base_len + name_len;
@@ -312,16 +313,7 @@ High-throughput directory iterator backed by `getdents` or `getdirentries`,
  It also avoids implicit `stat` calls for each entry and only falls back to
  metadata lookups when the filesystem does not provide a usable entry type.
 */
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "freebsd",
-    target_os = "macos"
-))]
+#[cfg(has_faster_readdir)]
 pub struct GetDents {
     /// The (owned) File descriptor of the open directory, closed when the iterator is dropped.
     pub(crate) fd: OwnedFd,
@@ -350,16 +342,7 @@ pub struct GetDents {
     pub(crate) base_pointer: libc::off_t,
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "freebsd",
-    target_os = "macos"
-))]
+#[cfg(has_faster_readdir)]
 impl GetDents {
     #[inline]
     #[must_use]
@@ -724,13 +707,13 @@ macro_rules! impl_dirent_constructor {
             }
 
             #[inline]
-            fn parent_depth(&self) -> u32 {
-                self.parent_depth
+            fn raw_fd(&self) -> ::std::os::fd::RawFd {
+                self.fd.as_raw_fd()
             }
 
             #[inline]
-            fn file_descriptor(&self) -> ::std::os::fd::BorrowedFd<'_> {
-                self.fd.as_fd()
+            fn parent_depth(&self) -> u32 {
+                self.parent_depth
             }
         }
     };
@@ -740,25 +723,7 @@ macro_rules! impl_dirent_constructor {
 impl_iterator_public_methods!(ReadDir);
 impl_dirent_constructor!(ReadDir);
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "freebsd",
-    target_os = "macos"
-))]
+#[cfg(has_faster_readdir)]
 impl_iterator_public_methods!(GetDents);
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "freebsd",
-    target_os = "macos"
-))]
+#[cfg(has_faster_readdir)]
 impl_dirent_constructor!(GetDents);

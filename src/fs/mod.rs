@@ -13,28 +13,10 @@ pub(crate) use libc::AT_EACCESS;
 
 pub use dir_entry::DirEntry;
 pub use file_type::FileType;
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "macos",
-    target_os = "freebsd"
-))]
-pub use iter::GetDents;
 pub use iter::ReadDir;
 pub use types::Result;
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "macos",
-    target_os = "freebsd"
-))]
+#[cfg(has_faster_readdir)]
+pub use iter::GetDents;
+#[cfg(has_faster_readdir)]
 pub use types::SyscallBuffer;

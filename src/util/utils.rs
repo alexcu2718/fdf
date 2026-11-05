@@ -8,7 +8,7 @@ use core::ffi::{CStr, c_char, c_int, c_void};
  # Arguments
  - `fd`: Open directory file descriptor
  - `bufptr`: Raw pointer to output buffer
- - `buf_ize`: Size of output buffer in bytes
+ - `bufsize`: Size of output buffer in bytes
 
  # Safety
  - Requires valid open directory descriptor
@@ -139,8 +139,8 @@ For macos you can also do this but linking the symbol is much better/safer
     unsafe { libc::syscall(SYS_GETDIRENTRIES64, fd, buffer_ptr, nbytes, basep) }
 */
 
-#[cfg(target_os = "macos")]
 unsafe extern "C" {
+    #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
     #[link_name = "openat$NOCANCEL"]
     /// Skip cancellation points in multhithreaded code.
     pub(crate) unsafe fn openat_nocancel(dirfd: c_int, path: *const c_char, flags: c_int) -> c_int;
@@ -352,8 +352,8 @@ pub const unsafe fn dirent_const_time_strlen(drnt: *const dirent64) -> usize {
         let mask = (reclen as u64).wrapping_sub(25) & 0xFFFF_FF00_0000_0000; // Could cast to a u32, shift by 8 then cast back to u64 but that's horrible
         // not checking the asm on that...
         debug_assert!(
-            reclen == 24 && mask == u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0])
-                || mask == 0 && reclen != 24,
+            (reclen == 24 && mask == u64::from_ne_bytes([0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0]))
+                || (mask == 0 && reclen != 24),
             "Checking condition holds"
         );
 

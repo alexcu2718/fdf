@@ -8,6 +8,7 @@ use core::{
     ffi::CStr,
     mem,
     num::{NonZeroU32, NonZeroUsize},
+    ops::Deref,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use crossbeam_channel::{Receiver, SendError, Sender, bounded};
@@ -166,6 +167,14 @@ impl IgnoreContext {
     }
 }
 
+impl Deref for IgnoreContext {
+    type Target = Self;
+
+    fn deref(&self) -> &Self::Target {
+        self
+    }
+}
+
 #[inline]
 fn find_task(
     local: &Worker<WorkItem>,
@@ -239,19 +248,20 @@ impl Finder {
     }
 
     /**
-    Returns the collected errors from the traversal
+    Returns an iterator over the collected errors from the traversal
 
-    Returns `Some(Vec<TraversalError>)` if error collection is enabled and errors occurred,
-    or `None` if error collection is disabled or the lock failed
+    Returns an iterator if error collection is enabled,
+    or an empty iterator if error collection is disabled or the lock failed
     */
-    #[must_use]
     #[allow(clippy::missing_inline_in_public_items)]
     #[cold]
-    pub fn errors(&self) -> Option<Vec<TraversalError>> {
+    pub fn errors(&self) -> impl Iterator<Item = TraversalError> + '_ {
         self.errors
             .as_ref()
             .and_then(|arc| arc.lock().ok())
-            .map(|guard| guard.iter().cloned().collect()) // very inefficient but quite frankly the error path is very cold
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
+            .into_iter()
     }
 
     /// Returns the shared traversal error storage when error collection is enabled.
@@ -261,6 +271,19 @@ impl Finder {
         self.errors.clone()
     }
 
+    /**
+    Records an error from directory traversal if error collection is enabled.
+
+    This method safely attempts to lock and push the error to the collection.
+    If error collection is disabled or the lock fails, the error is silently dropped.
+    */
+    #[inline(never)]
+    #[cold]
+    fn record_error(&self, dir: DirEntry, error: DirEntryError) {
+        if let Some(mut errors) = self.errors.as_ref().and_then(|arc| arc.lock().ok()) {
+            errors.push(TraversalError { dir, error })
+        }
+    }
     /**
     Traverse the directory tree starting from the root and return an iterator for the found entries.
 
@@ -516,14 +539,9 @@ impl Finder {
         self.search_config.depth
     }
     #[inline]
-    fn is_gitignored(
-        &self,
-        dir: &DirEntry,
-        mctx: Option<&Arc<IgnoreContext>>,
-        is_dir: bool,
-    ) -> bool {
+    fn is_gitignored(&self, dir: &DirEntry, mctx: Option<&IgnoreContext>, is_dir: bool) -> bool {
         // If ctx is Some, gitignore is enabled.
-        let Some(ctx) = mctx.map(AsRef::as_ref) else {
+        let Some(ctx) = mctx else {
             return false;
         };
         debug_assert!(
@@ -637,7 +655,7 @@ impl Finder {
         let (dir, parent_ignore_ctx): (DirEntry, _) = work_item.get_context(); // ensure types stay in right order.
         debug_assert!(dir.is_traversable(), "dev test");
         if self.matches_ignore_path(&dir)
-            || self.is_gitignored(&dir, parent_ignore_ctx.as_ref(), true)
+            || self.is_gitignored(&dir, parent_ignore_ctx.as_deref(), true)
             || !self.directory_or_symlink_filter(&dir)
         // Check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info
         {
@@ -670,7 +688,7 @@ impl Finder {
                         || self.matches_ignore_path(&entry)
                         || self.is_gitignored(
                             &entry,
-                            current_ignore_ctx.as_ref(),
+                            current_ignore_ctx.as_deref(),
                             self.should_traverse(&entry, opt_fd),
                         )
                     {
@@ -696,14 +714,7 @@ impl Finder {
                 }
             }
             Err(error) => {
-                if let Some(errors_arc) = self.errors.as_ref() {
-                    // This will only show errors if collect errors is enabled
-                    // Generally I don't like this approach due to the locking it can cause
-                    // However, errors are VERY small typically hence this create negligible issues.
-                    if let Ok(mut errors) = errors_arc.lock() {
-                        errors.push(TraversalError { dir, error });
-                    }
-                }
+                self.record_error(dir, error);
             }
         }
     }

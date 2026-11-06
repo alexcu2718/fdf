@@ -630,13 +630,20 @@ impl DirEntry {
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
         const BUF_SIZE: usize = 512; //pretty arbitrary.
-        const DENT_SIZE: usize = core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8); // ALWAYS THE LAST ELEMENT, FIND MIN STRUCT SIZE.
+        const DENT_SIZE: isize = core::mem::offset_of!(crate::dirent64, d_name)
+            .next_multiple_of(8)
+            .cast_signed(); // ALWAYS THE LAST ELEMENT, FIND MIN STRUCT SIZE.
         const { assert!(DENT_SIZE >= 16 && DENT_SIZE <= 32, "showing below works") };
         // On Linux it's 24, on solaris it's 24/32
         // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
         //on openbsd it's 16, ugh, TODO think
 
-        const MINIMUM_DIRENT_SIZE: isize = if cfg!(target_os = "openbsd") { 16 } else { 32 };
+        const MINIMUM_DIRENT_SIZE: isize =
+            if cfg!(any(target_os = "solaris", target_os = "illumos")) {
+                32
+            } else {
+                DENT_SIZE
+            };
 
         debug_assert!(
             self.is_dir() || self.is_symlink(),

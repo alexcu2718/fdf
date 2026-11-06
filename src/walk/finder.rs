@@ -7,7 +7,7 @@ use crate::{
 use core::{
     ffi::CStr,
     mem,
-    num::NonZeroUsize,
+    num::{NonZeroU32, NonZeroUsize},
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use crossbeam_channel::{Receiver, SendError, Sender, bounded};
@@ -456,12 +456,12 @@ impl Finder {
     }
 
     #[inline]
-    fn has_git_dir(filedes: BorrowedFd) -> bool {
+    fn has_git_dir(fdes: BorrowedFd) -> bool {
         const GITFILE: &CStr = c".git";
 
         let result: Result<libc::stat, DirEntryError> = stat_syscall!(
             libc::fstatat,
-            filedes.as_raw_fd(),
+            fdes.as_raw_fd(),
             GITFILE.as_ptr(),
             libc::AT_SYMLINK_NOFOLLOW
         );
@@ -510,6 +510,12 @@ impl Finder {
     }
 
     #[inline]
+    #[must_use]
+    /// Returns the maximal depth this will traverse to, if set.
+    pub const fn depth(&self) -> Option<NonZeroU32> {
+        self.search_config.depth
+    }
+    #[inline]
     fn is_gitignored(
         &self,
         dir: &DirEntry,
@@ -517,7 +523,7 @@ impl Finder {
         is_dir: bool,
     ) -> bool {
         // If ctx is Some, gitignore is enabled.
-        let Some(ctx) = mctx else {
+        let Some(ctx) = mctx.map(AsRef::as_ref) else {
             return false;
         };
         debug_assert!(
@@ -559,67 +565,40 @@ impl Finder {
     #[inline]
     #[allow(clippy::cast_sign_loss)]
     #[allow(unfulfilled_lint_expectations)] // for systems with 32bit `st_dev`
-    #[allow(unused)] // fix a bug in rust-analyzer TODO check if this can be removed.
+    #[allow(unused)] // fix a bug in rust-analyzer TODO check if this can be removed. (buggy on only THIS system ffs)
     fn directory_or_symlink_filter(&self, dir: &DirEntry) -> bool {
-        // This is a beast of a function to read, sorry!
-        match dir.file_type {
-            // Normal directories
-            FileType::Directory => {
-                self.inode_cache.as_ref().map_or_else(
-                    || {
-                        // Fast path: only calls stat IFF self.starting_filesystem is Some
-                        debug_assert!(
-                            !self.is_following_symlinks(),
-                            "we expect follow symlinks to be disabled when following this path"
-                        );
+        let inode_cache = self.inode_cache.as_ref();
+        let start_fs = self.starting_filesystem;
 
-                        self.starting_filesystem.is_none_or(|start_dev| {
-                            dir.get_stat()
-                                .is_ok_and(|statted| start_dev == access_stat!(statted, st_dev))
-                        })
-                    },
-                    |cache| {
-                        debug_assert!(
-                            self.is_following_symlinks(),
-                            "we expect follow symlinks to be enabled when following this path"
-                        );
+        debug_assert_eq!(
+            inode_cache.is_some(),
+            self.is_following_symlinks(),
+            "inode cache must be present iff following symlinks"
+        );
 
-                        dir.get_stat().is_ok_and(|stat| {
-                            // Check same filesystem if enabled
-                            self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev)) &&
-                        // Check if we've already traversed this inode
+        // Stat the entry, check it is a directory (unless already known), check
+        // the filesystem boundary, then (if following symlinks) record the inode.
+        let passes = |is_already_known_dir: bool| {
+            dir.get_stat().is_ok_and(|stat| {
+                (is_already_known_dir || FileType::from(&stat).is_dir())
+                    && start_fs.is_none_or(|start_dev| start_dev == access_stat!(stat, st_dev))
+                    && inode_cache.is_none_or(|cache| {
                         cache.insert((access_stat!(stat, st_dev), access_stat!(stat, st_ino)))
-                        })
-                    },
-                )
-            }
-
-            // Symlinks that may point to directories
-            // self.search_config.follow_symlinks <=> inode_cache is some
-            FileType::Symlink
-                if self.inode_cache.as_ref().is_some_and(|cache| {
-                    debug_assert!(
-                        self.is_following_symlinks(),
-                        "we expect follow symlinks to be enabled when following this path"
-                    );
-
-                    dir.get_stat().is_ok_and(|statted| {
-                        FileType::from(&statted).is_dir() &&
-                    // Check filesystem boundary
-                    self.starting_filesystem.is_none_or(|start_dev| start_dev == access_stat!(statted, st_dev)) &&
-                    // Check if we've already traversed this inode
-                    cache.insert((access_stat!(statted, st_dev), access_stat!(statted, st_ino)))
                     })
-                }) =>
-            {
-                true
-            }
+            })
+        };
 
-            // All other file types (files, non-followed symlinks, etc.)
+        match dir.file_type() {
+            // Fast path: no stat at all when there's nothing to check
+            FileType::Directory => (inode_cache.is_none() && start_fs.is_none()) || passes(true),
+            // Symlinks only matter when following; they must resolve to a directory
+            FileType::Symlink if inode_cache.is_some() => {
+                debug_assert!(self.is_following_symlinks(), "debug");
+                passes(false)
+            }
             _ => false,
         }
     }
-
     #[inline]
     fn matches_ignore_path(&self, dir: &DirEntry) -> bool {
         self.search_config.matches_ignore_path(dir.as_ref())
@@ -633,11 +612,7 @@ impl Finder {
         sender: &mut BatchSender,
         ctx: &WorkerContext<'_>,
     ) -> bool {
-        if self
-            .search_config
-            .depth
-            .is_some_and(|depth| dir.depth >= depth.get())
-        {
+        if self.depth().is_some_and(|depth| dir.depth >= depth.get()) {
             if should_send && sender.send(dir.clone()).is_err() {
                 ctx.signal_shutdown()
             } // Cloning costs very little here.

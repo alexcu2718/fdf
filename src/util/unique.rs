@@ -140,8 +140,8 @@ impl<T: ?Sized> Unique<T> {
     }
 
     #[inline(always)]
-    pub const fn from_mut_ref(mreff: &mut T) -> Self {
-        Self::from_ref(mreff)
+    pub const fn from_mut(mreff: &mut T) -> Self {
+        Self::from_non_null(NonNull::from_mut(mreff))
     }
 
     #[inline(always)]
@@ -204,25 +204,25 @@ impl<T: ?Sized> Unique<T> {
         Unique::from_non_null(self.as_non_null().cast())
     }
 }
-
-impl<T: ?Sized> Clone for Unique<T> {
+#[expect(clippy::expl_impl_clone_on_copy, reason = "intentional")]
+impl Clone for Unique<dirent64> {
     #[inline(always)]
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T: ?Sized> Copy for Unique<T> {}
+impl Copy for Unique<dirent64> {}
 
 impl<T: ?Sized> fmt::Debug for Unique<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Pointer::fmt(&self.as_ptr(), f)
+        fmt::Pointer::fmt(&self.0, f)
     }
 }
 
 impl<T: ?Sized> fmt::Pointer for Unique<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Pointer::fmt(&self.as_ptr(), f)
+        fmt::Pointer::fmt(&self.0, f)
     }
 }
 
@@ -236,7 +236,7 @@ impl<T: ?Sized> From<&T> for Unique<T> {
 impl<T: ?Sized> From<&mut T> for Unique<T> {
     #[inline(always)]
     fn from(reference: &mut T) -> Self {
-        Self::from_mut_ref(reference)
+        Self::from_mut(reference)
     }
 }
 

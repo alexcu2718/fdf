@@ -39,7 +39,7 @@ jobs:
             artifact: fdf-macos-x86_64
           - os: macos
             arch: aarch64
-            runner: macos-14
+            runner: macos-latest
             artifact: fdf-macos-aarch64
           - os: netbsd
             arch: x86_64

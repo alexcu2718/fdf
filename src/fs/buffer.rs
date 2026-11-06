@@ -121,27 +121,29 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
         }
     }
 
-    /// Executes the `getdirentries64` system call
-    /// Supported on macOS and FreeBSD.
-    ///
-    /// On success, the return value is the number of bytes written into this buffer.
-    /// A return value of `0` indicates end-of-directory. Negative values indicate an
-    /// OS error as returned by the underlying syscall wrapper. (Check [`libc::errno`])
-    ///
-    /// Caveats
-    /// - This method is `unsafe` because the kernel only initialises the first `n`
-    ///   bytes it writes. Callers must only read the returned byte count, not the
-    ///   whole buffer.
-    /// - `basep` is an in/out directory position cookie. It must point to valid,
-    ///   writable memory for the duration of the call, and the updated value should
-    ///   be preserved if the caller needs to resume iteration correctly.
-    ///
-    ///
-    ///
-    /// # Safety
-    /// The caller must ensure `fd` refers to an open directory and that `basep`
-    /// remains a valid mutable reference for the duration of the call.
-    ///  Only Available on macOS and FreeBSD (with dragonfly to be expected in future update)
+    /**
+     Executes the `getdirentries64` system call
+     Supported on macOS and FreeBSD.
+
+     On success, the return value is the number of bytes written into this buffer.
+     A return value of `0` indicates end-of-directory. Negative values indicate an
+     OS error as returned by the underlying syscall wrapper. (Check [`libc::errno`])
+
+     Caveats
+     - This method is `unsafe` because the kernel only initialises the first `n`
+       bytes it writes. Callers must only read the returned byte count, not the
+       whole buffer.
+     - `basep` is an in/out directory position cookie. It must point to valid,
+       writable memory for the duration of the call, and the updated value should
+       be preserved if the caller needs to resume iteration correctly.
+
+
+
+     # Safety
+     The caller must ensure `fd` refers to an open directory and that `basep`
+     remains a valid mutable reference for the duration of the call.
+      Only Available on macOS and FreeBSD (with dragonfly to be expected in future update)
+    */
     #[inline]
     #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     pub unsafe fn getdirentries64(&mut self, fd: BorrowedFd, basep: &mut libc::off_t) -> isize {

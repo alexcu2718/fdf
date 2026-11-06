@@ -35,7 +35,7 @@ pub use utils::getdents64;
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 pub use utils::getdirentries64;
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", target_pointer_width = "64"))]
 pub(crate) use utils::openat_nocancel;
 
 pub use utils::dirent_name_length;

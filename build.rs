@@ -1,6 +1,29 @@
 #![allow(clippy::undocumented_unsafe_blocks)]
 
 // Create a purposefully empty directory and test if the EOF trick is used by the kernel
+
+#[cfg(target_family = "unix")]
+fn flag_for_faster_readdir() {
+    println!("cargo:rustc-check-cfg=cfg(has_faster_readdir)");
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "freebsd",
+        target_os = "macos"
+    ))]
+    println!("cargo:rustc-cfg=has_faster_readdir")
+}
+
+#[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
+fn test_eof() {
+    // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
+    println!("cargo:rustc-check-cfg=cfg(has_eof_trick)");
+}
+
 #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
 #[allow(clippy::expect_used, clippy::let_underscore_must_use)]
 fn test_eof() {
@@ -91,6 +114,7 @@ fn test_eof() {
 }
 
 #[allow(clippy::unwrap_used)]
+#[cfg(unix)]
 fn check_dirent_has_field(cfg_name: &str) {
     // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
     println!("cargo:rustc-check-cfg=cfg({cfg_name})");
@@ -124,25 +148,24 @@ fn check_dirent_has_field(cfg_name: &str) {
 }
 
 fn main() {
-    // Tell cargo about the cfg we intend to use so `check-cfg` won't warn.
-    println!("cargo:rustc-check-cfg=cfg(has_eof_trick)");
-    // Re-run build script if filesystem list changes
-
-    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-    println!("cargo:rustc-env=FDF_PAGE_SIZE={page_size}");
-
-    #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
     test_eof();
+    #[cfg(unix)]
+    {
+        flag_for_faster_readdir();
 
-    check_dirent_has_field("has_d_type");
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        println!("cargo:rustc-env=FDF_PAGE_SIZE={page_size}");
 
-    check_dirent_has_field("has_d_reclen");
+        check_dirent_has_field("has_d_type");
 
-    check_dirent_has_field("has_d_namlen");
+        check_dirent_has_field("has_d_reclen");
 
-    check_dirent_has_field("has_d_off");
+        check_dirent_has_field("has_d_namlen");
 
-    check_dirent_has_field("has_d_seekoff");
+        check_dirent_has_field("has_d_off");
 
-    check_dirent_has_field("has_d_ino");
+        check_dirent_has_field("has_d_seekoff");
+
+        check_dirent_has_field("has_d_ino");
+    }
 }

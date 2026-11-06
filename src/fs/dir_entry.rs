@@ -648,9 +648,10 @@ impl DirEntry {
             #[cfg(any(
                 target_os = "linux",
                 target_os = "android",
+                target_os = "openbsd",
                 target_os = "netbsd",
+                target_os = "illumos",
                 target_os = "solaris",
-                target_os = "illumos"
             ))]
             let sys_ret_val = syscall_buffer.getdents(fd.as_fd());
             #[cfg(any(target_os = "freebsd", target_os = "macos"))]

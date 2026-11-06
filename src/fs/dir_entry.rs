@@ -577,25 +577,14 @@ impl DirEntry {
                 },
             ),
 
-            #[cfg(has_faster_readdir)]
             FileType::Directory => opt_fd.map_or_else(
                 || self.is_empty(),
                 |parent_fd| {
                     Self::open_at(parent_fd, self.file_name_cstr())
-                        .ok()
-                        .and_then(|dir_fd| read_direntries_from_fd!(self, dir_fd).ok())
-                        .is_some_and(|mut entries| entries.next().is_none())
-                },
-            ),
-
-            #[cfg(not(has_faster_readdir))]
-            FileType::Directory => opt_fd.map_or_else(
-                || self.is_empty(),
-                |parent_fd| {
-                    Self::open_at(parent_fd, self.file_name_cstr())
-                        .ok()
-                        .and_then(|dir_fd| read_direntries_from_fd!(self, dir_fd).ok())
-                        .is_some_and(|entries| entries.is_ok_and(|mut x| x.next().is_none()))
+                        .map(|dir_fd| read_direntries_from_fd!(self, dir_fd))
+                        .is_ok_and(|result| {
+                            result.is_ok_and(|mut entries| entries.next().is_none())
+                        })
                 },
             ),
 
@@ -650,7 +639,7 @@ impl DirEntry {
         const MINIMUM_DIRENT_SIZE: isize = if cfg!(target_os = "openbsd") { 16 } else { 32 };
 
         debug_assert!(
-            self.file_type.is_dir() || self.file_type.is_symlink(),
+            self.is_dir() || self.is_symlink(),
             " Only expect dirs/symlinks to pass through this private func"
         );
         if let Ok(fd) = self.open() {
@@ -667,7 +656,9 @@ impl DirEntry {
             #[cfg(any(target_os = "freebsd", target_os = "macos"))]
             let sys_ret_val = {
                 let mut basep: libc::off_t = 0;
-                syscall_buffer.getdirentries64(fd.as_fd(), &mut basep)
+
+                // SAFETY: safe to call
+                unsafe { syscall_buffer.getdirentries64(fd.as_fd(), &mut basep) }
             };
 
             // if empty, then only 2 entries expected, . and .., this means only 64 or below (or neg if errors, who cares.)

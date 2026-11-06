@@ -639,7 +639,8 @@ impl DirEntry {
         const MINIMUM_DIRENT_SIZE: isize = if cfg!(any(
             target_os = "solaris",
             target_os = "illumos",
-            target_os = "macos"
+            target_os = "macos",
+            target_os = "freebsd"
         )) {
             32
         } else {

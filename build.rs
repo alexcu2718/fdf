@@ -148,14 +148,13 @@ fn check_dirent_has_field(cfg_name: &str) {
 }
 
 fn main() {
+    test_eof();
     #[cfg(unix)]
     {
         flag_for_faster_readdir();
 
         let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
         println!("cargo:rustc-env=FDF_PAGE_SIZE={page_size}");
-
-        test_eof();
 
         check_dirent_has_field("has_d_type");
 

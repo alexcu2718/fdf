@@ -432,16 +432,7 @@ impl DirEntry {
 
     /// Returns a [`GetDents`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
     #[inline]
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "illumos",
-        target_os = "solaris",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(has_faster_readdir)]
     pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> crate::fs::GetDents {
         crate::fs::GetDents::from_fd(fd, self)
     }
@@ -560,21 +551,9 @@ impl DirEntry {
         match self.file_type {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
-                #[cfg(any(
-                    target_os = "linux",
-                    target_os = "android",
-                    target_os = "netbsd",
-                    target_os = "solaris",
-                    target_os = "illumos"
-                ))]
+                #[cfg(has_faster_readdir)]
                 let result = self.is_empty_getdents();
-                #[cfg(not(any(
-                    target_os = "linux",
-                    target_os = "android",
-                    target_os = "netbsd",
-                    target_os = "solaris",
-                    target_os = "illumos"
-                )))]
+                #[cfg(not(has_faster_readdir))]
                 let result = self.is_empty_posix(); //Avoid allocating a buffer here or any other ops.
                 result
             }
@@ -589,7 +568,7 @@ impl DirEntry {
     // fdopendir can fail due to bad alloc and some other weird edge cases
     // As this is an ugly implementation detail, may refactor this to be a bit nicer.
     pub(crate) fn is_empty_at(&self, opt_fd: Option<BorrowedFd>) -> bool {
-        match self.file_type {
+        match self.file_type() {
             FileType::RegularFile => opt_fd.map_or_else(
                 || self.file_size().is_ok_and(|size| size == 0),
                 |fd| {
@@ -626,13 +605,7 @@ impl DirEntry {
 
     #[inline]
     #[must_use]
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "netbsd",
-        target_os = "solaris",
-        target_os = "illumos"
-    )))]
+    #[cfg(not(has_faster_readdir))]
     pub(crate) fn is_empty_posix(&self) -> bool {
         //avoid a heapalloc
         use crate::readdir64;
@@ -662,13 +635,7 @@ impl DirEntry {
     }
 
     #[inline]
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "netbsd",
-        target_os = "solaris",
-        target_os = "illumos"
-    ))]
+    #[cfg(has_faster_readdir)]
     /// Specialisation for empty checks on linux/android/netbsd/etc (avoid a heap alloc)
     // could add mac/freebsd here? TODO
     pub(crate) fn is_empty_getdents(&self) -> bool {
@@ -689,7 +656,19 @@ impl DirEntry {
         if let Ok(fd) = self.open() {
             let mut syscall_buffer: AlignedBuffer<u8, BUF_SIZE> = AlignedBuffer::new();
 
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "android",
+                target_os = "netbsd",
+                target_os = "solaris",
+                target_os = "illumos"
+            ))]
             let sys_ret_val = syscall_buffer.getdents(fd.as_fd());
+            #[cfg(any(target_os = "freebsd", target_os = "macos"))]
+            let sys_ret_val = {
+                let mut basep: libc::off_t = 0;
+                syscall_buffer.getdirentries64(fd.as_fd(), &mut basep)
+            };
 
             // if empty, then only 2 entries expected, . and .., this means only 64 or below (or neg if errors, who cares.)
             return sys_ret_val <= 2 * MINIMUM_DIRENT_SIZE;

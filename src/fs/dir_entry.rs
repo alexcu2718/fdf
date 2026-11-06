@@ -640,7 +640,8 @@ impl DirEntry {
             target_os = "solaris",
             target_os = "illumos",
             target_os = "macos",
-            target_os = "freebsd"
+            target_os = "freebsd",
+            target_os = "netbsd"
         )) {
             32
         } else {

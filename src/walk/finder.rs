@@ -1,5 +1,5 @@
 use crate::{
-    DirEntryError, FilesystemIOError, SearchConfig, SearchConfigError, TraversalError,
+    DirEntryError, SearchConfig, SearchConfigError, TraversalError,
     fs::{DirEntry, FileType},
     util::PrinterBuilder,
     walk::{DirEntryFilter, FilterType, finder_builder::FinderBuilder},
@@ -251,17 +251,7 @@ impl Finder {
         self.errors
             .as_ref()
             .and_then(|arc| arc.lock().ok())
-            .map(|guard| {
-                guard
-                    .iter()
-                    .map(|te| TraversalError {
-                        dir: te.dir.clone(),
-                        error: DirEntryError::IOError(FilesystemIOError::from_io_error(
-                            std::io::Error::other(te.error.to_string()),
-                        )),
-                    })
-                    .collect()
-            }) // very inefficient but quite frankly the error path is very cold
+            .map(|guard| guard.iter().cloned().collect()) // very inefficient but quite frankly the error path is very cold
     }
 
     /// Returns the shared traversal error storage when error collection is enabled.

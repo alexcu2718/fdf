@@ -1615,7 +1615,7 @@ impl DirEntry {
             path_ref = stripped;
         }
 
-        let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::NulError)?;
+        let cstring = std::ffi::CString::new(path_ref).map_err(DirEntryError::from)?;
 
         let file_name_index = Self::_file_name_index(path_ref);
         // extract information from successful statg

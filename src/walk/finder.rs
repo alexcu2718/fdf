@@ -284,6 +284,20 @@ impl Finder {
             errors.push(TraversalError { dir, error })
         }
     }
+
+    /**
+    Checks if an entry should be ignored based on path matching and gitignore rules.
+    */
+    #[inline]
+    fn should_ignore_entry(
+        &self,
+        entry: &DirEntry,
+        ignore_ctx: Option<&IgnoreContext>,
+        traverse: bool,
+    ) -> bool {
+        self.matches_ignore_path(entry) || self.is_gitignored(entry, ignore_ctx, traverse)
+    }
+
     /**
     Traverse the directory tree starting from the root and return an iterator for the found entries.
 
@@ -654,8 +668,8 @@ impl Finder {
     ) {
         let (dir, parent_ignore_ctx): (DirEntry, _) = work_item.get_context(); // ensure types stay in right order.
         debug_assert!(dir.is_traversable(), "dev test");
-        if self.matches_ignore_path(&dir)
-            || self.is_gitignored(&dir, parent_ignore_ctx.as_deref(), true)
+
+        if self.should_ignore_entry(&dir, parent_ignore_ctx.as_deref(), true)
             || !self.directory_or_symlink_filter(&dir)
         // Check for same filesystem/recursive symlinks etc, if so, return to avoid a loop/unnecessary info
         {
@@ -669,53 +683,52 @@ impl Finder {
         // On Linux/Android/Solaris/Illumos/etc, use getdents
         // on MacOS/FreeBSD, use getdirentries(64)
         // Otherwise use readdir
-        match read_direntries!(dir) {
-            Ok(entries) => {
-                // SAFETY: `fd` stays valid for the loop body since `entries` (and its owned fd) outlives it;
-                // constructing the `BorrowedFd` this way (instead of borrowing `entries.fd` directly) avoids
-                // holding a borrow of `entries` across the `for entry in entries` move below.
-                let fd = unsafe { BorrowedFd::borrow_raw(entries.rawfd()) };
-                let opt_fd = Some(fd); //dirty hack, need to revisit my approach
-
-                // I need to figure out how to use 'openat' style on opening queued file descriptors
-                // Unfortunately queueing file descriptors will fail once file descriptors go past ulimit
-                // but they won't for consequent file descriptors
-                // I can see *why* the std library did it the way it did, I should research how walkdir handles it.
-                let current_ignore_ctx = Self::build_ignore_context(&dir, fd, parent_ignore_ctx);
-
-                for entry in entries {
-                    if !self.keep_hidden(&entry)
-                        || self.matches_ignore_path(&entry)
-                        || self.is_gitignored(
-                            &entry,
-                            current_ignore_ctx.as_deref(),
-                            self.should_traverse(&entry, opt_fd),
-                        )
-                    {
-                        continue;
-                    }
-
-                    if self.should_traverse(&entry, opt_fd) {
-                        if !ctx.enqueue_dir(entry, current_ignore_ctx.as_ref()) {
-                            return;
-                        }
-                        continue;
-                    }
-
-                    if self.file_filter(&entry, opt_fd) && sender.send(entry).is_err() {
-                        ctx.signal_shutdown();
-                        return;
-                    }
-                }
-
-                // Checking if we should send directories
-                if should_send_dir_or_symlink && sender.send(dir).is_err() {
-                    ctx.signal_shutdown();
-                }
+        let entries = match read_direntries!(dir) {
+            Ok(iter) => iter,
+            Err(err) => {
+                // indicated with a cold annotation
+                self.record_error(dir, err);
+                return;
             }
-            Err(error) => {
-                self.record_error(dir, error);
+        };
+
+        // SAFETY: `fd` stays valid for the loop body since `entries` (and its owned fd) outlives it;
+        // constructing the `BorrowedFd` this way (instead of borrowing `entries.fd` directly) avoids
+        // holding a borrow of `entries` across the `for entry in entries` move below.
+        let fd = unsafe { BorrowedFd::borrow_raw(entries.rawfd()) };
+        let opt_fd = Some(fd); //dirty hack, need to revisit my approach
+
+        // I need to figure out how to use 'openat' style on opening queued file descriptors
+        // Unfortunately queueing file descriptors will fail once file descriptors go past ulimit
+        let current_ignore_ctx = Self::build_ignore_context(&dir, fd, parent_ignore_ctx);
+
+        for entry in entries {
+            if !self.keep_hidden(&entry)
+                || self.should_ignore_entry(
+                    &entry,
+                    current_ignore_ctx.as_deref(),
+                    self.should_traverse(&entry, opt_fd),
+                )
+            {
+                continue;
             }
+
+            if self.should_traverse(&entry, opt_fd) {
+                if !ctx.enqueue_dir(entry, current_ignore_ctx.as_ref()) {
+                    return;
+                }
+                continue;
+            }
+
+            if self.file_filter(&entry, opt_fd) && sender.send(entry).is_err() {
+                ctx.signal_shutdown();
+                return;
+            }
+        }
+
+        // Checking if we should send directories
+        if should_send_dir_or_symlink && sender.send(dir).is_err() {
+            ctx.signal_shutdown();
         }
     }
 }

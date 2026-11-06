@@ -635,7 +635,9 @@ impl DirEntry {
         // On Linux it's 24, on solaris it's 24/32
         // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
         //on openbsd it's 16, ugh, TODO think
-
+        #[cfg(target_pointer_width = "32")]
+        compile_error!("the below code is broke");
+        // These were hand derived, it was painful.
         const MINIMUM_DIRENT_SIZE: isize = if cfg!(any(
             target_os = "solaris",
             target_os = "illumos",

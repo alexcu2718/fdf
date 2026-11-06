@@ -408,14 +408,14 @@ impl DirEntry {
     #[inline]
     pub(crate) fn open_at(parent_fd: BorrowedFd, child_name: &CStr) -> Result<OwnedFd> {
         const FLAGS: c_int = O_CLOEXEC | O_DIRECTORY | O_NONBLOCK | O_RDONLY;
+
+        let rawfd = parent_fd.as_raw_fd();
         #[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
         // SAFETY: child_name is null-terminated; parent_fd is a valid open directory fd.
-        let fd = unsafe { libc::openat(parent_fd.as_raw_fd(), child_name.as_ptr(), FLAGS) };
+        let fd = unsafe { libc::openat(rawfd, child_name.as_ptr(), FLAGS) };
         #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
         // SAFETY: as above
-        let fd = unsafe {
-            crate::util::openat_nocancel(parent_fd.as_raw_fd(), child_name.as_ptr(), FLAGS)
-        };
+        let fd = unsafe { crate::util::openat_nocancel(rawfd, child_name.as_ptr(), FLAGS) };
         if fd < 0 {
             return_os_error!()
         }
@@ -548,7 +548,7 @@ impl DirEntry {
         // to allocate the vector in getdents, finding empty files is a good use case so even though it's niche
         // it would have appeal to people. Not too hard to implement.
         // (This code is verbose but it's an essential operation so it makes sense to optimise it)
-        match self.file_type {
+        match self.file_type() {
             FileType::RegularFile => self.file_size().is_ok_and(|size| size == 0),
             FileType::Directory => {
                 #[cfg(has_faster_readdir)]
@@ -626,24 +626,25 @@ impl DirEntry {
     #[inline]
     #[cfg(has_faster_readdir)]
     /// Specialisation for empty checks on linux/android/netbsd/etc (avoid a heap alloc)
-    // could add mac/freebsd here? TODO
     pub(crate) fn is_empty_getdents(&self) -> bool {
         use crate::fs::AlignedBuffer;
         const BUF_SIZE: usize = 512; //pretty arbitrary.
-        const DENT_SIZE: isize = core::mem::offset_of!(crate::dirent64, d_name)
-            .next_multiple_of(8)
-            .cast_signed(); // ALWAYS THE LAST ELEMENT, FIND MIN STRUCT SIZE.
+        const DENT_SIZE: usize = core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8);
+        // ALWAYS THE LAST ELEMENT, FIND MIN STRUCT SIZE.
         const { assert!(DENT_SIZE >= 16 && DENT_SIZE <= 32, "showing below works") };
         // On Linux it's 24, on solaris it's 24/32
         // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
         //on openbsd it's 16, ugh, TODO think
 
-        const MINIMUM_DIRENT_SIZE: isize =
-            if cfg!(any(target_os = "solaris", target_os = "illumos")) {
-                32
-            } else {
-                DENT_SIZE
-            };
+        const MINIMUM_DIRENT_SIZE: isize = if cfg!(any(
+            target_os = "solaris",
+            target_os = "illumos",
+            target_os = "macos"
+        )) {
+            32
+        } else {
+            DENT_SIZE.cast_signed()
+        };
 
         debug_assert!(
             self.is_dir() || self.is_symlink(),
@@ -1296,7 +1297,7 @@ impl DirEntry {
     #[inline]
     #[must_use]
     pub fn is_traversable(&self) -> bool {
-        match self.file_type {
+        match self.file_type() {
             FileType::Directory => true,
             FileType::Symlink => self.check_symlink_traversablility(), // we essentially use a cache to avoid recalling this for subsequent calls, see below.
             _ => false,

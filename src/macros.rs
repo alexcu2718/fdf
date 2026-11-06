@@ -52,33 +52,13 @@ macro_rules! access_stat {
 */
 macro_rules! read_direntries {
     ($dir:expr) => {{
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "illumos",
-            target_os = "solaris",
-            target_os = "macos",
-            target_os = "freebsd"
-        ))]
+        #[cfg(has_faster_readdir)]
         {
             // additionally, readdir internally calls stat on each file, which is expensive.
             $dir.getdents()
         }
 
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "illumos",
-            target_os = "solaris",
-            target_os = "macos",
-            target_os = "freebsd"
-        )))]
+        #[cfg(not(has_faster_readdir))]
         {
             $dir.readdir()
         }
@@ -96,32 +76,12 @@ macro_rules! read_direntries {
 */
 macro_rules! read_direntries_from_fd {
     ($dir:expr, $fd:expr) => {{
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "illumos",
-            target_os = "solaris",
-            target_os = "macos",
-            target_os = "freebsd"
-        ))]
+        #[cfg(has_faster_readdir)]
         {
             Ok::<_, $crate::DirEntryError>($dir.getdents_from_fd($fd))
         }
 
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "openbsd",
-            target_os = "netbsd",
-            target_os = "illumos",
-            target_os = "solaris",
-            target_os = "macos",
-            target_os = "freebsd"
-        )))]
+        #[cfg(not(has_faster_readdir))]
         {
             Ok::<_, $crate::DirEntryError>($dir.readdir_from_fd($fd))
         }
@@ -373,12 +333,12 @@ macro_rules! stat_syscall {
             // SAFETY: If the return code is 0, we know the stat structure has been properly initialised
             Ok(unsafe { stat_buf.assume_init() })
         } else {
-            Err(std::io::Error::last_os_error().into())
+            Err(::std::io::Error::last_os_error().into())
         }
     }};
     // For fstatat with flags - returns FileType directly (kinda like an internal black magic tool for me to save writing so much duplicate code)
     ($syscall:path, $fd:expr, $path:expr, $flags:expr,DTYPE) => {{
-        let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
+        let mut stat_buf = ::core::mem::MaybeUninit::<::libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
         let res = unsafe { $syscall($fd, $path, stat_buf.as_mut_ptr(), $flags) };

@@ -423,8 +423,8 @@ impl Finder {
         self,
     ) -> core::result::Result<PrinterBuilder<impl Iterator<Item = DirEntry>>, SearchConfigError>
     {
-        let errors = self.errors.clone();
-        Ok(PrinterBuilder::new(self.traverse()?).errors(errors))
+        let er = self.errors.clone();
+        self.traverse().map(|it| PrinterBuilder::new(it).errors(er))
     }
 
     /// Determines if a directory should be sent through the channel

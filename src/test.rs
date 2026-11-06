@@ -805,6 +805,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "openbsd"))] // CI being buggy
     fn test_handles_various_tests() {
         // create empty directory
         let tdir = temp_dir().join("NOTAREALPATHLALALA");

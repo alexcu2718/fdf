@@ -94,7 +94,8 @@ impl<T> Unique<T> {
     #[inline(always)]
     #[must_use]
     pub fn is_aligned_to<U>(&self) -> bool {
-        self.cast::<U>().is_aligned()
+        // needs to make nonnull due to ownership bleh.
+        self.as_non_null().cast::<U>().is_aligned()
     }
 }
 
@@ -117,7 +118,7 @@ impl<T: ?Sized> Unique<T> {
     /// # Safety
     ///
     /// Same requirements as [`NonNull::byte_add`].
-    pub const unsafe fn byte_add(&self, amt: usize) -> Self {
+    pub const unsafe fn byte_add(self, amt: usize) -> Self {
         // SAFETY: same requirements as normal byte add, checked by caller.
         unsafe { Self::from_non_null(self.as_non_null().byte_add(amt)) }
     }
@@ -129,7 +130,7 @@ impl<T: ?Sized> Unique<T> {
     /// # Safety
     ///
     /// Same requirements as [`NonNull::byte_sub`].
-    pub const unsafe fn byte_sub(&self, amt: usize) -> Self {
+    pub const unsafe fn byte_sub(self, amt: usize) -> Self {
         // SAFETY: same requirements as normal byte_sub, checked by caller
         unsafe { Self::from_non_null(self.as_non_null().byte_sub(amt)) }
     }
@@ -195,10 +196,10 @@ impl<T: ?Sized> Unique<T> {
         unsafe { &*self.as_ptr() }
     }
 
-    /// Casts to a pointer of another type.
+    /// Casts to a pointer of another type and passes ownership (IMPORTANT!)
     #[inline(always)]
     #[must_use]
-    pub const fn cast<U>(&self) -> Unique<U> {
+    pub const fn cast<U>(self) -> Unique<U> {
         // the given pointer to not be null.
         // Since we are passing self as a pointer, it cannot be null.
         Unique::from_non_null(self.as_non_null().cast())

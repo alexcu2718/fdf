@@ -72,7 +72,7 @@ unsafe impl<T: Sync + ?Sized> Sync for Unique<T> {}
 impl<T> Unique<T> {
     #[inline(always)]
     #[must_use]
-    pub fn is_aligned(self) -> bool {
+    pub fn is_aligned(&self) -> bool {
         self.as_non_null().is_aligned()
     }
 
@@ -93,8 +93,9 @@ impl<T> Unique<T> {
 
     #[inline(always)]
     #[must_use]
-    pub fn is_aligned_to<U>(self) -> bool {
-        self.cast::<U>().is_aligned()
+    pub fn is_aligned_to<U>(&self) -> bool {
+        // needs to make nonnull due to ownership bleh.
+        self.as_non_null().cast::<U>().is_aligned()
     }
 }
 
@@ -146,7 +147,7 @@ impl<T: ?Sized> Unique<T> {
 
     #[inline(always)]
     #[must_use]
-    pub fn addr(self) -> NonZeroUsize {
+    pub fn addr(&self) -> NonZeroUsize {
         self.as_non_null().addr()
     }
 
@@ -163,13 +164,13 @@ impl<T: ?Sized> Unique<T> {
     /// Acquires the underlying `*const` pointer.
     #[inline(always)]
     #[must_use]
-    pub const fn as_ptr(self) -> *const T {
+    pub const fn as_ptr(&self) -> *const T {
         self.0.as_ptr()
     }
 
     #[inline(always)]
     #[must_use]
-    pub const fn as_non_null(self) -> NonNull<T> {
+    pub const fn as_non_null(&self) -> NonNull<T> {
         self.0
     }
 
@@ -189,13 +190,13 @@ impl<T: ?Sized> Unique<T> {
     /// requirements for a reference.
     #[inline(always)]
     #[must_use]
-    pub const unsafe fn as_ref<'ptr>(self) -> &'ptr T {
+    pub const unsafe fn as_ref<'ptr>(&self) -> &'ptr T {
         // SAFETY: the caller must guarantee that `self` meets all the
         // requirements for a reference.
         unsafe { &*self.as_ptr() }
     }
 
-    /// Casts to a pointer of another type.
+    /// Casts to a pointer of another type and passes ownership (IMPORTANT!)
     #[inline(always)]
     #[must_use]
     pub const fn cast<U>(self) -> Unique<U> {
@@ -204,15 +205,17 @@ impl<T: ?Sized> Unique<T> {
         Unique::from_non_null(self.as_non_null().cast())
     }
 }
-#[expect(clippy::expl_impl_clone_on_copy, reason = "intentional")]
-impl Clone for Unique<dirent64> {
-    #[inline(always)]
-    fn clone(&self) -> Self {
-        *self
-    }
-}
+//no copy/clone semantics!
 
-impl Copy for Unique<dirent64> {}
+// #[expect(clippy::expl_impl_clone_on_copy, reason = "intentional")]
+// impl Clone for Unique<dirent64> {
+//     #[inline(always)]
+//     fn clone(&self) -> Self {
+//         *self
+//     }
+// }
+
+// impl Copy for Unique<dirent64> {}
 
 impl<T: ?Sized> fmt::Debug for Unique<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -253,7 +256,7 @@ impl Unique<dirent64> {
     /// Returns the inode of the `dirent64`, returns 0 if `d_ino` is not a struct member on your OS.
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_ino(self) -> u64 {
+    pub const unsafe fn d_ino(&self) -> u64 {
         // SAFETY: caller must maintain the invariant
 
         #[cfg(all(
@@ -300,7 +303,7 @@ impl Unique<dirent64> {
     ///
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_type(self) -> u8 {
+    pub const unsafe fn d_type(&self) -> u8 {
         #[cfg(has_d_type)]
         // SAFETY: caller must maintain the invariant
         unsafe {
@@ -317,7 +320,7 @@ impl Unique<dirent64> {
     /// Returns the `d_namlen` if the member exists on your system
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_namlen(self) -> usize {
+    pub const unsafe fn d_namlen(&self) -> usize {
         // SAFETY: caller must maintain the invariant
         unsafe { (*self.as_ptr()).d_namlen as _ }
     }
@@ -331,7 +334,7 @@ impl Unique<dirent64> {
     /// Stub present only to give a clear diagnostic; this platform has no `d_namlen` field.
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_namlen(self) -> usize {
+    pub const unsafe fn d_namlen(&self) -> usize {
         // SAFETY: caller must maintain the invariant
         unsafe { self.name_length() }
     }
@@ -341,7 +344,7 @@ impl Unique<dirent64> {
     /// Returns a slice reference to the `d_name`, not including null terminator.
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_name_slice<'pointer>(self) -> &'pointer [u8] {
+    pub const unsafe fn d_name_slice<'pointer>(&self) -> &'pointer [u8] {
         // SAFETY: Caller must not invalidate the invariant.
         unsafe { from_raw_parts(self.d_name().cast(), self.name_length()) }
     }
@@ -351,7 +354,7 @@ impl Unique<dirent64> {
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_name_cstr<'pointer>(self) -> &'pointer CStr {
+    pub const unsafe fn d_name_cstr<'pointer>(&self) -> &'pointer CStr {
         // SAFETY: caller must ensure the invariants
         let slice: &[u8] = unsafe { from_raw_parts(self.d_name().cast(), self.name_length() + 1) }; // add  1 to include terminal
 
@@ -365,7 +368,7 @@ impl Unique<dirent64> {
     /// Returns the `d_reclen` member as a usize.
     ///  # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_reclen(self) -> usize {
+    pub const unsafe fn d_reclen(&self) -> usize {
         //SAFETY: TRIVIALLY VALID BY CONSTRUCTION
 
         unsafe { (*self.as_ptr()).d_reclen as _ }
@@ -384,7 +387,7 @@ impl Unique<dirent64> {
      # Safety
     The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
     */
-    pub const unsafe fn d_name(self) -> *const c_char {
+    pub const unsafe fn d_name(&self) -> *const c_char {
         // SAFETY: caller must maintain the invariant
         unsafe { (&raw const (*self.as_ptr()).d_name).cast() }
     }
@@ -394,7 +397,7 @@ impl Unique<dirent64> {
     /// Returns the length of the `d_name` but, like strlen, it doesn't include the null terminator.
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn name_length(self) -> usize {
+    pub const unsafe fn name_length(&self) -> usize {
         // SAFETY: caller must maintain the invariant
         unsafe { crate::util::dirent_name_length(self.as_ptr()) }
     }

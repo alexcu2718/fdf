@@ -1,12 +1,13 @@
 mod glob;
 mod memchr_derivations;
+mod owneddir;
 mod printer;
 mod unique;
 mod utils;
 pub use glob::{Error, glob_to_regex};
 pub use memchr_derivations::memrchr;
+pub use owneddir::OwnedDir;
 pub use unique::Unique;
-
 #[cfg(any(
     target_os = "linux",
     target_os = "android",

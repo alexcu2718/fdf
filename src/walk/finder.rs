@@ -695,7 +695,7 @@ impl Finder {
         // SAFETY: `fd` stays valid for the loop body since `entries` (and its owned fd) outlives it;
         // constructing the `BorrowedFd` this way (instead of borrowing `entries.fd` directly) avoids
         // holding a borrow of `entries` across the `for entry in entries` move below.
-        let fd = unsafe { BorrowedFd::borrow_raw(entries.rawfd()) };
+        let fd = unsafe { BorrowedFd::borrow_raw(entries.as_raw_fd()) };
         let opt_fd = Some(fd); //dirty hack, need to revisit my approach
 
         // I need to figure out how to use 'openat' style on opening queued file descriptors

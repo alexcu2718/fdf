@@ -1,15 +1,15 @@
 use crate::fs::{DirEntry, FileType, Result};
+use crate::util::OwnedDir;
 use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::hint::assert_unchecked;
-#[allow(unused)]
-use core::mem::{ManuallyDrop, MaybeUninit};
-use core::ptr::NonNull;
-use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
-use std::os::fd::RawFd;
-#[allow(unused)]
-use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
+
+#[cfg(has_faster_readdir)]
+use crate::fs::SyscallBuffer;
+use core::mem::MaybeUninit;
+use libc::{AT_SYMLINK_NOFOLLOW, DIR, fstatat};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 
 /**
  POSIX-compliant directory iterator using libc's readdir
@@ -21,18 +21,14 @@ use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
 */
 #[derive(Debug)]
 pub struct ReadDir {
-    /// Raw directory pointer from libc's `opendir() wrapped in a nonnull`
-    pub(crate) dir: NonNull<DIR>,
+    /// Raw directory pointer from libc's `opendir()` wrapped in a new type.
+    pub(crate) fd: OwnedDir, //call it fd for macro code
     /// Buffer storing the full directory path for constructing entry paths
     pub(crate) path_buffer: Vec<MaybeUninit<u8>>,
     /// Index into `path_buffer` where filenames start (avoids recalculating)
     pub(crate) file_name_index: usize,
     /// Depth of this directory relative to traversal root
     pub(crate) parent_depth: u32,
-    /// The file descriptor of this directory, for use in calls like openat/statat etc.
-    pub(crate) fd: ManuallyDrop<OwnedFd>, //We need ManuallyDrop because the `DIR` owns the descriptor!
-                                          // We never close it though, just we want it's deref traits to match the `GetDents`
-                                          // There's probably a better way but I'm gonna ignore that for now.
 }
 
 impl ReadDir {
@@ -71,12 +67,17 @@ impl ReadDir {
     #[inline]
     pub unsafe fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
         // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
-        let dirent_ptr = unsafe { readdir64(self.dir.as_ptr()) };
+        let dirent_ptr = unsafe { readdir64(self.as_ptr()) };
 
         // readdir returns null at end of directory or on error
         Unique::new(dirent_ptr)
     }
 
+    #[inline]
+    /// Returns the `DIR` pointer for next iteration.
+    pub const fn as_ptr(&mut self) -> *mut DIR {
+        self.fd.as_ptr()
+    }
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
         let fd = dir_path.open()?; //read file descriptor
@@ -84,17 +85,11 @@ impl ReadDir {
         // Mutate the buffer to contain the full path, then add a null terminator and record the new length
         // We use this length to index to get the filename (store full path -> index to get filename)
 
-        //SAFETY: No safety required.
-        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.as_raw_fd()) }) else {
-            return_os_error!()
-        };
-
         Ok(Self {
-            dir,
+            fd: OwnedDir::from_owned_fd(fd)?,
             path_buffer,
             file_name_index,
             parent_depth: dir_path.depth, //inherit depth
-            fd: ManuallyDrop::new(fd),
         })
     }
 
@@ -105,48 +100,14 @@ impl ReadDir {
     #[inline]
     pub(crate) fn from_fd(fd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
         let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
-        // SAFETY: caller provides a valid directory fd; fdopendir takes ownership.
-        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.as_raw_fd()) }) else {
-            return_os_error!()
-        };
-
+        // fdopendir takes ownership.
         Ok(Self {
-            dir,
+            fd: OwnedDir::from_owned_fd(fd)?,
             path_buffer,
             file_name_index,
             parent_depth: dir_path.depth,
-            fd: ManuallyDrop::new(fd),
         })
     }
-}
-
-impl Drop for ReadDir {
-    /**
-    Closes the directory file descriptor to prevent resource leaks.
-
-
-    File descriptors are limited system resources, so proper cleanup
-    is essential.
-
-    We need to drop here but not in `Getdents` because the DIR owns the file descriptor (and associated heap alloc etc).
-    */
-    #[inline]
-    fn drop(&mut self) {
-        // SAFETY: only closing HERE
-        #[cfg(not(debug_assertions))]
-        unsafe {
-            closedir(self.dir.as_ptr())
-        };
-        #[cfg(debug_assertions)]
-        assert!(
-            // SAFETY: as above
-            unsafe { closedir(self.dir.as_ptr()) } == 0,
-            "Fd was not closed in readdir!"
-        );
-    }
-    // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
-    // This is because it's UB to close via file descriptor according to GNU docs, if that file descriptor
-    // was obtained from the `dirfd()`
 }
 
 /**
@@ -319,7 +280,7 @@ pub struct GetDents {
     pub(crate) fd: OwnedFd,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// typically using the best calculated  buffer sizes, optimised for typical directory traversal (derived from syscall tracing)
-    pub(crate) syscall_buffer: crate::fs::SyscallBuffer,
+    pub(crate) syscall_buffer: SyscallBuffer,
     /// buffer for constructing full entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     pub(crate) path_buffer: Vec<MaybeUninit<u8>>,
@@ -400,7 +361,7 @@ impl GetDents {
 
     /// A constant representing the maximum size of the internal Stack based buffer on this platform
     /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
-    pub const BUFFER_SIZE: usize = crate::fs::SyscallBuffer::BUFFER_SIZE;
+    pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
 
     #[inline]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
@@ -578,7 +539,7 @@ impl GetDents {
 
         Ok(Self {
             fd,
-            syscall_buffer: crate::fs::SyscallBuffer::new(),
+            syscall_buffer: SyscallBuffer::new(),
             path_buffer,
             file_name_index,
             parent_depth: dir.depth,
@@ -602,7 +563,7 @@ impl GetDents {
 
         Self {
             fd,
-            syscall_buffer: crate::fs::SyscallBuffer::new(),
+            syscall_buffer: SyscallBuffer::new(),
             path_buffer,
             file_name_index,
             parent_depth: dir.depth,
@@ -618,6 +579,20 @@ impl GetDents {
 // Cheap macro to avoid duplicate code maintenance. (Keep the documentation continuous)
 macro_rules! impl_iterator_public_methods {
     ($type:ty) => {
+        impl AsRawFd for $type {
+            #[inline]
+            fn as_raw_fd(&self) -> RawFd {
+                self.fd.as_raw_fd()
+            }
+        }
+
+        impl AsFd for $type {
+            #[inline]
+            fn as_fd(&self) -> BorrowedFd<'_> {
+                self.fd.as_fd()
+            }
+        }
+
         impl Iterator for $type {
             type Item = $crate::fs::DirEntry;
 
@@ -635,26 +610,6 @@ macro_rules! impl_iterator_public_methods {
 
         impl $type {
             /**
-            Returns the file descriptor for this directory.
-
-            Useful for operations that need the raw directory FD.
-
-            */
-            #[inline]
-            #[must_use]
-            pub fn dirfd(&self) -> ::std::os::fd::BorrowedFd<'_> {
-                self.fd.as_fd()
-            }
-
-            #[inline]
-            #[must_use]
-            /// Grab the raw `Fd` directly, usually to call [`std::os::fd::BorrowedFd::borrow_raw`]
-            pub fn rawfd(&self) -> ::std::os::fd::RawFd {
-                self.fd.as_raw_fd()
-            }
-
-            #[inline]
-            /**
              Constructs a `DirEntry` from a directory entry pointer.
 
              This method converts a raw `dirent64` pointer into a safe `DirEntry`
@@ -665,6 +620,7 @@ macro_rules! impl_iterator_public_methods {
              * `drnt` - A `Unique` pointer to a valid `dirent64` structure
 
             */
+            #[inline]
             pub fn construct_direntry(
                 &mut self,
                 drnt: $crate::Unique<$crate::dirent64>,
@@ -699,7 +655,7 @@ macro_rules! impl_dirent_constructor {
 
             #[inline]
             fn raw_fd(&self) -> ::std::os::fd::RawFd {
-                self.fd.as_raw_fd()
+                self.as_fd().as_raw_fd()
             }
 
             #[inline]

@@ -2,9 +2,10 @@ mod buffer;
 mod dir_entry;
 mod file_type;
 mod iter;
+mod owned_dir;
 mod types;
-
 pub use buffer::{AlignedBuffer, ValueType};
+pub use owned_dir::OwnedDir;
 
 #[cfg(target_os = "android")]
 pub(crate) const AT_EACCESS: libc::c_int = 0; // android being weird, again....

@@ -1,5 +1,4 @@
-use crate::fs::{DirEntry, FileType, Result};
-use crate::util::OwnedDir;
+use crate::fs::{DirEntry, FileType, OwnedDir, Result};
 use crate::{Unique, dirent64, readdir64};
 use core::cell::Cell;
 use core::ffi::CStr;
@@ -121,7 +120,7 @@ impl ReadDir {
  file name positions, and managing directory traversal depth.
 
 */
-pub(crate) trait DirentConstructor {
+pub(crate) trait DirentConstructor: AsRawFd {
     /// Returns a mutable reference to the path buffer used for constructing full paths
     fn path_buffer(&mut self) -> &mut Vec<MaybeUninit<u8>>;
     /// Returns the current index in the path buffer where the filename should be appended
@@ -134,8 +133,6 @@ pub(crate) trait DirentConstructor {
     fn parent_depth(&self) -> u32;
     /// Total allocated size of the internal vector that holds the path buffer
     fn allocated_size(&self) -> usize;
-    /// Returns the `RawFd`
-    fn raw_fd(&self) -> RawFd;
 
     #[inline]
     /// Constructs a `DirEntry` from a raw directory entry pointer
@@ -217,7 +214,7 @@ pub(crate) trait DirentConstructor {
         let stat_call = || {
             stat_syscall!(
                 fstatat,
-                self.raw_fd(), //borrow before mutably borrowing the path buffer
+                self.as_raw_fd(), //borrow before mutably borrowing the path buffer
                 drnt.d_name(),
                 AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
                 DTYPE
@@ -654,11 +651,6 @@ macro_rules! impl_dirent_constructor {
             #[inline]
             fn file_index(&self) -> usize {
                 self.file_name_index
-            }
-
-            #[inline]
-            fn raw_fd(&self) -> ::std::os::fd::RawFd {
-                self.as_fd().as_raw_fd()
             }
 
             #[inline]

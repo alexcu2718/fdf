@@ -5,6 +5,9 @@ use core::cell::Cell;
 use core::ffi::CStr;
 use core::hint::assert_unchecked;
 
+#[allow(unused)]
+use core::ptr::NonNull;
+
 #[cfg(has_faster_readdir)]
 use crate::fs::SyscallBuffer;
 use core::mem::MaybeUninit;

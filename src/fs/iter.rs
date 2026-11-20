@@ -1,14 +1,10 @@
+#[cfg(has_faster_readdir)]
+use crate::fs::SyscallBuffer;
 use crate::fs::{DirEntry, FileType, OwnedDir, Result};
 use crate::{Unique, dirent64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::hint::assert_unchecked;
-
-#[allow(unused)]
-use core::ptr::NonNull;
-
-#[cfg(has_faster_readdir)]
-use crate::fs::SyscallBuffer;
 use core::mem::MaybeUninit;
 use libc::{AT_SYMLINK_NOFOLLOW, fstatat};
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
@@ -378,10 +374,10 @@ impl GetDents {
         check explanation below
         Alignment of 8 => Alignment of 4 guaranteed invariant. */
         // SAFETY: see above
-        let last_four_bytes: NonNull<u32> = unsafe {
-            NonNull::from_mut(&mut self.syscall_buffer)
+        let last_four_bytes = unsafe {
+            core::ptr::NonNull::from_mut(&mut self.syscall_buffer)
                 .byte_add(const { Self::BUFFER_SIZE - 4 })
-                .cast()
+                .cast::<u32>()
         };
 
         #[cfg(has_eof_trick)]

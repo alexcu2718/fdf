@@ -6,7 +6,6 @@ mod utils;
 pub use glob::{Error, glob_to_regex};
 pub use memchr_derivations::memrchr;
 pub use unique::Unique;
-
 #[cfg(any(
     target_os = "linux",
     target_os = "android",

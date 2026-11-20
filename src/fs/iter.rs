@@ -1,15 +1,13 @@
-use crate::fs::{DirEntry, FileType, Result};
-use crate::{Unique, dirent64, readdir64};
+#[cfg(has_faster_readdir)]
+use crate::fs::SyscallBuffer;
+use crate::fs::{DirEntry, FileType, OwnedDir, Result};
+use crate::{Unique, dirent64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::hint::assert_unchecked;
-#[allow(unused)]
-use core::mem::{ManuallyDrop, MaybeUninit};
-use core::ptr::NonNull;
-use libc::{AT_SYMLINK_NOFOLLOW, DIR, closedir, fstatat};
-use std::os::fd::RawFd;
-#[allow(unused)]
-use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
+use core::mem::MaybeUninit;
+use libc::{AT_SYMLINK_NOFOLLOW, fstatat};
+use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
 /**
  POSIX-compliant directory iterator using libc's readdir
@@ -21,18 +19,12 @@ use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
 */
 #[derive(Debug)]
 pub struct ReadDir {
-    /// Raw directory pointer from libc's `opendir() wrapped in a nonnull`
-    pub(crate) dir: NonNull<DIR>,
-    /// Buffer storing the full directory path for constructing entry paths
-    pub(crate) path_buffer: Vec<MaybeUninit<u8>>,
-    /// Index into `path_buffer` where filenames start (avoids recalculating)
-    pub(crate) file_name_index: usize,
+    /// Directory pointer from libc's `opendir()` wrapped in a new type with custom destructor.
+    fd: OwnedDir, //call it fd for macro code
+    /// Bookmarked base-path state (buffer + filename index) used to construct entry paths
+    path: PathBuffer,
     /// Depth of this directory relative to traversal root
-    pub(crate) parent_depth: u32,
-    /// The file descriptor of this directory, for use in calls like openat/statat etc.
-    pub(crate) fd: ManuallyDrop<OwnedFd>, //We need ManuallyDrop because the `DIR` owns the descriptor!
-                                          // We never close it though, just we want it's deref traits to match the `GetDents`
-                                          // There's probably a better way but I'm gonna ignore that for now.
+    parent_depth: u32,
 }
 
 impl ReadDir {
@@ -70,31 +62,20 @@ impl ReadDir {
     */
     #[inline]
     pub unsafe fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
-        // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
-        let dirent_ptr = unsafe { readdir64(self.dir.as_ptr()) };
-
-        // readdir returns null at end of directory or on error
-        Unique::new(dirent_ptr)
+        self.fd.next_pointer()
     }
 
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        let fd = dir_path.open()?; //read file descriptor
-        let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
+        let fd = OwnedDir::from_owned_fd(dir_path.open()?)?; //read file descriptor
         // Mutate the buffer to contain the full path, then add a null terminator and record the new length
         // We use this length to index to get the filename (store full path -> index to get filename)
-
-        //SAFETY: No safety required.
-        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.as_raw_fd()) }) else {
-            return_os_error!()
-        };
+        let path = PathBuffer::new(dir_path);
 
         Ok(Self {
-            dir,
-            path_buffer,
-            file_name_index,
+            fd,
+            path,
             parent_depth: dir_path.depth, //inherit depth
-            fd: ManuallyDrop::new(fd),
         })
     }
 
@@ -103,98 +84,39 @@ impl ReadDir {
     /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
     /// full-path resolution for the child directory.
     #[inline]
-    pub(crate) fn from_fd(fd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
-        let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
-        // SAFETY: caller provides a valid directory fd; fdopendir takes ownership.
-        let Some(dir) = NonNull::new(unsafe { libc::fdopendir(fd.as_raw_fd()) }) else {
-            return_os_error!()
-        };
-
+    pub(crate) fn from_fd(dfd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
+        let fd = OwnedDir::from_owned_fd(dfd)?;
+        let path = PathBuffer::new(dir_path);
+        // fdopendir takes ownership.
         Ok(Self {
-            dir,
-            path_buffer,
-            file_name_index,
+            fd,
+            path,
             parent_depth: dir_path.depth,
-            fd: ManuallyDrop::new(fd),
         })
     }
 }
 
-impl Drop for ReadDir {
-    /**
-    Closes the directory file descriptor to prevent resource leaks.
+/**
+ Bookmarked path-construction state shared by every directory iterator.
 
-
-    File descriptors are limited system resources, so proper cleanup
-    is essential.
-
-    We need to drop here but not in `Getdents` because the DIR owns the file descriptor (and associated heap alloc etc).
-    */
-    #[inline]
-    fn drop(&mut self) {
-        // SAFETY: only closing HERE
-        #[cfg(not(debug_assertions))]
-        unsafe {
-            closedir(self.dir.as_ptr())
-        };
-        #[cfg(debug_assertions)]
-        assert!(
-            // SAFETY: as above
-            unsafe { closedir(self.dir.as_ptr()) } == 0,
-            "Fd was not closed in readdir!"
-        );
-    }
-    // Basically fdsan shouts about a different object owning the fd, so we close via closedir.
-    // This is because it's UB to close via file descriptor according to GNU docs, if that file descriptor
-    // was obtained from the `dirfd()`
+ Combines the base-path buffer with the index marking where filenames start,
+ so the two always stay in sync.
+*/
+#[derive(Debug)]
+struct PathBuffer {
+    buffer: Vec<MaybeUninit<u8>>,
+    /// Index into `buffer` where filenames start (avoids recalculating)
+    file_index: usize,
 }
 
-/**
-  Internal trait for constructing directory entries during iteration
-
- This trait provides the necessary components to construct `DirEntry` objects
- from raw `dirent64` structures while maintaining path buffer state, tracking
- file name positions, and managing directory traversal depth.
-
-*/
-pub(crate) trait DirentConstructor {
-    /// Returns a mutable reference to the path buffer used for constructing full paths
-    fn path_buffer(&mut self) -> &mut Vec<MaybeUninit<u8>>;
-    /// Returns the current index in the path buffer where the filename should be appended
-    ///
-    /// This represents the length of the base directory path before adding the current filename.
-    fn file_index(&self) -> usize; //modify name a bit so we dont get collisions.
-    /// Returns the depth of the parent directory in the traversal hierarchy
-    ///
-    /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
-    fn parent_depth(&self) -> u32;
-    /// Total allocated size of the internal vector that holds the path buffer
-    fn allocated_size(&self) -> usize;
-    /// Returns the `RawFd`
-    fn raw_fd(&self) -> RawFd;
-
-    #[inline]
-    /// Constructs a `DirEntry` from a raw directory entry pointer
-    fn construct_entry(&mut self, drnt: Unique<dirent64>) -> DirEntry {
-        let (cstrpath, inode, file_type): (&CStr, u64, FileType) = self.construct_path(drnt);
-
-        DirEntry {
-            path: cstrpath.into(),
-            file_type,
-            inode,
-            depth: self.parent_depth() + 1,
-            file_name_index: self.file_index(),
-            is_cached_traversable: Cell::new(None), // Lazy cache for traversal checks
-        }
-    }
-
+impl PathBuffer {
     #[inline]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
-    fn init_from_path(path: &[u8]) -> (Vec<MaybeUninit<u8>>, usize) {
+    fn new(path: &[u8]) -> Self {
         let needs_slash = usize::from(path != b"/");
         /*
         Fast-path filename capacity (+NUL is included in the filename during append).
-        Longer names take the cold slow-path reserve in `construct_path`.
+        Longer names take the cold slow-path reserve in `reserve_for_long_name`.
         Most filepaths will never be longer than this. In the odd-case they are, it's really rare
         with no negligible affect otherwise
         */
@@ -216,27 +138,101 @@ pub(crate) trait DirentConstructor {
         // In-bounds always
         buffer[len].write(b'/');
 
-        let initialised_to = len + needs_slash;
-        (buffer, initialised_to)
+        let file_index = len + needs_slash;
+        Self { buffer, file_index }
         /* for 'len' we only read up to len bytes, so inc the ase it's not a directory, we intentionally omit the last slash by truncation.*/
+    }
+
+    #[inline]
+    /// Returns the current index in the buffer where the filename should be appended
+    ///
+    /// This represents the length of the base directory path before adding the current filename.
+    const fn file_index(&self) -> usize {
+        self.file_index
+    }
+
+    #[inline]
+    /// Total allocated size of the internal vector that holds the path buffer
+    fn allocated_size(&self) -> usize {
+        let allocated_sz = self.buffer.len();
+        debug_assert!(allocated_sz <= self.buffer.capacity(), "");
+        // trivial check, this should always be true, debug invariant.
+        allocated_sz
     }
 
     #[inline(never)]
     fn reserve_for_long_name(&mut self, required_len: usize) {
-        let path_buffer = self.path_buffer();
-        let current_len = path_buffer.len();
-        path_buffer.reserve(required_len - current_len);
+        let current_len = self.buffer.len();
+        self.buffer.reserve(required_len - current_len);
         // SAFETY: we reserved+(some extra, we assume weird fs here, like reiser or openzfs ) enough capacity and bytes in the extended range
         // are immediately written by `copy_to_nonoverlapping`.
-        unsafe { path_buffer.set_len(required_len) };
+        unsafe { self.buffer.set_len(required_len) };
+    }
+
+    #[inline]
+    #[expect(clippy::indexing_slicing, reason = "panic free")]
+    /// Ensures the buffer can hold `required_len` bytes, growing it (cold path) if necessary,
+    /// then returns the portion of the buffer truncated to that length.
+    fn prepare(&mut self, required_len: usize) -> &mut [MaybeUninit<u8>] {
+        if crate::util::unlikely(required_len > self.allocated_size()) {
+            self.reserve_for_long_name(required_len);
+        }
+        // SAFETY: the branch above guarantees `buffer.len() >= required_len`.
+        unsafe { assert_unchecked(required_len <= self.buffer.len()) }
+        &mut self.buffer[..required_len]
+    }
+}
+
+/**
+  Internal trait for constructing directory entries during iteration
+
+ This trait provides the necessary components to construct `DirEntry` objects
+ from raw `dirent64` structures while maintaining path buffer state, tracking
+ file name positions, and managing directory traversal depth.
+
+*/
+trait DirentConstructor: AsRawFd + AsFd {
+    /// Returns a mutable reference to the bookmarked path-buffer state used to construct full paths
+    fn path_buffer(&mut self) -> &mut PathBuffer;
+    /// Returns the depth of the parent directory in the traversal hierarchy
+    ///
+    /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
+    fn parent_depth(&self) -> u32;
+
+    #[inline]
+    /// Constructs a `DirEntry` from a raw directory entry pointer
+    fn construct_entry(&mut self, drnt: Unique<dirent64>) -> DirEntry {
+        let (cstrpath, inode, file_type): (&CStr, u64, FileType) = self.construct_path(drnt);
+
+        DirEntry {
+            path: cstrpath.into(),
+            file_type,
+            inode,
+            depth: self.parent_depth() + 1,
+            file_name_index: self.path_buffer().file_index(),
+            is_cached_traversable: Cell::new(None), // Lazy cache for traversal checks
+        }
+    }
+
+    #[inline]
+    /// Gets the `FileType` without following
+    fn get_filetype(&self, drnt: &Unique<dirent64>) -> FileType {
+        stat_syscall!(
+            fstatat,
+            self.as_raw_fd(),
+            drnt.d_name(),
+            AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+            DTYPE
+        )
     }
 
     /**
     Constructs a full path by appending the directory entry name to the base path
 
-    returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
+    returns the full path, inode,`FileType`
     */
     #[inline]
+    // TODO! make a temp dirent struct being fd:borrowedfd,name:&cstr,filetype:Filetype,ino:u64 etc, needs lifetime fuckery.
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
@@ -249,43 +245,29 @@ pub(crate) trait DirentConstructor {
 
         //includes the null terminator
         let name_len = d_name_cstr.len(); //technically should be a u16 but we need it for indexing :(
-        // make a lambda which we only call  if the `drnt` doesn't give us the dtype.
-        let stat_call = || {
-            stat_syscall!(
-                fstatat,
-                self.raw_fd(), //borrow before mutably borrowing the path buffer
-                drnt.d_name(),
-                AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
-                DTYPE
-            )
-        };
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
         // SAFETY: same conditions for the d/name etc
         let file_type: FileType = unsafe {
             match FileType::from_dtype(drnt.d_type()) {
-                FileType::Unknown => stat_call(),
+                FileType::Unknown => self.get_filetype(&drnt),
                 not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
             }
         };
 
         #[cfg(not(has_d_type))] // Have to make a syscall on these systems alas
-        let file_type = stat_call();
+        let file_type = self.get_filetype(&drnt);
 
-        let base_len = self.file_index();
+        let path_buffer = self.path_buffer();
+        let base_len = path_buffer.file_index();
         let required_len = base_len + name_len;
         //SAFETY: trivial, name_len=>1 (POSIX standard) ; ALLOWS US TO ELIDE BOUNDS CHECKS
+        // rustc knows this but it's unsigned overflow conditions being annoying.
         unsafe { assert_unchecked(required_len > base_len) };
-        if crate::util::unlikely(required_len > self.allocated_size()) {
-            self.reserve_for_long_name(required_len);
-        }
 
-        // SAFETY: required len checked above. (as self.path_buffer().capacity()=={...}.len())
-        unsafe { assert_unchecked(required_len <= self.path_buffer().len()) }
-
-        // Get the amount of the buffer we wish to initialise.
-        let buffer = &mut self.path_buffer()[..required_len];
+        // Get the amount of the buffer we wish to initialise (grows the buffer on the cold path if required).
+        let buffer = path_buffer.prepare(required_len);
 
         // Get the portion of the buffer that goes past the last slash, up to the name+NUL
         let name_portion = &mut buffer[base_len..];
@@ -316,30 +298,27 @@ High-throughput directory iterator backed by `getdents` or `getdirentries`,
 #[cfg(has_faster_readdir)]
 pub struct GetDents {
     /// The (owned) File descriptor of the open directory, closed when the iterator is dropped.
-    pub(crate) fd: OwnedFd,
+    fd: OwnedFd,
     /// Kernel buffer for batch reading directory entries via system call I/O
     /// typically using the best calculated  buffer sizes, optimised for typical directory traversal (derived from syscall tracing)
-    pub(crate) syscall_buffer: crate::fs::SyscallBuffer,
-    /// buffer for constructing full entry paths
+    syscall_buffer: SyscallBuffer,
+    /// Bookmarked base-path state (buffer + filename index) used to construct entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
-    pub(crate) path_buffer: Vec<MaybeUninit<u8>>,
-    /// Length of the base directory path including the trailing slash
-    /// Used for efficient filename extraction and path construction
-    pub(crate) file_name_index: usize,
+    path: PathBuffer,
     /// Depth of the parent directory in the directory tree hierarchy
     /// Used to calculate depth for child entries during recursive traversal
-    pub(crate) parent_depth: u32,
+    parent_depth: u32,
     /// Current read position within the directory entry buffer
     /// Tracks progress through the currently loaded batch of entries
-    pub(crate) offset: usize,
+    offset: usize,
     /// Number of bytes remaining to be processed in the current buffer
     /// Indicates when a new system call is needed to fetch more entries
-    pub(crate) remaining_bytes: usize,
+    remaining_bytes: usize,
     /// A marker for when the `FileDes` can give no more entries
-    pub(crate) end_of_stream: bool,
+    end_of_stream: bool,
     #[cfg(any(target_os = "freebsd", target_os = "macos"))] // TODO add dragonflyBSD here eventually
     /// The base pointer for the getdirentries call
-    pub(crate) base_pointer: libc::off_t,
+    base_pointer: libc::off_t,
 }
 
 #[cfg(has_faster_readdir)]
@@ -400,7 +379,7 @@ impl GetDents {
 
     /// A constant representing the maximum size of the internal Stack based buffer on this platform
     /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
-    pub const BUFFER_SIZE: usize = crate::fs::SyscallBuffer::BUFFER_SIZE;
+    pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
 
     #[inline]
     pub(crate) fn are_more_entries_remaining(&mut self) -> bool {
@@ -421,10 +400,10 @@ impl GetDents {
         check explanation below
         Alignment of 8 => Alignment of 4 guaranteed invariant. */
         // SAFETY: see above
-        let last_four_bytes: NonNull<u32> = unsafe {
-            NonNull::from_mut(&mut self.syscall_buffer)
+        let last_four_bytes = unsafe {
+            core::ptr::NonNull::from_mut(&mut self.syscall_buffer)
                 .byte_add(const { Self::BUFFER_SIZE - 4 })
-                .cast()
+                .cast::<u32>()
         };
 
         #[cfg(has_eof_trick)]
@@ -574,13 +553,12 @@ impl GetDents {
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
         let fd = dir.open()?; //getting the file descriptor
 
-        let (path_buffer, file_name_index) = Self::init_from_path(dir);
+        let path = PathBuffer::new(dir);
 
         Ok(Self {
             fd,
-            syscall_buffer: crate::fs::SyscallBuffer::new(),
-            path_buffer,
-            file_name_index,
+            syscall_buffer: SyscallBuffer::new(),
+            path,
             parent_depth: dir.depth,
             offset: 0,
             remaining_bytes: 0,
@@ -598,13 +576,12 @@ impl GetDents {
     */
     #[inline]
     pub(crate) fn from_fd(fd: OwnedFd, dir: &DirEntry) -> Self {
-        let (path_buffer, file_name_index) = Self::init_from_path(dir);
+        let path = PathBuffer::new(dir);
 
         Self {
             fd,
-            syscall_buffer: crate::fs::SyscallBuffer::new(),
-            path_buffer,
-            file_name_index,
+            syscall_buffer: SyscallBuffer::new(),
+            path,
             parent_depth: dir.depth,
             offset: 0,
             remaining_bytes: 0,
@@ -614,10 +591,23 @@ impl GetDents {
         }
     }
 }
-
 // Cheap macro to avoid duplicate code maintenance. (Keep the documentation continuous)
 macro_rules! impl_iterator_public_methods {
     ($type:ty) => {
+        impl ::std::os::fd::AsRawFd for $type {
+            #[inline]
+            fn as_raw_fd(&self) -> ::std::os::fd::RawFd {
+                self.fd.as_raw_fd()
+            }
+        }
+
+        impl ::std::os::fd::AsFd for $type {
+            #[inline]
+            fn as_fd(&self) -> ::std::os::fd::BorrowedFd<'_> {
+                self.fd.as_fd()
+            }
+        }
+
         impl Iterator for $type {
             type Item = $crate::fs::DirEntry;
 
@@ -635,26 +625,6 @@ macro_rules! impl_iterator_public_methods {
 
         impl $type {
             /**
-            Returns the file descriptor for this directory.
-
-            Useful for operations that need the raw directory FD.
-
-            */
-            #[inline]
-            #[must_use]
-            pub fn dirfd(&self) -> ::std::os::fd::BorrowedFd<'_> {
-                self.fd.as_fd()
-            }
-
-            #[inline]
-            #[must_use]
-            /// Grab the raw `Fd` directly, usually to call [`std::os::fd::BorrowedFd::borrow_raw`]
-            pub fn rawfd(&self) -> ::std::os::fd::RawFd {
-                self.fd.as_raw_fd()
-            }
-
-            #[inline]
-            /**
              Constructs a `DirEntry` from a directory entry pointer.
 
              This method converts a raw `dirent64` pointer into a safe `DirEntry`
@@ -665,6 +635,7 @@ macro_rules! impl_iterator_public_methods {
              * `drnt` - A `Unique` pointer to a valid `dirent64` structure
 
             */
+            #[inline]
             pub fn construct_direntry(
                 &mut self,
                 drnt: $crate::Unique<$crate::dirent64>,
@@ -680,26 +651,8 @@ macro_rules! impl_dirent_constructor {
     ($type:ty) => {
         impl DirentConstructor for $type {
             #[inline]
-            fn path_buffer(&mut self) -> &mut ::std::vec::Vec<::core::mem::MaybeUninit<u8>> {
-                &mut self.path_buffer
-            }
-
-            #[inline]
-            fn allocated_size(&self) -> usize {
-                let allocated_sz = self.path_buffer.len();
-                ::core::debug_assert!(allocated_sz <= self.path_buffer.capacity(), "");
-                // trivial check, this should always be true, debug invariant.
-                allocated_sz
-            }
-
-            #[inline]
-            fn file_index(&self) -> usize {
-                self.file_name_index
-            }
-
-            #[inline]
-            fn raw_fd(&self) -> ::std::os::fd::RawFd {
-                self.fd.as_raw_fd()
+            fn path_buffer(&mut self) -> &mut PathBuffer {
+                &mut self.path
             }
 
             #[inline]

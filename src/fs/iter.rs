@@ -1,5 +1,5 @@
 use crate::fs::{DirEntry, FileType, OwnedDir, Result};
-use crate::{Unique, dirent64, readdir64};
+use crate::{Unique, dirent64};
 use core::cell::Cell;
 use core::ffi::CStr;
 use core::hint::assert_unchecked;
@@ -10,8 +10,8 @@ use core::ptr::NonNull;
 #[cfg(has_faster_readdir)]
 use crate::fs::SyscallBuffer;
 use core::mem::MaybeUninit;
-use libc::{AT_SYMLINK_NOFOLLOW, DIR, fstatat};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
+use libc::{AT_SYMLINK_NOFOLLOW, fstatat};
+use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
 /**
  POSIX-compliant directory iterator using libc's readdir
@@ -23,7 +23,7 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 */
 #[derive(Debug)]
 pub struct ReadDir {
-    /// Raw directory pointer from libc's `opendir()` wrapped in a new type.
+    /// Directory pointer from libc's `opendir()` wrapped in a new type with custom destructor.
     pub(crate) fd: OwnedDir, //call it fd for macro code
     /// Buffer storing the full directory path for constructing entry paths
     pub(crate) path_buffer: Vec<MaybeUninit<u8>>,
@@ -68,27 +68,18 @@ impl ReadDir {
     */
     #[inline]
     pub unsafe fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
-        // SAFETY: `self.dir` is a valid directory pointer maintained by the iterator
-        let dirent_ptr = unsafe { readdir64(self.as_ptr()) };
-
-        // readdir returns null at end of directory or on error
-        Unique::new(dirent_ptr)
+        self.fd.next_pointer()
     }
 
-    #[inline]
-    /// Returns the `DIR` pointer for next iteration.
-    pub const fn as_ptr(&mut self) -> *mut DIR {
-        self.fd.as_ptr()
-    }
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        let fd = dir_path.open()?; //read file descriptor
+        let fd = OwnedDir::from_owned_fd(dir_path.open()?)?; //read file descriptor
         let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
         // Mutate the buffer to contain the full path, then add a null terminator and record the new length
         // We use this length to index to get the filename (store full path -> index to get filename)
 
         Ok(Self {
-            fd: OwnedDir::from_owned_fd(fd)?,
+            fd,
             path_buffer,
             file_name_index,
             parent_depth: dir_path.depth, //inherit depth
@@ -100,11 +91,12 @@ impl ReadDir {
     /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
     /// full-path resolution for the child directory.
     #[inline]
-    pub(crate) fn from_fd(fd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
+    pub(crate) fn from_fd(dfd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
+        let fd = OwnedDir::from_owned_fd(dfd)?;
         let (path_buffer, file_name_index) = Self::init_from_path(dir_path);
         // fdopendir takes ownership.
         Ok(Self {
-            fd: OwnedDir::from_owned_fd(fd)?,
+            fd,
             path_buffer,
             file_name_index,
             parent_depth: dir_path.depth,
@@ -120,7 +112,7 @@ impl ReadDir {
  file name positions, and managing directory traversal depth.
 
 */
-pub(crate) trait DirentConstructor: AsRawFd {
+pub(crate) trait DirentConstructor: AsRawFd + AsFd {
     /// Returns a mutable reference to the path buffer used for constructing full paths
     fn path_buffer(&mut self) -> &mut Vec<MaybeUninit<u8>>;
     /// Returns the current index in the path buffer where the filename should be appended
@@ -192,12 +184,25 @@ pub(crate) trait DirentConstructor: AsRawFd {
         unsafe { path_buffer.set_len(required_len) };
     }
 
+    #[inline]
+    /// Gets the `FileType` without following
+    fn get_filetype(&self, drnt: &Unique<dirent64>) -> FileType {
+        stat_syscall!(
+            fstatat,
+            self.as_raw_fd(),
+            drnt.d_name(),
+            AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
+            DTYPE
+        )
+    }
+
     /**
     Constructs a full path by appending the directory entry name to the base path
 
-    returns the full path, inode,`FileType` (not abstracted into types bc of  internal use only)
+    returns the full path, inode,`FileType`
     */
     #[inline]
+    // TODO! make a temp dirent struct being fd:borrowedfd,name:&cstr,filetype:Filetype,ino:u64 etc, needs lifetime fuckery.
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
@@ -210,33 +215,24 @@ pub(crate) trait DirentConstructor: AsRawFd {
 
         //includes the null terminator
         let name_len = d_name_cstr.len(); //technically should be a u16 but we need it for indexing :(
-        // make a lambda which we only call  if the `drnt` doesn't give us the dtype.
-        let stat_call = || {
-            stat_syscall!(
-                fstatat,
-                self.as_raw_fd(), //borrow before mutably borrowing the path buffer
-                drnt.d_name(),
-                AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
-                DTYPE
-            )
-        };
 
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
         // SAFETY: same conditions for the d/name etc
         let file_type: FileType = unsafe {
             match FileType::from_dtype(drnt.d_type()) {
-                FileType::Unknown => stat_call(),
+                FileType::Unknown => self.get_filetype(&drnt),
                 not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
             }
         };
 
         #[cfg(not(has_d_type))] // Have to make a syscall on these systems alas
-        let file_type = stat_call();
+        let file_type = self.get_filetype(&drnt);
 
         let base_len = self.file_index();
         let required_len = base_len + name_len;
         //SAFETY: trivial, name_len=>1 (POSIX standard) ; ALLOWS US TO ELIDE BOUNDS CHECKS
+        // rustc knows this but it's unsigned overflow conditions being annoying.
         unsafe { assert_unchecked(required_len > base_len) };
         if crate::util::unlikely(required_len > self.allocated_size()) {
             self.reserve_for_long_name(required_len);
@@ -575,20 +571,19 @@ impl GetDents {
         }
     }
 }
-
 // Cheap macro to avoid duplicate code maintenance. (Keep the documentation continuous)
 macro_rules! impl_iterator_public_methods {
     ($type:ty) => {
-        impl AsRawFd for $type {
+        impl ::std::os::fd::AsRawFd for $type {
             #[inline]
-            fn as_raw_fd(&self) -> RawFd {
+            fn as_raw_fd(&self) -> ::std::os::fd::RawFd {
                 self.fd.as_raw_fd()
             }
         }
 
-        impl AsFd for $type {
+        impl ::std::os::fd::AsFd for $type {
             #[inline]
-            fn as_fd(&self) -> BorrowedFd<'_> {
+            fn as_fd(&self) -> ::std::os::fd::BorrowedFd<'_> {
                 self.fd.as_fd()
             }
         }

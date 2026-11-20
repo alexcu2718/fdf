@@ -1,4 +1,4 @@
-use crate::fs::Result;
+use crate::{Unique, dirent64, fs::Result, readdir64};
 use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 use libc::{DIR, closedir, fdopendir};
@@ -6,7 +6,7 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 
 #[derive(Debug)]
 pub struct OwnedDir {
-    inner: NonNull<DIR>,
+    inner: NonNull<DIR>, // Exclusive only access
     // We store this but just need it for deref,
     // We also don't want a non-inlineable glibc call to get the fd. (even if it's just pointer access)
     fdes: ManuallyDrop<OwnedFd>,
@@ -30,7 +30,7 @@ impl Drop for OwnedDir {
     #[inline]
     fn drop(&mut self) {
         // SAFETY: `inner` is a valid DIR* from a successful `fdopendir`, closed only here.
-        let retval = unsafe { closedir(self.as_ptr()) };
+        let retval = unsafe { closedir(self.inner.as_ptr()) };
         debug_assert_eq!(retval, 0, "not closed properly!");
     }
 }
@@ -55,8 +55,9 @@ impl OwnedDir {
     }
 
     #[inline]
-    /// Returns a mutable pointer to underlying `DIR`
-    pub const fn as_ptr(&mut self) -> *mut DIR {
-        self.inner.as_ptr()
+    /// Gets the next pointer from `readdir64`
+    pub fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
+        // SAFETY: passing a valid pointer, no other access is possible to this handle
+        unsafe { Unique::new(readdir64(self.inner.as_ptr())) }
     }
 }

@@ -426,7 +426,7 @@ impl DirEntry {
     /// Returns a [`ReadDir`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
     #[inline]
     #[allow(unused)] // for esoteric platforms
-    pub(crate) fn readdir_from_fd(&self, fd: OwnedFd) -> Result<ReadDir> {
+    pub(crate) fn readdir_from_fd(&self, fd: OwnedFd) -> Result<ReadDir<'_>> {
         ReadDir::from_fd(fd, self)
     }
 
@@ -1750,7 +1750,7 @@ impl DirEntry {
     ```
     */
     #[inline]
-    pub fn readdir(&self) -> Result<ReadDir> {
+    pub fn readdir(&self) -> Result<ReadDir<'_>> {
         ReadDir::new(self)
     }
 

@@ -18,16 +18,16 @@ use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
 */
 #[derive(Debug)]
-pub struct ReadDir {
+pub struct ReadDir<'filedes> {
     /// Directory pointer from libc's `opendir()` wrapped in a new type with custom destructor.
-    fd: OwnedDir, //call it fd for macro code
+    fd: OwnedDir<'filedes>, //call it fd for macro code
     /// Bookmarked base-path state (buffer + filename index) used to construct entry paths
     path: PathBuffer,
     /// Depth of this directory relative to traversal root
     parent_depth: u32,
 }
 
-impl ReadDir {
+impl ReadDir<'_> {
     /**
     Reads the next directory entry using the libc `readdir` function.
 
@@ -664,8 +664,8 @@ macro_rules! impl_dirent_constructor {
 }
 
 // Common to all platforms
-impl_iterator_public_methods!(ReadDir);
-impl_dirent_constructor!(ReadDir);
+impl_iterator_public_methods!(ReadDir<'_>);
+impl_dirent_constructor!(ReadDir<'_>);
 
 #[cfg(has_faster_readdir)]
 impl_iterator_public_methods!(GetDents);

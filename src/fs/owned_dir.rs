@@ -1,32 +1,31 @@
 use crate::{Unique, dirent64, fs::Result, readdir64};
-use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 use libc::{DIR, closedir, fdopendir};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd as _, OwnedFd, RawFd};
 
 #[derive(Debug)]
-pub struct OwnedDir {
+pub struct OwnedDir<'fd> {
     inner: NonNull<DIR>, // Exclusive only access
     // We store this but just need it for deref,
     // We also don't want a non-inlineable glibc call to get the fd. (even if it's just pointer access)
-    fdes: ManuallyDrop<OwnedFd>,
+    fdes: BorrowedFd<'fd>,
 }
 
-impl AsFd for OwnedDir {
+impl AsFd for OwnedDir<'_> {
     #[inline]
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fdes.as_fd()
     }
 }
 
-impl AsRawFd for OwnedDir {
+impl AsRawFd for OwnedDir<'_> {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
         self.fdes.as_raw_fd()
     }
 }
 
-impl Drop for OwnedDir {
+impl Drop for OwnedDir<'_> {
     #[inline]
     fn drop(&mut self) {
         // SAFETY: `inner` is a valid DIR* from a successful `fdopendir`, closed only here.
@@ -35,7 +34,7 @@ impl Drop for OwnedDir {
     }
 }
 
-impl OwnedDir {
+impl OwnedDir<'_> {
     /// Wraps an owned file descriptor in a directory stream.
     ///
     /// # Errors
@@ -46,10 +45,13 @@ impl OwnedDir {
         let ret = unsafe { fdopendir(fd.as_raw_fd()) };
 
         match NonNull::new(ret) {
-            Some(valid) => Ok(Self {
-                inner: valid,
-                fdes: ManuallyDrop::new(fd),
-            }),
+            Some(valid) => {
+                // Ownership moves to the DIR stream, which closes the fd in `closedir`.
+                let raw = fd.into_raw_fd();
+                // SAFETY: `raw` is open and stays valid until `closedir` in `Drop`.
+                let fdes = unsafe { BorrowedFd::borrow_raw(raw) };
+                Ok(Self { inner: valid, fdes })
+            }
             None => return_os_error!(),
         }
     }

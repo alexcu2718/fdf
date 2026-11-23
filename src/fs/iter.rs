@@ -9,6 +9,13 @@ use core::mem::MaybeUninit;
 use libc::{AT_SYMLINK_NOFOLLOW, fstatat};
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
+// struct DirEntryRef<'fdes>{
+
+//     path:&'fdes CStr,
+//     inode:u64,
+
+// }
+
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -67,14 +74,11 @@ impl ReadDir<'_> {
 
     #[inline]
     pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        let fd = OwnedDir::from_owned_fd(dir_path.open()?)?; //read file descriptor
         // Mutate the buffer to contain the full path, then add a null terminator and record the new length
         // We use this length to index to get the filename (store full path -> index to get filename)
-        let path = PathBuffer::new(dir_path);
-
         Ok(Self {
-            fd,
-            path,
+            fd: dir_path.open()?.try_into()?,
+            path: PathBuffer::new(dir_path),
             parent_depth: dir_path.depth, //inherit depth
         })
     }
@@ -85,12 +89,9 @@ impl ReadDir<'_> {
     /// full-path resolution for the child directory.
     #[inline]
     pub(crate) fn from_fd(dfd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
-        let fd = OwnedDir::from_owned_fd(dfd)?;
-        let path = PathBuffer::new(dir_path);
-        // fdopendir takes ownership.
         Ok(Self {
-            fd,
-            path,
+            fd: dfd.try_into()?,
+            path: PathBuffer::new(dir_path),
             parent_depth: dir_path.depth,
         })
     }
@@ -112,8 +113,8 @@ struct PathBuffer {
 impl PathBuffer {
     #[inline]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
-    fn new(path: &[u8]) -> Self {
-        let needs_slash = usize::from(path != b"/");
+    fn new(path: &DirEntry) -> Self {
+        let needs_slash = usize::from(path != b"/".as_ref());
         /*
         Fast-path filename capacity (+NUL is included in the filename during append).
         Longer names take the cold slow-path reserve in `reserve_for_long_name`.
@@ -202,12 +203,11 @@ trait DirentConstructor: AsRawFd + AsFd {
     #[inline]
     /// Constructs a `DirEntry` from a raw directory entry pointer
     fn construct_entry(&mut self, drnt: Unique<dirent64>) -> DirEntry {
-        let (cstrpath, inode, file_type): (&CStr, u64, FileType) = self.construct_path(drnt);
-
+        let meta = self.construct_path(drnt);
         DirEntry {
-            path: cstrpath.into(),
-            file_type,
-            inode,
+            path: meta.0.into(), //&cstr->cstring
+            inode: meta.1,       //u64
+            file_type: meta.2,   // filetype
             depth: self.parent_depth() + 1,
             file_name_index: self.path_buffer().file_index(),
             is_cached_traversable: Cell::new(None), // Lazy cache for traversal checks
@@ -235,6 +235,7 @@ trait DirentConstructor: AsRawFd + AsFd {
     // TODO! make a temp dirent struct being fd:borrowedfd,name:&cstr,filetype:Filetype,ino:u64 etc, needs lifetime fuckery.
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
+        use core::slice::from_raw_parts;
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
         let d_name_cstr: &[u8] = unsafe { drnt.d_name_cstr().to_bytes_with_nul() };
 
@@ -277,9 +278,10 @@ trait DirentConstructor: AsRawFd + AsFd {
         //^this is a memcpy.
         // SAFETY: the buffer is guaranteed null terminated(copying a null terminated string)
         // &CStr is a &[u8]/&[i8] underneath.
-        let full_path = unsafe { &*((&raw const *buffer) as *const CStr) };
+        let bytes = unsafe { from_raw_parts(buffer.as_ptr().cast(), required_len) };
+        // SAFETY: guraranteed to have no interior nulls, length is suited etc etc.
+        let full_path = unsafe { CStr::from_bytes_with_nul_unchecked(bytes) };
         //truncate the buffer to the first null terminator of the full path
-
         (full_path, d_ino, file_type)
     }
 }
@@ -384,7 +386,7 @@ impl GetDents<'_> {
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
         Ok(Self {
-            fd: OwnedFdDir::new(dir.open()?),
+            fd: dir.open()?.into(),
             path: PathBuffer::new(dir),
             parent_depth: dir.depth,
         })
@@ -399,7 +401,7 @@ impl GetDents<'_> {
     #[inline]
     pub(crate) fn from_fd(fd: OwnedFd, dir: &DirEntry) -> Self {
         Self {
-            fd: OwnedFdDir::new(fd),
+            fd: fd.into(),
             path: PathBuffer::new(dir),
             parent_depth: dir.depth,
         }

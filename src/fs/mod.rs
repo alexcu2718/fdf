@@ -6,6 +6,8 @@ mod owned_dir;
 mod types;
 pub use buffer::{AlignedBuffer, ValueType};
 pub use owned_dir::OwnedDir;
+#[cfg(has_faster_readdir)]
+pub use owned_dir::OwnedFdDir;
 
 #[cfg(target_os = "android")]
 pub(crate) const AT_EACCESS: libc::c_int = 0; // android being weird, again....

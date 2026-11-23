@@ -433,7 +433,7 @@ impl DirEntry {
     /// Returns a [`GetDents`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
     #[inline]
     #[cfg(has_faster_readdir)]
-    pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> crate::fs::GetDents {
+    pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> crate::fs::GetDents<'_> {
         crate::fs::GetDents::from_fd(fd, self)
     }
 
@@ -1784,7 +1784,7 @@ impl DirEntry {
     */
     #[inline]
     #[cfg(has_faster_readdir)]
-    pub fn getdents(&self) -> Result<crate::fs::GetDents> {
+    pub fn getdents(&self) -> Result<crate::fs::GetDents<'_>> {
         crate::fs::GetDents::new(self)
     }
 }

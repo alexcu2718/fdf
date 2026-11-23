@@ -1,7 +1,10 @@
 use crate::{Unique, dirent64, fs::Result, readdir64};
 use core::ptr::NonNull;
 use libc::{DIR, closedir, fdopendir};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd as _, OwnedFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
+
+#[cfg(has_faster_readdir)]
+use crate::fs::SyscallBuffer;
 
 #[derive(Debug)]
 pub struct OwnedDir<'fd> {
@@ -61,5 +64,188 @@ impl OwnedDir<'_> {
     pub fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
         // SAFETY: passing a valid pointer, no other access is possible to this handle
         unsafe { Unique::new(readdir64(self.inner.as_ptr())) }
+    }
+}
+
+/// An owned directory file descriptor that buffers batched `getdents`/`getdirentries64` reads,
+/// mirroring `readdir` semantics (all entries are returned, including `.` and `..`).
+///
+/// Backs [`crate::fs::GetDents`].
+#[cfg(has_faster_readdir)]
+#[derive(Debug)]
+pub struct OwnedFdDir<'fd> {
+    inner: OwnedFd,
+    syscall_buffer: SyscallBuffer,
+    /// Current read position within `syscall_buffer`
+    offset: usize,
+    /// Number of valid bytes in `syscall_buffer` from the last syscall
+    remaining_bytes: usize,
+    /// Set once the kernel reports no more entries
+    end_of_stream: bool,
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    /// The base pointer (seek cookie) for the `getdirentries64` call
+    base_pointer: libc::off_t,
+    /// Ties `self` to the lifetime of the fd's origin, mirroring `OwnedDir<'fd>`.
+    _marker: core::marker::PhantomData<BorrowedFd<'fd>>,
+}
+
+#[cfg(has_faster_readdir)] // can't exist for `OwnedDir`
+impl IntoRawFd for OwnedFdDir<'_> {
+    #[inline]
+    fn into_raw_fd(self) -> RawFd {
+        self.inner.into_raw_fd()
+    }
+}
+
+#[cfg(has_faster_readdir)]
+impl AsFd for OwnedFdDir<'_> {
+    #[inline]
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.inner.as_fd()
+    }
+}
+
+#[cfg(has_faster_readdir)]
+impl AsRawFd for OwnedFdDir<'_> {
+    #[inline]
+    fn as_raw_fd(&self) -> RawFd {
+        self.inner.as_raw_fd()
+    }
+}
+
+#[cfg(has_faster_readdir)]
+impl OwnedFdDir<'_> {
+    pub(crate) const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
+
+    #[inline]
+    pub(crate) const fn new(fd: OwnedFd) -> Self {
+        Self {
+            inner: fd,
+            syscall_buffer: SyscallBuffer::new(),
+            offset: 0,
+            remaining_bytes: 0,
+            end_of_stream: false,
+            #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+            base_pointer: 0,
+            _marker: core::marker::PhantomData,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    /// Returns the current offset into the internal (stack) buffer.
+    pub(crate) const fn offset(&self) -> usize {
+        self.offset
+    }
+
+    #[inline]
+    #[must_use]
+    /// Returns the amount of bytes left in the buffer
+    pub(crate) const fn remaining_bytes(&self) -> usize {
+        self.remaining_bytes
+    }
+
+    #[inline]
+    #[must_use]
+    /// Returns a boolean indicating whether the stream is exhausted
+    pub(crate) const fn is_end_of_stream(&self) -> bool {
+        self.end_of_stream
+    }
+
+    /// Refills the buffer via the platform syscall, returning the raw syscall result
+    /// (positive: bytes read, `0`: end of directory, negative: error).
+    #[inline]
+    pub(crate) fn getdents(&mut self) -> isize {
+        #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+        {
+            self.syscall_buffer.getdents(self.inner.as_fd())
+        }
+        #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+        {
+            // SAFETY: passing a valid buffer to an open file descriptor and base pointer
+            unsafe {
+                self.syscall_buffer
+                    .getdirentries64(self.inner.as_fd(), &mut self.base_pointer)
+            }
+        }
+    }
+
+    /// Refills the buffer, returns whether any bytes were read.
+    /// See `GetDents::are_more_entries_remaining` for the explanation of the macOS EOF trick.
+    #[inline]
+    fn are_more_entries_remaining(&mut self) -> bool {
+        if self.end_of_stream {
+            return false;
+        }
+
+        const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
+
+        #[cfg(has_eof_trick)]
+        // SAFETY: the buffer is 8-aligned and BUFFER_SIZE >= 4, so the last four bytes are in bounds and aligned.
+        let last_four_bytes = unsafe {
+            NonNull::from_mut(&mut self.syscall_buffer)
+                .byte_add(const { Self::BUFFER_SIZE - 4 })
+                .cast::<u32>()
+        };
+
+        #[cfg(has_eof_trick)]
+        // SAFETY: guaranteed in bounds + aligned, zeroed so the kernel's EOF flag is detectable.
+        unsafe {
+            last_four_bytes.write(0)
+        };
+
+        let remaining_bytes = self.getdents();
+        let is_more_remaining = remaining_bytes.is_positive();
+
+        #[cfg(has_eof_trick)]
+        {
+            const { assert!(Self::BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick") };
+            let eof_marker_is_valid: bool = is_more_remaining
+                && remaining_bytes.cast_unsigned() <= const { Self::BUFFER_SIZE - 4 };
+
+            self.end_of_stream = (eof_marker_is_valid
+                // SAFETY: the marker was initialised before the syscall and the payload didn't overlap it.
+                && unsafe { last_four_bytes.read() } & 1 != 0)
+                || !is_more_remaining;
+        }
+
+        #[cfg(not(has_eof_trick))]
+        {
+            self.end_of_stream = !is_more_remaining
+        }
+
+        self.remaining_bytes = remaining_bytes.max(0).cast_unsigned(); // negatives map to 0
+        self.offset = 0;
+
+        is_more_remaining
+    }
+
+    /// Gets the next pointer from the `getdents` buffer, refilling it when exhausted.
+    ///
+    /// Returns ALL entries including `.` and `..`, like `readdir`.
+    /// The returned pointer is only valid until the next call.
+    #[inline]
+    pub fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
+        while self.offset >= self.remaining_bytes {
+            if !self.are_more_entries_remaining() {
+                return None;
+            }
+        }
+
+        // SAFETY: the buffer holds unread bytes, the offset is in bounds, and the buffer is aligned.
+        let drnt = unsafe {
+            Unique::from_ref(&self.syscall_buffer)
+                .byte_add(self.offset)
+                .cast::<dirent64>()
+        };
+        debug_assert!(drnt.is_aligned(), "Expected to be aligned, report this");
+
+        // SAFETY: we just obtained this pointer, so reading d_reclen is valid.
+        let reclen = unsafe { drnt.d_reclen() };
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        debug_assert!(reclen >= 24, "expected reclen >=24, it is `{reclen}`");
+        self.offset += reclen;
+
+        Some(drnt)
     }
 }

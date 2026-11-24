@@ -27,6 +27,8 @@ struct PathBuffer {
     buffer: Vec<MaybeUninit<u8>>,
     /// Index into `buffer` where filenames start (avoids recalculating)
     file_index: usize,
+    /// Depth of the bookmarked base path relative to the traversal root
+    depth: u32,
 }
 
 impl PathBuffer {
@@ -58,8 +60,11 @@ impl PathBuffer {
         // In-bounds always
         buffer[len].write(b'/');
 
-        let file_index = len + needs_slash;
-        Self { buffer, file_index }
+        Self {
+            buffer,
+            file_index: len + needs_slash,
+            depth: path.depth,
+        }
         /* for 'len' we only read up to len bytes, so inc the ase it's not a directory, we intentionally omit the last slash by truncation.*/
     }
 
@@ -69,6 +74,14 @@ impl PathBuffer {
     /// This represents the length of the base directory path before adding the current filename.
     const fn file_index(&self) -> usize {
         self.file_index
+    }
+
+    #[inline]
+    /// Returns the depth of the bookmarked base path relative to the traversal root
+    ///
+    /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
+    const fn depth(&self) -> u32 {
+        self.depth
     }
 
     #[inline]
@@ -111,6 +124,7 @@ impl PathBuffer {
     Returns the resulting full path (base path + '/' + name) as a `&CStr`.
     */
     fn copy_dname(&mut self, d_name_cstr: &CStr) -> &CStr {
+        use core::slice;
         let base_len = self.file_index();
         let name_len = d_name_cstr.count_bytes() + 1; //technically should be a u16 but we need it for indexing :( // we need +1 bc this strlen omits null terminator
         let required_len = base_len + name_len;
@@ -129,7 +143,7 @@ impl PathBuffer {
         //^this is a memcpy.
         // SAFETY: the buffer is guaranteed null terminated(copying a null terminated string)
         // &CStr is a &[u8]/&[i8] underneath.
-        let bytes = unsafe { core::slice::from_raw_parts(buffer.as_ptr().cast(), required_len) };
+        let bytes: &[u8] = unsafe { slice::from_raw_parts(buffer.as_ptr().cast(), required_len) };
         // SAFETY: guraranteed to have no interior nulls, length is suited etc etc.
         unsafe { CStr::from_bytes_with_nul_unchecked(bytes) }
     }
@@ -154,10 +168,8 @@ impl From<&DirEntry> for PathBuffer {
 pub struct ReadDir<'filedes> {
     /// Directory pointer from libc's `opendir()` wrapped in a new type with custom destructor.
     fd: OwnedDir<'filedes>, //call it fd for macro code
-    /// Bookmarked base-path state (buffer + filename index) used to construct entry paths
+    /// Bookmarked base-path state (buffer + filename index + depth) used to construct entry paths
     path: PathBuffer,
-    /// Depth of this directory relative to traversal root
-    parent_depth: u32,
 }
 
 impl ReadDir<'_> {
@@ -215,7 +227,6 @@ impl ReadDir<'_> {
         Ok(Self {
             fd: dfd.try_into()?,
             path: dir_path.into(),
-            parent_depth: dir_path.depth,
         })
     }
 }
@@ -230,11 +241,21 @@ impl ReadDir<'_> {
 */
 trait DirentConstructor: AsRawFd + AsFd {
     /// Returns a mutable reference to the bookmarked path-buffer state used to construct full paths
-    fn path_buffer(&mut self) -> &mut PathBuffer;
-    /// Returns the depth of the parent directory in the traversal hierarchy
-    ///
-    /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
-    fn parent_depth(&self) -> u32;
+    fn path_buffer_mut(&mut self) -> &mut PathBuffer;
+
+    /// Returns a reference to the bookmarked path-buffer state used to construct full paths
+    fn path_buffer(&self) -> &PathBuffer;
+    #[inline]
+    /// Returns the depth at which this was created at
+    fn parent_depth(&self) -> u32 {
+        self.path_buffer().depth()
+    }
+
+    #[inline]
+    /// A bookkeeping value, TODO!
+    fn file_index(&self) -> usize {
+        self.path_buffer().file_index()
+    }
 
     #[inline]
     /// Constructs a `DirEntry` from a raw directory entry pointer
@@ -245,7 +266,7 @@ trait DirentConstructor: AsRawFd + AsFd {
             inode: meta.1,       //u64
             file_type: meta.2,   // filetype
             depth: self.parent_depth() + 1,
-            file_name_index: self.path_buffer().file_index(),
+            file_name_index: self.file_index(),
             is_cached_traversable: Cell::new(None), // Lazy cache for traversal checks
         }
     }
@@ -271,7 +292,7 @@ trait DirentConstructor: AsRawFd + AsFd {
     // TODO! make a temp dirent struct being fd:borrowedfd,name:&cstr,filetype:Filetype,ino:u64 etc, needs lifetime fuckery.
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
-        let d_name_cstr: &CStr = unsafe { drnt.d_name_cstr() };
+        let d_name_cstr = unsafe { drnt.d_name_cstr() };
 
         debug_assert!(drnt.is_aligned(), "drnt not aligned(report this)");
 
@@ -292,7 +313,7 @@ trait DirentConstructor: AsRawFd + AsFd {
         let file_type = self.get_filetype(&drnt);
 
         // Copies the name past the bookmarked base path and returns the resulting full path.
-        let full_path = self.path_buffer().copy_dname(d_name_cstr);
+        let full_path = self.path_buffer_mut().copy_dname(d_name_cstr);
         (full_path, d_ino, file_type)
     }
 }
@@ -312,12 +333,9 @@ High-throughput directory iterator backed by `getdents` or `getdirentries`,
 pub struct GetDents<'filedes> {
     /// The owned, buffered directory file descriptor, closed when the iterator is dropped.
     fd: OwnedFdDir<'filedes>,
-    /// Bookmarked base-path state (buffer + filename index) used to construct entry paths
+    /// Bookmarked base-path state (buffer + filename index + depth) used to construct entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
     path: PathBuffer,
-    /// Depth of the parent directory in the directory tree hierarchy
-    /// Used to calculate depth for child entries during recursive traversal
-    parent_depth: u32,
 }
 
 #[cfg(has_faster_readdir)]
@@ -396,12 +414,11 @@ impl GetDents<'_> {
         Self {
             fd: fd.into(),
             path: dir.into(),
-            parent_depth: dir.depth,
         }
     }
 }
 // Cheap macro to avoid duplicate code maintenance. (Keep the documentation continuous)
-macro_rules! impl_iterator_public_methods {
+macro_rules! impl_iterator_methods {
     ($type:ty) => {
         impl ::std::os::fd::AsRawFd for $type {
             #[inline]
@@ -452,31 +469,23 @@ macro_rules! impl_iterator_public_methods {
                 self.construct_entry(drnt)
             }
         }
-    };
-}
 
-// Simple repetition avoider for private trait
-macro_rules! impl_dirent_constructor {
-    ($type:ty) => {
+        // Simple repetition avoider for private trait
         impl DirentConstructor for $type {
             #[inline]
-            fn path_buffer(&mut self) -> &mut PathBuffer {
+            fn path_buffer_mut(&mut self) -> &mut PathBuffer {
                 &mut self.path
             }
 
             #[inline]
-            fn parent_depth(&self) -> u32 {
-                self.parent_depth
+            fn path_buffer(&self) -> &PathBuffer {
+                &self.path
             }
         }
     };
 }
-
 // Common to all platforms
-impl_iterator_public_methods!(ReadDir<'_>);
-impl_dirent_constructor!(ReadDir<'_>);
+impl_iterator_methods!(ReadDir<'_>);
 
 #[cfg(has_faster_readdir)]
-impl_iterator_public_methods!(GetDents<'_>);
-#[cfg(has_faster_readdir)]
-impl_dirent_constructor!(GetDents<'_>);
+impl_iterator_methods!(GetDents<'_>);

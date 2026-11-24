@@ -101,6 +101,38 @@ impl PathBuffer {
         unsafe { assert_unchecked(required_len <= self.buffer.len()) }
         &mut self.buffer[..required_len]
     }
+
+    #[inline]
+    #[expect(clippy::indexing_slicing, reason = "panic free")]
+    /**
+    Copies a NUL-terminated directory-entry name (`d_name_cstr`, including its NUL byte) into the
+    buffer right after the bookmarked base path, growing the buffer first if required.
+
+    Returns the resulting full path (base path + '/' + name) as a `&CStr`.
+    */
+    fn copy_dname(&mut self, d_name_cstr: &CStr) -> &CStr {
+        let base_len = self.file_index();
+        let name_len = d_name_cstr.count_bytes() + 1; //technically should be a u16 but we need it for indexing :( // we need +1 bc this strlen omits null terminator
+        let required_len = base_len + name_len;
+        //SAFETY: trivial, name_len=>1 (POSIX standard) ; ALLOWS US TO ELIDE BOUNDS CHECKS
+        // rustc knows this but it's unsigned overflow conditions being annoying.
+        unsafe { assert_unchecked(required_len > base_len) };
+
+        // Get the amount of the buffer we wish to initialise (grows the buffer on the cold path if required).
+        let buffer = self.prepare(required_len);
+
+        // Get the portion of the buffer that goes past the last slash, up to the name+NUL
+        let name_portion = &mut buffer[base_len..];
+
+        // Copy name into the uninit memory.
+        name_portion.write_copy_of_slice(d_name_cstr.to_bytes_with_nul());
+        //^this is a memcpy.
+        // SAFETY: the buffer is guaranteed null terminated(copying a null terminated string)
+        // &CStr is a &[u8]/&[i8] underneath.
+        let bytes = unsafe { core::slice::from_raw_parts(buffer.as_ptr().cast(), required_len) };
+        // SAFETY: guraranteed to have no interior nulls, length is suited etc etc.
+        unsafe { CStr::from_bytes_with_nul_unchecked(bytes) }
+    }
 }
 
 impl From<&DirEntry> for PathBuffer {
@@ -237,24 +269,19 @@ trait DirentConstructor: AsRawFd + AsFd {
     */
     #[inline]
     // TODO! make a temp dirent struct being fd:borrowedfd,name:&cstr,filetype:Filetype,ino:u64 etc, needs lifetime fuckery.
-    #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
-        use core::slice::from_raw_parts;
         // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
-        let d_name_cstr: &[u8] = unsafe { drnt.d_name_cstr().to_bytes_with_nul() };
+        let d_name_cstr: &CStr = unsafe { drnt.d_name_cstr() };
 
         debug_assert!(drnt.is_aligned(), "drnt not aligned(report this)");
 
         // SAFETY: as above
         let d_ino = unsafe { drnt.d_ino() }; // Returns 0 if d_ino isn't defined on your system
 
-        //includes the null terminator
-        let name_len = d_name_cstr.len(); //technically should be a u16 but we need it for indexing :(
-
         // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
         #[cfg(has_d_type)]
         // SAFETY: same conditions for the d/name etc
-        let file_type: FileType = unsafe {
+        let file_type = unsafe {
             match FileType::from_dtype(drnt.d_type()) {
                 FileType::Unknown => self.get_filetype(&drnt),
                 not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
@@ -264,28 +291,8 @@ trait DirentConstructor: AsRawFd + AsFd {
         #[cfg(not(has_d_type))] // Have to make a syscall on these systems alas
         let file_type = self.get_filetype(&drnt);
 
-        let path_buffer = self.path_buffer();
-        let base_len = path_buffer.file_index();
-        let required_len = base_len + name_len;
-        //SAFETY: trivial, name_len=>1 (POSIX standard) ; ALLOWS US TO ELIDE BOUNDS CHECKS
-        // rustc knows this but it's unsigned overflow conditions being annoying.
-        unsafe { assert_unchecked(required_len > base_len) };
-
-        // Get the amount of the buffer we wish to initialise (grows the buffer on the cold path if required).
-        let buffer = path_buffer.prepare(required_len);
-
-        // Get the portion of the buffer that goes past the last slash, up to the name+NUL
-        let name_portion = &mut buffer[base_len..];
-
-        // Copy name into the uninit memory.
-        name_portion.write_copy_of_slice(d_name_cstr);
-        //^this is a memcpy.
-        // SAFETY: the buffer is guaranteed null terminated(copying a null terminated string)
-        // &CStr is a &[u8]/&[i8] underneath.
-        let bytes = unsafe { from_raw_parts(buffer.as_ptr().cast(), required_len) };
-        // SAFETY: guraranteed to have no interior nulls, length is suited etc etc.
-        let full_path = unsafe { CStr::from_bytes_with_nul_unchecked(bytes) };
-        //truncate the buffer to the first null terminator of the full path
+        // Copies the name past the bookmarked base path and returns the resulting full path.
+        let full_path = self.path_buffer().copy_dname(d_name_cstr);
         (full_path, d_ino, file_type)
     }
 }

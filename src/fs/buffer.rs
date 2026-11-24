@@ -83,6 +83,8 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     #[track_caller]
     pub const fn new() -> Self {
         const { assert!(Self::BUFFER_SIZE < i32::MAX as _, " `SIZE` => i32::MAX ") };
+        const { assert!(Self::BUFFER_SIZE > 0, "trivial") }
+        const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "as above") }
         // thanks to monomorphisation this should highlight the error fine.
         Self(MaybeUninit::uninit())
     }

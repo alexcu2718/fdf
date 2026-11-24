@@ -224,8 +224,8 @@ impl ReadDir<'_> {
     /// full-path resolution for the child directory.
     #[inline]
     pub(crate) fn from_fd(dfd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
-        Ok(Self {
-            fd: dfd.try_into()?,
+        dfd.try_into().map(|inner| Self {
+            fd: inner,
             path: dir_path.into(),
         })
     }
@@ -236,7 +236,7 @@ impl ReadDir<'_> {
 
  This trait provides the necessary components to construct `DirEntry` objects
  from raw `dirent64` structures while maintaining path buffer state, tracking
- file name positions, and managing directory traversal depth.
+ file name positions, and managing directory traversal depth.W
 
 */
 trait DirentConstructor: AsRawFd + AsFd {

@@ -240,6 +240,13 @@ impl PartialEq<[u8]> for DirEntry {
     }
 }
 
+impl<const N: usize> PartialEq<[u8; N]> for DirEntry {
+    #[inline]
+    fn eq(&self, other: &[u8; N]) -> bool {
+        self.as_bytes() == other
+    }
+}
+
 impl PartialEq<OsStr> for DirEntry {
     #[inline]
     fn eq(&self, other: &OsStr) -> bool {
@@ -925,9 +932,7 @@ impl DirEntry {
 
     /**
     Converts a directory entry to a full, canonical path, resolving all symlinks
-
-    This is a **costly** operation as it involves a system call (`realpath`).
-    If the filetype is a symlink, it invokes a stat call to find the realtype, otherwise stat is not called.
+    stat call to find the realtype, otherwise stat is not called.
 
     # Errors
 
@@ -1112,8 +1117,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_lstatat(&self, fd: BorrowedFd) -> Result<stat> {
-        const FLAG: c_int = AT_SYMLINK_NOFOLLOW;
-        stat_syscall!(fstatat, fd.as_raw_fd(), self.file_name_ptr(), FLAG)
+        stat_syscall!(fstatat, fd, self.file_name_ptr(), AT_SYMLINK_NOFOLLOW)
     }
 
     #[inline]
@@ -1219,7 +1223,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_statat(&self, fd: BorrowedFd) -> Result<stat> {
-        stat_syscall!(fstatat, fd.as_raw_fd(), self.file_name_ptr(), 0)
+        stat_syscall!(fstatat, fd, self.file_name_ptr(), 0)
     }
 
     /// Cost free conversion to bytes (because it is already is bytes)
@@ -1466,7 +1470,7 @@ impl DirEntry {
             "Indexing should always be within bounds"
         );
 
-        if self == b"/".as_ref() {
+        if self == b"/" {
             return b"/";
         }
 

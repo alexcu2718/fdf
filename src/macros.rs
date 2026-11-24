@@ -327,7 +327,7 @@ macro_rules! stat_syscall {
         let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
-        let res = unsafe { $syscall($fd, $path, stat_buf.as_mut_ptr(), $flags) };
+        let res = unsafe { $syscall($fd.as_raw_fd(), $path, stat_buf.as_mut_ptr(), $flags) };
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know the stat structure has been properly initialised
@@ -341,7 +341,7 @@ macro_rules! stat_syscall {
         let mut stat_buf = ::core::mem::MaybeUninit::<::libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
-        let res = unsafe { $syscall($fd, $path, stat_buf.as_mut_ptr(), $flags) };
+        let res = unsafe { $syscall($fd.as_raw_fd(), $path, stat_buf.as_mut_ptr(), $flags) };
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know it's been initialised properly

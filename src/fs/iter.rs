@@ -114,7 +114,7 @@ impl PathBuffer {
     #[inline]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn new(path: &DirEntry) -> Self {
-        let needs_slash = usize::from(path != b"/".as_ref());
+        let needs_slash = usize::from(path != b"/");
         /*
         Fast-path filename capacity (+NUL is included in the filename during append).
         Longer names take the cold slow-path reserve in `reserve_for_long_name`.
@@ -219,7 +219,7 @@ trait DirentConstructor: AsRawFd + AsFd {
     fn get_filetype(&self, drnt: &Unique<dirent64>) -> FileType {
         stat_syscall!(
             fstatat,
-            self.as_raw_fd(),
+            self,
             drnt.d_name(),
             AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
             DTYPE

@@ -17,87 +17,6 @@ use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 // }
 
 /**
- POSIX-compliant directory iterator using libc's readdir
-
- This iterator traverses directory entries using the standard POSIX directory
- reading API. It automatically skips "." and ".." entries and provides
- a safe Rust interface over the underlying C library functions.
-
-*/
-#[derive(Debug)]
-pub struct ReadDir<'filedes> {
-    /// Directory pointer from libc's `opendir()` wrapped in a new type with custom destructor.
-    fd: OwnedDir<'filedes>, //call it fd for macro code
-    /// Bookmarked base-path state (buffer + filename index) used to construct entry paths
-    path: PathBuffer,
-    /// Depth of this directory relative to traversal root
-    parent_depth: u32,
-}
-
-impl ReadDir<'_> {
-    /**
-    Reads the next directory entry using the libc `readdir` function.
-
-    This function provides a safe wrapper around the libc `readdir` call, advancing
-    the directory stream and returning a pointer to the next directory entry.
-
-    The function handles the underlying directory stream management automatically,
-    including positioning and error conditions.
-
-    This was *MAINLY* implemented to give a lower level interface so that one can use `std::iter::from_fn`
-    It's not meant to be used without explicit reason.
-
-    IMPORTANT: This function returns ALL directory entries, including "." and ".." entries.
-    Filtering of these entries should be handled by the caller if desired.
-
-    # Returns
-    - `Some(Unique<dirent64>)` when a directory entry is successfully read
-    - `None` when the end of directory is reached or if an error occurs
-
-
-
-    # Notes
-    - Unlike the `getdents64`/`getdirentries64` system calls type approach, this implementation uses the
-      standard libc directory handling functions
-    - The function returns `None` both at end-of-directory and on errors, following
-      the traditional `readdir` semantics
-
-    # Safety
-    The directory stream is always valid and open for the lifetime of `self` (the destructor closes it).
-    The returned pointer is only valid until the next call to `get_next_entry`; it must be
-    consumed (e.g. via `construct_entry`) before advancing the stream again.
-    */
-    #[inline]
-    pub unsafe fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
-        self.fd.next_pointer()
-    }
-
-    #[inline]
-    pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        // Mutate the buffer to contain the full path, then add a null terminator and record the new length
-        // We use this length to index to get the filename (store full path -> index to get filename)
-        Ok(Self {
-            fd: dir_path.open()?.try_into()?,
-            path: PathBuffer::new(dir_path),
-            parent_depth: dir_path.depth, //inherit depth
-        })
-    }
-
-    /// Constructs a `ReadDir` from a pre-opened file descriptor, skipping the `open()` call.
-    ///
-    /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
-    /// full-path resolution for the child directory.
-    #[inline]
-    pub(crate) fn from_fd(dfd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
-        Ok(Self {
-            fd: dfd.try_into()?,
-            path: PathBuffer::new(dir_path),
-            parent_depth: dir_path.depth,
-        })
-    }
-}
-
-/**
  Bookmarked path-construction state shared by every directory iterator.
 
  Combines the base-path buffer with the index marking where filenames start,
@@ -181,6 +100,91 @@ impl PathBuffer {
         // SAFETY: the branch above guarantees `buffer.len() >= required_len`.
         unsafe { assert_unchecked(required_len <= self.buffer.len()) }
         &mut self.buffer[..required_len]
+    }
+}
+
+impl From<&DirEntry> for PathBuffer {
+    #[inline]
+    fn from(dent: &DirEntry) -> Self {
+        Self::new(dent)
+    }
+}
+
+/**
+ POSIX-compliant directory iterator using libc's readdir
+
+ This iterator traverses directory entries using the standard POSIX directory
+ reading API. It automatically skips "." and ".." entries and provides
+ a safe Rust interface over the underlying C library functions.
+
+*/
+#[derive(Debug)]
+pub struct ReadDir<'filedes> {
+    /// Directory pointer from libc's `opendir()` wrapped in a new type with custom destructor.
+    fd: OwnedDir<'filedes>, //call it fd for macro code
+    /// Bookmarked base-path state (buffer + filename index) used to construct entry paths
+    path: PathBuffer,
+    /// Depth of this directory relative to traversal root
+    parent_depth: u32,
+}
+
+impl ReadDir<'_> {
+    /**
+    Reads the next directory entry using the libc `readdir` function.
+
+    This function provides a safe wrapper around the libc `readdir` call, advancing
+    the directory stream and returning a pointer to the next directory entry.
+
+    The function handles the underlying directory stream management automatically,
+    including positioning and error conditions.
+
+    This was *MAINLY* implemented to give a lower level interface so that one can use `std::iter::from_fn`
+    It's not meant to be used without explicit reason.
+
+    IMPORTANT: This function returns ALL directory entries, including "." and ".." entries.
+    Filtering of these entries should be handled by the caller if desired.
+
+    # Returns
+    - `Some(Unique<dirent64>)` when a directory entry is successfully read
+    - `None` when the end of directory is reached or if an error occurs
+
+
+
+    # Notes
+    - Unlike the `getdents64`/`getdirentries64` system calls type approach, this implementation uses the
+      standard libc directory handling functions
+    - The function returns `None` both at end-of-directory and on errors, following
+      the traditional `readdir` semantics
+
+    # Safety
+    The directory stream is always valid and open for the lifetime of `self` (the destructor closes it).
+    The returned pointer is only valid until the next call to `get_next_entry`; it must be
+    consumed (e.g. via `construct_entry`) before advancing the stream again.
+    */
+    #[inline]
+    pub unsafe fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
+        self.fd.next_pointer()
+    }
+
+    #[inline]
+    #[allow(clippy::return_and_then)]
+    pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
+        // Mutate the buffer to contain the full path, then add a null terminator and record the new length
+        // We use this length to index to get the filename (store full path -> index to get filename)
+        dir_path.open().and_then(|fd| Self::from_fd(fd, dir_path))
+    }
+
+    /// Constructs a `ReadDir` from a pre-opened file descriptor, skipping the `open()` call.
+    ///
+    /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
+    /// full-path resolution for the child directory.
+    #[inline]
+    pub(crate) fn from_fd(dfd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
+        Ok(Self {
+            fd: dfd.try_into()?,
+            path: dir_path.into(),
+            parent_depth: dir_path.depth,
+        })
     }
 }
 
@@ -385,11 +389,7 @@ impl GetDents<'_> {
 
     #[inline]
     pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
-        Ok(Self {
-            fd: dir.open()?.into(),
-            path: PathBuffer::new(dir),
-            parent_depth: dir.depth,
-        })
+        dir.open().map(|fd| Self::from_fd(fd, dir))
     }
     /**
     Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
@@ -402,7 +402,7 @@ impl GetDents<'_> {
     pub(crate) fn from_fd(fd: OwnedFd, dir: &DirEntry) -> Self {
         Self {
             fd: fd.into(),
-            path: PathBuffer::new(dir),
+            path: dir.into(),
             parent_depth: dir.depth,
         }
     }

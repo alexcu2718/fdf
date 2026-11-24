@@ -85,15 +85,18 @@ use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ffi::{CStr, c_char, c_int};
 use core::fmt;
-use libc::{AT_FDCWD, X_OK};
 #[allow(unused)]
 use libc::{
-    AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK, access,
-    faccessat, fstatat, lstat, stat,
+    AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK,
+    X_OK, access, faccessat, fstatat, lstat, stat,
 };
 #[allow(unused)]
 use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, FromRawFd as _, OwnedFd};
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
+use std::{
+    ffi::{CString, OsStr},
+    os::unix::ffi::OsStrExt as _,
+    path::Path,
+};
 
 //TODO, test #[align(64)] to check for presence of false sharing/perf improvements
 // If so, add extra relevant metadata to the struct...
@@ -396,9 +399,9 @@ impl DirEntry {
         // We can't just 'retry' certain files, ie ones in /proc
 
         // SAFETY: the pointer is null terminated
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
         let fd = unsafe { libc::open(self.as_ptr(), FLAGS) };
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
         // SAFETY: as above.
         let fd = unsafe { crate::util::openat_nocancel(libc::AT_FDCWD, self.as_ptr(), FLAGS) };
         if fd < 0 {
@@ -1600,7 +1603,7 @@ impl DirEntry {
             path_ref = stripped;
         }
 
-        let cstr = std::ffi::CString::new(path_ref).map_err(DirEntryError::from)?;
+        let cstr = CString::new(path_ref).map_err(DirEntryError::from)?;
 
         let file_name_index = Self::_file_name_index(path_ref);
         // extract information from successful stat call

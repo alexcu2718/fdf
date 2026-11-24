@@ -164,22 +164,8 @@ impl OwnedFdDir<'_> {
 
     #[inline]
     #[must_use]
-    /// Returns the current offset into the internal (stack) buffer.
-    pub(crate) const fn offset(&self) -> usize {
-        self.offset
-    }
-
-    #[inline]
-    #[must_use]
-    /// Returns the amount of bytes left in the buffer
-    pub(crate) const fn remaining_bytes(&self) -> usize {
-        self.remaining_bytes
-    }
-
-    #[inline]
-    #[must_use]
     /// Returns a boolean indicating whether the stream is exhausted
-    pub(crate) const fn is_end_of_stream(&self) -> bool {
+    pub const fn is_end_of_stream(&self) -> bool {
         self.end_of_stream
     }
 
@@ -205,7 +191,7 @@ impl OwnedFdDir<'_> {
     /// See `GetDents::are_more_entries_remaining` for the explanation of the macOS EOF trick.
     #[inline]
     fn are_more_entries_remaining(&mut self) -> bool {
-        if self.end_of_stream {
+        if self.is_end_of_stream() {
             return false;
         }
 

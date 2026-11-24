@@ -316,13 +316,6 @@ pub struct GetDents<'filedes> {
 #[cfg(has_faster_readdir)]
 impl GetDents<'_> {
     #[inline]
-    #[must_use]
-    /// Returns the current offset into the internal (stack) buffer.
-    pub const fn offset(&self) -> usize {
-        self.fd.offset()
-    }
-
-    #[inline]
     /**
      Refills the internal directory-entry buffer using the platform directory syscall.
 
@@ -342,13 +335,6 @@ impl GetDents<'_> {
     */
     pub fn getdents(&mut self) -> isize {
         self.fd.getdents()
-    }
-
-    #[inline]
-    #[must_use]
-    /// Returns the amount of bytes left in the buffer
-    pub const fn remaining_bytes(&self) -> usize {
-        self.fd.remaining_bytes()
     }
 
     #[inline]

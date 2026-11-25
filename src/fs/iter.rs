@@ -1,20 +1,16 @@
-use crate::fs::{DirEntry, FileType, OwnedDir, Result};
 #[cfg(has_faster_readdir)]
-use crate::fs::{OwnedFdDir, SyscallBuffer};
-use crate::{Unique, dirent64};
-use core::cell::Cell;
-use core::ffi::CStr;
-use core::hint::assert_unchecked;
-use core::mem::MaybeUninit;
-use core::slice;
+use crate::fs::OwnedFdDir;
+use crate::{
+    Unique, dirent64,
+    fs::{DirEntry, FileType, OwnedDir, Result},
+};
+use core::{cell::Cell, ffi::CStr, hint::assert_unchecked, mem::MaybeUninit, slice};
 use libc::{AT_SYMLINK_NOFOLLOW, fstatat};
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
 // struct DirEntryRef<'fdes>{
-
 //     path:&'fdes CStr,
 //     inode:u64,
-
 // }
 
 /**
@@ -342,10 +338,6 @@ impl GetDents<'_> {
     pub const fn is_end_of_stream(&self) -> bool {
         self.fd.is_end_of_stream()
     }
-
-    /// A constant representing the maximum size of the internal Stack based buffer on this platform
-    /// Differs per platform and in debug/release! Do not rely on this except if you're doing pointer arithmetic.
-    pub const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
 
     /**
         Advances the iterator to the next directory entry in the buffer and returns a pointer to it.

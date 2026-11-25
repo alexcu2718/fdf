@@ -79,8 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 */
 
 use crate::DirEntryError;
-use crate::fs::AT_EACCESS;
-use crate::fs::{FileType, ReadDir, types::Result};
+use crate::fs::{AT_EACCESS, FileType, ReadDir, types::Result};
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ffi::{CStr, c_char, c_int};
@@ -443,7 +442,7 @@ impl DirEntry {
     /// Returns a [`GetDents`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
     #[inline]
     #[cfg(has_faster_readdir)]
-    pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> crate::fs::GetDents<'_> {
+    pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> Result<crate::fs::GetDents<'_>> {
         crate::fs::GetDents::from_fd(fd, self)
     }
 
@@ -1603,11 +1602,11 @@ impl DirEntry {
             path_ref = stripped;
         }
 
-        let cstr = CString::new(path_ref).map_err(DirEntryError::from)?;
+        let cstr = CString::new(path_ref)?;
 
         let file_name_index = Self::_file_name_index(path_ref);
         // extract information from successful stat call
-        let get_stat: stat = stat_syscall!(lstat, cstr.as_ptr()).map_err(DirEntryError::IOError)?;
+        let get_stat: stat = stat_syscall!(lstat, cstr.as_ptr())?;
         let file_type = FileType::from(&get_stat);
         let inode = access_stat!(get_stat, st_ino);
         Ok(Self {

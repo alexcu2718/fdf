@@ -3,11 +3,26 @@ use crate::{Unique, dirent64, fs::Result, readdir64};
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 #[allow(unused)]
-use libc::{DIR, closedir, fdopendir, off_t};
+use libc::{DIR, off_t};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
 #[cfg(has_faster_readdir)]
 use crate::fs::SyscallBuffer;
+
+/// A source of raw `dirent64` pointers (`readdir` or a `getdents` buffer) over an open directory fd.
+pub trait DirStream: AsFd + AsRawFd + Sized {
+    /// Error returned when wrapping an fd (`fdopendir` can fail; `getdents` cannot).
+    type Error: Into<crate::DirEntryError>;
+
+    /// Wraps an owned directory fd.
+    ///
+    /// # Errors
+    /// Returns `Self::Error` if the directory stream cannot be created from the fd.
+    fn from_owned_fd(fd: OwnedFd) -> core::result::Result<Self, Self::Error>;
+
+    /// Returns ALL entries (including `.` and `..`); the pointer is only valid until the next call.
+    fn next_pointer(&mut self) -> Option<Unique<dirent64>>;
+}
 
 #[derive(Debug)]
 pub struct OwnedDir<'fd> {
@@ -35,7 +50,7 @@ impl Drop for OwnedDir<'_> {
     #[inline]
     fn drop(&mut self) {
         // SAFETY: `dirp` is a valid DIR* from a successful `fdopendir`, closed only here.
-        let retval = unsafe { closedir(self.as_mut_ptr()) };
+        let retval = unsafe { libc::closedir(self.as_mut_ptr()) };
         debug_assert_eq!(retval, 0, "not closed properly!");
     }
 }
@@ -53,15 +68,17 @@ impl TryFrom<OwnedFd> for OwnedDir<'_> {
     }
 }
 
-impl OwnedDir<'_> {
+impl DirStream for OwnedDir<'_> {
+    type Error = crate::DirEntryError;
+
     /// Wraps an owned file descriptor in a directory stream.
     ///
     /// # Errors
     /// Returns the OS error if `fdopendir` fails (e.g. the fd is not a directory).
     #[inline]
-    pub fn from_owned_fd(fd: OwnedFd) -> Result<Self> {
+    fn from_owned_fd(fd: OwnedFd) -> Result<Self> {
         // SAFETY: `fd` is a valid, open file descriptor owned by us.
-        let ret: *mut DIR = unsafe { fdopendir(fd.as_raw_fd()) };
+        let ret: *mut DIR = unsafe { libc::fdopendir(fd.as_raw_fd()) };
 
         match NonNull::new(ret) {
             Some(inner) => {
@@ -77,16 +94,17 @@ impl OwnedDir<'_> {
     }
 
     #[inline]
+    fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
+        // SAFETY: passing a valid pointer, no other access is possible to this handle
+        Unique::new(unsafe { readdir64(self.as_mut_ptr()) })
+    }
+}
+
+impl OwnedDir<'_> {
+    #[inline]
     #[expect(clippy::needless_pass_by_ref_mut, reason = "interior mutability")]
     const fn as_mut_ptr(&mut self) -> *mut DIR {
         self.dirp.as_ptr()
-    }
-
-    #[inline]
-    /// Gets the next pointer from `readdir64`
-    pub fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
-        // SAFETY: passing a valid pointer, no other access is possible to this handle
-        unsafe { Unique::new(readdir64(self.as_mut_ptr())) }
     }
 }
 
@@ -250,13 +268,24 @@ impl OwnedFdDir<'_> {
 
         is_more_remaining
     }
+}
+
+#[cfg(has_faster_readdir)]
+impl DirStream for OwnedFdDir<'_> {
+    type Error = core::convert::Infallible; // needs to match API of readdir sigh.
+    // Move to never type eventually.
+
+    #[inline]
+    fn from_owned_fd(fd: OwnedFd) -> core::result::Result<Self, Self::Error> {
+        Ok(Self::new(fd))
+    }
 
     /// Gets the next pointer from the `getdents` buffer, refilling it when exhausted.
     ///
     /// Returns ALL entries including `.` and `..`, like `readdir`.
     /// The returned pointer is only valid until the next call.
     #[inline]
-    pub fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
+    fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
         while self.offset >= self.remaining_bytes {
             if !self.are_more_entries_remaining() {
                 return None;

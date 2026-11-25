@@ -1,17 +1,10 @@
-#[cfg(has_faster_readdir)]
-use crate::fs::OwnedFdDir;
 use crate::{
     Unique, dirent64,
-    fs::{DirEntry, FileType, OwnedDir, Result},
+    fs::{DirEntry, DirStream, FileType, OwnedDir, Result},
 };
 use core::{cell::Cell, ffi::CStr, hint::assert_unchecked, mem::MaybeUninit, slice};
 use libc::{AT_SYMLINK_NOFOLLOW, fstatat};
-use std::os::fd::{AsFd, AsRawFd, OwnedFd};
-
-// struct DirEntryRef<'fdes>{
-//     path:&'fdes CStr,
-//     inode:u64,
-// }
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 
 /**
  Bookmarked path-construction state shared by every directory iterator.
@@ -20,7 +13,7 @@ use std::os::fd::{AsFd, AsRawFd, OwnedFd};
  so the two always stay in sync.
 */
 #[derive(Debug)]
-struct FilePathState {
+struct Metadata {
     buffer: Vec<MaybeUninit<u8>>,
     /// Index into `buffer` where filenames start (avoids recalculating)
     file_index: usize,
@@ -28,7 +21,14 @@ struct FilePathState {
     depth: u32,
 }
 
-impl FilePathState {
+impl From<&DirEntry> for Metadata {
+    #[inline]
+    fn from(dentry: &DirEntry) -> Self {
+        Self::new(dentry)
+    }
+}
+
+impl Metadata {
     #[inline]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn new(path: &DirEntry) -> Self {
@@ -66,24 +66,8 @@ impl FilePathState {
     }
 
     #[inline]
-    /// Returns the current index in the buffer where the filename should be appended
-    ///
-    /// This represents the length of the base directory path before adding the current filename.
-    const fn file_index(&self) -> usize {
-        self.file_index
-    }
-
-    #[inline]
-    /// Returns the depth of the bookmarked base path relative to the traversal root
-    ///
-    /// Depth starts at 0 for the root directory being scanned and increments for each subdirectory.
-    const fn depth(&self) -> u32 {
-        self.depth
-    }
-
-    #[inline]
     /// Total allocated size of the internal vector that holds the path buffer
-    fn allocated_size(&self) -> usize {
+    const fn allocated_size(&self) -> usize {
         let allocated_sz = self.buffer.len();
         debug_assert!(allocated_sz <= self.buffer.capacity(), "");
         // trivial check, this should always be true, debug invariant.
@@ -120,8 +104,10 @@ impl FilePathState {
 
     Returns the resulting full path (base path + '/' + name) as a `&CStr`.
     */
-    fn copy_dname(&mut self, d_name_cstr: &CStr) -> &CStr {
-        let base_len = self.file_index();
+    fn copy_dname(&mut self, drnt: &Unique<dirent64>) -> &CStr {
+        // SAFETY: just obtained, pointer is aligned, alive etc.
+        let d_name_cstr = unsafe { drnt.d_name_cstr() };
+        let base_len = self.file_index;
         let name_len = d_name_cstr.count_bytes() + 1; //technically should be a u16 but we need it for indexing :( // we need +1 bc this strlen omits null terminator
         let required_len = base_len + name_len;
         //SAFETY: trivial, name_len=>1 (POSIX standard) ; ALLOWS US TO ELIDE BOUNDS CHECKS
@@ -145,13 +131,6 @@ impl FilePathState {
     }
 }
 
-impl From<&DirEntry> for FilePathState {
-    #[inline]
-    fn from(dent: &DirEntry) -> Self {
-        Self::new(dent)
-    }
-}
-
 /**
  POSIX-compliant directory iterator using libc's readdir
 
@@ -160,15 +139,63 @@ impl From<&DirEntry> for FilePathState {
  a safe Rust interface over the underlying C library functions.
 
 */
+pub type ReadDir<'filedes> = DirIter<OwnedDir<'filedes>>;
+
+/**
+High-throughput directory iterator backed by `getdents` or `getdirentries`,
+ depending on the target platform.
+
+ This implementation reads directory entries in batches directly from the kernel,
+ which reduces libc overhead and is typically faster than `readdir` when walking
+ large directories.
+
+ It also avoids implicit `stat` calls for each entry and only falls back to
+ metadata lookups when the filesystem does not provide a usable entry type.
+*/
+#[cfg(has_faster_readdir)]
+pub type GetDents<'filedes> = DirIter<crate::fs::OwnedFdDir<'filedes>>;
+
+/// Directory iterator shared by [`ReadDir`] and [`GetDents`]: a raw entry stream plus the
+/// bookmarked base path used to build each entry's full path.
 #[derive(Debug)]
-pub struct ReadDir<'filedes> {
-    /// Directory pointer from libc's `opendir()` wrapped in a new type with custom destructor.
-    fd: OwnedDir<'filedes>, //call it fd for macro code
-    /// Bookmarked base-path state (buffer + filename index + depth) used to construct entry paths
-    path: FilePathState,
+pub struct DirIter<S: DirStream> {
+    /// The owned directory stream, closed when the iterator is dropped.
+    fd: S,
+    /// Bookmarked base-path state (buffer + filename index + depth), reused for every entry
+    /// (only constructed once per dir).
+    path: Metadata,
 }
 
-impl ReadDir<'_> {
+impl<S: DirStream> AsRawFd for DirIter<S> {
+    #[inline]
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+}
+
+impl<S: DirStream> AsFd for DirIter<S> {
+    #[inline]
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
+    }
+}
+
+impl<S: DirStream> Iterator for DirIter<S> {
+    type Item = DirEntry;
+
+    #[inline]
+    fn next(&mut self) -> Option<DirEntry> {
+        // SAFETY: the underlying fd/directory stream is kept open and valid for the lifetime of `self`
+        while let Some(drnt) = unsafe { self.get_next_entry() } {
+            // avoids using strlen/strcmp on the pointer (avoids unnecessary non inlineable function calls)
+            skip_dot_or_dot_dot_entries!(drnt, continue);
+            return Some(self.construct_direntry(&drnt));
+        }
+        None
+    }
+}
+
+impl<S: DirStream> DirIter<S> {
     /**
     Reads the next directory entry using the libc `readdir` function.
 
@@ -206,252 +233,60 @@ impl ReadDir<'_> {
         self.fd.next_pointer()
     }
 
+    /// Opens `dir` and wraps it in an iterator.
     #[inline]
-    #[allow(clippy::return_and_then)]
-    pub(crate) fn new(dir_path: &DirEntry) -> Result<Self> {
-        // Mutate the buffer to contain the full path, then add a null terminator and record the new length
-        // We use this length to index to get the filename (store full path -> index to get filename)
-        dir_path.open().and_then(|fd| Self::from_fd(fd, dir_path))
+    pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
+        Self::from_fd(dir.open()?, dir)
     }
 
-    /// Constructs a `ReadDir` from a pre-opened file descriptor, skipping the `open()` call.
+    /// Constructs a `DirIter` from a pre-opened file descriptor, skipping the `open()` call.
     ///
     /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
     /// full-path resolution for the child directory.
     #[inline]
-    pub(crate) fn from_fd(dfd: OwnedFd, dpath: &DirEntry) -> Result<Self> {
-        dfd.try_into().map(|fd| Self {
-            fd,
-            path: dpath.into(),
-        })
-    }
-}
-
-/**
-  Internal trait for constructing directory entries during iteration
-
- This trait provides the necessary components to construct `DirEntry` objects
- from raw `dirent64` structures while maintaining path buffer state, tracking
- file name positions, and managing directory traversal depth.W
-
-*/
-trait DirentConstructor: AsRawFd + AsFd {
-    /// Returns a mutable reference to the bookmarked path-buffer state used to construct full paths
-    fn path_buffer_mut(&mut self) -> &mut FilePathState;
-
-    /// Returns a reference to the bookmarked path-buffer state used to construct full paths
-    fn path_buffer(&self) -> &FilePathState;
-    #[inline]
-    /// Returns the depth at which this was created at
-    fn parent_depth(&self) -> u32 {
-        self.path_buffer().depth()
+    pub(crate) fn from_fd(dfd: OwnedFd, dir: &DirEntry) -> Result<Self> {
+        S::from_owned_fd(dfd)
+            .map(|fd| Self {
+                fd,
+                path: dir.into(),
+            })
+            .map_err(Into::into)
     }
 
+    /// Constructs a `DirEntry` from a directory entry pointer, combining the entry's metadata
+    /// with the parent directory's path stored in the path buffer.
+    ///
+    /// `drnt` must be a valid pointer freshly obtained from [`Self::get_next_entry`].
     #[inline]
-    /// A bookkeeping value, TODO!
-    fn file_index(&self) -> usize {
-        self.path_buffer().file_index()
-    }
+    pub fn construct_direntry(&mut self, drnt: &Unique<dirent64>) -> DirEntry {
+        // SAFETY: we just obtained this pointer and it hasn't been invalidated by advancing the stream
+        let inode = unsafe { drnt.d_ino() }; //Returns 0 if d_ino isn't defined on your system
+        debug_assert!(drnt.is_aligned(), "drnt not aligned(report this)");
 
-    #[inline]
-    /// Constructs a `DirEntry` from a raw directory entry pointer
-    fn construct_entry(&mut self, drnt: Unique<dirent64>) -> DirEntry {
-        let meta = self.construct_path(drnt);
+        // Only fall back to an `fstatat` when the filesystem doesn't supply `d_type`
+        // (skipping the syscall is a massive perf win).
+        #[cfg(has_d_type)]
+        // SAFETY: as above
+        let file_type = match FileType::from_dtype(unsafe { drnt.d_type() }) {
+            FileType::Unknown => self.stat_filetype(drnt),
+            known => known,
+        };
+        #[cfg(not(has_d_type))]
+        let file_type = self.stat_filetype(&drnt);
+
         DirEntry {
-            path: meta.0.into(), //&cstr->cstring
-            inode: meta.1,       //u64
-            file_type: meta.2,   // filetype
-            depth: self.parent_depth() + 1,
-            file_name_index: self.file_index(),
+            path: self.path.copy_dname(drnt).into(),
+            inode,
+            file_type,
+            depth: self.path.depth + 1,
+            file_name_index: self.path.file_index,
             is_cached_traversable: Cell::new(None), // Lazy cache for traversal checks
         }
     }
 
+    /// Gets the `FileType` without following symlinks (same semantics as readdir/getdents)
     #[inline]
-    #[rustfmt::skip]
-    /// Gets the `FileType` without following
-    fn get_filetype(&self, drnt: &Unique<dirent64>) -> FileType {
-        // dont follow, to keep same semantics as readdir/getdents
-        stat_syscall!(fstatat,self,drnt.d_name(),AT_SYMLINK_NOFOLLOW,DTYPE)
-    }
-
-    /**
-    Constructs a full path by appending the directory entry name to the base path
-
-    returns the full path, inode,`FileType`
-    */
-    #[inline]
-    // TODO! make a temp dirent struct being fd:borrowedfd,name:&cstr,filetype:Filetype,ino:u64 etc, needs lifetime fuckery.
-    fn construct_path(&mut self, drnt: Unique<dirent64>) -> (&CStr, u64, FileType) {
-        // SAFETY: we just obtained this pointer and hasn't been invalidated by iterator reset
-        let d_name_cstr = unsafe { drnt.d_name_cstr() };
-
-        debug_assert!(drnt.is_aligned(), "drnt not aligned(report this)");
-
-        // SAFETY: as above
-        let d_ino = unsafe { drnt.d_ino() }; // Returns 0 if d_ino isn't defined on your system
-
-        // if d_type==`DT_UNKNOWN`  then make an fstat at call to determine
-        #[cfg(has_d_type)]
-        // SAFETY: same conditions for the d/name etc
-        let file_type = unsafe {
-            match FileType::from_dtype(drnt.d_type()) {
-                FileType::Unknown => self.get_filetype(&drnt),
-                not_unknown => not_unknown, //if not unknown, skip the syscall (THIS IS A MASSIVE PERF WIN)
-            }
-        };
-
-        #[cfg(not(has_d_type))] // Have to make a syscall on these systems alas
-        let file_type = self.get_filetype(&drnt);
-
-        // Copies the name past the bookmarked base path and returns the resulting full path.
-        let full_path = self.path_buffer_mut().copy_dname(d_name_cstr);
-        (full_path, d_ino, file_type)
+    fn stat_filetype(&self, drnt: &Unique<dirent64>) -> FileType {
+        stat_syscall!(fstatat, self, drnt.d_name(), AT_SYMLINK_NOFOLLOW, DTYPE)
     }
 }
-
-/**
-High-throughput directory iterator backed by `getdents` or `getdirentries`,
- depending on the target platform.
-
- This implementation reads directory entries in batches directly from the kernel,
- which reduces libc overhead and is typically faster than `readdir` when walking
- large directories.
-
- It also avoids implicit `stat` calls for each entry and only falls back to
- metadata lookups when the filesystem does not provide a usable entry type.
-*/
-#[cfg(has_faster_readdir)]
-pub struct GetDents<'filedes> {
-    /// The owned, buffered directory file descriptor, closed when the iterator is dropped.
-    fd: OwnedFdDir<'filedes>,
-    /// Bookmarked base-path state (buffer + filename index + depth) used to construct entry paths
-    /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
-    path: FilePathState,
-}
-
-#[cfg(has_faster_readdir)]
-impl GetDents<'_> {
-    #[inline]
-    #[must_use]
-    /// Returns a boolean indicating whether the stream is exhausted
-    pub const fn is_end_of_stream(&self) -> bool {
-        self.fd.is_end_of_stream()
-    }
-
-    /**
-        Advances the iterator to the next directory entry in the buffer and returns a pointer to it.
-
-        This function processes the internal buffer filled by `getdirentries(64)` system calls, interpreting
-        the data at the current offset as a `dirent64` structure. After reading an entry, the internal
-        offset is advanced by the entry's record length (`d_reclen`), positioning the iterator for
-        the next subsequent call.
-
-        IMPORTANT: This function returns ALL directory entries, including "." and ".." entries.
-        Filtering of these entries should be handled by the caller if desired.
-
-        # Returns
-        - `Some(Unique<dirent64>)` when a valid directory entry is available
-        - `None` when the buffer is exhausted and no more entries can be read
-
-        # Safety
-        The directory file descriptor is always valid and open for the lifetime of `self` (the destructor closes it).
-        The returned pointer is only valid until the next call to `get_next_entry`; it must be
-        consumed (e.g. via `construct_entry`) before advancing the stream again.
-    */
-    #[inline]
-    pub unsafe fn get_next_entry(&mut self) -> Option<Unique<dirent64>> {
-        self.fd.next_pointer()
-    }
-
-    #[inline]
-    pub(crate) fn new(dir: &DirEntry) -> Result<Self> {
-        dir.open().map(|fd| Self::from_fd(fd, dir))
-    }
-    /**
-    Constructs a `GetDents` from a pre-opened file descriptor, skipping the `open()` call.
-
-    Used when the caller already holds an fd obtained via `openat`, avoiding a second
-    full-path resolution for the child directory.
-    Used internally only due to non-enforceable invariants
-    */
-    #[inline]
-    pub(crate) fn from_fd(fd: OwnedFd, dir: &DirEntry) -> Self {
-        Self {
-            fd: fd.into(),
-            path: dir.into(),
-        }
-    }
-}
-// Cheap macro to avoid duplicate code maintenance. (Keep the documentation continuous)
-macro_rules! impl_iterator_methods {
-    ($type:ty) => {
-        impl ::std::os::fd::AsRawFd for $type {
-            #[inline]
-            fn as_raw_fd(&self) -> ::std::os::fd::RawFd {
-                self.fd.as_raw_fd()
-            }
-        }
-
-        impl ::std::os::fd::AsFd for $type {
-            #[inline]
-            fn as_fd(&self) -> ::std::os::fd::BorrowedFd<'_> {
-                self.fd.as_fd()
-            }
-        }
-
-        impl Iterator for $type {
-            type Item = $crate::fs::DirEntry;
-
-            #[inline]
-            fn next(&mut self) -> ::core::option::Option<Self::Item> {
-                // SAFETY: the underlying fd/directory stream is kept open and valid for the lifetime of `self`
-                while let Some(drnt) = unsafe { self.get_next_entry() } {
-                    skip_dot_or_dot_dot_entries!(drnt, continue);
-                    // avoids using strlen/strcmp on the pointer (avoids unnecessary non inlineable function calls)
-                    return Some(self.construct_direntry(drnt));
-                }
-                None // signal end
-            }
-        }
-
-        impl $type {
-            /**
-             Constructs a `DirEntry` from a directory entry pointer.
-
-             This method converts a raw `dirent64` pointer into a safe `DirEntry`
-             by combining the directory entry metadata with the parent directory's
-             path information stored in the path buffer.
-
-             # Arguments
-             * `drnt` - A `Unique` pointer to a valid `dirent64` structure
-
-            */
-            #[inline]
-            pub fn construct_direntry(
-                &mut self,
-                drnt: $crate::Unique<$crate::dirent64>,
-            ) -> $crate::fs::DirEntry {
-                self.construct_entry(drnt)
-            }
-        }
-
-        // Simple repetition avoider for private trait
-        impl DirentConstructor for $type {
-            #[inline]
-            fn path_buffer_mut(&mut self) -> &mut FilePathState {
-                &mut self.path
-            }
-
-            #[inline]
-            fn path_buffer(&self) -> &FilePathState {
-                &self.path
-            }
-        }
-    };
-}
-// Common to all platforms
-impl_iterator_methods!(ReadDir<'_>);
-
-#[cfg(has_faster_readdir)]
-impl_iterator_methods!(GetDents<'_>);

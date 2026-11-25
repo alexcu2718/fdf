@@ -78,12 +78,12 @@ macro_rules! read_direntries_from_fd {
     ($dir:expr, $fd:expr) => {{
         #[cfg(has_faster_readdir)]
         {
-            Ok::<_, $crate::DirEntryError>($dir.getdents_from_fd($fd))
+            $dir.getdents_from_fd($fd)
         }
 
         #[cfg(not(has_faster_readdir))]
         {
-            Ok::<_, $crate::DirEntryError>($dir.readdir_from_fd($fd))
+            $dir.readdir_from_fd($fd)
         }
     }};
 }
@@ -333,7 +333,9 @@ macro_rules! stat_syscall {
             // SAFETY: If the return code is 0, we know the stat structure has been properly initialised
             Ok(unsafe { stat_buf.assume_init() })
         } else {
-            Err(::std::io::Error::last_os_error().into())
+            // Pinned to `DirEntryError` explicitly (rather than a generic `.into()`) so that call
+            // sites using `?` aren't ambiguous between converting here vs. at the `?`.
+            Err::<libc::stat, $crate::DirEntryError>(::std::io::Error::last_os_error().into())
         }
     }};
     // For fstatat with flags - returns FileType directly (kinda like an internal black magic tool for me to save writing so much duplicate code)
@@ -361,7 +363,9 @@ macro_rules! stat_syscall {
             // SAFETY: If the return code is 0, we know it's been initialised properly
             Ok(unsafe { stat_buf.assume_init() })
         } else {
-            Err(std::io::Error::last_os_error().into())
+            // Pinned to `DirEntryError` explicitly (rather than a generic `.into()`) so that call
+            // sites using `?` aren't ambiguous between converting here vs. at the `?`.
+            Err::<libc::stat, $crate::DirEntryError>(::std::io::Error::last_os_error().into())
         }
     }};
 }

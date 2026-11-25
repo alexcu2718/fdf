@@ -6,6 +6,7 @@ use core::cell::Cell;
 use core::ffi::CStr;
 use core::hint::assert_unchecked;
 use core::mem::MaybeUninit;
+use core::slice;
 use libc::{AT_SYMLINK_NOFOLLOW, fstatat};
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
@@ -23,7 +24,7 @@ use std::os::fd::{AsFd, AsRawFd, OwnedFd};
  so the two always stay in sync.
 */
 #[derive(Debug)]
-struct PathBuffer {
+struct FilePathState {
     buffer: Vec<MaybeUninit<u8>>,
     /// Index into `buffer` where filenames start (avoids recalculating)
     file_index: usize,
@@ -31,7 +32,7 @@ struct PathBuffer {
     depth: u32,
 }
 
-impl PathBuffer {
+impl FilePathState {
     #[inline]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
     fn new(path: &DirEntry) -> Self {
@@ -124,7 +125,6 @@ impl PathBuffer {
     Returns the resulting full path (base path + '/' + name) as a `&CStr`.
     */
     fn copy_dname(&mut self, d_name_cstr: &CStr) -> &CStr {
-        use core::slice;
         let base_len = self.file_index();
         let name_len = d_name_cstr.count_bytes() + 1; //technically should be a u16 but we need it for indexing :( // we need +1 bc this strlen omits null terminator
         let required_len = base_len + name_len;
@@ -149,7 +149,7 @@ impl PathBuffer {
     }
 }
 
-impl From<&DirEntry> for PathBuffer {
+impl From<&DirEntry> for FilePathState {
     #[inline]
     fn from(dent: &DirEntry) -> Self {
         Self::new(dent)
@@ -169,7 +169,7 @@ pub struct ReadDir<'filedes> {
     /// Directory pointer from libc's `opendir()` wrapped in a new type with custom destructor.
     fd: OwnedDir<'filedes>, //call it fd for macro code
     /// Bookmarked base-path state (buffer + filename index + depth) used to construct entry paths
-    path: PathBuffer,
+    path: FilePathState,
 }
 
 impl ReadDir<'_> {
@@ -223,10 +223,10 @@ impl ReadDir<'_> {
     /// Used when the caller already holds an fd obtained via `openat`, avoiding a second
     /// full-path resolution for the child directory.
     #[inline]
-    pub(crate) fn from_fd(dfd: OwnedFd, dir_path: &DirEntry) -> Result<Self> {
-        dfd.try_into().map(|inner| Self {
-            fd: inner,
-            path: dir_path.into(),
+    pub(crate) fn from_fd(dfd: OwnedFd, dpath: &DirEntry) -> Result<Self> {
+        dfd.try_into().map(|fd| Self {
+            fd,
+            path: dpath.into(),
         })
     }
 }
@@ -241,10 +241,10 @@ impl ReadDir<'_> {
 */
 trait DirentConstructor: AsRawFd + AsFd {
     /// Returns a mutable reference to the bookmarked path-buffer state used to construct full paths
-    fn path_buffer_mut(&mut self) -> &mut PathBuffer;
+    fn path_buffer_mut(&mut self) -> &mut FilePathState;
 
     /// Returns a reference to the bookmarked path-buffer state used to construct full paths
-    fn path_buffer(&self) -> &PathBuffer;
+    fn path_buffer(&self) -> &FilePathState;
     #[inline]
     /// Returns the depth at which this was created at
     fn parent_depth(&self) -> u32 {
@@ -272,15 +272,11 @@ trait DirentConstructor: AsRawFd + AsFd {
     }
 
     #[inline]
+    #[rustfmt::skip]
     /// Gets the `FileType` without following
     fn get_filetype(&self, drnt: &Unique<dirent64>) -> FileType {
-        stat_syscall!(
-            fstatat,
-            self,
-            drnt.d_name(),
-            AT_SYMLINK_NOFOLLOW, // dont follow, to keep same semantics as readdir/getdents
-            DTYPE
-        )
+        // dont follow, to keep same semantics as readdir/getdents
+        stat_syscall!(fstatat,self,drnt.d_name(),AT_SYMLINK_NOFOLLOW,DTYPE)
     }
 
     /**
@@ -335,7 +331,7 @@ pub struct GetDents<'filedes> {
     fd: OwnedFdDir<'filedes>,
     /// Bookmarked base-path state (buffer + filename index + depth) used to construct entry paths
     /// Reused for each entry to avoid repeated memory allocation (only constructed once per dir)
-    path: PathBuffer,
+    path: FilePathState,
 }
 
 #[cfg(has_faster_readdir)]
@@ -451,12 +447,12 @@ macro_rules! impl_iterator_methods {
         // Simple repetition avoider for private trait
         impl DirentConstructor for $type {
             #[inline]
-            fn path_buffer_mut(&mut self) -> &mut PathBuffer {
+            fn path_buffer_mut(&mut self) -> &mut FilePathState {
                 &mut self.path
             }
 
             #[inline]
-            fn path_buffer(&self) -> &PathBuffer {
+            fn path_buffer(&self) -> &FilePathState {
                 &self.path
             }
         }

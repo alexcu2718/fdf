@@ -197,13 +197,12 @@ impl OwnedFdDir<'_> {
             // SAFETY: passing a valid buffer to an open file descriptor and base pointer
             unsafe {
                 self.syscall_buffer
-                    .getdirentries64(self.inner.as_fd(), &mut self.base_pointer)
+                    .getdirentries64(self.fd.as_fd(), &mut self.base_pointer)
             }
         }
     }
 
     /// Refills the buffer, returns whether any bytes were read.
-    /// See `GetDents::are_more_entries_remaining` for the explanation of the macOS EOF trick.
     #[inline]
     fn are_more_entries_remaining(&mut self) -> bool {
         if self.is_end_of_stream() {

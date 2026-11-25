@@ -96,8 +96,8 @@ impl OwnedDir<'_> {
 /// Backs [`crate::fs::GetDents`].
 #[cfg(has_faster_readdir)]
 #[derive(Debug)]
-pub struct OwnedFdDir<'fd> {
-    inner: OwnedFd,
+pub struct OwnedFdDir<'fdes> {
+    fd: OwnedFd,
     syscall_buffer: SyscallBuffer,
     /// Current read position within `syscall_buffer`
     offset: usize,
@@ -109,14 +109,14 @@ pub struct OwnedFdDir<'fd> {
     /// The base pointer (seek cookie) for the `getdirentries64` call
     base_pointer: off_t,
     /// Ties `self` to the lifetime of the fd's origin, mirroring `OwnedDir<'fd>`.
-    _marker: PhantomData<BorrowedFd<'fd>>,
+    _marker: PhantomData<BorrowedFd<'fdes>>,
 }
 
 #[cfg(has_faster_readdir)] // can't exist for `OwnedDir`
 impl IntoRawFd for OwnedFdDir<'_> {
     #[inline]
     fn into_raw_fd(self) -> RawFd {
-        self.inner.into_raw_fd()
+        self.fd.into_raw_fd()
     }
 }
 
@@ -124,7 +124,7 @@ impl IntoRawFd for OwnedFdDir<'_> {
 impl AsFd for OwnedFdDir<'_> {
     #[inline]
     fn as_fd(&self) -> BorrowedFd<'_> {
-        self.inner.as_fd()
+        self.fd.as_fd()
     }
 }
 
@@ -132,7 +132,7 @@ impl AsFd for OwnedFdDir<'_> {
 impl AsRawFd for OwnedFdDir<'_> {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
-        self.inner.as_raw_fd()
+        self.fd.as_raw_fd()
     }
 }
 
@@ -151,7 +151,7 @@ impl OwnedFdDir<'_> {
     #[inline]
     pub(crate) const fn new(fd: OwnedFd) -> Self {
         Self {
-            inner: fd,
+            fd,
             syscall_buffer: SyscallBuffer::new(),
             offset: 0,
             remaining_bytes: 0,
@@ -169,13 +169,28 @@ impl OwnedFdDir<'_> {
         self.end_of_stream
     }
 
-    /// Refills the buffer via the platform syscall, returning the raw syscall result
-    /// (positive: bytes read, `0`: end of directory, negative: error).
-    #[inline]
+    /**
+     Refills the internal directory-entry buffer using the platform directory syscall.
+
+     On Linux-like targets this dispatches to `getdents`, while on macOS and
+     FreeBSD it calls `getdirentries64` and updates the internal base pointer
+     required by that API.
+
+     # Returns
+
+     Returns the raw syscall result as a signed byte count:
+     - positive: the number of bytes written into the buffer
+     - `0`: end of directory stream
+     - negative: the syscall failed
+
+     This method does not interpret the returned entries; higher-level iteration
+     code is responsible for consuming the buffer and handling end-of-stream.
+    */
+    #[inline] //TODO MAKE PUBLIC?
     pub(crate) fn getdents(&mut self) -> isize {
         #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
         {
-            self.syscall_buffer.getdents(self.inner.as_fd())
+            self.syscall_buffer.getdents(self.fd.as_fd())
         }
         #[cfg(any(target_os = "macos", target_os = "freebsd"))]
         {

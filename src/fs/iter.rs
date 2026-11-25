@@ -341,28 +341,6 @@ pub struct GetDents<'filedes> {
 #[cfg(has_faster_readdir)]
 impl GetDents<'_> {
     #[inline]
-    /**
-     Refills the internal directory-entry buffer using the platform directory syscall.
-
-     On Linux-like targets this dispatches to `getdents`, while on macOS and
-     FreeBSD it calls `getdirentries64` and updates the internal base pointer
-     required by that API.
-
-     # Returns
-
-     Returns the raw syscall result as a signed byte count:
-     - positive: the number of bytes written into the buffer
-     - `0`: end of directory stream
-     - negative: the syscall failed
-
-     This method does not interpret the returned entries; higher-level iteration
-     code is responsible for consuming the buffer and handling end-of-stream.
-    */
-    pub fn getdents(&mut self) -> isize {
-        self.fd.getdents()
-    }
-
-    #[inline]
     #[must_use]
     /// Returns a boolean indicating whether the stream is exhausted
     pub const fn is_end_of_stream(&self) -> bool {

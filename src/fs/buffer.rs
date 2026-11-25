@@ -1,3 +1,4 @@
+use crate::util;
 use core::fmt::{Debug, Display};
 use core::marker::Copy;
 use core::mem::MaybeUninit;
@@ -118,9 +119,7 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     ))]
     pub fn getdents(&mut self, fd: BorrowedFd) -> isize {
         // SAFETY: we're passing a valid buffer
-        unsafe {
-            crate::util::getdents64(fd.as_raw_fd(), self.as_mut_ptr().cast(), Self::BUFFER_SIZE)
-        }
+        unsafe { util::getdents64(fd.as_raw_fd(), self.as_mut_ptr().cast(), Self::BUFFER_SIZE) }
     }
 
     /**
@@ -151,7 +150,7 @@ impl<T: ValueType, const SIZE: usize> AlignedBuffer<T, SIZE> {
     pub unsafe fn getdirentries64(&mut self, fd: BorrowedFd, basep: &mut libc::off_t) -> isize {
         // SAFETY: we're passing a valid buffer and valid base pointer
         unsafe {
-            crate::util::getdirentries64(
+            util::getdirentries64(
                 fd.as_raw_fd(),
                 self.as_mut_ptr().cast(),
                 Self::BUFFER_SIZE,

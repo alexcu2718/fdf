@@ -17,6 +17,7 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 #[repr(align(8))] // only used as an empty type
 struct Aligned8Bytes<const SIZE: usize>([u8; SIZE]);
 
+#[cfg(has_faster_readdir)]
 type SyscallBuffer<const SIZE: usize = { fs::BUFFER_SIZE }> = MaybeUninit<Aligned8Bytes<SIZE>>;
 
 /// A source of raw `dirent64` pointers (`readdir` or a `getdents` buffer) over an open directory fd.
@@ -264,7 +265,7 @@ impl OwnedFdDir<'_> {
                     self.as_raw_fd(),
                     self.syscall_buffer.as_mut_ptr().cast(),
                     Self::BUFFER_SIZE,
-                    &raw mut *self.base_pointer,
+                    &raw mut self.base_pointer,
                 )
             }
         }

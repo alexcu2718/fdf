@@ -3,6 +3,7 @@ use crate::{Unique, dirent64, fs, readdir64, util};
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
+
 #[allow(unused)]
 use libc::{DIR, off_t};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
@@ -13,7 +14,10 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
    Aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
 */
-type SyscallBuffer = MaybeUninit<[u64; fs::BUFFER_SIZE.div_euclid(8)]>;
+#[repr(align(8))] // only used as an empty type
+struct Aligned8Bytes<const SIZE: usize>([u8; SIZE]);
+
+type SyscallBuffer<const SIZE: usize = { fs::BUFFER_SIZE }> = MaybeUninit<Aligned8Bytes<SIZE>>;
 
 /// A source of raw `dirent64` pointers (`readdir` or a `getdents` buffer) over an open directory fd.
 pub trait DirStream: AsFd + AsRawFd + Sized {
@@ -87,13 +91,15 @@ impl DirStream for OwnedDir<'_> {
         let ret: *mut DIR = unsafe { libc::fdopendir(fd.as_raw_fd()) };
 
         match NonNull::new(ret) {
-            Some(inner) => {
+            Some(dirp) => {
                 // Ownership moves to the DIR stream, which closes the fd in `closedir`.
                 let raw = fd.into_raw_fd();
+                // SAFETY: valid ptr, checking for validity for dirfd.
+                debug_assert!(raw == unsafe { libc::dirfd(dirp.as_ptr()) }, "checking");
                 // strong drop order.
                 // SAFETY: `raw` is open and stays valid until `closedir` in `Drop`.
                 let fdes = unsafe { BorrowedFd::borrow_raw(raw) };
-                Ok(Self { dirp: inner, fdes })
+                Ok(Self { dirp, fdes })
             }
             None => return_os_error!(),
         }
@@ -244,7 +250,7 @@ impl OwnedFdDir<'_> {
             // SAFETY: passing a valid buffer of `BUFFER_SIZE` bytes to an open file descriptor
             unsafe {
                 util::getdents64(
-                    self.fd.as_raw_fd(),
+                    self.as_raw_fd(),
                     self.syscall_buffer.as_mut_ptr().cast(),
                     Self::BUFFER_SIZE,
                 )
@@ -255,10 +261,10 @@ impl OwnedFdDir<'_> {
             // SAFETY: passing a valid buffer to an open file descriptor and base pointer
             unsafe {
                 util::getdirentries64(
-                    self.fd.as_raw_fd(),
+                    self.as_raw_fd(),
                     self.syscall_buffer.as_mut_ptr().cast(),
                     Self::BUFFER_SIZE,
-                    core::ptr::from_mut(&mut self.base_pointer),
+                    &raw mut *self.base_pointer,
                 )
             }
         }
@@ -276,12 +282,12 @@ impl OwnedFdDir<'_> {
         #[cfg(has_eof_trick)]
         // SAFETY: the buffer is 8-aligned and BUFFER_SIZE >= 4, so the last four bytes are in bounds and aligned.
         let last_four_bytes = unsafe {
-            let val = NonNull::from_mut(&mut self.syscall_buffer)
+            let ptr = NonNull::from_mut(&mut self.syscall_buffer)
                 .byte_add(const { Self::BUFFER_SIZE - 4 })
                 .cast::<u32>();
 
-            val.write(0);
-            val
+            ptr.write(0);
+            ptr
         };
 
         let remaining_bytes = self.getdents();

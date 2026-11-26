@@ -1,10 +1,8 @@
-mod buffer;
 mod dir_entry;
 mod file_type;
 mod iter;
 mod owned_dir;
 mod types;
-pub use buffer::{AlignedBuffer, ValueType};
 #[cfg(has_faster_readdir)]
 pub use owned_dir::OwnedFdDir;
 pub use owned_dir::{DirStream, OwnedDir};
@@ -22,4 +20,4 @@ pub use types::Result;
 #[cfg(has_faster_readdir)]
 pub use iter::GetDents;
 #[cfg(has_faster_readdir)]
-pub use types::SyscallBuffer;
+pub use types::BUFFER_SIZE;

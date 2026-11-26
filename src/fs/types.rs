@@ -7,12 +7,6 @@ const _: () = assert!(
     BUFFER_SIZE.is_multiple_of(8),
     "Simplifies the problem, keeps alignment of dirents"
 );
-/**
-   Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
-
-   Aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
-*/
-pub type SyscallBuffer = crate::fs::AlignedBuffer<u64, { BUFFER_SIZE.div_euclid(8) }>; // showing example above
 
 #[cfg(all(target_os = "android", not(debug_assertions)))]
 pub const BUFFER_SIZE: usize = 4200;

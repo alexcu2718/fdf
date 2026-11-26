@@ -1,13 +1,19 @@
-use crate::{Unique, dirent64, fs::Result, readdir64};
+use crate::{Unique, dirent64, fs, readdir64, util};
 #[allow(unused)]
 use core::marker::PhantomData;
+use core::mem::MaybeUninit;
 use core::ptr::NonNull;
 #[allow(unused)]
 use libc::{DIR, off_t};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
 #[cfg(has_faster_readdir)]
-use crate::fs::SyscallBuffer;
+/**
+   Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
+
+   Aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
+*/
+type SyscallBuffer = MaybeUninit<[u64; fs::BUFFER_SIZE.div_euclid(8)]>;
 
 /// A source of raw `dirent64` pointers (`readdir` or a `getdents` buffer) over an open directory fd.
 pub trait DirStream: AsFd + AsRawFd + Sized {
@@ -63,7 +69,7 @@ impl TryFrom<OwnedFd> for OwnedDir<'_> {
     /// # Errors
     /// Returns the OS error if `fdopendir` fails (e.g. the fd is not a directory).
     #[inline]
-    fn try_from(fd: OwnedFd) -> Result<Self> {
+    fn try_from(fd: OwnedFd) -> fs::Result<Self> {
         Self::from_owned_fd(fd)
     }
 }
@@ -76,7 +82,7 @@ impl DirStream for OwnedDir<'_> {
     /// # Errors
     /// Returns the OS error if `fdopendir` fails (e.g. the fd is not a directory).
     #[inline]
-    fn from_owned_fd(fd: OwnedFd) -> Result<Self> {
+    fn from_owned_fd(fd: OwnedFd) -> fs::Result<Self> {
         // SAFETY: `fd` is a valid, open file descriptor owned by us.
         let ret: *mut DIR = unsafe { libc::fdopendir(fd.as_raw_fd()) };
 
@@ -178,13 +184,13 @@ impl From<OwnedFd> for OwnedFdDir<'_> {
 
 #[cfg(has_faster_readdir)]
 impl OwnedFdDir<'_> {
-    pub(crate) const BUFFER_SIZE: usize = SyscallBuffer::BUFFER_SIZE;
+    pub(crate) const BUFFER_SIZE: usize = fs::BUFFER_SIZE;
 
     #[inline]
     pub(crate) const fn new(fd: OwnedFd) -> Self {
         Self {
             fd,
-            syscall_buffer: SyscallBuffer::new(),
+            syscall_buffer: MaybeUninit::uninit(),
             offset: 0,
             remaining_bytes: 0,
             end_of_stream: false,
@@ -235,14 +241,25 @@ impl OwnedFdDir<'_> {
     pub(crate) fn getdents(&mut self) -> isize {
         #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
         {
-            self.syscall_buffer.getdents(self.fd.as_fd())
+            // SAFETY: passing a valid buffer of `BUFFER_SIZE` bytes to an open file descriptor
+            unsafe {
+                util::getdents64(
+                    self.fd.as_raw_fd(),
+                    self.syscall_buffer.as_mut_ptr().cast(),
+                    Self::BUFFER_SIZE,
+                )
+            }
         }
         #[cfg(any(target_os = "macos", target_os = "freebsd"))]
         {
             // SAFETY: passing a valid buffer to an open file descriptor and base pointer
             unsafe {
-                self.syscall_buffer
-                    .getdirentries64(self.fd.as_fd(), &mut self.base_pointer)
+                util::getdirentries64(
+                    self.fd.as_raw_fd(),
+                    self.syscall_buffer.as_mut_ptr().cast(),
+                    Self::BUFFER_SIZE,
+                    core::ptr::from_mut(&mut self.base_pointer),
+                )
             }
         }
     }
@@ -259,30 +276,25 @@ impl OwnedFdDir<'_> {
         #[cfg(has_eof_trick)]
         // SAFETY: the buffer is 8-aligned and BUFFER_SIZE >= 4, so the last four bytes are in bounds and aligned.
         let last_four_bytes = unsafe {
-            NonNull::from_mut(&mut self.syscall_buffer)
+            let val = NonNull::from_mut(&mut self.syscall_buffer)
                 .byte_add(const { Self::BUFFER_SIZE - 4 })
-                .cast::<u32>()
-        };
+                .cast::<u32>();
 
-        #[cfg(has_eof_trick)]
-        // SAFETY: guaranteed in bounds + aligned, zeroed so the kernel's EOF flag is detectable.
-        unsafe {
-            last_four_bytes.write(0)
+            val.write(0);
+            val
         };
 
         let remaining_bytes = self.getdents();
         let is_more_remaining = remaining_bytes.is_positive();
 
-        #[cfg(has_eof_trick)]
+        #[cfg(has_eof_trick)] // See for trick
         {
+            // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
             const { assert!(Self::BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick") };
-            let eof_marker_is_valid: bool = is_more_remaining
-                && remaining_bytes.cast_unsigned() <= const { Self::BUFFER_SIZE - 4 };
-
-            self.end_of_stream = (eof_marker_is_valid
-                // SAFETY: the marker was initialised before the syscall and the payload didn't overlap it.
-                && unsafe { last_four_bytes.read() } & 1 != 0)
-                || !is_more_remaining;
+            // SAFETY: the marker was initialised before the syscall and the payload didn't overlap it.
+            self.end_of_stream = !is_more_remaining
+                || (remaining_bytes.cast_unsigned() <= const { Self::BUFFER_SIZE - 4 }
+                    && unsafe { last_four_bytes.read() } & 1 != 0);
         }
 
         #[cfg(not(has_eof_trick))]

@@ -272,7 +272,7 @@ impl<S: DirStream> DirIter<S> {
             known => known,
         };
         #[cfg(not(has_d_type))]
-        let file_type = self.stat_filetype(&drnt);
+        let file_type = self.stat_filetype(drnt);
 
         DirEntry {
             path: self.path.copy_dname(drnt).into(),

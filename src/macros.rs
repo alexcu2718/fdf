@@ -66,29 +66,6 @@ macro_rules! read_direntries {
 }
 
 /**
- Like [`read_direntries!`] but uses a pre-opened file descriptor instead of opening via path.
-
- This avoids a second full-path `open()` call by reusing an fd obtained earlier via `openat`.
- The fd is consumed by the returned iterator and closed when it is dropped.
-
- - Linux/Android/OpenBSD/NetBSD/Illumos/Solaris/macOS/FreeBSD: `getdents_from_fd`
- - Other supported Unix targets: `readdir_from_fd`
-*/
-macro_rules! read_direntries_from_fd {
-    ($dir:expr, $fd:expr) => {{
-        #[cfg(has_faster_readdir)]
-        {
-            $dir.getdents_from_fd($fd)
-        }
-
-        #[cfg(not(has_faster_readdir))]
-        {
-            $dir.readdir_from_fd($fd)
-        }
-    }};
-}
-
-/**
 A compile time assert, mirroring `static_assert` from C++
 
 # Examples

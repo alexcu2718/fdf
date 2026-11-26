@@ -432,19 +432,19 @@ impl DirEntry {
         Ok(unsafe { OwnedFd::from_raw_fd(fd) })
     }
 
-    /// Returns a [`ReadDir`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
-    #[inline]
-    #[allow(unused)] // for esoteric platforms
-    pub(crate) fn readdir_from_fd(&self, fd: OwnedFd) -> Result<ReadDir<'_>> {
-        ReadDir::from_fd(fd, self)
-    }
+    // /// Returns a [`ReadDir`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
+    // #[inline]
+    // //#[allow(unused)] // for esoteric platforms
+    // pub(crate) fn readdir_from_fd(&self, fd: OwnedFd) -> Result<ReadDir<'_>> {
+    //     ReadDir::from_fd(fd, self)
+    // }
 
-    /// Returns a [`GetDents`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
-    #[inline]
-    #[cfg(has_faster_readdir)]
-    pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> Result<crate::fs::GetDents<'_>> {
-        crate::fs::GetDents::from_fd(fd, self)
-    }
+    // /// Returns a [`GetDents`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
+    // #[inline]
+    // #[cfg(has_faster_readdir)]
+    // pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> Result<crate::fs::GetDents<'_>> {
+    //     crate::fs::GetDents::from_fd(fd, self)
+    // }
 
     // Converts to a lossy string for ease of use
     #[inline]
@@ -590,10 +590,7 @@ impl DirEntry {
                 || self.is_empty(),
                 |parent_fd| {
                     Self::open_at(parent_fd, self.file_name_cstr())
-                        .map(|dir_fd| read_direntries_from_fd!(self, dir_fd))
-                        .is_ok_and(|result| {
-                            result.is_ok_and(|mut entries| entries.next().is_none())
-                        })
+                        .is_ok_and(Self::is_empty_from_fd)
                 },
             ),
 
@@ -601,94 +598,41 @@ impl DirEntry {
         }
     }
 
+    /// Checks a directory fd for emptiness, consuming it. Returns false if a stream can't be created.
+    #[inline]
+    fn is_empty_from_fd(fd: OwnedFd) -> bool {
+        #[cfg(has_faster_readdir)]
+        {
+            crate::fs::OwnedFdDir::new(fd).is_empty()
+        }
+        #[cfg(not(has_faster_readdir))]
+        {
+            crate::fs::OwnedDir::try_from(fd).is_ok_and(|mut dir| dir.is_empty())
+        }
+    }
+
     #[inline]
     #[must_use]
     #[cfg(not(has_faster_readdir))]
     pub(crate) fn is_empty_posix(&self) -> bool {
-        //avoid a heapalloc
-        use crate::readdir64;
-        use libc::closedir;
-
         debug_assert!(
             self.is_dir(),
             "checking the only entries to this are directories"
         );
 
-        // SAFETY: guaranteed null terminated path
-        let dir = unsafe { libc::opendir(self.as_ptr()) };
-
-        if dir.is_null() {
-            return false;
-        }
-
-        // SAFETY: dir valid to read
-        let result = unsafe {
-            readdir64(dir); // Skip "."
-            readdir64(dir); // Skip ".."
-            readdir64(dir).is_null()
-        };
-        // SAFETY: closing a valid directory
-        unsafe { closedir(dir) };
-        result
+        self.open().is_ok_and(Self::is_empty_from_fd)
     }
 
     #[inline]
     #[cfg(has_faster_readdir)]
-    /// Specialisation for empty checks on linux/android/netbsd/etc (avoid a heap alloc)
+    /// Specialisation for empty checks on linux/android/netbsd/etc (no heap alloc)
     pub(crate) fn is_empty_getdents(&self) -> bool {
-        use crate::fs::AlignedBuffer;
-        const BUF_SIZE: usize = 512; //pretty arbitrary.
-        const DENT_SIZE: usize = core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8);
-        // ALWAYS THE LAST ELEMENT, FIND MIN STRUCT SIZE.
-        const { assert!(DENT_SIZE >= 16 && DENT_SIZE <= 32, "showing below works") };
-        // On Linux it's 24, on solaris it's 24/32
-        // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
-        //on openbsd it's 16, ugh, TODO think
-        #[cfg(target_pointer_width = "32")]
-        compile_error!("the below code is broke");
-        // These were hand derived, it was painful.
-        const MINIMUM_DIRENT_SIZE: isize = if cfg!(any(
-            target_os = "solaris",
-            target_os = "illumos",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        )) {
-            32
-        } else {
-            DENT_SIZE.cast_signed()
-        };
-
         debug_assert!(
             self.is_dir() || self.is_symlink(),
             " Only expect dirs/symlinks to pass through this private func"
         );
-        if let Ok(fd) = self.open() {
-            let mut syscall_buffer: AlignedBuffer<u8, BUF_SIZE> = AlignedBuffer::new();
 
-            #[cfg(any(
-                target_os = "linux",
-                target_os = "android",
-                target_os = "openbsd",
-                target_os = "netbsd",
-                target_os = "illumos",
-                target_os = "solaris",
-            ))]
-            let sys_ret_val = syscall_buffer.getdents(fd.as_fd());
-            #[cfg(any(target_os = "freebsd", target_os = "macos"))]
-            let sys_ret_val = {
-                let mut basep: libc::off_t = 0;
-
-                // SAFETY: safe to call
-                unsafe { syscall_buffer.getdirentries64(fd.as_fd(), &mut basep) }
-            };
-
-            // if empty, then only 2 entries expected, . and .., this means only 64 or below (or neg if errors, who cares.)
-            return sys_ret_val <= 2 * MINIMUM_DIRENT_SIZE;
-            // dirfd now gets dropped because it's an `OwnedFd` which has RAII
-        }
-        false //return false is open fails
+        self.open().is_ok_and(Self::is_empty_from_fd)
     }
 
     /**

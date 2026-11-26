@@ -106,6 +106,20 @@ impl OwnedDir<'_> {
     const fn as_mut_ptr(&mut self) -> *mut DIR {
         self.dirp.as_ptr()
     }
+
+    /// Returns true if the directory has no entries besides `.` and `..`.
+    ///
+    /// Doesn't rely on `.`/`..` being returned first, as `readdir` order is unspecified.
+    #[inline]
+    #[must_use]
+    #[cfg(not(has_faster_readdir))]
+    pub(crate) fn is_empty(&mut self) -> bool {
+        while let Some(drnt) = self.next_pointer() {
+            skip_dot_or_dot_dot_entries!(drnt, continue);
+            return false;
+        }
+        true
+    }
 }
 
 /// An owned directory file descriptor that buffers batched `getdents`/`getdirentries64` reads,
@@ -121,11 +135,11 @@ pub struct OwnedFdDir<'fdes> {
     offset: usize,
     /// Number of valid bytes in `syscall_buffer` from the last syscall
     remaining_bytes: usize,
-    /// Set once the kernel reports no more entries
-    end_of_stream: bool,
     #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     /// The base pointer (seek cookie) for the `getdirentries64` call
     base_pointer: off_t,
+    /// Set once the kernel reports no more entries
+    end_of_stream: bool,
     /// Ties `self` to the lifetime of the fd's origin, mirroring `OwnedDir<'fd>`.
     _marker: PhantomData<BorrowedFd<'fdes>>,
 }
@@ -178,6 +192,19 @@ impl OwnedFdDir<'_> {
             base_pointer: 0,
             _marker: PhantomData,
         }
+    }
+
+    /// Returns true if the directory has no entries besides `.` and `..`.
+    ///
+    /// Doesn't rely on entry sizes or on `.`/`..` being returned first.
+    #[inline]
+    #[must_use]
+    pub(crate) fn is_empty(&mut self) -> bool {
+        while let Some(drnt) = self.next_pointer() {
+            skip_dot_or_dot_dot_entries!(drnt, continue);
+            return false;
+        }
+        true
     }
 
     #[inline]
@@ -301,10 +328,7 @@ impl DirStream for OwnedFdDir<'_> {
         debug_assert!(drnt.is_aligned(), "Expected to be aligned, report this");
 
         // SAFETY: we just obtained this pointer, so reading d_reclen is valid.
-        let reclen = unsafe { drnt.d_reclen() };
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        debug_assert!(reclen >= 24, "expected reclen >=24, it is `{reclen}`");
-        self.offset += reclen;
+        self.offset += unsafe { drnt.d_reclen() };
 
         Some(drnt)
     }

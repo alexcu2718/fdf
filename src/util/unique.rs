@@ -371,8 +371,11 @@ impl Unique<dirent64> {
     pub const unsafe fn d_reclen(&self) -> usize {
         //SAFETY: TRIVIALLY VALID BY CONSTRUCTION
 
-        unsafe { (*self.as_ptr()).d_reclen as _ }
+        let reclen = unsafe { (*self.as_ptr()).d_reclen as usize };
         // although most systems should have this struct member.
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        debug_assert!(reclen >= 24, "expected reclen >=24");
+        reclen
     }
 
     #[inline(always)]

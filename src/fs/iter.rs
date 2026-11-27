@@ -2,6 +2,7 @@
 use crate::{
     Unique, dirent64, fs,
     fs::{DirEntry, DirStream, FileType, OwnedDir, Result},
+    util,
 };
 use core::{cell::Cell, ffi::CStr, hint::assert_unchecked, mem::MaybeUninit, slice};
 use libc::{AT_SYMLINK_NOFOLLOW, fstatat};
@@ -86,19 +87,6 @@ impl Metadata {
 
     #[inline]
     #[expect(clippy::indexing_slicing, reason = "panic free")]
-    /// Ensures the buffer can hold `required_len` bytes, growing it (cold path) if necessary,
-    /// then returns the portion of the buffer truncated to that length.
-    fn prepare(&mut self, required_len: usize) -> &mut [MaybeUninit<u8>] {
-        if crate::util::unlikely(required_len > self.allocated_size()) {
-            self.reserve_for_long_name(required_len);
-        }
-        // SAFETY: the branch above guarantees `buffer.len() >= required_len`.
-        unsafe { assert_unchecked(required_len <= self.buffer.len()) }
-        &mut self.buffer[..required_len]
-    }
-
-    #[inline]
-    #[expect(clippy::indexing_slicing, reason = "panic free")]
     /**
     Copies a NUL-terminated directory-entry name (`d_name_cstr`, including its NUL byte) into the
     buffer right after the bookmarked base path, growing the buffer first if required.
@@ -107,7 +95,7 @@ impl Metadata {
     */
     fn copy_dname(&mut self, drnt: &Unique<dirent64>) -> &CStr {
         // SAFETY: just obtained, pointer is aligned, alive etc.
-        let d_name_cstr = unsafe { drnt.to_bytes_with_nul() };
+        let d_name_cstr = unsafe { drnt.d_name_cstr().to_bytes_with_nul() };
         let base_len = self.file_index;
         let name_len = d_name_cstr.len(); //technically should be a u16 but we need it for indexing :( // we need +1 bc this strlen omits null terminator
         let required_len = base_len + name_len;
@@ -115,8 +103,14 @@ impl Metadata {
         // rustc knows this but it's unsigned overflow conditions being annoying.
         unsafe { assert_unchecked(required_len > base_len) };
 
-        // Get the amount of the buffer we wish to initialise (grows the buffer on the cold path if required).
-        let buffer = self.prepare(required_len);
+        // Ensure the buffer can hold `required_len` bytes, growing it (cold path) if necessary.
+        if util::unlikely(required_len > self.allocated_size()) {
+            self.reserve_for_long_name(required_len);
+        }
+        // SAFETY: the branch above guarantees `buffer.len() >= required_len`.
+        unsafe { assert_unchecked(required_len <= self.buffer.len()) }
+        // Get the amount of the buffer we wish to initialise, truncated to the required length.
+        let buffer = &mut self.buffer[..required_len];
 
         // Get the portion of the buffer that goes past the last slash, up to the name+NUL
         let name_portion = &mut buffer[base_len..];
@@ -216,14 +210,6 @@ impl<S: DirStream> DirIter<S> {
     # Returns
     - `Some(Unique<dirent64>)` when a directory entry is successfully read
     - `None` when the end of directory is reached or if an error occurs
-
-
-
-    # Notes
-    - Unlike the `getdents64`/`getdirentries64` system calls type approach, this implementation uses the
-      standard libc directory handling functions
-    - The function returns `None` both at end-of-directory and on errors, following
-      the traditional `readdir` semantics
 
     # Safety
     The directory stream is always valid and open for the lifetime of `self` (the destructor closes it).

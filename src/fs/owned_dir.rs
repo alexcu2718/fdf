@@ -1,10 +1,8 @@
 //CURRENTLY UNSURE WHAT TO MAKE PUBLIC ETC.
-
 use crate::{DirEntryError, Unique, dirent64, fs, readdir64, util};
 use core::ptr::NonNull;
 #[allow(unused)]
 use core::{marker::PhantomData, mem::MaybeUninit};
-
 use libc::{DIR, closedir, fdopendir};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
@@ -21,8 +19,6 @@ pub trait DirStream: AsFd + AsRawFd + Sized {
     fn next_pointer(&mut self) -> Option<Unique<dirent64>>;
 
     /// Returns true if the directory has no entries besides `.` and `..`.
-    ///
-    /// Doesn't rely on entry sizes or on `.`/`..` being returned first, as the order is unspecified.
     #[inline]
     #[must_use]
     fn is_empty(&mut self) -> bool {
@@ -36,10 +32,8 @@ pub trait DirStream: AsFd + AsRawFd + Sized {
 
 #[derive(Debug)]
 pub struct OwnedDir<'fd> {
-    dirp: NonNull<DIR>, // Exclusive only access
-    // We store this but just need it for deref,
-    // We also don't want a non-inlineable glibc call to get the fd. (even if it's just pointer access)
-    fdes: BorrowedFd<'fd>,
+    dirp: NonNull<DIR>, // We store this but just need it for deref,we only acccess the pointer from within
+    fdes: BorrowedFd<'fd>, //   We also don't want a non-inlineable glibc call to get the fd. (even if it's just pointer access)
 }
 
 impl AsFd for OwnedDir<'_> {
@@ -60,14 +54,13 @@ impl Drop for OwnedDir<'_> {
     #[inline]
     fn drop(&mut self) {
         // SAFETY: `dirp` is a valid DIR* from a successful `fdopendir`, closed only here.
-        let retval = unsafe { closedir(self.as_mut_ptr()) };
+        let retval = unsafe { closedir(self.dirp.as_ptr()) };
         debug_assert_eq!(retval, 0, "not closed properly!");
     }
 }
 
 impl TryFrom<OwnedFd> for OwnedDir<'_> {
     type Error = DirEntryError;
-
     /// Wraps an owned file descriptor in a directory stream.
     ///
     /// # Errors
@@ -87,14 +80,12 @@ impl DirStream for OwnedDir<'_> {
     fn from_owned_fd(fd: OwnedFd) -> fs::Result<Self> {
         // SAFETY: `fd` is a valid, open file descriptor owned by us.
         let ret: *mut DIR = unsafe { fdopendir(fd.as_raw_fd()) };
-
         match NonNull::new(ret) {
             Some(dirp) => {
                 // Ownership moves to the DIR stream, which closes the fd in `closedir`.
                 let raw = fd.into_raw_fd();
                 // SAFETY: valid ptr, checking for validity for dirfd.
                 debug_assert!(raw == unsafe { libc::dirfd(dirp.as_ptr()) }, "checking");
-                // strong drop order.
                 // SAFETY: `raw` is open and stays valid until `closedir` in `Drop`.
                 let fdes = unsafe { BorrowedFd::borrow_raw(raw) };
                 Ok(Self { dirp, fdes })
@@ -106,26 +97,14 @@ impl DirStream for OwnedDir<'_> {
     #[inline]
     fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
         // SAFETY: passing a valid pointer, no other access is possible to this handle
-        Unique::new(unsafe { readdir64(self.as_mut_ptr()) })
-    }
-}
-
-impl OwnedDir<'_> {
-    #[inline]
-    #[expect(clippy::needless_pass_by_ref_mut, reason = "interior mutability")]
-    const fn as_mut_ptr(&mut self) -> *mut DIR {
-        self.dirp.as_ptr()
+        Unique::new(unsafe { readdir64(self.dirp.as_ptr()) })
     }
 }
 
 #[cfg(has_faster_readdir)]
-/**
-   Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
-
-   Aligned(to 8 bytes) stack allocated buffer of [`MaybeUninit`]
-*/
 #[repr(align(8))] // only used as writable uninit memory.
-struct Aligned8Bytes<const SIZE: usize>([u8; SIZE]);
+///Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
+struct AlignedByteBuffer<const SIZE: usize>([u8; SIZE]);
 
 /// An owned directory file descriptor that buffers batched `getdents`/`getdirentries64` reads,
 /// mirroring `readdir` semantics (all entries are returned, including `.` and `..`).
@@ -137,7 +116,7 @@ struct Aligned8Bytes<const SIZE: usize>([u8; SIZE]);
 #[derive(Debug)]
 pub struct OwnedFdDir<'fdes, const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> {
     fd: OwnedFd,
-    syscall_buffer: MaybeUninit<Aligned8Bytes<BUFFER_SIZE>>,
+    syscall_buffer: MaybeUninit<AlignedByteBuffer<BUFFER_SIZE>>,
     /// Current read position within `syscall_buffer`
     offset: usize,
     /// Number of valid bytes in `syscall_buffer` from the last syscall
@@ -146,7 +125,7 @@ pub struct OwnedFdDir<'fdes, const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> {
     /// The base pointer (seek cookie) for the `getdirentries64` call
     base_pointer: libc::off_t,
     /// Set once the kernel reports no more entries
-    end_of_stream: bool,
+    is_end_of_stream: bool,
     /// Ties `self` to the lifetime of the fd's origin, mirroring `OwnedDir<'fd>`.
     _marker: PhantomData<BorrowedFd<'fdes>>,
 }
@@ -195,19 +174,13 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
             syscall_buffer: MaybeUninit::uninit(),
             offset: 0,
             remaining_bytes: 0,
-            end_of_stream: false,
+            is_end_of_stream: false,
             #[cfg(any(target_os = "macos", target_os = "freebsd"))]
             base_pointer: 0,
             _marker: PhantomData,
         }
     }
 
-    #[inline]
-    #[must_use]
-    /// Returns a boolean indicating whether the stream is exhausted
-    pub const fn is_end_of_stream(&self) -> bool {
-        self.end_of_stream
-    }
     /**
      Refills the internal directory-entry buffer using the platform directory syscall.
 
@@ -248,24 +221,20 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
     /// Refills the buffer, returns whether any bytes were read.
     #[inline]
     fn are_more_entries_remaining(&mut self) -> bool {
-        if self.is_end_of_stream() {
+        if self.is_end_of_stream {
             return false;
         }
-
         const { assert!(BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
         const { assert!(BUFFER_SIZE >= 512, "Should be reasonably bigger.") }
-
         #[cfg(has_eof_trick)]
         // SAFETY: the buffer is 8-aligned and BUFFER_SIZE >= 4, so the last four bytes are in bounds and aligned.
         let last_four_bytes = unsafe {
             let ptr = NonNull::from_mut(&mut self.syscall_buffer)
                 .byte_add(const { BUFFER_SIZE - 4 })
                 .cast::<u32>();
-
             ptr.write(0);
             ptr
         };
-
         let remaining_bytes = self.getdents();
         let is_more_remaining = remaining_bytes.is_positive();
 
@@ -281,7 +250,7 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
 
         #[cfg(not(has_eof_trick))]
         {
-            self.end_of_stream = !is_more_remaining
+            self.is_end_of_stream = !is_more_remaining
         }
 
         self.remaining_bytes = remaining_bytes.max(0).cast_unsigned(); // negatives map to 0

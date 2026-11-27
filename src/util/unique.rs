@@ -190,7 +190,7 @@ impl<T: ?Sized> Unique<T> {
     /// requirements for a reference.
     #[inline(always)]
     #[must_use]
-    pub const unsafe fn as_ref<'ptr>(&self) -> &'ptr T {
+    pub const unsafe fn as_ref(&self) -> &T {
         // SAFETY: the caller must guarantee that `self` meets all the
         // requirements for a reference.
         unsafe { &*self.as_ptr() }
@@ -344,19 +344,9 @@ impl Unique<dirent64> {
     /// Returns a slice reference to the `d_name`, not including null terminator.
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_name_slice<'pointer>(&self) -> &'pointer [u8] {
+    pub const unsafe fn d_name_slice(&self) -> &[u8] {
         // SAFETY: Caller must not invalidate the invariant.
         unsafe { from_raw_parts(self.d_name().cast(), self.name_length()) }
-    }
-
-    #[must_use]
-    #[inline(always)]
-    /// Returns a slice reference to the `d_name`, including null terminator.
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn to_bytes_with_nul(&self) -> &[u8] {
-        // SAFETY: Caller must not invalidate the invariant.
-        unsafe { self.d_name_cstr().to_bytes_with_nul() }
     }
 
     #[must_use]
@@ -364,7 +354,7 @@ impl Unique<dirent64> {
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_name_cstr<'pointer>(&self) -> &'pointer CStr {
+    pub const unsafe fn d_name_cstr(&self) -> &CStr {
         // SAFETY: caller must ensure the invariants
         let slice: &[u8] = unsafe { from_raw_parts(self.d_name().cast(), self.name_length() + 1) }; // add  1 to include terminal
 

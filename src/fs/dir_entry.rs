@@ -79,7 +79,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 */
 
 use crate::DirEntryError;
+use crate::fs;
 use crate::fs::{AT_EACCESS, DirStream as _, FileType, ReadDir, Result};
+use crate::util;
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ffi::{CStr, c_char, c_int};
@@ -402,7 +404,7 @@ impl DirEntry {
         let fd = unsafe { libc::open(self.as_ptr(), FLAGS) };
         #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
         // SAFETY: as above.
-        let fd = unsafe { crate::util::openat_nocancel(libc::AT_FDCWD, self.as_ptr(), FLAGS) };
+        let fd = unsafe { util::openat_nocancel(libc::AT_FDCWD, self.as_ptr(), FLAGS) };
         if fd < 0 {
             return_os_error!()
         }
@@ -424,7 +426,7 @@ impl DirEntry {
         let fd = unsafe { libc::openat(rawfd, child_name.as_ptr(), FLAGS) };
         #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
         // SAFETY: as above
-        let fd = unsafe { crate::util::openat_nocancel(rawfd, child_name.as_ptr(), FLAGS) };
+        let fd = unsafe { util::openat_nocancel(rawfd, child_name.as_ptr(), FLAGS) };
         if fd < 0 {
             return_os_error!()
         }
@@ -603,11 +605,12 @@ impl DirEntry {
     fn is_empty_from_fd(fd: OwnedFd) -> bool {
         #[cfg(has_faster_readdir)]
         {
-            crate::fs::OwnedFdDir::new(fd).is_empty()
+            let mut dir: fs::OwnedFdDir = fs::OwnedFdDir::new(fd);
+            dir.is_empty()
         }
         #[cfg(not(has_faster_readdir))]
         {
-            crate::fs::OwnedDir::try_from(fd).is_ok_and(|mut dir| dir.is_empty())
+            fs::OwnedDir::try_from(fd).is_ok_and(|mut dir| dir.is_empty())
         }
     }
 
@@ -1070,12 +1073,12 @@ impl DirEntry {
     /// stupid internal helper with few use cases.
     fn _file_name_index(path: &[u8]) -> usize {
         // the entries going into this are filepaths, therefore they must have length 1
-        if crate::util::unlikely(path.len() == 1) {
+        if util::unlikely(path.len() == 1) {
             return 0;
         }
         debug_assert!(!path.is_empty(), "should never be empty");
         debug_assert!(!path.ends_with(b"/"), "file path ends with a slash!"); //debug asserts for development
-        crate::util::memrchr(b'/', path).map_or(1, |pos| pos + 1)
+        util::memrchr(b'/', path).map_or(1, |pos| pos + 1)
     }
 
     // #[inline]
@@ -1461,7 +1464,7 @@ impl DirEntry {
         let len = filename.len();
 
         // Any extension needs to be at least len 3  EG: "a.a".
-        if crate::util::unlikely(len < 3) {
+        if util::unlikely(len < 3) {
             return None;
         }
 
@@ -1471,7 +1474,7 @@ impl DirEntry {
          the final byte, so "foo." does not count
         */
 
-        crate::util::memrchr(b'.', &filename[1..len - 1]).map(|pos| {
+        util::memrchr(b'.', &filename[1..len - 1]).map(|pos| {
             //bounds elided
             // `pos` is relative to filename[1..], so the actual dot is
             // at pos + 1, and the extension starts at pos + 2.
@@ -1734,7 +1737,7 @@ impl DirEntry {
     */
     #[inline]
     #[cfg(has_faster_readdir)]
-    pub fn getdents(&self) -> Result<crate::fs::GetDents<'_>> {
-        crate::fs::GetDents::new(self)
+    pub fn getdents(&self) -> Result<fs::GetDents<'_>> {
+        fs::GetDents::new(self)
     }
 }

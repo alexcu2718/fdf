@@ -1,8 +1,9 @@
 //CURRENTLY UNSURE WHAT TO MAKE PUBLIC ETC.
 
-use crate::{Unique, dirent64, fs, readdir64, util};
-use core::mem::MaybeUninit;
+use crate::{DirEntryError, Unique, dirent64, fs, readdir64, util};
 use core::ptr::NonNull;
+#[allow(unused)]
+use core::{marker::PhantomData, mem::MaybeUninit};
 
 use libc::{DIR, closedir, fdopendir};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
@@ -10,13 +11,13 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 /// A source of raw `dirent64` pointers (`readdir` or a `getdents` buffer) over an open directory fd.
 pub trait DirStream: AsFd + AsRawFd + Sized {
     /// Error returned when wrapping an fd (`fdopendir` can fail; `getdents` cannot).
-    type Error: Into<crate::DirEntryError>;
+    type Error: Into<DirEntryError>;
 
     /// Wraps an owned directory fd.
     ///
     /// # Errors
     /// Returns `Self::Error` if the directory stream cannot be created from the fd.
-    fn from_owned_fd(fd: OwnedFd) -> core::result::Result<Self, Self::Error>;
+    fn from_owned_fd(fd: OwnedFd) -> Result<Self, Self::Error>;
 
     /// Returns ALL entries (including `.` and `..`); the pointer is only valid until the next call.
     fn next_pointer(&mut self) -> Option<Unique<dirent64>>;
@@ -67,7 +68,7 @@ impl Drop for OwnedDir<'_> {
 }
 
 impl TryFrom<OwnedFd> for OwnedDir<'_> {
-    type Error = crate::DirEntryError;
+    type Error = DirEntryError;
 
     /// Wraps an owned file descriptor in a directory stream.
     ///
@@ -80,7 +81,7 @@ impl TryFrom<OwnedFd> for OwnedDir<'_> {
 }
 
 impl DirStream for OwnedDir<'_> {
-    type Error = crate::DirEntryError;
+    type Error = DirEntryError;
 
     /// Wraps an owned file descriptor in a directory stream.
     ///
@@ -125,7 +126,7 @@ impl OwnedDir<'_> {
 /**
    Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
 
-   Aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
+   Aligned(to 8 bytes) stack allocated buffer of [`MaybeUninit`]
 */
 #[repr(align(8))] // only used as writable uninit memory.
 struct Aligned8Bytes<const SIZE: usize>([u8; SIZE]);
@@ -151,7 +152,7 @@ pub struct OwnedFdDir<'fdes, const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> {
     /// Set once the kernel reports no more entries
     end_of_stream: bool,
     /// Ties `self` to the lifetime of the fd's origin, mirroring `OwnedDir<'fd>`.
-    _marker: core::marker::PhantomData<BorrowedFd<'fdes>>,
+    _marker: PhantomData<BorrowedFd<'fdes>>,
 }
 
 #[cfg(has_faster_readdir)] // can't exist for `OwnedDir`
@@ -190,6 +191,9 @@ impl<const BUFFER_SIZE: usize> From<OwnedFd> for OwnedFdDir<'_, BUFFER_SIZE> {
 impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
     #[inline]
     pub(crate) const fn new(fd: OwnedFd) -> Self {
+        const { assert!(BUFFER_SIZE.is_multiple_of(8), "Must be multiple of 8") };
+        const { assert!(BUFFER_SIZE >= 128, "Expected buffer size to be above 128") }; //arbitrary low point
+        const { assert!(BUFFER_SIZE <= i32::MAX as _, "Size must be below i32::MAX") };
         Self {
             fd,
             syscall_buffer: MaybeUninit::uninit(),
@@ -198,7 +202,7 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
             end_of_stream: false,
             #[cfg(any(target_os = "macos", target_os = "freebsd"))]
             base_pointer: 0,
-            _marker: core::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
 
@@ -292,12 +296,12 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
 }
 
 #[cfg(has_faster_readdir)]
-impl DirStream for OwnedFdDir<'_> {
+impl<const BUFFER_SIZE: usize> DirStream for OwnedFdDir<'_, BUFFER_SIZE> {
     type Error = core::convert::Infallible; // needs to match API of readdir sigh.
     // Move to never type eventually.
 
     #[inline]
-    fn from_owned_fd(fd: OwnedFd) -> core::result::Result<Self, Self::Error> {
+    fn from_owned_fd(fd: OwnedFd) -> Result<Self, Self::Error> {
         Ok(Self::new(fd))
     }
 

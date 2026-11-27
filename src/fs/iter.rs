@@ -1,5 +1,6 @@
+#[allow(unused)]
 use crate::{
-    Unique, dirent64,
+    Unique, dirent64, fs,
     fs::{DirEntry, DirStream, FileType, OwnedDir, Result},
 };
 use core::{cell::Cell, ffi::CStr, hint::assert_unchecked, mem::MaybeUninit, slice};
@@ -153,7 +154,8 @@ High-throughput directory iterator backed by `getdents` or `getdirentries`,
  metadata lookups when the filesystem does not provide a usable entry type.
 */
 #[cfg(has_faster_readdir)]
-pub type GetDents<'filedes> = DirIter<crate::fs::OwnedFdDir<'filedes>>;
+pub type GetDents<'filedes, const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> =
+    DirIter<fs::OwnedFdDir<'filedes, BUFFER_SIZE>>;
 
 /// Directory iterator shared by [`ReadDir`] and [`GetDents`]: a raw entry stream plus the
 /// bookmarked base path used to build each entry's full path.

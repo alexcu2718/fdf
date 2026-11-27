@@ -351,6 +351,16 @@ impl Unique<dirent64> {
 
     #[must_use]
     #[inline(always)]
+    /// Returns a slice reference to the `d_name`, including null terminator.
+    /// # Safety
+    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
+    pub const unsafe fn to_bytes_with_nul(&self) -> &[u8] {
+        // SAFETY: Caller must not invalidate the invariant.
+        unsafe { self.d_name_cstr().to_bytes_with_nul() }
+    }
+
+    #[must_use]
+    #[inline(always)]
     /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
     /// # Safety
     /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call

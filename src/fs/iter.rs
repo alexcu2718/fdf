@@ -107,9 +107,9 @@ impl Metadata {
     */
     fn copy_dname(&mut self, drnt: &Unique<dirent64>) -> &CStr {
         // SAFETY: just obtained, pointer is aligned, alive etc.
-        let d_name_cstr = unsafe { drnt.d_name_cstr() };
+        let d_name_cstr = unsafe { drnt.to_bytes_with_nul() };
         let base_len = self.file_index;
-        let name_len = d_name_cstr.count_bytes() + 1; //technically should be a u16 but we need it for indexing :( // we need +1 bc this strlen omits null terminator
+        let name_len = d_name_cstr.len(); //technically should be a u16 but we need it for indexing :( // we need +1 bc this strlen omits null terminator
         let required_len = base_len + name_len;
         //SAFETY: trivial, name_len=>1 (POSIX standard) ; ALLOWS US TO ELIDE BOUNDS CHECKS
         // rustc knows this but it's unsigned overflow conditions being annoying.
@@ -122,7 +122,7 @@ impl Metadata {
         let name_portion = &mut buffer[base_len..];
 
         // Copy name into the uninit memory.
-        name_portion.write_copy_of_slice(d_name_cstr.to_bytes_with_nul());
+        name_portion.write_copy_of_slice(d_name_cstr);
         //^this is a memcpy.
         // SAFETY: the buffer is guaranteed null terminated(copying a null terminated string)
         // &CStr is a &[u8]/&[i8] underneath.
@@ -247,12 +247,10 @@ impl<S: DirStream> DirIter<S> {
     /// full-path resolution for the child directory.
     #[inline]
     pub(crate) fn from_fd(dfd: OwnedFd, dir: &DirEntry) -> Result<Self> {
-        S::from_owned_fd(dfd)
-            .map(|fd| Self {
-                fd,
-                path: dir.into(),
-            })
-            .map_err(Into::into)
+        S::from_owned_fd(dfd).map(|fd| Self {
+            fd,
+            path: dir.into(),
+        })
     }
 
     /// Constructs a `DirEntry` from a directory entry pointer, combining the entry's metadata
@@ -261,14 +259,12 @@ impl<S: DirStream> DirIter<S> {
     /// `drnt` must be a valid pointer freshly obtained from [`Self::get_next_entry`].
     #[inline]
     pub fn construct_direntry(&mut self, drnt: &Unique<dirent64>) -> DirEntry {
-        // SAFETY: we just obtained this pointer and it hasn't been invalidated by advancing the stream
-        let inode = unsafe { drnt.d_ino() }; //Returns 0 if d_ino isn't defined on your system
         debug_assert!(drnt.is_aligned(), "drnt not aligned(report this)");
 
         // Only fall back to an `fstatat` when the filesystem doesn't supply `d_type`
         // (skipping the syscall is a massive perf win).
         #[cfg(has_d_type)]
-        // SAFETY: as above
+        // SAFETY: we just obtained this pointer and it hasn't been invalidated by advancing the stream
         let file_type = match FileType::from_dtype(unsafe { drnt.d_type() }) {
             FileType::Unknown => self.stat_filetype(drnt),
             known => known,
@@ -278,7 +274,8 @@ impl<S: DirStream> DirIter<S> {
 
         DirEntry {
             path: self.path.copy_dname(drnt).into(),
-            inode,
+            // SAFETY: as above
+            inode: unsafe { drnt.d_ino() },
             file_type,
             depth: self.path.depth + 1,
             file_name_index: self.path.file_index,

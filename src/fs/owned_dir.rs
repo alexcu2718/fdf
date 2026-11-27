@@ -10,14 +10,12 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
 /// A source of raw `dirent64` pointers (`readdir` or a `getdents` buffer) over an open directory fd.
 pub trait DirStream: AsFd + AsRawFd + Sized {
-    /// Error returned when wrapping an fd (`fdopendir` can fail; `getdents` cannot).
-    type Error: Into<DirEntryError>;
-
     /// Wraps an owned directory fd.
     ///
     /// # Errors
-    /// Returns `Self::Error` if the directory stream cannot be created from the fd.
-    fn from_owned_fd(fd: OwnedFd) -> Result<Self, Self::Error>;
+    /// Returns an error if the directory stream cannot be created from the fd
+    /// (`fdopendir` can fail; the `getdents` implementation never does).
+    fn from_owned_fd(fd: OwnedFd) -> fs::Result<Self>;
 
     /// Returns ALL entries (including `.` and `..`); the pointer is only valid until the next call.
     fn next_pointer(&mut self) -> Option<Unique<dirent64>>;
@@ -81,8 +79,6 @@ impl TryFrom<OwnedFd> for OwnedDir<'_> {
 }
 
 impl DirStream for OwnedDir<'_> {
-    type Error = DirEntryError;
-
     /// Wraps an owned file descriptor in a directory stream.
     ///
     /// # Errors
@@ -297,11 +293,8 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
 
 #[cfg(has_faster_readdir)]
 impl<const BUFFER_SIZE: usize> DirStream for OwnedFdDir<'_, BUFFER_SIZE> {
-    type Error = core::convert::Infallible; // needs to match API of readdir sigh.
-    // Move to never type eventually.
-
     #[inline]
-    fn from_owned_fd(fd: OwnedFd) -> Result<Self, Self::Error> {
+    fn from_owned_fd(fd: OwnedFd) -> fs::Result<Self> {
         Ok(Self::new(fd))
     }
 

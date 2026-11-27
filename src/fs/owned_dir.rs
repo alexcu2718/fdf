@@ -1,8 +1,8 @@
 //CURRENTLY UNSURE WHAT TO MAKE PUBLIC ETC.
 use crate::{DirEntryError, Unique, dirent64, fs, readdir64, util};
-use core::ptr::NonNull;
 #[allow(unused)]
-use core::{marker::PhantomData, mem::MaybeUninit};
+use core::mem::{ManuallyDrop, MaybeUninit};
+use core::ptr::NonNull;
 use libc::{DIR, closedir, fdopendir};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
@@ -31,26 +31,27 @@ pub trait DirStream: AsFd + AsRawFd + Sized {
 }
 
 #[derive(Debug)]
-pub struct OwnedDir<'fd> {
+pub struct OwnedDir {
     dirp: NonNull<DIR>, // We store this but just need it for deref,we only acccess the pointer from within
-    fdes: BorrowedFd<'fd>, //   We also don't want a non-inlineable glibc call to get the fd. (even if it's just pointer access)
+    fdes: ManuallyDrop<OwnedFd>, //   We also don't want a non-inlineable glibc call to get the fd. (even if it's just pointer access)
+                                 // ManuallyDrop is most appropriate since we *are* manually managing it's drop.
 }
 
-impl AsFd for OwnedDir<'_> {
+impl AsFd for OwnedDir {
     #[inline]
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fdes.as_fd()
     }
 }
 
-impl AsRawFd for OwnedDir<'_> {
+impl AsRawFd for OwnedDir {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
         self.fdes.as_raw_fd()
     }
 }
 
-impl Drop for OwnedDir<'_> {
+impl Drop for OwnedDir {
     #[inline]
     fn drop(&mut self) {
         // SAFETY: `dirp` is a valid DIR* from a successful `fdopendir`, closed only here.
@@ -59,7 +60,7 @@ impl Drop for OwnedDir<'_> {
     }
 }
 
-impl TryFrom<OwnedFd> for OwnedDir<'_> {
+impl TryFrom<OwnedFd> for OwnedDir {
     type Error = DirEntryError;
     /// Wraps an owned file descriptor in a directory stream.
     ///
@@ -71,7 +72,7 @@ impl TryFrom<OwnedFd> for OwnedDir<'_> {
     }
 }
 
-impl DirStream for OwnedDir<'_> {
+impl DirStream for OwnedDir {
     /// Wraps an owned file descriptor in a directory stream.
     ///
     /// # Errors
@@ -83,12 +84,10 @@ impl DirStream for OwnedDir<'_> {
         match NonNull::new(ret) {
             Some(dirp) => {
                 // Ownership moves to the DIR stream, which closes the fd in `closedir`.
-                let raw = fd.into_raw_fd();
-                // SAFETY: valid ptr, checking for validity for dirfd.
-                debug_assert!(raw == unsafe { libc::dirfd(dirp.as_ptr()) }, "checking");
-                // SAFETY: `raw` is open and stays valid until `closedir` in `Drop`.
-                let fdes = unsafe { BorrowedFd::borrow_raw(raw) };
-                Ok(Self { dirp, fdes })
+                Ok(Self {
+                    dirp,
+                    fdes: ManuallyDrop::new(fd),
+                })
             }
             None => return_os_error!(),
         }
@@ -101,20 +100,17 @@ impl DirStream for OwnedDir<'_> {
     }
 }
 
-#[cfg(has_faster_readdir)]
+#[cfg(has_faster_readdir)] //Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls
 #[repr(align(8))] // only used as writable uninit memory.
-///Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
 struct AlignedByteBuffer<const SIZE: usize>([u8; SIZE]);
 
 /// An owned directory file descriptor that buffers batched `getdents`/`getdirentries64` reads,
 /// mirroring `readdir` semantics (all entries are returned, including `.` and `..`).
 ///
 /// Default `BUFFER_SIZE` is a value chosen from syscall tracing. (Represents call counts)
-///
-/// Backs [`crate::fs::GetDents`].
 #[cfg(has_faster_readdir)]
 #[derive(Debug)]
-pub struct OwnedFdDir<'fdes, const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> {
+pub struct OwnedFdDir<const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> {
     fd: OwnedFd,
     syscall_buffer: MaybeUninit<AlignedByteBuffer<BUFFER_SIZE>>,
     /// Current read position within `syscall_buffer`
@@ -126,12 +122,10 @@ pub struct OwnedFdDir<'fdes, const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> {
     base_pointer: libc::off_t,
     /// Set once the kernel reports no more entries
     is_end_of_stream: bool,
-    /// Ties `self` to the lifetime of the fd's origin, mirroring `OwnedDir<'fd>`.
-    _marker: PhantomData<BorrowedFd<'fdes>>,
 }
 
 #[cfg(has_faster_readdir)] // can't exist for `OwnedDir`
-impl<const BUFFER_SIZE: usize> IntoRawFd for OwnedFdDir<'_, BUFFER_SIZE> {
+impl<const BUFFER_SIZE: usize> IntoRawFd for OwnedFdDir<BUFFER_SIZE> {
     #[inline]
     fn into_raw_fd(self) -> RawFd {
         self.fd.into_raw_fd()
@@ -139,7 +133,7 @@ impl<const BUFFER_SIZE: usize> IntoRawFd for OwnedFdDir<'_, BUFFER_SIZE> {
 }
 
 #[cfg(has_faster_readdir)]
-impl<const BUFFER_SIZE: usize> AsFd for OwnedFdDir<'_, BUFFER_SIZE> {
+impl<const BUFFER_SIZE: usize> AsFd for OwnedFdDir<BUFFER_SIZE> {
     #[inline]
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
@@ -147,7 +141,7 @@ impl<const BUFFER_SIZE: usize> AsFd for OwnedFdDir<'_, BUFFER_SIZE> {
 }
 
 #[cfg(has_faster_readdir)]
-impl<const BUFFER_SIZE: usize> AsRawFd for OwnedFdDir<'_, BUFFER_SIZE> {
+impl<const BUFFER_SIZE: usize> AsRawFd for OwnedFdDir<BUFFER_SIZE> {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
         self.fd.as_raw_fd()
@@ -155,7 +149,7 @@ impl<const BUFFER_SIZE: usize> AsRawFd for OwnedFdDir<'_, BUFFER_SIZE> {
 }
 
 #[cfg(has_faster_readdir)]
-impl<const BUFFER_SIZE: usize> From<OwnedFd> for OwnedFdDir<'_, BUFFER_SIZE> {
+impl<const BUFFER_SIZE: usize> From<OwnedFd> for OwnedFdDir<BUFFER_SIZE> {
     #[inline]
     fn from(fd: OwnedFd) -> Self {
         Self::new(fd)
@@ -163,11 +157,10 @@ impl<const BUFFER_SIZE: usize> From<OwnedFd> for OwnedFdDir<'_, BUFFER_SIZE> {
 }
 
 #[cfg(has_faster_readdir)]
-impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
+impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
     #[inline]
     pub(crate) const fn new(fd: OwnedFd) -> Self {
         const { assert!(BUFFER_SIZE.is_multiple_of(8), "Must be multiple of 8") };
-        const { assert!(BUFFER_SIZE >= 128, "Expected buffer size to be above 128") }; //arbitrary low point
         const { assert!(BUFFER_SIZE <= i32::MAX as _, "Size must be below i32::MAX") };
         Self {
             fd,
@@ -177,7 +170,6 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
             is_end_of_stream: false,
             #[cfg(any(target_os = "macos", target_os = "freebsd"))]
             base_pointer: 0,
-            _marker: PhantomData,
         }
     }
 
@@ -261,7 +253,7 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
 }
 
 #[cfg(has_faster_readdir)]
-impl<const BUFFER_SIZE: usize> DirStream for OwnedFdDir<'_, BUFFER_SIZE> {
+impl<const BUFFER_SIZE: usize> DirStream for OwnedFdDir<BUFFER_SIZE> {
     #[inline]
     fn from_owned_fd(fd: OwnedFd) -> fs::Result<Self> {
         Ok(Self::new(fd))

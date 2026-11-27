@@ -1703,7 +1703,7 @@ impl DirEntry {
     ```
     */
     #[inline]
-    pub fn readdir(&self) -> Result<ReadDir<'_>> {
+    pub fn readdir(&self) -> Result<ReadDir> {
         ReadDir::new(self)
     }
 
@@ -1737,7 +1737,7 @@ impl DirEntry {
     */
     #[inline]
     #[cfg(has_faster_readdir)]
-    pub fn getdents(&self) -> Result<fs::GetDents<'_>> {
+    pub fn getdents(&self) -> Result<fs::GetDents> {
         fs::GetDents::new(self)
     }
 }

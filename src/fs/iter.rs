@@ -134,7 +134,7 @@ impl Metadata {
  a safe Rust interface over the underlying C library functions.
 
 */
-pub type ReadDir<'filedes> = DirIter<OwnedDir<'filedes>>;
+pub type ReadDir = DirIter<OwnedDir>;
 
 /**
 High-throughput directory iterator backed by `getdents` or `getdirentries`,
@@ -148,8 +148,8 @@ High-throughput directory iterator backed by `getdents` or `getdirentries`,
  metadata lookups when the filesystem does not provide a usable entry type.
 */
 #[cfg(has_faster_readdir)]
-pub type GetDents<'filedes, const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> =
-    DirIter<fs::OwnedFdDir<'filedes, BUFFER_SIZE>>;
+pub type GetDents<const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> =
+    DirIter<fs::OwnedFdDir<BUFFER_SIZE>>;
 
 /// Directory iterator shared by [`ReadDir`] and [`GetDents`]: a raw entry stream plus the
 /// bookmarked base path used to build each entry's full path.

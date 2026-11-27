@@ -7,18 +7,6 @@ use core::ptr::NonNull;
 use libc::{DIR, closedir, fdopendir};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
-#[cfg(has_faster_readdir)]
-/**
-   Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
-
-   Aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
-*/
-#[repr(align(8))] // only used as an empty type
-struct Aligned8Bytes<const SIZE: usize>([u8; SIZE]);
-
-#[cfg(has_faster_readdir)]
-type SyscallBuffer<const SIZE: usize = { fs::BUFFER_SIZE }> = MaybeUninit<Aligned8Bytes<SIZE>>;
-
 /// A source of raw `dirent64` pointers (`readdir` or a `getdents` buffer) over an open directory fd.
 pub trait DirStream: AsFd + AsRawFd + Sized {
     /// Error returned when wrapping an fd (`fdopendir` can fail; `getdents` cannot).
@@ -133,15 +121,26 @@ impl OwnedDir<'_> {
     }
 }
 
+#[cfg(has_faster_readdir)]
+/**
+   Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls,
+
+   Aligned(to 8 bytes) stack allocated buffer of [`core::mem::MaybeUninit`]
+*/
+#[repr(align(8))] // only used as writable uninit memory.
+struct Aligned8Bytes<const SIZE: usize>([u8; SIZE]);
+
 /// An owned directory file descriptor that buffers batched `getdents`/`getdirentries64` reads,
 /// mirroring `readdir` semantics (all entries are returned, including `.` and `..`).
+///
+/// Default `BUFFER_SIZE` is a value chosen from syscall tracing. (Represents call counts)
 ///
 /// Backs [`crate::fs::GetDents`].
 #[cfg(has_faster_readdir)]
 #[derive(Debug)]
-pub struct OwnedFdDir<'fdes> {
+pub struct OwnedFdDir<'fdes, const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> {
     fd: OwnedFd,
-    syscall_buffer: SyscallBuffer,
+    syscall_buffer: MaybeUninit<Aligned8Bytes<BUFFER_SIZE>>,
     /// Current read position within `syscall_buffer`
     offset: usize,
     /// Number of valid bytes in `syscall_buffer` from the last syscall
@@ -156,7 +155,7 @@ pub struct OwnedFdDir<'fdes> {
 }
 
 #[cfg(has_faster_readdir)] // can't exist for `OwnedDir`
-impl IntoRawFd for OwnedFdDir<'_> {
+impl<const BUFFER_SIZE: usize> IntoRawFd for OwnedFdDir<'_, BUFFER_SIZE> {
     #[inline]
     fn into_raw_fd(self) -> RawFd {
         self.fd.into_raw_fd()
@@ -164,7 +163,7 @@ impl IntoRawFd for OwnedFdDir<'_> {
 }
 
 #[cfg(has_faster_readdir)]
-impl AsFd for OwnedFdDir<'_> {
+impl<const BUFFER_SIZE: usize> AsFd for OwnedFdDir<'_, BUFFER_SIZE> {
     #[inline]
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
@@ -172,7 +171,7 @@ impl AsFd for OwnedFdDir<'_> {
 }
 
 #[cfg(has_faster_readdir)]
-impl AsRawFd for OwnedFdDir<'_> {
+impl<const BUFFER_SIZE: usize> AsRawFd for OwnedFdDir<'_, BUFFER_SIZE> {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
         self.fd.as_raw_fd()
@@ -180,7 +179,7 @@ impl AsRawFd for OwnedFdDir<'_> {
 }
 
 #[cfg(has_faster_readdir)]
-impl From<OwnedFd> for OwnedFdDir<'_> {
+impl<const BUFFER_SIZE: usize> From<OwnedFd> for OwnedFdDir<'_, BUFFER_SIZE> {
     #[inline]
     fn from(fd: OwnedFd) -> Self {
         Self::new(fd)
@@ -188,9 +187,7 @@ impl From<OwnedFd> for OwnedFdDir<'_> {
 }
 
 #[cfg(has_faster_readdir)]
-impl OwnedFdDir<'_> {
-    pub(crate) const BUFFER_SIZE: usize = fs::BUFFER_SIZE;
-
+impl<const BUFFER_SIZE: usize> OwnedFdDir<'_, BUFFER_SIZE> {
     #[inline]
     pub(crate) const fn new(fd: OwnedFd) -> Self {
         Self {
@@ -230,7 +227,7 @@ impl OwnedFdDir<'_> {
                 util::getdents64(
                     self.as_raw_fd(),
                     self.syscall_buffer.as_mut_ptr().cast(),
-                    Self::BUFFER_SIZE,
+                    BUFFER_SIZE,
                 )
             }
         }
@@ -241,7 +238,7 @@ impl OwnedFdDir<'_> {
                 util::getdirentries64(
                     self.as_raw_fd(),
                     self.syscall_buffer.as_mut_ptr().cast(),
-                    Self::BUFFER_SIZE,
+                    BUFFER_SIZE,
                     &raw mut self.base_pointer,
                 )
             }
@@ -255,14 +252,14 @@ impl OwnedFdDir<'_> {
             return false;
         }
 
-        const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
-        const { assert!(Self::BUFFER_SIZE >= 512, "Should be reasonably bigger.") }
+        const { assert!(BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
+        const { assert!(BUFFER_SIZE >= 512, "Should be reasonably bigger.") }
 
         #[cfg(has_eof_trick)]
         // SAFETY: the buffer is 8-aligned and BUFFER_SIZE >= 4, so the last four bytes are in bounds and aligned.
         let last_four_bytes = unsafe {
             let ptr = NonNull::from_mut(&mut self.syscall_buffer)
-                .byte_add(const { Self::BUFFER_SIZE - 4 })
+                .byte_add(const { BUFFER_SIZE - 4 })
                 .cast::<u32>();
 
             ptr.write(0);
@@ -275,10 +272,10 @@ impl OwnedFdDir<'_> {
         #[cfg(has_eof_trick)] // See for trick
         {
             // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
-            const { assert!(Self::BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick") };
+            const { assert!(BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick") };
             // SAFETY: the marker was initialised before the syscall and the payload didn't overlap it.
             self.end_of_stream = !is_more_remaining
-                || (remaining_bytes.cast_unsigned() <= const { Self::BUFFER_SIZE - 4 }
+                || (remaining_bytes.cast_unsigned() <= const { BUFFER_SIZE - 4 }
                     && unsafe { last_four_bytes.read() } & 1 != 0);
         }
 

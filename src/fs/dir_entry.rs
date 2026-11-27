@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 */
 
 use crate::DirEntryError;
-use crate::fs::{AT_EACCESS, FileType, ReadDir, types::Result};
+use crate::fs::{AT_EACCESS, DirStream as _, FileType, ReadDir, Result};
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ffi::{CStr, c_char, c_int};

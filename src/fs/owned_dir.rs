@@ -1,11 +1,10 @@
+//CURRENTLY UNSURE WHAT TO MAKE PUBLIC ETC.
+
 use crate::{Unique, dirent64, fs, readdir64, util};
-#[allow(unused)]
-use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
 
-#[allow(unused)]
-use libc::{DIR, off_t};
+use libc::{DIR, closedir, fdopendir};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
 #[cfg(has_faster_readdir)]
@@ -33,6 +32,19 @@ pub trait DirStream: AsFd + AsRawFd + Sized {
 
     /// Returns ALL entries (including `.` and `..`); the pointer is only valid until the next call.
     fn next_pointer(&mut self) -> Option<Unique<dirent64>>;
+
+    /// Returns true if the directory has no entries besides `.` and `..`.
+    ///
+    /// Doesn't rely on entry sizes or on `.`/`..` being returned first, as the order is unspecified.
+    #[inline]
+    #[must_use]
+    fn is_empty(&mut self) -> bool {
+        while let Some(drnt) = self.next_pointer() {
+            skip_dot_or_dot_dot_entries!(drnt, continue);
+            return false;
+        }
+        true
+    }
 }
 
 #[derive(Debug)]
@@ -61,7 +73,7 @@ impl Drop for OwnedDir<'_> {
     #[inline]
     fn drop(&mut self) {
         // SAFETY: `dirp` is a valid DIR* from a successful `fdopendir`, closed only here.
-        let retval = unsafe { libc::closedir(self.as_mut_ptr()) };
+        let retval = unsafe { closedir(self.as_mut_ptr()) };
         debug_assert_eq!(retval, 0, "not closed properly!");
     }
 }
@@ -89,7 +101,7 @@ impl DirStream for OwnedDir<'_> {
     #[inline]
     fn from_owned_fd(fd: OwnedFd) -> fs::Result<Self> {
         // SAFETY: `fd` is a valid, open file descriptor owned by us.
-        let ret: *mut DIR = unsafe { libc::fdopendir(fd.as_raw_fd()) };
+        let ret: *mut DIR = unsafe { fdopendir(fd.as_raw_fd()) };
 
         match NonNull::new(ret) {
             Some(dirp) => {
@@ -119,20 +131,6 @@ impl OwnedDir<'_> {
     const fn as_mut_ptr(&mut self) -> *mut DIR {
         self.dirp.as_ptr()
     }
-
-    /// Returns true if the directory has no entries besides `.` and `..`.
-    ///
-    /// Doesn't rely on `.`/`..` being returned first, as `readdir` order is unspecified.
-    #[inline]
-    #[must_use]
-    #[cfg(not(has_faster_readdir))]
-    pub(crate) fn is_empty(&mut self) -> bool {
-        while let Some(drnt) = self.next_pointer() {
-            skip_dot_or_dot_dot_entries!(drnt, continue);
-            return false;
-        }
-        true
-    }
 }
 
 /// An owned directory file descriptor that buffers batched `getdents`/`getdirentries64` reads,
@@ -150,11 +148,11 @@ pub struct OwnedFdDir<'fdes> {
     remaining_bytes: usize,
     #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     /// The base pointer (seek cookie) for the `getdirentries64` call
-    base_pointer: off_t,
+    base_pointer: libc::off_t,
     /// Set once the kernel reports no more entries
     end_of_stream: bool,
     /// Ties `self` to the lifetime of the fd's origin, mirroring `OwnedDir<'fd>`.
-    _marker: PhantomData<BorrowedFd<'fdes>>,
+    _marker: core::marker::PhantomData<BorrowedFd<'fdes>>,
 }
 
 #[cfg(has_faster_readdir)] // can't exist for `OwnedDir`
@@ -203,21 +201,8 @@ impl OwnedFdDir<'_> {
             end_of_stream: false,
             #[cfg(any(target_os = "macos", target_os = "freebsd"))]
             base_pointer: 0,
-            _marker: PhantomData,
+            _marker: core::marker::PhantomData,
         }
-    }
-
-    /// Returns true if the directory has no entries besides `.` and `..`.
-    ///
-    /// Doesn't rely on entry sizes or on `.`/`..` being returned first.
-    #[inline]
-    #[must_use]
-    pub(crate) fn is_empty(&mut self) -> bool {
-        while let Some(drnt) = self.next_pointer() {
-            skip_dot_or_dot_dot_entries!(drnt, continue);
-            return false;
-        }
-        true
     }
 
     #[inline]
@@ -226,23 +211,15 @@ impl OwnedFdDir<'_> {
     pub const fn is_end_of_stream(&self) -> bool {
         self.end_of_stream
     }
-
     /**
      Refills the internal directory-entry buffer using the platform directory syscall.
 
-     On Linux-like targets this dispatches to `getdents`, while on macOS and
-     FreeBSD it calls `getdirentries64` and updates the internal base pointer
+     On Linux-like targets this dispatches to [`getdents(64)`], while on macOS and
+     FreeBSD it calls [`getdirentries64`] and updates the internal base pointer
      required by that API.
 
-     # Returns
-
-     Returns the raw syscall result as a signed byte count:
-     - positive: the number of bytes written into the buffer
-     - `0`: end of directory stream
-     - negative: the syscall failed
-
-     This method does not interpret the returned entries; higher-level iteration
-     code is responsible for consuming the buffer and handling end-of-stream.
+     [`getdents`]: https://man7.org/linux/man-pages/man2/getdents.2.html
+     [`getdirentries64`]: https://man7.org/linux/man-pages/man3/getdirentries.3.html
     */
     #[inline] //TODO MAKE PUBLIC?
     pub(crate) fn getdents(&mut self) -> isize {
@@ -279,6 +256,7 @@ impl OwnedFdDir<'_> {
         }
 
         const { assert!(Self::BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
+        const { assert!(Self::BUFFER_SIZE >= 512, "Should be reasonably bigger.") }
 
         #[cfg(has_eof_trick)]
         // SAFETY: the buffer is 8-aligned and BUFFER_SIZE >= 4, so the last four bytes are in bounds and aligned.

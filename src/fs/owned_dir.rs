@@ -162,6 +162,8 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
     pub(crate) const fn new(fd: OwnedFd) -> Self {
         const { assert!(BUFFER_SIZE.is_multiple_of(8), "Must be multiple of 8") };
         const { assert!(BUFFER_SIZE <= i32::MAX as _, "Size must be below i32::MAX") };
+        const { assert!(BUFFER_SIZE >= 512, "Should be reasonably bigger.") }
+
         Self {
             fd,
             syscall_buffer: MaybeUninit::uninit(),
@@ -216,11 +218,10 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
         if self.is_end_of_stream {
             return false;
         }
-        const { assert!(BUFFER_SIZE.is_multiple_of(8), "proving alignment") };
-        const { assert!(BUFFER_SIZE >= 512, "Should be reasonably bigger.") }
         #[cfg(has_eof_trick)]
         // SAFETY: the buffer is 8-aligned and BUFFER_SIZE >= 4, so the last four bytes are in bounds and aligned.
         let last_four_bytes = unsafe {
+            const { assert!(BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick") }; //See below libj
             let ptr = NonNull::from_mut(&mut self.syscall_buffer)
                 .byte_add(const { BUFFER_SIZE - 4 })
                 .cast::<u32>();
@@ -233,7 +234,6 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
         #[cfg(has_eof_trick)] // See for trick
         {
             // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
-            const { assert!(BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick") };
             // SAFETY: the marker was initialised before the syscall and the payload didn't overlap it.
             self.end_of_stream = !is_more_remaining
                 || (remaining_bytes.cast_unsigned() <= const { BUFFER_SIZE - 4 }

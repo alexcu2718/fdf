@@ -494,14 +494,11 @@ impl Finder {
 
     #[inline]
     fn has_git_dir(fdes: BorrowedFd) -> bool {
+        use libc::{AT_SYMLINK_NOFOLLOW, fstatat, stat};
         const GITFILE: &CStr = c".git";
 
-        let result: Result<libc::stat, DirEntryError> = stat_syscall!(
-            libc::fstatat,
-            fdes.as_raw_fd(),
-            GITFILE.as_ptr(),
-            libc::AT_SYMLINK_NOFOLLOW
-        );
+        let result: Result<stat, DirEntryError> =
+            stat_syscall!(fstatat, fdes, GITFILE.as_ptr(), AT_SYMLINK_NOFOLLOW);
 
         // A `.git` file (worktrees/submodules) also marks a repo, so accept any existing entry
         // except a symlink; directories are the common case.

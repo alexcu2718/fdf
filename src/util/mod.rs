@@ -6,21 +6,7 @@ mod utils;
 pub use glob::{Error, glob_to_regex};
 pub use memchr_derivations::memrchr;
 pub use unique::Unique;
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "emscripten",
-    target_os = "redox",
-    target_os = "hermit",
-    target_os = "fuchsia",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "aix",
-    target_os = "hurd"
-))]
+#[cfg(any(target_os = "linux", target_os = "android", has_d_namlen))]
 pub use utils::dirent_const_time_strlen;
 #[cfg(any(
     target_os = "linux",

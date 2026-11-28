@@ -18,14 +18,11 @@ Edited slightly, essentially providing a type safe wrapper to inforce internal i
 //! Look at the [`Unique` definition](crate::fdf) for more info.
 #![allow(clippy::missing_inline_in_public_items)]
 #![expect(clippy::inline_always, reason = "just a wrapper")]
-use crate::dirent64;
 use core::convert::From;
-use core::ffi::{CStr, c_char};
 use core::fmt;
 use core::marker::PhantomData;
 use core::num::NonZeroUsize;
 use core::ptr::NonNull;
-use core::slice::from_raw_parts;
 
 /// A wrapper around a raw non-null `*const T` that indicates that the possessor
 /// of this wrapper owns the referent. Usefor building abstractions like
@@ -190,7 +187,7 @@ impl<T: ?Sized> Unique<T> {
     /// requirements for a reference.
     #[inline(always)]
     #[must_use]
-    pub const unsafe fn as_ref<'ptr>(&self) -> &'ptr T {
+    pub const unsafe fn as_ref(&self) -> &T {
         // SAFETY: the caller must guarantee that `self` meets all the
         // requirements for a reference.
         unsafe { &*self.as_ptr() }
@@ -247,158 +244,5 @@ impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
     #[inline(always)]
     fn from(unique: Unique<T>) -> Self {
         unique.as_non_null()
-    }
-}
-
-impl Unique<dirent64> {
-    #[inline(always)]
-    #[must_use]
-    /// Returns the inode of the `dirent64`, returns 0 if `d_ino` is not a struct member on your OS.
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_ino(&self) -> u64 {
-        // SAFETY: caller must maintain the invariant
-
-        #[cfg(all(
-            any(
-                target_os = "freebsd",
-                target_os = "openbsd",
-                target_os = "netbsd",
-                target_os = "dragonfly"
-            ),
-            has_d_ino
-        ))]
-        {
-            // SAFETY: checked by caller
-            unsafe { (*self.as_ptr()).d_fileno as _ }
-        }
-
-        #[cfg(all(
-            not(any(
-                target_os = "freebsd",
-                target_os = "openbsd",
-                target_os = "netbsd",
-                target_os = "dragonfly"
-            )),
-            has_d_ino
-        ))]
-        {
-            // SAFETY: checked by caller
-            unsafe { (*self.as_ptr()).d_ino as _ }
-            //irritating.
-        }
-
-        #[cfg(not(has_d_ino))]
-        {
-            0
-        }
-    }
-
-    #[inline(always)]
-    #[must_use]
-    /// Returns the libc equivalent of the type as eg `DT_BLK`  from libc
-    /// Follow the link  for [GNU documentation ](<https://ftp.gnu.org/old-gnu/Manuals/glibc-2.2.3/html_node/libc_260.html>)
-    ///
-    /// Returns `DT_UNKNOWN` for systems without `d_type` (eg Solaris/Illumos)
-    ///
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_type(&self) -> u8 {
-        #[cfg(has_d_type)]
-        // SAFETY: caller must maintain the invariant
-        unsafe {
-            (*self.as_ptr()).d_type as _
-        }
-
-        #[cfg(not(has_d_type))]
-        libc::DT_UNKNOWN
-    }
-
-    #[must_use]
-    #[inline(always)]
-    #[cfg(has_d_namlen)]
-    /// Returns the `d_namlen` if the member exists on your system
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_namlen(&self) -> usize {
-        // SAFETY: caller must maintain the invariant
-        unsafe { (*self.as_ptr()).d_namlen as _ }
-    }
-
-    #[must_use]
-    #[inline(always)]
-    #[cfg(not(has_d_namlen))]
-    #[deprecated(
-        note = "`d_namlen` does not exist on this platform's `dirent`; use `name_length()` instead, which is portable"
-    )]
-    /// Stub present only to give a clear diagnostic; this platform has no `d_namlen` field.
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_namlen(&self) -> usize {
-        // SAFETY: caller must maintain the invariant
-        unsafe { self.name_length() }
-    }
-
-    #[must_use]
-    #[inline(always)]
-    /// Returns a slice reference to the `d_name`, not including null terminator.
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_name_slice<'pointer>(&self) -> &'pointer [u8] {
-        // SAFETY: Caller must not invalidate the invariant.
-        unsafe { from_raw_parts(self.d_name().cast(), self.name_length()) }
-    }
-
-    #[must_use]
-    #[inline(always)]
-    /// Returns a `CStr` reference to the `d_name`, (including null terminator.)
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_name_cstr<'pointer>(&self) -> &'pointer CStr {
-        // SAFETY: caller must ensure the invariants
-        let slice: &[u8] = unsafe { from_raw_parts(self.d_name().cast(), self.name_length() + 1) }; // add  1 to include terminal
-
-        // SAFETY:  has it's null terminator included, and no interior nulls..
-        unsafe { CStr::from_bytes_with_nul_unchecked(slice) } //equivalent if you cast it.
-    }
-
-    #[inline(always)]
-    #[must_use]
-    #[cfg(has_d_reclen)] // Overly paranoid, I want to know what builds fail.
-    /// Returns the `d_reclen` member as a usize.
-    ///  # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn d_reclen(&self) -> usize {
-        //SAFETY: TRIVIALLY VALID BY CONSTRUCTION
-
-        unsafe { (*self.as_ptr()).d_reclen as _ }
-        // although most systems should have this struct member.
-    }
-
-    #[inline(always)]
-    #[must_use]
-    // can be anything from [c_char;3] to [c_char;1024] or whatever. It's a VLA.
-    /**
-    Access the pointer to `d_name`,
-
-    Note that `d-name` is not a [ `c_char` ;256] array, it can be greater,
-    So careful attention has to be paid
-
-     # Safety
-    The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    */
-    pub const unsafe fn d_name(&self) -> *const c_char {
-        // SAFETY: caller must maintain the invariant
-        unsafe { (&raw const (*self.as_ptr()).d_name).cast() }
-    }
-
-    #[inline(always)]
-    #[must_use]
-    /// Returns the length of the `d_name` but, like strlen, it doesn't include the null terminator.
-    /// # Safety
-    /// The pointer must be valid and not invalidated by another `readdir`/`getdents(64)` call
-    pub const unsafe fn name_length(&self) -> usize {
-        // SAFETY: caller must maintain the invariant
-        unsafe { crate::util::dirent_name_length(self.as_ptr()) }
     }
 }

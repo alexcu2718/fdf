@@ -327,6 +327,13 @@ impl From<std::ffi::NulError> for DirEntryError {
     }
 }
 
+impl From<core::convert::Infallible> for DirEntryError {
+    #[inline] //so compiler can see it
+    fn from(never: core::convert::Infallible) -> Self {
+        match never {}
+    }
+}
+
 impl fmt::Display for DirEntryError {
     #[allow(clippy::pattern_type_mismatch)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

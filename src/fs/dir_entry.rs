@@ -79,21 +79,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 */
 
 use crate::DirEntryError;
-use crate::fs::AT_EACCESS;
-use crate::fs::{FileType, ReadDir, types::Result};
+use crate::fs;
+use crate::fs::{AT_EACCESS, DirStream as _, FileType, ReadDir, Result};
+use crate::util;
 use chrono::{DateTime, Utc};
 use core::cell::Cell;
 use core::ffi::{CStr, c_char, c_int};
 use core::fmt;
-use libc::{AT_FDCWD, X_OK};
 #[allow(unused)]
 use libc::{
-    AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK, access,
-    faccessat, fstatat, lstat, stat,
+    AT_FDCWD, AT_SYMLINK_NOFOLLOW, F_OK, O_CLOEXEC, O_DIRECTORY, O_NONBLOCK, O_RDONLY, R_OK, W_OK,
+    X_OK, access, faccessat, fstatat, lstat, stat,
 };
 #[allow(unused)]
 use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, FromRawFd as _, OwnedFd};
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, path::Path};
+use std::{
+    ffi::{CString, OsStr},
+    os::unix::ffi::OsStrExt as _,
+    path::Path,
+};
 
 //TODO, test #[align(64)] to check for presence of false sharing/perf improvements
 // If so, add extra relevant metadata to the struct...
@@ -236,6 +240,13 @@ impl TryFrom<&[u8]> for DirEntry {
 impl PartialEq<[u8]> for DirEntry {
     #[inline]
     fn eq(&self, other: &[u8]) -> bool {
+        self.as_bytes() == other
+    }
+}
+
+impl<const N: usize> PartialEq<[u8; N]> for DirEntry {
+    #[inline]
+    fn eq(&self, other: &[u8; N]) -> bool {
         self.as_bytes() == other
     }
 }
@@ -389,11 +400,11 @@ impl DirEntry {
         // We can't just 'retry' certain files, ie ones in /proc
 
         // SAFETY: the pointer is null terminated
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(all(target_os = "macos", target_pointer_width = "64")))]
         let fd = unsafe { libc::open(self.as_ptr(), FLAGS) };
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
         // SAFETY: as above.
-        let fd = unsafe { crate::util::openat_nocancel(libc::AT_FDCWD, self.as_ptr(), FLAGS) };
+        let fd = unsafe { util::openat_nocancel(libc::AT_FDCWD, self.as_ptr(), FLAGS) };
         if fd < 0 {
             return_os_error!()
         }
@@ -415,7 +426,7 @@ impl DirEntry {
         let fd = unsafe { libc::openat(rawfd, child_name.as_ptr(), FLAGS) };
         #[cfg(all(target_os = "macos", target_pointer_width = "64"))]
         // SAFETY: as above
-        let fd = unsafe { crate::util::openat_nocancel(rawfd, child_name.as_ptr(), FLAGS) };
+        let fd = unsafe { util::openat_nocancel(rawfd, child_name.as_ptr(), FLAGS) };
         if fd < 0 {
             return_os_error!()
         }
@@ -423,19 +434,19 @@ impl DirEntry {
         Ok(unsafe { OwnedFd::from_raw_fd(fd) })
     }
 
-    /// Returns a [`ReadDir`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
-    #[inline]
-    #[allow(unused)] // for esoteric platforms
-    pub(crate) fn readdir_from_fd(&self, fd: OwnedFd) -> Result<ReadDir> {
-        ReadDir::from_fd(fd, self)
-    }
+    // /// Returns a [`ReadDir`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
+    // #[inline]
+    // //#[allow(unused)] // for esoteric platforms
+    // pub(crate) fn readdir_from_fd(&self, fd: OwnedFd) -> Result<ReadDir<'_>> {
+    //     ReadDir::from_fd(fd, self)
+    // }
 
-    /// Returns a [`GetDents`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
-    #[inline]
-    #[cfg(has_faster_readdir)]
-    pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> crate::fs::GetDents {
-        crate::fs::GetDents::from_fd(fd, self)
-    }
+    // /// Returns a [`GetDents`] iterator backed by a pre-opened fd, avoiding a second `open()` call.
+    // #[inline]
+    // #[cfg(has_faster_readdir)]
+    // pub(crate) fn getdents_from_fd(&self, fd: OwnedFd) -> Result<crate::fs::GetDents<'_>> {
+    //     crate::fs::GetDents::from_fd(fd, self)
+    // }
 
     // Converts to a lossy string for ease of use
     #[inline]
@@ -581,10 +592,7 @@ impl DirEntry {
                 || self.is_empty(),
                 |parent_fd| {
                     Self::open_at(parent_fd, self.file_name_cstr())
-                        .map(|dir_fd| read_direntries_from_fd!(self, dir_fd))
-                        .is_ok_and(|result| {
-                            result.is_ok_and(|mut entries| entries.next().is_none())
-                        })
+                        .is_ok_and(Self::is_empty_from_fd)
                 },
             ),
 
@@ -592,94 +600,42 @@ impl DirEntry {
         }
     }
 
+    /// Checks a directory fd for emptiness, consuming it. Returns false if a stream can't be created.
+    #[inline]
+    fn is_empty_from_fd(fd: OwnedFd) -> bool {
+        #[cfg(has_faster_readdir)]
+        {
+            let mut dir: fs::OwnedFdDir = fs::OwnedFdDir::new(fd);
+            dir.is_empty()
+        }
+        #[cfg(not(has_faster_readdir))]
+        {
+            fs::OwnedDir::try_from(fd).is_ok_and(|mut dir| dir.is_empty())
+        }
+    }
+
     #[inline]
     #[must_use]
     #[cfg(not(has_faster_readdir))]
     pub(crate) fn is_empty_posix(&self) -> bool {
-        //avoid a heapalloc
-        use crate::readdir64;
-        use libc::closedir;
-
         debug_assert!(
             self.is_dir(),
             "checking the only entries to this are directories"
         );
 
-        // SAFETY: guaranteed null terminated path
-        let dir = unsafe { libc::opendir(self.as_ptr()) };
-
-        if dir.is_null() {
-            return false;
-        }
-
-        // SAFETY: dir valid to read
-        let result = unsafe {
-            readdir64(dir); // Skip "."
-            readdir64(dir); // Skip ".."
-            readdir64(dir).is_null()
-        };
-        // SAFETY: closing a valid directory
-        unsafe { closedir(dir) };
-        result
+        self.open().is_ok_and(Self::is_empty_from_fd)
     }
 
     #[inline]
     #[cfg(has_faster_readdir)]
-    /// Specialisation for empty checks on linux/android/netbsd/etc (avoid a heap alloc)
+    /// Specialisation for empty checks on linux/android/netbsd/etc (no heap alloc)
     pub(crate) fn is_empty_getdents(&self) -> bool {
-        use crate::fs::AlignedBuffer;
-        const BUF_SIZE: usize = 512; //pretty arbitrary.
-        const DENT_SIZE: usize = core::mem::offset_of!(crate::dirent64, d_name).next_multiple_of(8);
-        // ALWAYS THE LAST ELEMENT, FIND MIN STRUCT SIZE.
-        const { assert!(DENT_SIZE >= 16 && DENT_SIZE <= 32, "showing below works") };
-        // On Linux it's 24, on solaris it's 24/32
-        // so either way, 2*32=64>= 2*24 or 2*32, just a better catch all
-        //on openbsd it's 16, ugh, TODO think
-        #[cfg(target_pointer_width = "32")]
-        compile_error!("the below code is broke");
-        // These were hand derived, it was painful.
-        const MINIMUM_DIRENT_SIZE: isize = if cfg!(any(
-            target_os = "solaris",
-            target_os = "illumos",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        )) {
-            32
-        } else {
-            DENT_SIZE.cast_signed()
-        };
-
         debug_assert!(
             self.is_dir() || self.is_symlink(),
             " Only expect dirs/symlinks to pass through this private func"
         );
-        if let Ok(fd) = self.open() {
-            let mut syscall_buffer: AlignedBuffer<u8, BUF_SIZE> = AlignedBuffer::new();
 
-            #[cfg(any(
-                target_os = "linux",
-                target_os = "android",
-                target_os = "openbsd",
-                target_os = "netbsd",
-                target_os = "illumos",
-                target_os = "solaris",
-            ))]
-            let sys_ret_val = syscall_buffer.getdents(fd.as_fd());
-            #[cfg(any(target_os = "freebsd", target_os = "macos"))]
-            let sys_ret_val = {
-                let mut basep: libc::off_t = 0;
-
-                // SAFETY: safe to call
-                unsafe { syscall_buffer.getdirentries64(fd.as_fd(), &mut basep) }
-            };
-
-            // if empty, then only 2 entries expected, . and .., this means only 64 or below (or neg if errors, who cares.)
-            return sys_ret_val <= 2 * MINIMUM_DIRENT_SIZE;
-            // dirfd now gets dropped because it's an `OwnedFd` which has RAII
-        }
-        false //return false is open fails
+        self.open().is_ok_and(Self::is_empty_from_fd)
     }
 
     /**
@@ -925,9 +881,7 @@ impl DirEntry {
 
     /**
     Converts a directory entry to a full, canonical path, resolving all symlinks
-
-    This is a **costly** operation as it involves a system call (`realpath`).
-    If the filetype is a symlink, it invokes a stat call to find the realtype, otherwise stat is not called.
+    stat call to find the realtype, otherwise stat is not called.
 
     # Errors
 
@@ -1112,20 +1066,19 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_lstatat(&self, fd: BorrowedFd) -> Result<stat> {
-        const FLAG: c_int = AT_SYMLINK_NOFOLLOW;
-        stat_syscall!(fstatat, fd.as_raw_fd(), self.file_name_ptr(), FLAG)
+        stat_syscall!(fstatat, fd, self.file_name_ptr(), AT_SYMLINK_NOFOLLOW)
     }
 
     #[inline]
     /// stupid internal helper with few use cases.
     fn _file_name_index(path: &[u8]) -> usize {
         // the entries going into this are filepaths, therefore they must have length 1
-        if crate::util::unlikely(path.len() == 1) {
+        if util::unlikely(path.len() == 1) {
             return 0;
         }
         debug_assert!(!path.is_empty(), "should never be empty");
         debug_assert!(!path.ends_with(b"/"), "file path ends with a slash!"); //debug asserts for development
-        crate::util::memrchr(b'/', path).map_or(1, |pos| pos + 1)
+        util::memrchr(b'/', path).map_or(1, |pos| pos + 1)
     }
 
     // #[inline]
@@ -1219,7 +1172,7 @@ impl DirEntry {
     */
     #[inline]
     pub fn get_statat(&self, fd: BorrowedFd) -> Result<stat> {
-        stat_syscall!(fstatat, fd.as_raw_fd(), self.file_name_ptr(), 0)
+        stat_syscall!(fstatat, fd, self.file_name_ptr(), 0)
     }
 
     /// Cost free conversion to bytes (because it is already is bytes)
@@ -1466,7 +1419,7 @@ impl DirEntry {
             "Indexing should always be within bounds"
         );
 
-        if self == b"/".as_ref() {
+        if self == b"/" {
             return b"/";
         }
 
@@ -1511,7 +1464,7 @@ impl DirEntry {
         let len = filename.len();
 
         // Any extension needs to be at least len 3  EG: "a.a".
-        if crate::util::unlikely(len < 3) {
+        if util::unlikely(len < 3) {
             return None;
         }
 
@@ -1521,7 +1474,7 @@ impl DirEntry {
          the final byte, so "foo." does not count
         */
 
-        crate::util::memrchr(b'.', &filename[1..len - 1]).map(|pos| {
+        util::memrchr(b'.', &filename[1..len - 1]).map(|pos| {
             //bounds elided
             // `pos` is relative to filename[1..], so the actual dot is
             // at pos + 1, and the extension starts at pos + 2.
@@ -1596,11 +1549,11 @@ impl DirEntry {
             path_ref = stripped;
         }
 
-        let cstr = std::ffi::CString::new(path_ref).map_err(DirEntryError::from)?;
+        let cstr = CString::new(path_ref)?;
 
         let file_name_index = Self::_file_name_index(path_ref);
         // extract information from successful stat call
-        let get_stat: stat = stat_syscall!(lstat, cstr.as_ptr()).map_err(DirEntryError::IOError)?;
+        let get_stat: stat = stat_syscall!(lstat, cstr.as_ptr())?;
         let file_type = FileType::from(&get_stat);
         let inode = access_stat!(get_stat, st_ino);
         Ok(Self {
@@ -1784,7 +1737,7 @@ impl DirEntry {
     */
     #[inline]
     #[cfg(has_faster_readdir)]
-    pub fn getdents(&self) -> Result<crate::fs::GetDents> {
-        crate::fs::GetDents::new(self)
+    pub fn getdents(&self) -> Result<fs::GetDents> {
+        fs::GetDents::new(self)
     }
 }

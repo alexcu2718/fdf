@@ -28,6 +28,7 @@ fn test_eof() {
 #[allow(clippy::expect_used, clippy::let_underscore_must_use)]
 fn test_eof() {
     use std::os::unix::ffi::OsStrExt as _;
+    println!("cargo:rustc-check-cfg=cfg(has_eof_trick)");
     /*
     https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
     #if __DARWIN_64_BIT_INO_T

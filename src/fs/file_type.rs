@@ -121,13 +121,7 @@ impl FileType {
     #[inline]
     #[must_use]
     pub fn from_fd_no_follow(fd: BorrowedFd, filename: &CStr) -> Self {
-        stat_syscall!(
-            fstatat,
-            fd.as_raw_fd(),
-            filename.as_ptr(),
-            AT_SYMLINK_NOFOLLOW,
-            DTYPE
-        )
+        stat_syscall!(fstatat, fd, filename.as_ptr(), AT_SYMLINK_NOFOLLOW, DTYPE)
     }
 
     /**
@@ -153,13 +147,7 @@ impl FileType {
     #[inline]
     #[must_use]
     pub fn from_fd_follow(fd: BorrowedFd, filename: &CStr) -> Self {
-        stat_syscall!(
-            fstatat,
-            fd.as_raw_fd(),
-            filename.as_ptr(),
-            AT_SYMLINK_FOLLOW,
-            DTYPE
-        )
+        stat_syscall!(fstatat, fd, filename.as_ptr(), AT_SYMLINK_FOLLOW, DTYPE)
     }
 
     /// Returns true if this represents a directory  (cost free check)

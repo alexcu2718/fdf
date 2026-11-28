@@ -66,29 +66,6 @@ macro_rules! read_direntries {
 }
 
 /**
- Like [`read_direntries!`] but uses a pre-opened file descriptor instead of opening via path.
-
- This avoids a second full-path `open()` call by reusing an fd obtained earlier via `openat`.
- The fd is consumed by the returned iterator and closed when it is dropped.
-
- - Linux/Android/OpenBSD/NetBSD/Illumos/Solaris/macOS/FreeBSD: `getdents_from_fd`
- - Other supported Unix targets: `readdir_from_fd`
-*/
-macro_rules! read_direntries_from_fd {
-    ($dir:expr, $fd:expr) => {{
-        #[cfg(has_faster_readdir)]
-        {
-            Ok::<_, $crate::DirEntryError>($dir.getdents_from_fd($fd))
-        }
-
-        #[cfg(not(has_faster_readdir))]
-        {
-            Ok::<_, $crate::DirEntryError>($dir.readdir_from_fd($fd))
-        }
-    }};
-}
-
-/**
 A compile time assert, mirroring `static_assert` from C++
 
 # Examples
@@ -327,13 +304,15 @@ macro_rules! stat_syscall {
         let mut stat_buf = ::core::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
-        let res = unsafe { $syscall($fd, $path, stat_buf.as_mut_ptr(), $flags) };
+        let res = unsafe { $syscall($fd.as_raw_fd(), $path, stat_buf.as_mut_ptr(), $flags) };
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know the stat structure has been properly initialised
             Ok(unsafe { stat_buf.assume_init() })
         } else {
-            Err(::std::io::Error::last_os_error().into())
+            // Pinned to `DirEntryError` explicitly (rather than a generic `.into()`) so that call
+            // sites using `?` aren't ambiguous between converting here vs. at the `?`.
+            Err::<libc::stat, $crate::DirEntryError>(::std::io::Error::last_os_error().into())
         }
     }};
     // For fstatat with flags - returns FileType directly (kinda like an internal black magic tool for me to save writing so much duplicate code)
@@ -341,7 +320,7 @@ macro_rules! stat_syscall {
         let mut stat_buf = ::core::mem::MaybeUninit::<::libc::stat>::uninit();
         // SAFETY:
         // - The path is guaranteed to be null-terminated (CStr)
-        let res = unsafe { $syscall($fd, $path, stat_buf.as_mut_ptr(), $flags) };
+        let res = unsafe { $syscall($fd.as_raw_fd(), $path, stat_buf.as_mut_ptr(), $flags) };
 
         if res == 0 {
             // SAFETY: If the return code is 0, we know it's been initialised properly
@@ -361,7 +340,9 @@ macro_rules! stat_syscall {
             // SAFETY: If the return code is 0, we know it's been initialised properly
             Ok(unsafe { stat_buf.assume_init() })
         } else {
-            Err(std::io::Error::last_os_error().into())
+            // Pinned to `DirEntryError` explicitly (rather than a generic `.into()`) so that call
+            // sites using `?` aren't ambiguous between converting here vs. at the `?`.
+            Err::<libc::stat, $crate::DirEntryError>(::std::io::Error::last_os_error().into())
         }
     }};
 }

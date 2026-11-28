@@ -82,13 +82,11 @@ impl DirStream for OwnedDir {
         // SAFETY: `fd` is a valid, open file descriptor owned by us.
         let ret: *mut DIR = unsafe { fdopendir(fd.as_raw_fd()) };
         match NonNull::new(ret) {
-            Some(dirp) => {
-                // Ownership moves to the DIR stream, which closes the fd in `closedir`.
-                Ok(Self {
-                    dirp,
-                    fdes: ManuallyDrop::new(fd),
-                })
-            }
+            // Ownership moves to the DIR stream, which closes the fd in `closedir`.
+            Some(dirp) => Ok(Self {
+                dirp,
+                fdes: ManuallyDrop::new(fd),
+            }),
             None => return_os_error!(),
         }
     }
@@ -192,7 +190,7 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
             unsafe {
                 util::getdents64(
                     self.as_raw_fd(),
-                    self.syscall_buffer.as_mut_ptr().cast(),
+                    (&raw mut self.syscall_buffer).cast(),
                     BUFFER_SIZE,
                 )
             }
@@ -203,7 +201,7 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
             unsafe {
                 util::getdirentries64(
                     self.as_raw_fd(),
-                    self.syscall_buffer.as_mut_ptr().cast(),
+                    (&raw mut self.syscall_buffer).cast(),
                     BUFFER_SIZE,
                     &raw mut self.base_pointer,
                 )

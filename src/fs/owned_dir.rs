@@ -163,7 +163,6 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
         const { assert!(BUFFER_SIZE.is_multiple_of(8), "Must be multiple of 8") };
         const { assert!(BUFFER_SIZE <= i32::MAX as _, "Size must be below i32::MAX") };
         const { assert!(BUFFER_SIZE >= 512, "Should be reasonably bigger.") }
-
         Self {
             fd,
             syscall_buffer: MaybeUninit::uninit(),
@@ -230,16 +229,14 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
         };
         let remaining_bytes = self.getdents();
         let is_more_remaining = remaining_bytes.is_positive();
-
         #[cfg(has_eof_trick)] // See for trick
         {
             // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
             // SAFETY: the marker was initialised before the syscall and the payload didn't overlap it.
-            self.end_of_stream = !is_more_remaining
+            self.is_end_of_stream = !is_more_remaining
                 || (remaining_bytes.cast_unsigned() <= const { BUFFER_SIZE - 4 }
                     && unsafe { last_four_bytes.read() } & 1 != 0);
         }
-
         #[cfg(not(has_eof_trick))]
         {
             self.is_end_of_stream = !is_more_remaining

@@ -100,7 +100,7 @@ impl DirStream for OwnedDir {
 
 #[cfg(has_faster_readdir)] //Buffer used to  hold the bytes sent from the OS for `getdents`/`getdirentries` calls
 #[repr(align(8))] // only used as writable uninit memory.
-struct AlignedByteBuffer<const SIZE: usize>([u8; SIZE]);
+struct AlignedBuffer<const SIZE: usize>([u8; SIZE]);
 
 /// An owned directory file descriptor that buffers batched `getdents`/`getdirentries64` reads,
 /// mirroring `readdir` semantics (all entries are returned, including `.` and `..`).
@@ -110,7 +110,7 @@ struct AlignedByteBuffer<const SIZE: usize>([u8; SIZE]);
 #[derive(Debug)]
 pub struct OwnedFdDir<const BUFFER_SIZE: usize = { fs::BUFFER_SIZE }> {
     fd: OwnedFd,
-    syscall_buffer: MaybeUninit<AlignedByteBuffer<BUFFER_SIZE>>,
+    syscall_buffer: MaybeUninit<AlignedBuffer<BUFFER_SIZE>>,
     /// Current read position within `syscall_buffer`
     offset: usize,
     /// Number of valid bytes in `syscall_buffer` from the last syscall
@@ -211,28 +211,27 @@ impl<const BUFFER_SIZE: usize> OwnedFdDir<BUFFER_SIZE> {
 
     /// Refills the buffer, returns whether any bytes were read.
     #[inline]
+    #[rustfmt::skip]
     fn are_more_entries_remaining(&mut self) -> bool {
         if self.is_end_of_stream {
             return false;
         }
         #[cfg(has_eof_trick)]
         // SAFETY: the buffer is 8-aligned and BUFFER_SIZE >= 4, so the last four bytes are in bounds and aligned.
-        let last_four_bytes = unsafe {
-            const { assert!(BUFFER_SIZE >= 1024, "Buffer must be >=1024 for trick") }; //See below libj
-            let ptr = NonNull::from_mut(&mut self.syscall_buffer)
-                .byte_add(const { BUFFER_SIZE - 4 })
-                .cast::<u32>();
+        let last_four_bytes:*mut u32 = unsafe {
+            let ptr:*mut u32 = (&raw mut self.syscall_buffer).byte_add(const { BUFFER_SIZE - 4 }).cast();
             ptr.write(0);
             ptr
         };
-        let remaining_bytes = self.getdents();
+        let remaining_bytes: isize = self.getdents();
         let is_more_remaining = remaining_bytes.is_positive();
+
         #[cfg(has_eof_trick)] // See for trick
-        {
-            // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
-            // SAFETY: the marker was initialised before the syscall and the payload didn't overlap it.
+        {  const {assert!(BUFFER_SIZE >= 1024 ,"Buffer must be >=1024 for trick")}; //See below link
+           // https://github.com/apple-oss-distributions/Libc/blob/899a3b2d52d95d75e05fb286a5e64975ec3de757/gen/FreeBSD/opendir.c#L373-L392
+           // SAFETY: the marker was initialised before the syscall and the payload didn't overlap it.
             self.is_end_of_stream = !is_more_remaining
-                || (remaining_bytes.cast_unsigned() <= const { BUFFER_SIZE - 4 }
+                || ( remaining_bytes.cast_unsigned() <= const { BUFFER_SIZE - 4 }
                     && unsafe { last_four_bytes.read() } & 1 != 0);
         }
         #[cfg(not(has_eof_trick))]
@@ -259,6 +258,7 @@ impl<const BUFFER_SIZE: usize> DirStream for OwnedFdDir<BUFFER_SIZE> {
     /// Returns ALL entries including `.` and `..`, like `readdir`.
     /// The returned pointer is only valid until the next call.
     #[inline]
+    #[rustfmt::skip]
     fn next_pointer(&mut self) -> Option<Unique<dirent64>> {
         while self.offset >= self.remaining_bytes {
             if !self.are_more_entries_remaining() {
@@ -268,14 +268,12 @@ impl<const BUFFER_SIZE: usize> DirStream for OwnedFdDir<BUFFER_SIZE> {
 
         // SAFETY: the buffer holds unread bytes, the offset is in bounds, and the buffer is aligned.
         let drnt = unsafe {
-            Unique::from_ref(&self.syscall_buffer)
-                .byte_add(self.offset)
-                .cast::<dirent64>()
+            Unique::from(&self.syscall_buffer).byte_add(self.offset).cast::<dirent64>()
         };
         debug_assert!(drnt.is_aligned(), "Expected to be aligned, report this");
 
         // SAFETY: we just obtained this pointer, so reading d_reclen is valid.
-        self.offset += unsafe { drnt.d_reclen() };
+        self.offset += unsafe { drnt.d_reclen() }; //d_reclen=size of struct in bytes, so we advance offset to next entry.
 
         Some(drnt)
     }

@@ -245,8 +245,6 @@ impl<S: DirStream> DirIter<S> {
     /// `drnt` must be a valid pointer freshly obtained from [`Self::get_next_entry`].
     #[inline]
     pub fn construct_direntry(&mut self, drnt: &Unique<dirent64>) -> DirEntry {
-        debug_assert!(drnt.is_aligned(), "drnt not aligned(report this)");
-
         // Only fall back to an `fstatat` when the filesystem doesn't supply `d_type`
         // (skipping the syscall is a massive perf win).
         #[cfg(has_d_type)]
